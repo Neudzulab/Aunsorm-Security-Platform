@@ -1,33 +1,36 @@
 # aunsorm-cli
 
-`aunsorm-cli`, Aunsorm güvenlik araç takımının uçtan uca senaryolarını terminalden
-çalıştırmak için sağlanan referans komut satırı aracıdır. EXTERNAL kalibrasyon bağlamını
-zorunlu kılar ve üretilen paketleri deterministik zarf dosyalarında saklar.
+`aunsorm-cli`, Aunsorm güvenlik araç takımına ait komut satırı
+arabirimidir. EXTERNAL kalibrasyon bağlamını zorunlu tutarak
+paket üretme ve çözme iş akışlarını otomatikleştirir.
 
 ## Özellikler
-- EXTERNAL kalibrasyon metni olmadan paketleri çözemeyen tek-atım şifreleme/deşifre akışı
-- PQC anahtarı sunulduğunda ML-KEM kapsüllemeli paket üretimi
-- `strict` kip desteği ve AAD sağlama
-- Üretilen paketlerin JSON zarf formatında saklanması
+
+- Deterministik salt türetimi ile `encrypt` ve `decrypt` komutları.
+- KDF profilleri (`mobile`, `low`, `medium`, `high`, `ultra`) ve
+  AEAD seçimleri (`aes-gcm`, `chacha20poly1305`).
+- Opsiyonel ek bağlamsal AAD girişi (metin ya da dosya).
+- KEM alanlarını manuel besleme desteği (ileri sürümler için)
+  ve strict kipinin ortam/parametre ile yönetimi.
 
 ## Kullanım
-```
+
+```bash
 cargo run -p aunsorm-cli -- encrypt \
-  --password "CorrectHorseBatteryStaple" \
-  --in message.bin \
-  --out packet.json \
-  --org-salt V2VBcmVLdXQuZXU= \
-  --calib-text "Neudzulab | Prod | 2025-08"
-
-cargo run -p aunsorm-cli -- decrypt \
-  --password "CorrectHorseBatteryStaple" \
-  --in packet.json \
-  --out plaintext.bin \
+  --password "correct horse battery staple" \
+  --in plaintext.bin \
+  --out packet.b64 \
   --org-salt V2VBcmVLdXQuZXU= \
   --calib-text "Neudzulab | Prod | 2025-08"
 ```
 
-## Zarf Formatı
-CLI, şifrelenmiş paketi, parola tuzlarını ve kalibrasyon tuzlarını içeren bir JSON
-zarfı üretir. Zarf yalnızca deşifre için gereken meta verileri taşır; kalibrasyon metni
-ve parola kullanıcı sorumluluğundadır.
+```bash
+cargo run -p aunsorm-cli -- decrypt \
+  --password "correct horse battery staple" \
+  --in packet.b64 \
+  --out recovered.bin \
+  --org-salt V2VBcmVLdXQuZXU= \
+  --calib-text "Neudzulab | Prod | 2025-08"
+```
+
+Her komutun ayrıntılı yardım sayfasına `--help` ile erişilebilir.
