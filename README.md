@@ -6,8 +6,8 @@ Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsaml�
 - [x] PLAN.md gereksinimlerini analiz et ve ajan rollerini belirle.
 - [x] Kılavuzları `AGENTS.md` ile belgeleyip iş akışını kur.
 - [x] Monorepo dosya yapısını (workspace, crates, CI) oluştur.
-- [ ] `aunsorm-core` kriptografik temel modüllerini uygula.
-- [ ] `aunsorm-packet` paket formatı ve doğrulamalarını geliştir.
+- [x] `aunsorm-core` kriptografik temel modüllerini uygula.
+- [x] `aunsorm-packet` paket formatı ve doğrulamalarını geliştir.
 - [ ] PQC köprüsü ve strict kip mantığını tamamla.
 - [ ] CLI / Server / WASM katmanlarını çıkar.
 - [ ] Kimlik bileşenlerini (JWT, X.509, KMS) entegre et.

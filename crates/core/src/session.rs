@@ -35,6 +35,24 @@ impl SessionRatchet {
         }
     }
 
+    /// Oturum tanımlayıcısını döndürür.
+    #[must_use]
+    pub const fn session_id(&self) -> [u8; 16] {
+        self.session_id
+    }
+
+    /// Strict kipinin etkin olup olmadığını belirtir.
+    #[must_use]
+    pub const fn is_strict(&self) -> bool {
+        self.strict
+    }
+
+    /// Bir sonraki mesaj numarasını döndürür.
+    #[must_use]
+    pub const fn message_no(&self) -> u64 {
+        self.message_no
+    }
+
     fn hkdf(&self) -> Hkdf<Sha256> {
         Hkdf::<Sha256>::new(Some(&self.session_id), self.root_key.as_ref())
     }
