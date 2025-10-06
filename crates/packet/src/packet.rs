@@ -357,6 +357,63 @@ mod tests {
     }
 
     #[test]
+    fn strict_mode_accepts_pqc_payload() {
+        if !aunsorm_pqc::kem::KemAlgorithm::MlKem768.is_available() {
+            return;
+        }
+
+        let profile = KdfProfile::preset(KdfPreset::Low);
+        let salts = test_salts();
+        let (calibration, _) = calib_from_text(b"org", "strict-note");
+        let password_salt = b"password-salt-999";
+
+        let kem_keys =
+            aunsorm_pqc::kem::KemKeyPair::generate(aunsorm_pqc::kem::KemAlgorithm::MlKem768)
+                .expect("kem keypair");
+        let kem_bundle = aunsorm_pqc::kem::encapsulate(
+            aunsorm_pqc::kem::KemAlgorithm::MlKem768,
+            kem_keys.public_key(),
+        )
+        .expect("encapsulate");
+        let kem_payload = kem_bundle.packet_payload(kem_keys.public_key());
+        let kem = KemPayload {
+            kem: kem_payload.kem,
+            pk: kem_payload.public_key,
+            ctkem: kem_payload.ciphertext,
+            rbkem: kem_payload.responder_key,
+            ss: kem_payload.shared_secret,
+        };
+
+        let packet = encrypt_one_shot(EncryptParams {
+            password: PASSWORD,
+            password_salt,
+            calibration: &calibration,
+            salts: &salts,
+            plaintext: b"strict secret",
+            aad: b"meta",
+            profile,
+            algorithm: AeadAlgorithm::AesGcm,
+            strict: true,
+            kem: Some(kem),
+        })
+        .expect("strict encrypt");
+
+        let encoded = packet.to_base64().expect("encode");
+        let decrypt_params = DecryptParams {
+            password: PASSWORD,
+            password_salt,
+            calibration: &calibration,
+            salts: &salts,
+            profile,
+            aad: b"meta",
+            strict: true,
+            packet: &encoded,
+        };
+        let decrypted = decrypt_one_shot(&decrypt_params).expect("decrypt");
+        assert_eq!(decrypted.plaintext, b"strict secret");
+    }
+
+    #[test]
     fn decrypt_rejects_wrong_calibration() {
         let profile = KdfProfile::preset(KdfPreset::Low);
         let salts = test_salts();
