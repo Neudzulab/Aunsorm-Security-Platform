@@ -1,0 +1,24 @@
+[package]
+name = "aunsorm-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.76"
+license = "Apache-2.0"
+description = "Core cryptographic primitives for the Aunsorm security toolkit."
+readme = "README.md"
+authors = ["Aunsorm Authors <security@aunsorm.dev>"]
+
+[dependencies]
+argon2 = { workspace = true }
+base64 = { workspace = true }
+hkdf = { workspace = true }
+rand_core = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+hex = { workspace = true }
+rand = "0.8"

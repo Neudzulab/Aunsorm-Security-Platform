@@ -1,0 +1,9 @@
+[advisories]
+ignore = []
+
+[bans]
+multiple-versions = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
