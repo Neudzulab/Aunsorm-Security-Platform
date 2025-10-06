@@ -1,2 +1,28 @@
-# Aunsorm
-Cyber Security
+# Aunsorm Monorepo Hazırlığı
+
+Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsamlı uygulaması için hazırlanmaktadır. Tüm çalışmalar çok ajanlı bir plana göre yürütülecektir.
+
+## Sprint 0: Planlama ve Altyapı
+- [x] PLAN.md gereksinimlerini analiz et ve ajan rollerini belirle.
+- [x] Kılavuzları `AGENTS.md` ile belgeleyip iş akışını kur.
+- [ ] Monorepo dosya yapısını (workspace, crates, CI) oluştur.
+- [ ] `aunsorm-core` kriptografik temel modüllerini uygula.
+- [ ] `aunsorm-packet` paket formatı ve doğrulamalarını geliştir.
+- [ ] PQC köprüsü ve strict kip mantığını tamamla.
+- [ ] CLI / Server / WASM katmanlarını çıkar.
+- [ ] Kimlik bileşenlerini (JWT, X.509, KMS) entegre et.
+- [ ] Test/Fuzz/Bench altyapısını çalışır hale getir.
+- [ ] Dokümantasyon, güvenlik rehberi ve lisansları yayımla.
+
+Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosya/dizin açtıklarında kapsamlarına özel `AGENTS.md` oluşturmakla yükümlüdür.
+
+## Nasıl Katkı Sağlanır?
+Tüm katkılar PR süreci üzerinden yapılmalı; PR açıklamalarında yapılan değişiklikler, ilgili ajan ve kontrol edilen gereksinimler belirtilmelidir. Standart çalışma komutları:
+
+```bash
+cargo fmt --all
+cargo clippy --all-targets --all-features
+cargo test --all-features
+```
+
+Gereksinimler ilerledikçe bu belge güncellenecektir.
