@@ -10,6 +10,10 @@ Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsaml�
 - [x] `aunsorm-packet` paket formatı ve doğrulamalarını geliştir.
 - [x] PQC köprüsü ve strict kip mantığını tamamla.
 - [ ] CLI / Server / WASM katmanlarını çıkar.
+  - [x] CLI: encrypt/decrypt/peek komutlarını sağla.
+  - [ ] CLI: oturum/jwt/x509 akışlarını ekle.
+  - [ ] Server katmanını uygula.
+  - [ ] WASM bağlayıcısını hazırla.
 - [ ] Kimlik bileşenlerini (JWT, X.509, KMS) entegre et.
 - [ ] Test/Fuzz/Bench altyapısını çalışır hale getir.
 - [ ] Dokümantasyon, güvenlik rehberi ve lisansları yayımla.
