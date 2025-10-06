@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/core",
+    "crates/packet",
 ]
 resolver = "2"
 
@@ -20,3 +21,11 @@ thiserror = "1"
 zeroize = { version = "1.7", features = ["zeroize_derive"] }
 criterion = { version = "0.5" }
 hex = "0.4"
+serde_json = { version = "1", default-features = false, features = ["std"] }
+aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["std"] }
+aead = { version = "0.5" }
+hmac = { version = "0.12" }
+pmac = { version = "0.7" }
+aes = { version = "0.8" }
+subtle = { version = "2.5" }
