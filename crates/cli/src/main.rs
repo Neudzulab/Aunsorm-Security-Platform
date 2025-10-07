@@ -19,7 +19,8 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 use aunsorm_core::{
-    calib_from_text, salts::Salts, KdfPreset, KdfProfile, SessionRatchet, SessionRatchetState,
+    calib_from_text, salts::Salts, Calibration, KdfPreset, KdfProfile, SessionRatchet,
+    SessionRatchetState,
 };
 use aunsorm_jwt::SqliteJtiStore;
 use aunsorm_jwt::{
@@ -62,6 +63,9 @@ enum Commands {
     Decrypt(DecryptArgs),
     /// Paket başlığını incele
     Peek(PeekArgs),
+    /// Kalibrasyon parametrelerini görüntüle
+    #[command(subcommand)]
+    Calib(CalibCommands),
     /// Oturum mesajını şifrele
     #[command(name = "session-encrypt")]
     SessionEncrypt(SessionEncryptArgs),
@@ -74,6 +78,12 @@ enum Commands {
     /// X.509 işlemleri
     #[command(subcommand)]
     X509(X509Commands),
+}
+
+#[derive(Subcommand)]
+enum CalibCommands {
+    /// Kalibrasyon metninden deterministik parametre üret
+    Inspect(CalibInspectArgs),
 }
 
 #[derive(Subcommand)]
@@ -177,6 +187,16 @@ struct PeekArgs {
     /// Girdi Base64 paket dosyası
     #[arg(long, value_name = "PATH")]
     r#in: PathBuf,
+}
+
+#[derive(Args)]
+struct CalibInspectArgs {
+    /// Organizasyon tuzu (Base64)
+    #[arg(long, value_name = "B64")]
+    org_salt: String,
+    /// Kalibrasyon metni
+    #[arg(long)]
+    calib_text: String,
 }
 
 #[derive(Args)]
@@ -549,6 +569,7 @@ fn run(cli: Cli) -> CliResult<()> {
         Commands::Encrypt(args) => handle_encrypt(args, strict),
         Commands::Decrypt(args) => handle_decrypt(args, strict),
         Commands::Peek(args) => handle_peek(&args),
+        Commands::Calib(command) => handle_calib(command),
         Commands::SessionEncrypt(args) => handle_session_encrypt(&args, strict),
         Commands::SessionDecrypt(args) => handle_session_decrypt(&args, strict),
         Commands::Jwt(command) => handle_jwt(command),
@@ -754,6 +775,61 @@ fn handle_peek(args: &PeekArgs) -> CliResult<()> {
     let json = serde_json::to_string_pretty(&header)?;
     println!("{json}");
     Ok(())
+}
+
+fn handle_calib(command: CalibCommands) -> CliResult<()> {
+    match command {
+        CalibCommands::Inspect(args) => handle_calib_inspect(&args),
+    }
+}
+
+fn handle_calib_inspect(args: &CalibInspectArgs) -> CliResult<()> {
+    let org_salt = decode_org_salt(&args.org_salt)?;
+    let (calibration, _) = calib_from_text(&org_salt, &args.calib_text);
+    let report = build_calibration_report(&calibration);
+    let json = serde_json::to_string_pretty(&report)?;
+    println!("{json}");
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct CalibrationRangeReport {
+    start: u16,
+    end: u16,
+    step: u16,
+}
+
+#[derive(Serialize)]
+struct CalibrationReport {
+    calibration_id: String,
+    alpha_long: u16,
+    alpha_short: u16,
+    beta_long: u16,
+    beta_short: u16,
+    tau: u16,
+    fingerprint: String,
+    ranges: [CalibrationRangeReport; 5],
+}
+
+fn build_calibration_report(calibration: &Calibration) -> CalibrationReport {
+    let ranges = std::array::from_fn(|idx| {
+        let range = calibration.ranges[idx];
+        CalibrationRangeReport {
+            start: range.start,
+            end: range.end,
+            step: range.step,
+        }
+    });
+    CalibrationReport {
+        calibration_id: calibration.id.as_str().to_string(),
+        alpha_long: calibration.alpha_long,
+        alpha_short: calibration.alpha_short,
+        beta_long: calibration.beta_long,
+        beta_short: calibration.beta_short,
+        tau: calibration.tau,
+        fingerprint: STANDARD.encode(calibration.fingerprint()),
+        ranges,
+    }
 }
 
 fn handle_jwt(command: JwtCommands) -> CliResult<()> {
@@ -1323,6 +1399,19 @@ mod tests {
         let (pwd_b, salts_b) = derive_salts(&org, calibration.id.as_str()).expect("salts");
         assert_eq!(pwd_a.as_slice(), pwd_b.as_slice());
         assert_eq!(salts_a, salts_b);
+    }
+
+    #[test]
+    fn calibration_report_reflects_calibration() {
+        let (calibration, _) = calib_from_text(b"org", "note");
+        let report = build_calibration_report(&calibration);
+        assert_eq!(report.calibration_id, calibration.id.as_str());
+        assert_eq!(report.alpha_long, calibration.alpha_long);
+        assert_eq!(report.ranges[0].start, calibration.ranges[0].start);
+        assert_eq!(
+            report.fingerprint,
+            STANDARD.encode(calibration.fingerprint())
+        );
     }
 
     #[test]
