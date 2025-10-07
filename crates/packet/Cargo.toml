@@ -27,3 +27,4 @@ subtle = { workspace = true }
 [dev-dependencies]
 hex = { workspace = true }
 aunsorm-pqc = { path = "../pqc" }
+proptest = "1"
