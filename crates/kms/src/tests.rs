@@ -103,3 +103,16 @@ fn fallback_respects_strict_mode() {
         .unwrap_err();
     assert!(matches!(err, crate::KmsError::Unsupported { .. }));
 }
+
+#[test]
+fn fallback_when_primary_key_missing() {
+    let store = write_local_store();
+    let config = KmsConfig::local_only(store.path()).expect("config");
+    let client = KmsClient::from_config(config).expect("client");
+    let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Local, "missing"))
+        .with_fallback(BackendLocator::new(BackendKind::Local, "jwt-sign"));
+    let signature = client
+        .sign_ed25519(&descriptor, b"fallback")
+        .expect("fallback sign");
+    assert_eq!(signature.len(), 64);
+}

@@ -180,6 +180,7 @@ impl KmsClient {
             KmsError::BackendNotConfigured { .. }
                 | KmsError::BackendUnavailable { .. }
                 | KmsError::Unsupported { .. }
+                | KmsError::KeyNotFound { .. }
         )
     }
 }
