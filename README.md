@@ -28,7 +28,7 @@ cargo run -p aunsorm-cli -- decrypt --password P --in pkt.b64 --out out.bin \
   - [x] Server katmanını uygula.
 - [x] WASM bağlayıcısını hazırla.
 - [x] Kimlik bileşenlerini (JWT, X.509, KMS) entegre et.
-- [ ] Test/Fuzz/Bench altyapısını çalışır hale getir.
+- [x] Test/Fuzz/Bench altyapısını çalışır hale getir.
 - [x] Dokümantasyon, güvenlik rehberi ve lisansları yayımla.
 
 Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosya/dizin açtıklarında kapsamlarına özel `AGENTS.md` oluşturmakla yükümlüdür.

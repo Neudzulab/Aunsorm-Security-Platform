@@ -1,0 +1,22 @@
+[package]
+name = "aunsorm-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+aunsorm-packet = { path = "../crates/packet" }
+aunsorm-core = { path = "../crates/core" }
+base64 = { workspace = true }
+
+[[bin]]
+name = "packet_roundtrip"
+path = "fuzz_targets/packet_roundtrip.rs"
+
+[[bin]]
+name = "session_ratchet"
+path = "fuzz_targets/session_ratchet.rs"
