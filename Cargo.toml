@@ -4,7 +4,7 @@ members = [
     "crates/core",
     "crates/packet",
     "crates/pqc",
-    "crates/cli",
+    "crates/jwt",
 ]
 resolver = "2"
 

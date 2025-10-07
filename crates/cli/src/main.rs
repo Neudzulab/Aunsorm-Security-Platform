@@ -2,21 +2,29 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error as _;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use hkdf::Hkdf;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::Value;
 use sha2::Sha256;
 use thiserror::Error;
 use zeroize::Zeroizing;
 
 use aunsorm_core::{
     calib_from_text, salts::Salts, KdfPreset, KdfProfile, SessionRatchet, SessionRatchetState,
+};
+use aunsorm_jwt::SqliteJtiStore;
+use aunsorm_jwt::{
+    Audience, Claims, Ed25519KeyPair, Ed25519PublicKey, Jwk, Jwks, JwtSigner, JwtVerifier,
+    VerificationOptions,
 };
 use aunsorm_packet::{
     decrypt_one_shot, decrypt_session, encrypt_one_shot, encrypt_session, peek_header,
@@ -53,6 +61,21 @@ enum Commands {
     /// Oturum mesajını çöz
     #[command(name = "session-decrypt")]
     SessionDecrypt(SessionDecryptArgs),
+    /// JWT işlemleri
+    #[command(subcommand)]
+    Jwt(JwtCommands),
+}
+
+#[derive(Subcommand)]
+enum JwtCommands {
+    /// Ed25519 JWT anahtarı üret
+    Keygen(JwtKeygenArgs),
+    /// JWT imzala
+    Sign(JwtSignArgs),
+    /// JWT doğrula
+    Verify(JwtVerifyArgs),
+    /// Anahtar dosyalarından JWKS üret
+    ExportJwks(JwtExportJwksArgs),
 }
 
 #[derive(Args)]
@@ -198,6 +221,106 @@ struct SessionDecryptArgs {
     session_id: Option<String>,
 }
 
+#[derive(Args)]
+struct JwtKeygenArgs {
+    /// Üretilecek anahtar kimliği (kid)
+    #[arg(long)]
+    kid: String,
+    /// Gizli anahtar çıktı dosyası (JSON)
+    #[arg(long, value_name = "PATH")]
+    out: PathBuf,
+    /// JWK (public) çıktı dosyası
+    #[arg(long, value_name = "PATH")]
+    public_out: Option<PathBuf>,
+    /// JWKS çıktı dosyası
+    #[arg(long, value_name = "PATH")]
+    jwks_out: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct JwtSignArgs {
+    /// Anahtar dosyası (keygen çıktısı)
+    #[arg(long, value_name = "PATH")]
+    key: PathBuf,
+    /// Üretilen JWT çıktı dosyası
+    #[arg(long, value_name = "PATH")]
+    out: PathBuf,
+    /// issuer claim değeri
+    #[arg(long)]
+    issuer: Option<String>,
+    /// subject claim değeri
+    #[arg(long)]
+    subject: Option<String>,
+    /// audience claim değerleri (birden çok kullanılabilir)
+    #[arg(long = "audience", value_name = "AUD")]
+    audience: Vec<String>,
+    /// Token geçerlilik süresi (örn. 15m, 1h)
+    #[arg(long, value_name = "DURATION", value_parser = humantime::parse_duration)]
+    expires_in: Option<Duration>,
+    /// Token'ın geçerli olmaya başlayacağı süre (now + duration)
+    #[arg(long, value_name = "DURATION", value_parser = humantime::parse_duration)]
+    not_before_in: Option<Duration>,
+    /// `issued_at` alanını devre dışı bırak
+    #[arg(long)]
+    no_issued_at: bool,
+    /// Özel jti değeri; verilmezse otomatik üretilecek
+    #[arg(long)]
+    jti: Option<String>,
+    /// Ek claim'ler JSON dosyası
+    #[arg(long, value_name = "PATH")]
+    claims: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct JwtVerifyArgs {
+    /// Doğrulanacak JWT dosyası
+    #[arg(long, value_name = "PATH")]
+    token: PathBuf,
+    /// JWKS dosyaları (birden fazla olabilir)
+    #[arg(long = "jwks", value_name = "PATH")]
+    jwks_files: Vec<PathBuf>,
+    /// JWK dosyaları
+    #[arg(long = "jwk", value_name = "PATH")]
+    jwk_files: Vec<PathBuf>,
+    /// Gizli anahtar dosyaları (public anahtar çıkarmak için)
+    #[arg(long = "key", value_name = "PATH")]
+    key_files: Vec<PathBuf>,
+    /// Doğrulanan claim çıktısı (JSON); belirtilmezse stdout'a yazılır
+    #[arg(long, value_name = "PATH")]
+    claims_out: Option<PathBuf>,
+    /// issuer beklenen değeri
+    #[arg(long)]
+    issuer: Option<String>,
+    /// subject beklenen değeri
+    #[arg(long)]
+    subject: Option<String>,
+    /// audience beklenen değeri
+    #[arg(long)]
+    audience: Option<String>,
+    /// jti alanı eksikse doğrulamayı kabul et
+    #[arg(long)]
+    allow_missing_jti: bool,
+    /// Zaman toleransı (varsayılan 30s)
+    #[arg(long, value_name = "DURATION", value_parser = humantime::parse_duration)]
+    leeway: Option<Duration>,
+    /// `SQLite` JTI store dosyası; belirtilirse replay koruması sağlanır
+    #[arg(long, value_name = "PATH")]
+    sqlite_store: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct JwtExportJwksArgs {
+    /// Gizli anahtar dosyaları (keygen çıktısı)
+    #[arg(long = "key", value_name = "PATH")]
+    key_files: Vec<PathBuf>,
+    /// JWK dosyaları
+    #[arg(long = "jwk", value_name = "PATH")]
+    jwk_files: Vec<PathBuf>,
+    /// JWKS çıktı dosyası
+    #[arg(long, value_name = "PATH")]
+    out: PathBuf,
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum ProfileArg {
     Mobile,
@@ -291,6 +414,16 @@ enum CliError {
     StateStrictMismatch,
     #[error("store dosyası oturum kimliği ile uyuşmuyor")]
     StoreSessionMismatch,
+    #[error("jwt hatası: {0}")]
+    Jwt(#[from] aunsorm_jwt::JwtError),
+    #[error("jwt anahtar dosyası geçersiz: {0}")]
+    JwtKeyFile(&'static str),
+    #[error("claim alanı rezerve edildi: {0}")]
+    ClaimReserved(String),
+    #[error("jwt anahtar materyali belirtilmelidir")]
+    MissingJwtMaterial,
+    #[error("claims dosyası geçersiz: {0}")]
+    JwtClaimsFile(&'static str),
 }
 
 type CliResult<T> = Result<T, CliError>;
@@ -316,6 +449,7 @@ fn run(cli: Cli) -> CliResult<()> {
         Commands::Peek(args) => handle_peek(&args),
         Commands::SessionEncrypt(args) => handle_session_encrypt(&args, strict),
         Commands::SessionDecrypt(args) => handle_session_decrypt(&args, strict),
+        Commands::Jwt(command) => handle_jwt(command),
     }
 }
 
@@ -519,6 +653,125 @@ fn handle_peek(args: &PeekArgs) -> CliResult<()> {
     Ok(())
 }
 
+fn handle_jwt(command: JwtCommands) -> CliResult<()> {
+    match command {
+        JwtCommands::Keygen(args) => handle_jwt_keygen(&args),
+        JwtCommands::Sign(args) => handle_jwt_sign(&args),
+        JwtCommands::Verify(args) => handle_jwt_verify(&args),
+        JwtCommands::ExportJwks(args) => handle_jwt_export_jwks(&args),
+    }
+}
+
+fn handle_jwt_keygen(args: &JwtKeygenArgs) -> CliResult<()> {
+    let key = Ed25519KeyPair::generate(args.kid.clone())?;
+    write_jwt_key_file(&args.out, &key)?;
+    if let Some(path) = args.public_out.as_deref() {
+        write_json_pretty(path, &key.to_jwk())?;
+    }
+    if let Some(path) = args.jwks_out.as_deref() {
+        let jwks = Jwks {
+            keys: vec![key.to_jwk()],
+        };
+        write_json_pretty(path, &jwks)?;
+    }
+    println!(
+        "jwt anahtarı üretildi: kid={} | secret={}{}{}",
+        key.kid(),
+        args.out.display(),
+        args.public_out
+            .as_ref()
+            .map(|p| format!(" | public={}", p.display()))
+            .unwrap_or_default(),
+        args.jwks_out
+            .as_ref()
+            .map(|p| format!(" | jwks={}", p.display()))
+            .unwrap_or_default()
+    );
+    Ok(())
+}
+
+fn handle_jwt_sign(args: &JwtSignArgs) -> CliResult<()> {
+    let key = load_jwt_keypair(&args.key)?;
+    let mut claims = build_claims_from_args(args)?;
+    if args.jti.is_none() {
+        claims.ensure_jwt_id();
+    }
+    let signer = JwtSigner::new(key.clone());
+    let token = signer.sign(&claims)?;
+    fs::write(&args.out, token.as_bytes())?;
+    println!(
+        "jwt imzalandı: kid={} | jti={} | out={} | exp={:?}",
+        key.kid(),
+        claims.jwt_id.as_deref().unwrap_or("<none>"),
+        args.out.display(),
+        claims.expiration
+    );
+    Ok(())
+}
+
+fn handle_jwt_verify(args: &JwtVerifyArgs) -> CliResult<()> {
+    let keys = load_verification_keys(args)?;
+    if keys.is_empty() {
+        return Err(CliError::MissingJwtMaterial);
+    }
+    let mut verifier = JwtVerifier::new(keys);
+    if let Some(leeway) = args.leeway {
+        verifier = verifier.with_leeway(leeway);
+    }
+    if let Some(path) = args.sqlite_store.as_deref() {
+        let store = SqliteJtiStore::open(path)?;
+        verifier = verifier.with_store(Arc::new(store));
+    }
+    let token_raw = fs::read_to_string(&args.token)?;
+    let token = token_raw.trim();
+    let options = VerificationOptions {
+        issuer: args.issuer.clone(),
+        subject: args.subject.clone(),
+        audience: args.audience.clone(),
+        require_jti: !args.allow_missing_jti,
+        now: None,
+    };
+    let claims = verifier.verify(token, &options)?;
+    if let Some(out) = args.claims_out.as_deref() {
+        write_json_pretty(out, &claims)?;
+        println!(
+            "jwt doğrulandı: token={} | jti={} | claims={}",
+            args.token.display(),
+            claims.jwt_id.as_deref().unwrap_or("<none>"),
+            out.display(),
+        );
+    } else {
+        let json = serde_json::to_string_pretty(&claims)?;
+        println!("{json}");
+    }
+    Ok(())
+}
+
+fn handle_jwt_export_jwks(args: &JwtExportJwksArgs) -> CliResult<()> {
+    let mut jwk_map = std::collections::BTreeMap::new();
+    for path in &args.key_files {
+        let key = load_jwt_keypair(path)?;
+        jwk_map.insert(key.kid().to_string(), key.to_jwk());
+    }
+    for path in &args.jwk_files {
+        let jwk: Jwk = read_json_file(path)?;
+        jwk_map.insert(jwk.kid.clone(), jwk);
+    }
+    if jwk_map.is_empty() {
+        return Err(CliError::MissingJwtMaterial);
+    }
+    let jwks = Jwks {
+        keys: jwk_map.into_values().collect(),
+    };
+    write_json_pretty(&args.out, &jwks)?;
+    println!(
+        "jwks üretildi: anahtar_sayısı={} | çıktı={}",
+        jwks.keys.len(),
+        args.out.display(),
+    );
+    Ok(())
+}
+
 #[derive(Serialize, Deserialize)]
 struct MetadataFile {
     metadata: SessionMetadata,
@@ -561,6 +814,12 @@ struct PersistedReplayStore {
     seen: BTreeSet<u64>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct JwtKeyMaterial {
+    kid: String,
+    seed: String,
+}
+
 fn load_metadata_file(path: &Path) -> CliResult<SessionMetadata> {
     let json = fs::read_to_string(path)?;
     let file: MetadataFile = serde_json::from_str(&json)?;
@@ -573,7 +832,8 @@ fn write_metadata_file(path: &Path, metadata: &SessionMetadata) -> CliResult<()>
     let payload = MetadataFile {
         metadata: metadata.clone(),
     };
-    write_json_pretty(path, &payload)
+    write_json_pretty(path, &payload)?;
+    Ok(())
 }
 
 #[allow(clippy::missing_const_for_fn)]
@@ -759,6 +1019,108 @@ fn env_strict() -> bool {
     )
 }
 
+fn write_jwt_key_file(path: &Path, key: &Ed25519KeyPair) -> CliResult<()> {
+    let material = JwtKeyMaterial {
+        kid: key.kid().to_string(),
+        seed: STANDARD.encode(key.signing_key().to_bytes()),
+    };
+    write_json_pretty(path, &material)
+}
+
+fn load_jwt_keypair(path: &Path) -> CliResult<Ed25519KeyPair> {
+    let material: JwtKeyMaterial = read_json_file(path)?;
+    if material.kid.trim().is_empty() {
+        return Err(CliError::JwtKeyFile("kid alanı boş"));
+    }
+    let seed = Zeroizing::new(STANDARD.decode(material.seed.trim())?);
+    if seed.len() != 32 {
+        return Err(CliError::InvalidLength {
+            context: "jwt seed",
+            expected: 32,
+            actual: seed.len(),
+        });
+    }
+    let mut buf = [0_u8; 32];
+    buf.copy_from_slice(&seed);
+    Ok(Ed25519KeyPair::from_seed(material.kid, buf)?)
+}
+
+fn build_claims_from_args(args: &JwtSignArgs) -> CliResult<Claims> {
+    let mut claims = Claims::new();
+    claims.issuer.clone_from(&args.issuer);
+    claims.subject.clone_from(&args.subject);
+    if !args.audience.is_empty() {
+        claims.audience = Some(if args.audience.len() == 1 {
+            Audience::Single(args.audience[0].clone())
+        } else {
+            Audience::Multiple(args.audience.clone())
+        });
+    }
+    if let Some(ttl) = args.expires_in {
+        claims.set_expiration_from_now(ttl);
+    }
+    if let Some(offset) = args.not_before_in {
+        claims.not_before = Some(SystemTime::now() + offset);
+    }
+    if !args.no_issued_at {
+        claims.set_issued_now();
+    }
+    if let Some(jti) = &args.jti {
+        claims.jwt_id = Some(jti.clone());
+    }
+    if let Some(path) = args.claims.as_deref() {
+        merge_extra_claims(&mut claims, path)?;
+    }
+    Ok(claims)
+}
+
+fn merge_extra_claims(claims: &mut Claims, path: &Path) -> CliResult<()> {
+    let value: Value = read_json_file(path)?;
+    let map = value
+        .as_object()
+        .ok_or(CliError::JwtClaimsFile("JSON object bekleniyordu"))?;
+    for (key, val) in map {
+        match key.as_str() {
+            "iss" | "sub" | "aud" | "exp" | "nbf" | "iat" | "jti" => {
+                return Err(CliError::ClaimReserved(key.clone()))
+            }
+            _ => {
+                claims.extra.insert(key.clone(), val.clone());
+            }
+        }
+    }
+    Ok(())
+}
+
+fn load_verification_keys(args: &JwtVerifyArgs) -> CliResult<Vec<Ed25519PublicKey>> {
+    let mut map: BTreeMap<String, Ed25519PublicKey> = BTreeMap::new();
+    for path in &args.jwks_files {
+        let jwks: Jwks = read_json_file(path)?;
+        for jwk in jwks.keys {
+            let key = Ed25519PublicKey::from_jwk(&jwk)?;
+            map.insert(jwk.kid.clone(), key);
+        }
+    }
+    for path in &args.jwk_files {
+        let jwk: Jwk = read_json_file(path)?;
+        let key = Ed25519PublicKey::from_jwk(&jwk)?;
+        map.insert(jwk.kid.clone(), key);
+    }
+    for path in &args.key_files {
+        let key = load_jwt_keypair(path)?;
+        map.insert(key.kid().to_string(), key.public_key());
+    }
+    Ok(map.into_values().collect())
+}
+
+fn read_json_file<T>(path: &Path) -> CliResult<T>
+where
+    T: DeserializeOwned,
+{
+    let data = fs::read(path)?;
+    Ok(serde_json::from_slice(&data)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -823,5 +1185,66 @@ mod tests {
     fn decode_fixed_detects_length() {
         let err = decode_fixed::<4>("AA==", "test").unwrap_err();
         assert!(matches!(err, CliError::InvalidLength { .. }));
+    }
+
+    #[test]
+    fn jwt_key_file_roundtrip() {
+        let key = Ed25519KeyPair::generate("cli-test").expect("key");
+        let file = NamedTempFile::new().expect("tmp");
+        write_jwt_key_file(file.path(), &key).expect("write");
+        let loaded = load_jwt_keypair(file.path()).expect("load");
+        assert_eq!(loaded.kid(), key.kid());
+    }
+
+    #[test]
+    fn jwt_extra_claims_rejects_reserved() {
+        let file = NamedTempFile::new().expect("tmp");
+        fs::write(file.path(), "{\"iss\":\"demo\"}").expect("write");
+        let mut claims = Claims::new();
+        let err = merge_extra_claims(&mut claims, file.path()).unwrap_err();
+        assert!(matches!(err, CliError::ClaimReserved(_)));
+    }
+
+    #[test]
+    fn jwt_sign_verify_roundtrip() {
+        let key = Ed25519KeyPair::generate("cli-flow").expect("key");
+        let key_file = NamedTempFile::new().expect("key file");
+        write_jwt_key_file(key_file.path(), &key).expect("write key");
+
+        let token_file = NamedTempFile::new().expect("token file");
+        let sign_args = JwtSignArgs {
+            key: key_file.path().to_path_buf(),
+            out: token_file.path().to_path_buf(),
+            issuer: Some("aunsorm".to_string()),
+            subject: Some("user-123".to_string()),
+            audience: vec!["cli".to_string()],
+            expires_in: Some(Duration::from_secs(60)),
+            not_before_in: None,
+            no_issued_at: false,
+            jti: None,
+            claims: None,
+        };
+        handle_jwt_sign(&sign_args).expect("sign");
+
+        let claims_out = NamedTempFile::new().expect("claims");
+        let verify_args = JwtVerifyArgs {
+            token: token_file.path().to_path_buf(),
+            jwks_files: Vec::new(),
+            jwk_files: Vec::new(),
+            key_files: vec![key_file.path().to_path_buf()],
+            claims_out: Some(claims_out.path().to_path_buf()),
+            issuer: Some("aunsorm".to_string()),
+            subject: Some("user-123".to_string()),
+            audience: Some("cli".to_string()),
+            allow_missing_jti: false,
+            leeway: None,
+            sqlite_store: None,
+        };
+        handle_jwt_verify(&verify_args).expect("verify");
+
+        let claims_json = fs::read_to_string(claims_out.path()).expect("read claims");
+        let claims: Claims = serde_json::from_str(&claims_json).expect("claims json");
+        assert_eq!(claims.issuer.as_deref(), Some("aunsorm"));
+        assert!(claims.jwt_id.is_some());
     }
 }
