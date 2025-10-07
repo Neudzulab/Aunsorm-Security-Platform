@@ -31,6 +31,9 @@ use aunsorm_packet::{
     AeadAlgorithm, DecryptParams, EncryptParams, KemPayload, SessionDecryptParams,
     SessionEncryptParams, SessionMetadata, SessionStore,
 };
+use aunsorm_x509::{
+    generate_self_signed as generate_self_signed_cert, SelfSignedCertParams as X509SelfSignedParams,
+};
 
 #[derive(Parser)]
 #[command(
@@ -64,6 +67,9 @@ enum Commands {
     /// JWT işlemleri
     #[command(subcommand)]
     Jwt(JwtCommands),
+    /// X.509 işlemleri
+    #[command(subcommand)]
+    X509(X509Commands),
 }
 
 #[derive(Subcommand)]
@@ -76,6 +82,13 @@ enum JwtCommands {
     Verify(JwtVerifyArgs),
     /// Anahtar dosyalarından JWKS üret
     ExportJwks(JwtExportJwksArgs),
+}
+
+#[derive(Subcommand)]
+enum X509Commands {
+    /// Ed25519 öz-imzalı sertifika üret
+    #[command(name = "self-signed")]
+    SelfSigned(X509SelfSignedArgs),
 }
 
 #[derive(Args)]
@@ -321,6 +334,34 @@ struct JwtExportJwksArgs {
     out: PathBuf,
 }
 
+#[derive(Args)]
+struct X509SelfSignedArgs {
+    /// Sertifika ortak adı (CN)
+    #[arg(long)]
+    common_name: String,
+    /// Kalibrasyon metni
+    #[arg(long)]
+    calib_text: String,
+    /// Organizasyon tuzu (Base64)
+    #[arg(long, value_name = "B64")]
+    org_salt: String,
+    /// Sertifika çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    cert_out: PathBuf,
+    /// Özel anahtar çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    key_out: PathBuf,
+    /// CPS URI değerleri
+    #[arg(long = "cps", value_name = "URI")]
+    cps: Vec<String>,
+    /// Politika OID değerleri
+    #[arg(long = "policy-oid", value_name = "OID")]
+    policy_oids: Vec<String>,
+    /// Geçerlilik süresi (gün)
+    #[arg(long, value_name = "DAYS", default_value_t = 365)]
+    validity_days: u32,
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum ProfileArg {
     Mobile,
@@ -427,6 +468,10 @@ enum CliError {
     MissingJwtMaterial,
     #[error("claims dosyası geçersiz: {0}")]
     JwtClaimsFile(&'static str),
+    #[error("x509 hatası: {0}")]
+    X509(#[from] aunsorm_x509::X509Error),
+    #[error("geçerlilik süresi en az 1 gün olmalıdır")]
+    InvalidValidityDays,
 }
 
 type CliResult<T> = Result<T, CliError>;
@@ -453,6 +498,7 @@ fn run(cli: Cli) -> CliResult<()> {
         Commands::SessionEncrypt(args) => handle_session_encrypt(&args, strict),
         Commands::SessionDecrypt(args) => handle_session_decrypt(&args, strict),
         Commands::Jwt(command) => handle_jwt(command),
+        Commands::X509(command) => handle_x509(command),
     }
 }
 
@@ -775,6 +821,42 @@ fn handle_jwt_export_jwks(args: &JwtExportJwksArgs) -> CliResult<()> {
     Ok(())
 }
 
+fn handle_x509(command: X509Commands) -> CliResult<()> {
+    match command {
+        X509Commands::SelfSigned(args) => handle_x509_self_signed(&args),
+    }
+}
+
+fn handle_x509_self_signed(args: &X509SelfSignedArgs) -> CliResult<()> {
+    let validity_days = args.validity_days;
+    if validity_days == 0 {
+        return Err(CliError::InvalidValidityDays);
+    }
+    let org_salt = decode_org_salt(&args.org_salt)?;
+    let params = X509SelfSignedParams {
+        common_name: &args.common_name,
+        org_salt: &org_salt,
+        calibration_text: &args.calib_text,
+        cps_uris: &args.cps,
+        policy_oids: &args.policy_oids,
+        validity_days,
+    };
+    let cert = generate_self_signed_cert(&params)?;
+    write_text_file(&args.cert_out, &cert.certificate_pem)?;
+    write_text_file(&args.key_out, &cert.private_key_pem)?;
+    println!(
+        "x509 sertifikası üretildi: cn={} | calib_id={} | validity={} gün | cert={} | key={} | cps={} | policies={}",
+        args.common_name,
+        cert.calibration_id,
+        validity_days,
+        args.cert_out.display(),
+        args.key_out.display(),
+        args.cps.len(),
+        args.policy_oids.len(),
+    );
+    Ok(())
+}
+
 #[derive(Serialize, Deserialize)]
 struct MetadataFile {
     metadata: SessionMetadata,
@@ -916,6 +998,16 @@ fn write_json_pretty<T: Serialize>(path: &Path, value: &T) -> CliResult<()> {
     }
     let json = serde_json::to_string_pretty(value)?;
     fs::write(path, json.as_bytes())?;
+    Ok(())
+}
+
+fn write_text_file(path: &Path, contents: &str) -> CliResult<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+    fs::write(path, contents.as_bytes())?;
     Ok(())
 }
 

@@ -18,6 +18,7 @@ aunsorm-jwt = { path = "../jwt", features = ["sqlite"] }
 aunsorm-core = { path = "../core" }
 aunsorm-packet = { path = "../packet" }
 aunsorm-pqc = { path = "../pqc" }
+aunsorm-x509 = { path = "../x509" }
 zeroize = { workspace = true }
 humantime = "2"
 

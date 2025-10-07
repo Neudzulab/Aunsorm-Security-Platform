@@ -15,6 +15,8 @@ paket üretme ve çözme iş akışlarını otomatikleştirir.
 - Oturum ratchet akışları için `session-encrypt` ve
   `session-decrypt` komutları; ratchet durumu ile replay store
   JSON dosyaları otomatik güncellenir.
+- JWT anahtar üretimi, imzalama/doğrulama ve JWKS dışa aktarımı.
+- Kalibrasyon uzantılı Ed25519 öz-imzalı X.509 sertifika üretimi.
 
 ## Kullanım
 
