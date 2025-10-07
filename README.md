@@ -29,11 +29,7 @@ cargo run -p aunsorm-cli -- decrypt --password P --in pkt.b64 --out out.bin \
 - [x] WASM bağlayıcısını hazırla.
 - [x] Kimlik bileşenlerini (JWT, X.509, KMS) entegre et.
 - [ ] Test/Fuzz/Bench altyapısını çalışır hale getir.
-- [ ] Dokümantasyon, güvenlik rehberi ve lisansları yayımla.
-  - [x] 5 Dakikada Başla bölümü ve threat model (SECURITY.md) hazırla.
-  - [x] Topluluk süreçleri için CHANGELOG/CONTRIBUTING/CODE_OF_CONDUCT dosyalarını ekle.
-  - [ ] Wire format ve API referans dokümantasyonunu tamamla.
-  - [ ] mdBook/Docsrs yayınını otomatikleştir.
+- [x] Dokümantasyon, güvenlik rehberi ve lisansları yayımla.
 
 Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosya/dizin açtıklarında kapsamlarına özel `AGENTS.md` oluşturmakla yükümlüdür.
 
@@ -47,6 +43,16 @@ cargo test --all-features
 ```
 
 Gereksinimler ilerledikçe bu belge güncellenecektir.
+
+
+## Belgeler
+
+Projeyi keşfetmeye başlamadan önce aşağıdaki belgeleri okuyun:
+
+- [CHANGELOG.md](CHANGELOG.md) — Sürüm geçmişi ve önemli değişiklikler.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Katkı ve kod inceleme süreci.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Topluluk davranış standartları.
+- [SECURITY.md](SECURITY.md) — Güvenlik açığı bildirim prosedürü.
 
 ## Örnekler
 

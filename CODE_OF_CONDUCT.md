@@ -1,35 +1,126 @@
-# Code of Conduct
+# Contributor Covenant Code of Conduct
 
 ## Our Pledge
 
-Biz, katkıda bulunanlar ve bakımcılar olarak, herkesin güvenli, kapsayıcı ve tacizden uzak bir toplulukta çalışabilmesini sağlamayı taahhüt ediyoruz. Cinsiyet, cinsel yönelim, engellilik, fiziksel görünüm, vücut ölçüsü, etnik köken, yaş, din veya kimlik fark etmeksizin tüm katılımcılar için ayrımcılık karşıtı bir ortam sunuyoruz.
+We as members, contributors, and leaders pledge to make participation in the
+Aunsorm project and our community a harassment-free experience for everyone,
+regardless of age, body size, visible or invisible disability, ethnicity, sex
+characteristics, gender identity and expression, level of experience, education,
+socio-economic status, nationality, personal appearance, race, religion, or
+sexual identity and orientation.
+
+We pledge to act and interact in ways that contribute to an open, welcoming,
+diverse, inclusive, and healthy community.
 
 ## Our Standards
 
-Olumlu davranış örnekleri:
-- Yapıcı geri bildirim verip almaya açık olmak.
-- Empatiyle hareket ederek teknik tartışmalarda kişisel saldırılardan kaçınmak.
-- Topluluğun güvenlik ve gizlilik hedeflerine saygı göstermek.
+Examples of behavior that contributes to a positive environment for our community
+include:
 
-Kabul edilmeyen davranış örnekleri:
-- Sözlü veya yazılı taciz, küçük düşürücü yorumlar.
-- Kamuya açık veya özel olarak uygunsuz görsel, sözlü ya da fiziksel iletişim.
-- Bilinçli olarak gizli materyallerin veya hassas verilerin sızdırılması.
+- Demonstrating empathy and kindness toward other people.
+- Respecting differing opinions, viewpoints, and experiences.
+- Giving and gracefully accepting constructive feedback.
+- Accepting responsibility and apologizing to those affected by our mistakes,
+  and learning from the experience.
+- Focusing on what is best for the community and project overall.
+
+Examples of unacceptable behavior include:
+
+- The use of sexualized language or imagery, and sexual attention or advances of
+  any kind.
+- Trolling, insulting or derogatory comments, and personal or political attacks.
+- Public or private harassment.
+- Publishing others' private information, such as a physical or email address,
+  without their explicit permission.
+- Other conduct which could reasonably be considered inappropriate in a
+  professional setting.
 
 ## Enforcement Responsibilities
 
-Projeyi sürdürenler uygunsuz davranışları düzeltmek için gerekli adımları atma hakkına sahiptir. Bu kapsamda yorumların silinmesi, uyarı verilmesi veya gerekirse projeden uzaklaştırma uygulanabilir.
+Community leaders are responsible for clarifying and enforcing our standards of
+acceptable behavior and will take appropriate and fair corrective action in
+response to any behavior that they deem inappropriate, threatening, offensive,
+or harmful.
+
+Project maintainers have the right and responsibility to remove, edit, or reject
+comments, commits, code, wiki edits, issues, and other contributions that are
+not aligned to this Code of Conduct, and will communicate reasons for moderation
+decisions when appropriate.
 
 ## Scope
 
-Bu politika proje depoları, issue/PR sayfaları, tartışma kanalları ve topluluk etkinlikleri dahil olmak üzere tüm resmi ortamlarda geçerlidir. Aunsorm markasını taşıyan fiziksel veya sanal etkinlikler de kapsam dahilindedir.
+This Code of Conduct applies within all community spaces, and also applies when
+an individual is officially representing the community in public spaces. Examples
+of representing our community include using an official e-mail address, posting
+via an official social media account, or acting as an appointed representative
+at an online or offline event.
 
 ## Enforcement
 
-Taciz veya uygunsuz davranış bildirmek için `conduct@aunsorm.example` adresine e-posta gönderin. Bildirimler gizli tutulur ve en geç beş iş günü içinde yanıtlanır. Güvenlik ihlallerine ilişkin raporlar için ayrıca `security@aunsorm.example` adresini kullanabilirsiniz.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be
+reported to the maintainers responsible for enforcement at
+[conduct@aunsorm.dev](mailto:conduct@aunsorm.dev). All complaints will be
+reviewed and investigated promptly and fairly.
 
-Bakımcılar, olayın bağlamını değerlendirdikten sonra uygun görülen yaptırımı uygular. Tekrarlayan veya ağır ihlaller projeden kalıcı uzaklaştırmaya neden olabilir.
+All community leaders are obligated to respect the privacy and security of the
+reporter of any incident.
+
+## Enforcement Guidelines
+
+Community leaders will follow these Community Impact Guidelines in determining
+the consequences for any action they deem in violation of this Code of Conduct:
+
+### 1. Correction
+
+**Community Impact**: Use of inappropriate language or other behavior deemed
+unprofessional or unwelcome in the community.
+
+**Consequence**: A private, written warning from community leaders, providing
+clarity around the nature of the violation and an explanation of why the behavior
+was inappropriate. A public apology may be requested.
+
+### 2. Warning
+
+**Community Impact**: A violation through a single incident or series of actions.
+
+**Consequence**: A warning with consequences for continued behavior. No
+interaction with the people involved, including unsolicited interaction with
+those enforcing the Code of Conduct, for a specified period of time. This
+includes avoiding interactions in community spaces as well as external channels
+like social media. Violating these terms may lead to a temporary or permanent
+ban.
+
+### 3. Temporary Ban
+
+**Community Impact**: A serious violation of community standards, including
+sustained inappropriate behavior.
+
+**Consequence**: A temporary ban from any sort of interaction or public
+communication with the community for a specified period of time. No public or
+private interaction with the people involved, including unsolicited interaction
+with those enforcing the Code of Conduct, is allowed during this period.
+Violating these terms may lead to a permanent ban.
+
+### 4. Permanent Ban
+
+**Community Impact**: Demonstrating a pattern of violation of community
+standards, including sustained inappropriate behavior, harassment of an
+individual, or aggression toward or disparagement of classes of individuals.
+
+**Consequence**: A permanent ban from any sort of public interaction within the
+community.
 
 ## Attribution
 
-Bu davranış kuralları, [Contributor Covenant](https://www.contributor-covenant.org/version/2/1/code_of_conduct.html) sürüm 2.1 temel alınarak uyarlanmıştır. SSS için [https://www.contributor-covenant.org/faq](https://www.contributor-covenant.org/faq) sayfasına bakabilirsiniz.
+This Code of Conduct is adapted from the [Contributor Covenant][homepage],
+version 2.1, available at
+<https://www.contributor-covenant.org/version/2/1/code_of_conduct.html>.
+
+Community Impact Guidelines were inspired by [Mozilla's code of conduct
+enforcement ladder](https://github.com/mozilla/diversity).
+
+For answers to common questions about this code of conduct, see the FAQ at
+<https://www.contributor-covenant.org/faq>. Translations are available at
+<https://www.contributor-covenant.org/translations>.
+
+[homepage]: https://www.contributor-covenant.org

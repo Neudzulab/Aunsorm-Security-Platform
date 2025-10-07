@@ -1,42 +1,50 @@
 # Security Policy
 
+Aunsorm aims to be a best-in-class secure communication suite. Responsible
+reporting allows us to protect users quickly and transparently.
+
 ## Supported Versions
 
-| Version | Destek Durumu |
-| ------- | -------------- |
-| `main`  | Güvenlik düzeltmeleri düzenli olarak uygulanır |
-| `0.1.x` | Kritik güvenlik yamaları için desteklenir |
+| Version | Supported |
+| ------- | --------- |
+| 0.1.x   | ✅         |
+| < 0.1   | ❌         |
 
-Semantik sürümleme uygulanır; yeni minör sürümler geriye dönük uyumlu kalırken güvenlik düzeltmeleri `PATCH` sürümlerinde yayınlanır.
+We currently support the latest patch release on the 0.1.x line. Older releases
+will only receive security fixes on a best-effort basis.
 
-## Vulnerability Reporting
+## Reporting a Vulnerability
 
-Güvenlik açığı bildirmek için `security@aunsorm.example` adresine PGP şifreli bir e-posta gönderin. 48 saat içinde alınan raporlar teyit edilir, 5 iş günü içerisinde etkilenen sürümler ve geçici çözümler hakkında yanıt verilir. Gerekliyse koordineli açıklama takvimi belirlenir.
+1. Email a detailed report to [security@aunsorm.dev](mailto:security@aunsorm.dev).
+   Include proof-of-concept steps, impact analysis, and any mitigation ideas.
+2. If the vulnerability involves highly sensitive data or cross-tenant impact,
+   encrypt your message using the PGP key published in `docs/SECURITY-KEY.asc`.
+   (Until that key is published, request a temporary key in your initial email.)
+3. Do **not** open a public GitHub issue until we have coordinated a disclosure
+   timeline together.
 
-## Threat Model
-
-Aunsorm; kalibrasyon metinleri ve organizasyon tuzları olmadan mesajların çözülememesini, oturum anahtarlarının her adımda yenilenmesini ve Strict kipte downgrade girişimlerinin engellenmesini hedefler.
-
-- **Kimlik Bağı**: `aunsorm-core` EXTERNAL kalibrasyon metnini `calib_from_text` fonksiyonu ile deterministik olarak kalibrasyon kimliği üretip KDF zincirine bağlar.
-- **Anahtar Türetimi**: Parolalar Argon2id ile profillere göre sertleştirilir; `KdfProfile::auto` sistem kaynaklarına göre preset seçer ve HKDF etiketi `Aunsorm/1.01/*` namespace'iyle bağlanır.
-- **Paket Bütünlüğü**: `aunsorm-packet` JSON başlıkları HMAC-SHA256 ile imzalar, gövdeyi AES-PMAC ile korur ve AEAD (AES-GCM veya ChaCha20-Poly1305) kullanır. Strict kipte başlık alanları ve boyutlar sıkı doğrulanır.
-- **Post-Kuantum Dayanıklılık**: `aunsorm-pqc` ML-KEM ve imza şemalarını sarmalar. Strict kip açıkken PQC özellikleri devre dışıysa `KemSelection` fallback'e izin vermez.
-- **Oturum Ratcheti**: `SessionRatchet` her mesaj numarası için HKDF ile adım sırrı üretir, tekrar kullanımını engeller.
-- **Kimlik Katmanı**: JWT bileşeni Ed25519 imzası ve sqlite tabanlı JTI deposuyla replay saldırılarını engeller; Strict kipte kalıcı depo zorunludur.
-
-## Operational Guidance
-
-- `AUNSORM_STRICT=1` değişkenini üretim ortamlarında varsayılan olarak etkinleştirin.
-- PQC bağımlılıklarını doğrulayın; Strict kipte gerekli `kem-*` özellikleri etkin değilse işlemler hatayla sonuçlanacaktır.
-- KMS fallback senaryolarında `AUNSORM_KMS_FALLBACK=0` ile kapalı mod çalıştırın.
-- JWT JTI deposu için sqlite WAL modunu aktif tutun ve periyodik vacuum uygulayın.
-- Kayıtlar (`audit` ve `error` logları) hassas materyal içermeyecek şekilde yapılandırılmıştır; yine de log seviyesini `info` veya daha düşükte tutun.
+We will acknowledge new reports within **3 business days**. Within **10 business
+ days** we will share our initial assessment, target fix version, and—if
+ applicable—request additional information.
 
 ## Disclosure Process
 
-1. Raporunuzu aldıktan sonra etkilenme durumunu doğrularız.
-2. Geçici çözüm veya yama çıkarılana dek raporu gizli tutarız.
-3. Çözüm yayınlandığında `CHANGELOG.md` ve `SECURITY.md` güncellenir, gerekirse CVE başvurusu yapılır.
-4. Açık kapatıldıktan sonra rapor sahibine atıf yapılır (isteğe bağlı).
+- We strive to release a patched version within **30 days** of confirming a
+  vulnerability. Complex issues may require more time; we will keep reporters
+  informed of delays.
+- Once a fix is available, we will publish security advisories, update
+  `CHANGELOG.md`, and notify known integrators.
+- Credit will be given to reporters who wish to be acknowledged. Anonymous
+  reports are always respected.
 
-Topluluk, güvenliğin sürdürülebilir olması için geri bildirimlerinizi bekler.
+## Safe Harbor
+
+We do not pursue legal action against researchers who:
+
+- Make a good-faith effort to avoid privacy violations, data destruction, or
+  service disruption.
+- Report vulnerabilities promptly and allow us reasonable time to remediate
+  before public disclosure.
+- Follow the steps outlined above and comply with applicable laws.
+
+Thank you for helping keep Aunsorm users safe.
