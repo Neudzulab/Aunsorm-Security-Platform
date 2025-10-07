@@ -1,0 +1,69 @@
+#![allow(clippy::module_name_repetitions)]
+
+use thiserror::Error;
+
+/// JWT işlemleri için sonuç türü.
+pub type Result<T> = std::result::Result<T, JwtError>;
+
+/// JWT hata türleri.
+#[derive(Debug, Error)]
+pub enum JwtError {
+    /// Serde seri/de-serializasyon hatası.
+    #[error("serde error: {0}")]
+    Serde(#[from] serde_json::Error),
+    /// Base64 kod çözme hatası.
+    #[error("base64 decode error: {0}")]
+    Base64(#[from] base64::DecodeError),
+    /// İmza doğrulama hatası.
+    #[error("signature verification failed")]
+    Signature,
+    /// Desteklenmeyen algoritma.
+    #[error("unsupported algorithm: {0}")]
+    UnsupportedAlgorithm(String),
+    /// `kid` alanı bilinmiyor.
+    #[error("unknown key id: {0}")]
+    UnknownKey(String),
+    /// Birden fazla anahtar varken `kid` eksik.
+    #[error("missing key id")]
+    MissingKeyId,
+    /// Token süresi dolmuş.
+    #[error("token expired")]
+    Expired,
+    /// Token henüz geçerli değil.
+    #[error("token not yet valid")]
+    NotYetValid,
+    /// `iat` gelecekte.
+    #[error("token issued in the future")]
+    IssuedInFuture,
+    /// Zaman alanları hatalı.
+    #[error("invalid claim {0}: {1}")]
+    InvalidClaim(&'static str, &'static str),
+    /// Beklenen claim eşleşmedi.
+    #[error("claim mismatch: {0}")]
+    ClaimMismatch(&'static str),
+    /// `jti` alanı zorunlu.
+    #[error("jti claim missing")]
+    MissingJti,
+    /// JTI store hatası.
+    #[error("jti store error: {0}")]
+    JtiStore(&'static str),
+    /// JTI tekrar saldırısı.
+    #[error("jti replay detected")]
+    Replay,
+    /// JWT biçimi hatalı.
+    #[error("malformed jwt")]
+    Malformed,
+    /// Zaman hesaplaması yapılamadı.
+    #[error("time conversion error")]
+    TimeConversion,
+    /// SQL hatası.
+    #[cfg(feature = "sqlite")]
+    #[error("sqlite error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
+}
+
+impl From<std::time::SystemTimeError> for JwtError {
+    fn from(_: std::time::SystemTimeError) -> Self {
+        Self::TimeConversion
+    }
+}
