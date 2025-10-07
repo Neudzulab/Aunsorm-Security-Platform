@@ -1,0 +1,28 @@
+[package]
+name = "aunsorm-server"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "OAuth-like control plane for the Aunsorm secure tooling suite"
+rust-version = "1.76"
+
+[dependencies]
+axum = { version = "0.7", features = ["json"] }
+base64 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+hkdf = { workspace = true }
+aunsorm-jwt = { path = "../jwt" }
+zeroize = { workspace = true }
+rand_core = { workspace = true }
+hex = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+rusqlite = { version = "0.31", default-features = false, features = ["bundled"] }
+hyper = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }
