@@ -1,0 +1,34 @@
+[package]
+name = "aunsorm-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+
+[workspace]
+members = []
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+aunsorm-packet = { path = "../crates/packet" }
+aunsorm-core = { path = "../crates/core" }
+base64 = { version = "0.21", default-features = false, features = ["std"] }
+
+[profile.release]
+debug = true
+
+[[bin]]
+name = "fuzz_packet"
+path = "fuzz_targets/fuzz_packet.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_session"
+path = "fuzz_targets/fuzz_session.rs"
+test = false
+doc = false
+bench = false
