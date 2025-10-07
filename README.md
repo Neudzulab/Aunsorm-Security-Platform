@@ -31,3 +31,12 @@ cargo test --all-features
 ```
 
 Gereksinimler ilerledikçe bu belge güncellenecektir.
+
+## Örnekler
+
+Mevcut örnekler aşağıdaki komutlarla çalıştırılabilir:
+
+```bash
+cargo run --example encrypt_decrypt
+cargo run --example session_roundtrip
+```
