@@ -61,4 +61,5 @@ Mevcut örnekler aşağıdaki komutlarla çalıştırılabilir:
 ```bash
 cargo run --example encrypt_decrypt
 cargo run --example session_roundtrip
+cargo run --example jwt_flow
 ```
