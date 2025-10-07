@@ -14,7 +14,7 @@ hkdf = { workspace = true }
 sha2 = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-aunsorm-jwt = { path = "../jwt", features = ["sqlite"] }
+aunsorm-jwt = { path = "../jwt", features = ["sqlite", "kms"] }
 aunsorm-core = { path = "../core" }
 aunsorm-packet = { path = "../packet" }
 aunsorm-pqc = { path = "../pqc" }
