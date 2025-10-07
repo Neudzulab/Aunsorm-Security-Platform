@@ -4,6 +4,7 @@ members = [
     "crates/core",
     "crates/packet",
     "crates/pqc",
+    "crates/kms",
     "crates/jwt",
     "crates/x509",
     "crates/server",

@@ -26,6 +26,10 @@ use aunsorm_jwt::{
     Audience, Claims, Ed25519KeyPair, Ed25519PublicKey, Jwk, Jwks, JwtSigner, JwtVerifier,
     VerificationOptions,
 };
+use aunsorm_kms::{
+    BackendKind as KmsBackendKind, BackendLocator as KmsBackendLocator,
+    KeyDescriptor as KmsKeyDescriptor, KmsClient, KmsConfig,
+};
 use aunsorm_packet::{
     decrypt_one_shot, decrypt_session, encrypt_one_shot, encrypt_session, peek_header,
     AeadAlgorithm, DecryptParams, EncryptParams, KemPayload, SessionDecryptParams,
@@ -253,8 +257,8 @@ struct JwtKeygenArgs {
 #[derive(Args)]
 struct JwtSignArgs {
     /// Anahtar dosyası (keygen çıktısı)
-    #[arg(long, value_name = "PATH")]
-    key: PathBuf,
+    #[arg(long, value_name = "PATH", conflicts_with = "kms_backend")]
+    key: Option<PathBuf>,
     /// Üretilen JWT çıktı dosyası
     #[arg(long, value_name = "PATH")]
     out: PathBuf,
@@ -282,6 +286,21 @@ struct JwtSignArgs {
     /// Ek claim'ler JSON dosyası
     #[arg(long, value_name = "PATH")]
     claims: Option<PathBuf>,
+    /// KMS backend türü
+    #[arg(long, value_enum, conflicts_with = "key")]
+    kms_backend: Option<KmsBackendArg>,
+    /// KMS anahtar kimliği
+    #[arg(long, value_name = "ID", requires = "kms_backend")]
+    kms_key_id: Option<String>,
+    /// Fallback backend türü
+    #[arg(long, value_enum, requires_all = ["kms_backend", "kms_key_id"])]
+    kms_fallback_backend: Option<KmsBackendArg>,
+    /// Fallback anahtar kimliği
+    #[arg(long, value_name = "ID", requires = "kms_fallback_backend")]
+    kms_fallback_key_id: Option<String>,
+    /// Yerel KMS store dosyası
+    #[arg(long, value_name = "PATH", requires = "kms_backend")]
+    kms_store: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -424,6 +443,36 @@ impl std::fmt::Display for AeadArg {
     }
 }
 
+#[derive(Clone, Copy, ValueEnum)]
+enum KmsBackendArg {
+    Local,
+    Gcp,
+    Azure,
+    Pkcs11,
+}
+
+impl From<KmsBackendArg> for KmsBackendKind {
+    fn from(value: KmsBackendArg) -> Self {
+        match value {
+            KmsBackendArg::Local => Self::Local,
+            KmsBackendArg::Gcp => Self::Gcp,
+            KmsBackendArg::Azure => Self::Azure,
+            KmsBackendArg::Pkcs11 => Self::Pkcs11,
+        }
+    }
+}
+
+impl std::fmt::Display for KmsBackendArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Local => "local",
+            Self::Gcp => "gcp",
+            Self::Azure => "azure",
+            Self::Pkcs11 => "pkcs11",
+        })
+    }
+}
+
 #[derive(Debug, Error)]
 enum CliError {
     #[error("io error: {0}")]
@@ -466,6 +515,8 @@ enum CliError {
     ClaimReserved(String),
     #[error("jwt anahtar materyali belirtilmelidir")]
     MissingJwtMaterial,
+    #[error("kms hatası: {0}")]
+    Kms(#[from] aunsorm_kms::KmsError),
     #[error("claims dosyası geçersiz: {0}")]
     JwtClaimsFile(&'static str),
     #[error("x509 hatası: {0}")]
@@ -491,6 +542,9 @@ fn main() {
 
 fn run(cli: Cli) -> CliResult<()> {
     let strict = cli.strict || env_strict();
+    if cli.strict {
+        std::env::set_var("AUNSORM_STRICT", "1");
+    }
     match cli.command {
         Commands::Encrypt(args) => handle_encrypt(args, strict),
         Commands::Decrypt(args) => handle_decrypt(args, strict),
@@ -740,20 +794,59 @@ fn handle_jwt_keygen(args: &JwtKeygenArgs) -> CliResult<()> {
 }
 
 fn handle_jwt_sign(args: &JwtSignArgs) -> CliResult<()> {
-    let key = load_jwt_keypair(&args.key)?;
     let mut claims = build_claims_from_args(args)?;
     if args.jti.is_none() {
         claims.ensure_jwt_id();
     }
-    let signer = JwtSigner::new(key.clone());
-    let token = signer.sign(&claims)?;
+    let (kid, token, extra_info) = if let Some(path) = args.key.as_deref() {
+        let key = load_jwt_keypair(path)?;
+        let signer = JwtSigner::new(key.clone());
+        let token = signer.sign(&claims)?;
+        (key.kid().to_string(), token, None)
+    } else if let Some(backend) = args.kms_backend {
+        let kms_key_id = args
+            .kms_key_id
+            .as_ref()
+            .ok_or(CliError::MissingParam("kms-key-id"))?
+            .clone();
+        if args.kms_fallback_backend.is_some() != args.kms_fallback_key_id.is_some() {
+            return Err(CliError::MissingParam("kms fallback"));
+        }
+        let mut config = KmsConfig::from_env()?;
+        if let Some(store) = args.kms_store.as_ref() {
+            config = config.with_local_store(store.clone());
+        }
+        let client = KmsClient::from_config(config)?;
+        let primary = KmsBackendLocator::new(backend.into(), kms_key_id.clone());
+        let descriptor = if let Some(fallback_backend) = args.kms_fallback_backend {
+            let fallback_id = args
+                .kms_fallback_key_id
+                .as_ref()
+                .ok_or(CliError::MissingParam("kms-fallback-key-id"))?
+                .clone();
+            KmsKeyDescriptor::new(primary)
+                .with_fallback(KmsBackendLocator::new(fallback_backend.into(), fallback_id))
+        } else {
+            if args.kms_fallback_key_id.is_some() {
+                return Err(CliError::MissingParam("kms-fallback-backend"));
+            }
+            KmsKeyDescriptor::new(primary)
+        };
+        let signer = aunsorm_jwt::KmsJwtSigner::new(&client, descriptor)?;
+        let token = signer.sign(&claims)?;
+        let kms_info = format!(" | kms={backend}::{kms_key_id}");
+        (signer.kid().to_string(), token, Some(kms_info))
+    } else {
+        return Err(CliError::MissingJwtMaterial);
+    };
     fs::write(&args.out, token.as_bytes())?;
     println!(
-        "jwt imzalandı: kid={} | jti={} | out={} | exp={:?}",
-        key.kid(),
+        "jwt imzalandı: kid={} | jti={} | out={} | exp={:?}{}",
+        kid,
         claims.jwt_id.as_deref().unwrap_or("<none>"),
         args.out.display(),
-        claims.expiration
+        claims.expiration,
+        extra_info.unwrap_or_default(),
     );
     Ok(())
 }
@@ -1308,7 +1401,7 @@ mod tests {
 
         let token_file = NamedTempFile::new().expect("token file");
         let sign_args = JwtSignArgs {
-            key: key_file.path().to_path_buf(),
+            key: Some(key_file.path().to_path_buf()),
             out: token_file.path().to_path_buf(),
             issuer: Some("aunsorm".to_string()),
             subject: Some("user-123".to_string()),
@@ -1318,6 +1411,11 @@ mod tests {
             no_issued_at: false,
             jti: None,
             claims: None,
+            kms_backend: None,
+            kms_key_id: None,
+            kms_fallback_backend: None,
+            kms_fallback_key_id: None,
+            kms_store: None,
         };
         handle_jwt_sign(&sign_args).expect("sign");
 
