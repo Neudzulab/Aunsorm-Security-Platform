@@ -60,6 +60,10 @@ pub enum JwtError {
     #[cfg(feature = "sqlite")]
     #[error("sqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    /// KMS katmanından dönen hata.
+    #[cfg(feature = "kms")]
+    #[error("kms error: {0}")]
+    Kms(#[from] aunsorm_kms::KmsError),
 }
 
 impl From<std::time::SystemTimeError> for JwtError {

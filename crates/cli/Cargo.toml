@@ -19,6 +19,7 @@ aunsorm-core = { path = "../core" }
 aunsorm-packet = { path = "../packet" }
 aunsorm-pqc = { path = "../pqc" }
 aunsorm-x509 = { path = "../x509" }
+aunsorm-kms = { path = "../kms" }
 zeroize = { workspace = true }
 humantime = "2"
 

@@ -11,6 +11,7 @@ rust-version = "1.76"
 [features]
 default = ["sqlite"]
 sqlite = ["dep:rusqlite"]
+kms = ["dep:aunsorm-kms"]
 
 [dependencies]
 base64 = { workspace = true }
@@ -21,6 +22,8 @@ zeroize = { workspace = true }
 rand_core = { workspace = true }
 ed25519-dalek = { version = "2", default-features = false, features = ["std", "rand_core"] }
 hex = { workspace = true }
+sha2 = { workspace = true }
+aunsorm-kms = { path = "../kms", optional = true }
 
 [dependencies.rusqlite]
 optional = true
