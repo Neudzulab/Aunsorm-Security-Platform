@@ -1,0 +1,9 @@
+# cargo-fuzz artifacts
+artifacts/
+corpus/
+crashes/
+coverage/
+reports/
+
+# Default target directory
+target/

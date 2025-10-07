@@ -1,0 +1,11 @@
+[package]
+name = "aunsorm-tests"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.76"
+publish = false
+
+[dependencies]
+aunsorm-core = { path = "../crates/core" }
+aunsorm-packet = { path = "../crates/packet" }
+proptest = "1.4"
