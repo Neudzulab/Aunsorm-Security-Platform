@@ -1,12 +1,16 @@
 //! Entegrasyon ve property testleri: çekirdek ve paket katmanının
 //! birlikte çalışmasını doğrular.
 
-use aunsorm_core::{calib_from_text, salts::Salts, KdfPreset, KdfProfile};
+use aunsorm_core::{
+    calib_from_text, coord32_derive, derive_seed64_and_pdk, salts::Salts, KdfPreset, KdfProfile,
+};
 use aunsorm_packet::{
     decrypt_one_shot, encrypt_one_shot, AeadAlgorithm, DecryptParams, EncryptParams, PacketError,
 };
+use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use proptest::test_runner::{Config as ProptestConfig, TestCaseError};
 use proptest::{char, prelude::*};
+use sha2::{Digest, Sha256};
 
 fn printable_string(min: usize, max: usize) -> impl Strategy<Value = String> {
     prop::collection::vec(char::range(' ', '~'), min..=max)
@@ -90,12 +94,34 @@ proptest! {
         })
         .map_err(|err| to_test_error(err, "decrypt"))?;
 
+        let (seed64, _, _) = derive_seed64_and_pdk(
+            &password,
+            password_salt.as_slice(),
+            salts.calibration(),
+            salts.chain(),
+            profile,
+        )
+        .map_err(|err| to_test_error(err, "derive seed"))?;
+
+        let (expected_coord_id, expected_coord) =
+            coord32_derive(&seed64, &calibration, &salts)
+                .map_err(|err| to_test_error(err, "derive coord"))?;
+
+        let mut digest_hasher = Sha256::new();
+        digest_hasher.update(b"Aunsorm/1.01/coord-digest");
+        digest_hasher.update(expected_coord);
+        let expected_digest = STANDARD_NO_PAD.encode(digest_hasher.finalize());
+
         prop_assert_eq!(decrypted.plaintext.as_slice(), plaintext.as_slice());
         prop_assert_eq!(&decrypted.header, &expected_header);
         prop_assert_eq!(decrypted.header.aead.alg, algorithm);
         prop_assert_eq!(decrypted.header.sizes.plaintext, plaintext.len());
-        prop_assert!(decrypted.metadata.coord_id.is_some());
-        prop_assert!(decrypted.metadata.coord.is_some());
+        prop_assert_eq!(
+            decrypted.metadata.coord_id.as_deref(),
+            Some(expected_coord_id.as_str())
+        );
+        prop_assert_eq!(decrypted.metadata.coord.as_ref(), Some(&expected_coord));
+        prop_assert_eq!(decrypted.metadata.coord_digest, expected_digest);
     }
 }
 

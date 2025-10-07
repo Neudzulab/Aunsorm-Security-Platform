@@ -9,3 +9,5 @@ publish = false
 aunsorm-core = { path = "../crates/core" }
 aunsorm-packet = { path = "../crates/packet" }
 proptest = "1.4"
+base64 = { workspace = true }
+sha2 = { workspace = true }
