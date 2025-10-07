@@ -19,7 +19,7 @@ Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsaml�
 - [x] WASM bağlayıcısını hazırla.
 - [x] Kimlik bileşenlerini (JWT, X.509, KMS) entegre et.
 - [ ] Test/Fuzz/Bench altyapısını çalışır hale getir.
-- [ ] Dokümantasyon, güvenlik rehberi ve lisansları yayımla.
+- [x] Dokümantasyon, güvenlik rehberi ve lisansları yayımla.
 
 Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosya/dizin açtıklarında kapsamlarına özel `AGENTS.md` oluşturmakla yükümlüdür.
 
@@ -33,6 +33,16 @@ cargo test --all-features
 ```
 
 Gereksinimler ilerledikçe bu belge güncellenecektir.
+
+
+## Belgeler
+
+Projeyi keşfetmeye başlamadan önce aşağıdaki belgeleri okuyun:
+
+- [CHANGELOG.md](CHANGELOG.md) — Sürüm geçmişi ve önemli değişiklikler.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — Katkı ve kod inceleme süreci.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Topluluk davranış standartları.
+- [SECURITY.md](SECURITY.md) — Güvenlik açığı bildirim prosedürü.
 
 ## Örnekler
 
