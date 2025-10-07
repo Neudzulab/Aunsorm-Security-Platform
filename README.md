@@ -19,7 +19,7 @@ cargo run -p aunsorm-cli -- decrypt --password P --in pkt.b64 --out out.bin \
 - [x] `aunsorm-core` kriptografik temel modüllerini uygula.
 - [x] `aunsorm-packet` paket formatı ve doğrulamalarını geliştir.
 - [x] PQC köprüsü ve strict kip mantığını tamamla.
-- [ ] CLI / Server / WASM katmanlarını çıkar.
+- [x] CLI / Server / WASM katmanlarını çıkar.
   - [x] CLI: encrypt/decrypt/peek komutlarını sağla.
   - [x] CLI: oturum komutlarını ekle.
   - [x] CLI: jwt/x509 akışlarını ekle.
