@@ -33,6 +33,14 @@ cargo run -p aunsorm-cli -- decrypt --password P --in pkt.b64 --out out.bin \
 
 Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosya/dizin açtıklarında kapsamlarına özel `AGENTS.md` oluşturmakla yükümlüdür.
 
+## Test, Fuzz ve Benchmark Çalıştırma
+
+Aşağıdaki komutlar test/fuzz/bench altyapısını kullanıma hazır hale getirir:
+
+- `cargo test --all-features` — modül testleri ve `tests/` altındaki property testlerini çalıştırır.
+- `cargo bench --benches` — Criterion tabanlı AEAD ve oturum ölçümlerini yürütür.
+- `cargo fuzz run fuzz_packet` ve `cargo fuzz run fuzz_session` — paket/oturum katmanlarını libFuzzer ile zorlar (Nightly + `cargo-fuzz` gerektirir).
+
 ## Nasıl Katkı Sağlanır?
 Tüm katkılar PR süreci üzerinden yapılmalı; PR açıklamalarında yapılan değişiklikler, ilgili ajan ve kontrol edilen gereksinimler belirtilmelidir. Ayrıntılı kurallar için [`CONTRIBUTING.md`](CONTRIBUTING.md) dosyasına başvurabilirsiniz. Standart çalışma komutları:
 
