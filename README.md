@@ -33,6 +33,28 @@ cargo run -p aunsorm-cli -- decrypt --password P --in pkt.b64 --out out.bin \
 
 Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosya/dizin açtıklarında kapsamlarına özel `AGENTS.md` oluşturmakla yükümlüdür.
 
+## Sprint 1: Kripto ve Paket Temelleri
+- [ ] Argon2id profil otomasyonu ve `KdfProfile` API'sini tamamla.
+- [ ] AEAD anahtar türetme, nonce yönetimi ve `strict` kip zorunluluklarını uygula.
+- [ ] Oturum/ratchet akışlarını ve deterministik hata yüzeylerini üret.
+- [ ] Paket başlık/gövde serileştirme ile sınır kontrollerini bitir.
+- [ ] Replay koruması ve JTI/PacketId mağazasını entegre et.
+- [ ] PQC köprüsünü (ML-KEM/Falcon/SPHINCS+) tamamla ve `strict` davranışlarını doğrula.
+
+## Sprint 2: Kimlik ve Platform Katmanları
+- [ ] `aunsorm-kms` için GCP, Azure ve PKCS#11 imzacılarını uygulamaya al.
+- [ ] `aunsorm-jwt` üzerinde Ed25519 JWT/JWKS akışlarını ve JTI mağazasını gerçekleştir.
+- [ ] `aunsorm-x509` için calib/policy OID, CPS kontrolleri ve opsiyonel PQ işaretlerini ekle.
+- [ ] CLI oturum/jwt/x509 komutlarını üretim seviyesinde tamamla.
+- [ ] Sunucu bileşeni için OAuth benzeri uçları, sağlık ve metrikleri çıkar.
+
+## Sprint 3: İnterop, Gözlemlenebilirlik ve Dağıtım
+- [ ] WASM bağlayıcısını `wasm-bindgen` ile yayımla ve EXTERNAL kalibrasyonunu doğrula.
+- [ ] Python uyumluluk testleri için referans karşılaştırmalarını çalıştır.
+- [ ] Benchmark, fuzz ve property test akışlarını CI'ya entegre et.
+- [ ] OpenTelemetry temelli gözlemlenebilirlik ve yapılandırılabilir logging ekle.
+- [ ] GitHub Actions matris CI'sini (fmt/clippy/test/fuzz/bench/audit/deny) etkinleştir.
+
 ## Test, Fuzz ve Benchmark Çalıştırma
 
 Aşağıdaki komutlar test/fuzz/bench altyapısını kullanıma hazır hale getirir:
