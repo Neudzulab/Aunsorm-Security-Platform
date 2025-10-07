@@ -36,12 +36,12 @@ cargo run -p aunsorm-cli -- calib inspect \
 Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosya/dizin açtıklarında kapsamlarına özel `AGENTS.md` oluşturmakla yükümlüdür.
 
 ## Sprint 1: Kripto ve Paket Temelleri
-- [ ] Argon2id profil otomasyonu ve `KdfProfile` API'sini tamamla.
-- [ ] AEAD anahtar türetme, nonce yönetimi ve `strict` kip zorunluluklarını uygula.
-- [ ] Oturum/ratchet akışlarını ve deterministik hata yüzeylerini üret.
-- [ ] Paket başlık/gövde serileştirme ile sınır kontrollerini bitir.
-- [ ] Replay koruması ve JTI/PacketId mağazasını entegre et.
-- [ ] PQC köprüsünü (ML-KEM/Falcon/SPHINCS+) tamamla ve `strict` davranışlarını doğrula.
+- [x] Argon2id profil otomasyonu ve `KdfProfile` API'sini tamamla.
+- [x] AEAD anahtar türetme, nonce yönetimi ve `strict` kip zorunluluklarını uygula.
+- [x] Oturum/ratchet akışlarını ve deterministik hata yüzeylerini üret.
+- [x] Paket başlık/gövde serileştirme ile sınır kontrollerini bitir.
+- [x] Replay koruması ve JTI/PacketId mağazasını entegre et.
+- [x] PQC köprüsünü (ML-KEM/Falcon/SPHINCS+) tamamla ve `strict` davranışlarını doğrula.
 
 ## Sprint 2: Kimlik ve Platform Katmanları
 - [ ] `aunsorm-kms` için GCP, Azure ve PKCS#11 imzacılarını uygulamaya al.
