@@ -11,7 +11,8 @@ Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsaml�
 - [x] PQC köprüsü ve strict kip mantığını tamamla.
 - [ ] CLI / Server / WASM katmanlarını çıkar.
   - [x] CLI: encrypt/decrypt/peek komutlarını sağla.
-  - [ ] CLI: oturum/jwt/x509 akışlarını ekle.
+  - [x] CLI: oturum komutlarını ekle.
+  - [ ] CLI: jwt/x509 akışlarını ekle.
   - [ ] Server katmanını uygula.
   - [ ] WASM bağlayıcısını hazırla.
 - [ ] Kimlik bileşenlerini (JWT, X.509, KMS) entegre et.

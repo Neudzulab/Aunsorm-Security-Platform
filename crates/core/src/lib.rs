@@ -17,4 +17,4 @@ pub use calibration::{
 pub use error::CoreError;
 pub use kdf::{derive_seed64_and_pdk, KdfInfo, KdfPreset, KdfProfile};
 pub use salts::Salts;
-pub use session::{SessionRatchet, StepSecret};
+pub use session::{SessionRatchet, SessionRatchetState, StepSecret};

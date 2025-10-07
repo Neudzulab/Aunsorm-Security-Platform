@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use aunsorm_core::session::SessionRatchet;
@@ -15,7 +16,7 @@ use crate::header::{
 };
 use crate::packet::{DecryptOk, Packet};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionMetadata {
     pub version: String,
     pub profile: HeaderProfile,

@@ -4,6 +4,33 @@ use zeroize::Zeroizing;
 
 use crate::error::CoreError;
 
+/// Serileştirilebilir oturum ratchet durumu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionRatchetState {
+    pub root_key: [u8; 32],
+    pub session_id: [u8; 16],
+    pub message_no: u64,
+    pub strict: bool,
+}
+
+impl SessionRatchetState {
+    /// Yeni bir ratchet durumu oluşturur.
+    #[must_use]
+    pub const fn new(
+        root_key: [u8; 32],
+        session_id: [u8; 16],
+        message_no: u64,
+        strict: bool,
+    ) -> Self {
+        Self {
+            root_key,
+            session_id,
+            message_no,
+            strict,
+        }
+    }
+}
+
 /// Ratchet adımı çıktısı.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StepSecret {
@@ -45,6 +72,30 @@ impl SessionRatchet {
     #[must_use]
     pub const fn is_strict(&self) -> bool {
         self.strict
+    }
+
+    /// Ratchet durumunu dışa aktarır.
+    #[must_use]
+    pub fn export_state(&self) -> SessionRatchetState {
+        let mut root_key = [0_u8; 32];
+        root_key.copy_from_slice(self.root_key.as_ref());
+        SessionRatchetState {
+            root_key,
+            session_id: self.session_id,
+            message_no: self.message_no,
+            strict: self.strict,
+        }
+    }
+
+    /// Dışa aktarılan durumdan ratchet oluşturur.
+    #[must_use]
+    pub fn from_state(state: SessionRatchetState) -> Self {
+        Self {
+            root_key: Zeroizing::new(state.root_key),
+            session_id: state.session_id,
+            message_no: state.message_no,
+            strict: state.strict,
+        }
     }
 
     /// Bir sonraki mesaj numarasını döndürür.
@@ -139,5 +190,22 @@ mod tests {
         ratchet.message_no = u64::MAX;
         let err = ratchet.next_step().unwrap_err();
         assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn state_roundtrip() {
+        let mut ratchet = SessionRatchet::new([5_u8; 32], [7_u8; 16], true);
+        let _ = ratchet.next_step().expect("step");
+        let snapshot = ratchet.export_state();
+        let mut restored = SessionRatchet::from_state(snapshot);
+        assert_eq!(restored.session_id(), ratchet.session_id());
+        assert_eq!(restored.message_no(), ratchet.message_no());
+        assert_eq!(restored.is_strict(), ratchet.is_strict());
+        let next_from_restored = restored.next_step().expect("next");
+        let next_from_original = ratchet.next_step().expect("next");
+        assert_eq!(
+            next_from_restored.step_secret,
+            next_from_original.step_secret
+        );
     }
 }

@@ -2,6 +2,7 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
+use std::collections::BTreeSet;
 use std::error::Error as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,14 +10,18 @@ use std::path::{Path, PathBuf};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use hkdf::Hkdf;
+use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use thiserror::Error;
 use zeroize::Zeroizing;
 
-use aunsorm_core::{calib_from_text, salts::Salts, KdfPreset, KdfProfile};
+use aunsorm_core::{
+    calib_from_text, salts::Salts, KdfPreset, KdfProfile, SessionRatchet, SessionRatchetState,
+};
 use aunsorm_packet::{
-    decrypt_one_shot, encrypt_one_shot, peek_header, AeadAlgorithm, DecryptParams, EncryptParams,
-    KemPayload,
+    decrypt_one_shot, decrypt_session, encrypt_one_shot, encrypt_session, peek_header,
+    AeadAlgorithm, DecryptParams, EncryptParams, KemPayload, SessionDecryptParams,
+    SessionEncryptParams, SessionMetadata, SessionStore,
 };
 
 #[derive(Parser)]
@@ -42,6 +47,12 @@ enum Commands {
     Decrypt(DecryptArgs),
     /// Paket başlığını incele
     Peek(PeekArgs),
+    /// Oturum mesajını şifrele
+    #[command(name = "session-encrypt")]
+    SessionEncrypt(SessionEncryptArgs),
+    /// Oturum mesajını çöz
+    #[command(name = "session-decrypt")]
+    SessionDecrypt(SessionDecryptArgs),
 }
 
 #[derive(Args)]
@@ -116,6 +127,9 @@ struct DecryptArgs {
     /// Ek AAD dosyası
     #[arg(long, value_name = "PATH")]
     aad_file: Option<PathBuf>,
+    /// Oturum meta verisini JSON olarak kaydet
+    #[arg(long, value_name = "PATH")]
+    metadata_out: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -123,6 +137,65 @@ struct PeekArgs {
     /// Girdi Base64 paket dosyası
     #[arg(long, value_name = "PATH")]
     r#in: PathBuf,
+}
+
+#[derive(Args)]
+struct SessionEncryptArgs {
+    /// Oturum meta verisi JSON dosyası
+    #[arg(long, value_name = "PATH")]
+    metadata: PathBuf,
+    /// Ratchet durum dosyası (JSON)
+    #[arg(long, value_name = "PATH")]
+    state: PathBuf,
+    /// Girdi düz metin dosyası
+    #[arg(long, value_name = "PATH")]
+    r#in: PathBuf,
+    /// Çıktı paket dosyası (Base64)
+    #[arg(long, value_name = "PATH")]
+    out: PathBuf,
+    /// Ek AAD metni
+    #[arg(long, value_name = "TEXT")]
+    aad: Option<String>,
+    /// Ek AAD dosyası
+    #[arg(long, value_name = "PATH")]
+    aad_file: Option<PathBuf>,
+    /// İlk kullanım için ratchet kök anahtarı (Base64)
+    #[arg(long, value_name = "B64")]
+    ratchet_root: Option<String>,
+    /// İlk kullanım için oturum kimliği (Base64)
+    #[arg(long, value_name = "B64")]
+    session_id: Option<String>,
+}
+
+#[derive(Args)]
+struct SessionDecryptArgs {
+    /// Oturum meta verisi JSON dosyası
+    #[arg(long, value_name = "PATH")]
+    metadata: PathBuf,
+    /// Ratchet durum dosyası (JSON)
+    #[arg(long, value_name = "PATH")]
+    state: PathBuf,
+    /// Replay store dosyası (JSON)
+    #[arg(long, value_name = "PATH")]
+    store: PathBuf,
+    /// Girdi paket dosyası (Base64)
+    #[arg(long, value_name = "PATH")]
+    r#in: PathBuf,
+    /// Çözülen çıktı dosyası
+    #[arg(long, value_name = "PATH")]
+    out: PathBuf,
+    /// Ek AAD metni
+    #[arg(long, value_name = "TEXT")]
+    aad: Option<String>,
+    /// Ek AAD dosyası
+    #[arg(long, value_name = "PATH")]
+    aad_file: Option<PathBuf>,
+    /// İlk kullanım için ratchet kök anahtarı (Base64)
+    #[arg(long, value_name = "B64")]
+    ratchet_root: Option<String>,
+    /// İlk kullanım için oturum kimliği (Base64)
+    #[arg(long, value_name = "B64")]
+    session_id: Option<String>,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -202,6 +275,22 @@ enum CliError {
     AadConflict,
     #[error("serde hatası: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("{context} uzunluğu {actual} bayt; {expected} bekleniyordu")]
+    InvalidLength {
+        context: &'static str,
+        expected: usize,
+        actual: usize,
+    },
+    #[error("{0} parametresi gerekli")]
+    MissingParam(&'static str),
+    #[error("metadata dosyası eksik alan: {0}")]
+    Metadata(&'static str),
+    #[error("durum dosyası oturum kimliği ile uyuşmuyor")]
+    StateSessionMismatch,
+    #[error("durum dosyası strict kip ile uyuşmuyor")]
+    StateStrictMismatch,
+    #[error("store dosyası oturum kimliği ile uyuşmuyor")]
+    StoreSessionMismatch,
 }
 
 type CliResult<T> = Result<T, CliError>;
@@ -225,6 +314,8 @@ fn run(cli: Cli) -> CliResult<()> {
         Commands::Encrypt(args) => handle_encrypt(args, strict),
         Commands::Decrypt(args) => handle_decrypt(args, strict),
         Commands::Peek(args) => handle_peek(&args),
+        Commands::SessionEncrypt(args) => handle_session_encrypt(&args, strict),
+        Commands::SessionDecrypt(args) => handle_session_decrypt(&args, strict),
     }
 }
 
@@ -314,14 +405,108 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
 
     fs::write(&args.out, &decrypted.plaintext)?;
 
+    if let Some(path) = args.metadata_out.as_deref() {
+        write_metadata_file(path, &decrypted.metadata)?;
+    }
+
+    let metadata_note = args
+        .metadata_out
+        .as_ref()
+        .map(|path| format!(" | metadata={}", path.display()))
+        .unwrap_or_default();
+
     println!(
-        "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B",
+        "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{}",
         args.out.display(),
         decrypted.header.calib_id,
         decrypted.coord_id,
         decrypted.header.aead.alg,
         strict,
         decrypted.plaintext.len(),
+        metadata_note,
+    );
+    Ok(())
+}
+
+fn handle_session_encrypt(args: &SessionEncryptArgs, strict: bool) -> CliResult<()> {
+    let metadata = load_metadata_file(&args.metadata)?;
+    ensure_metadata_ready(&metadata)?;
+    let plaintext = fs::read(&args.r#in)?;
+    let aad = load_aad(args.aad.as_deref(), args.aad_file.as_deref())?;
+
+    let mut ratchet = load_or_initialize_ratchet(
+        &args.state,
+        strict,
+        args.ratchet_root.as_deref(),
+        args.session_id.as_deref(),
+    )?;
+
+    metadata.ensure_strict(ratchet.is_strict())?;
+
+    let params = SessionEncryptParams {
+        ratchet: &mut ratchet,
+        metadata: &metadata,
+        plaintext: &plaintext,
+        aad: &aad,
+    };
+    let (packet, outcome) = encrypt_session(params)?;
+    let encoded = packet.to_base64()?;
+    fs::write(&args.out, encoded.as_bytes())?;
+
+    save_ratchet_state(&args.state, &ratchet)?;
+
+    println!(
+        "oturum şifreleme tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={}",
+        args.out.display(),
+        STANDARD.encode(outcome.session_id),
+        outcome.message_no,
+        ratchet.is_strict(),
+    );
+    Ok(())
+}
+
+fn handle_session_decrypt(args: &SessionDecryptArgs, strict: bool) -> CliResult<()> {
+    let metadata = load_metadata_file(&args.metadata)?;
+    ensure_metadata_ready(&metadata)?;
+    let packet_b64 = fs::read_to_string(&args.r#in)?;
+    let aad = load_aad(args.aad.as_deref(), args.aad_file.as_deref())?;
+
+    let mut ratchet = load_or_initialize_ratchet(
+        &args.state,
+        strict,
+        args.ratchet_root.as_deref(),
+        args.session_id.as_deref(),
+    )?;
+    metadata.ensure_strict(ratchet.is_strict())?;
+
+    let session_id_b64 = STANDARD.encode(ratchet.session_id());
+    let mut replay_store = load_replay_store(&args.store, &session_id_b64)?;
+    let mut store = SessionStore::new();
+    for msg_no in &replay_store.seen {
+        let _ = store.register(ratchet.session_id(), *msg_no);
+    }
+
+    let params = SessionDecryptParams {
+        ratchet: &mut ratchet,
+        metadata: &metadata,
+        store: &mut store,
+        aad: &aad,
+        packet: packet_b64.trim(),
+    };
+    let (decrypted, outcome) = decrypt_session(params)?;
+    fs::write(&args.out, &decrypted.plaintext)?;
+
+    replay_store.seen.insert(outcome.message_no);
+    save_replay_store(&args.store, &replay_store)?;
+    save_ratchet_state(&args.state, &ratchet)?;
+
+    println!(
+        "oturum deşifre tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | replay_seen={}",
+        args.out.display(),
+        session_id_b64,
+        outcome.message_no,
+        ratchet.is_strict(),
+        replay_store.seen.len(),
     );
     Ok(())
 }
@@ -332,6 +517,157 @@ fn handle_peek(args: &PeekArgs) -> CliResult<()> {
     let json = serde_json::to_string_pretty(&header)?;
     println!("{json}");
     Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+struct MetadataFile {
+    metadata: SessionMetadata,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedRatchet {
+    session_id: String,
+    root_key: String,
+    message_no: u64,
+    strict: bool,
+}
+
+impl PersistedRatchet {
+    fn from_state(state: &SessionRatchetState) -> Self {
+        Self {
+            session_id: STANDARD.encode(state.session_id),
+            root_key: STANDARD.encode(state.root_key),
+            message_no: state.message_no,
+            strict: state.strict,
+        }
+    }
+
+    fn to_state(&self) -> CliResult<SessionRatchetState> {
+        let session_id = decode_fixed::<16>(&self.session_id, "session-id")?;
+        let root_key = decode_fixed::<32>(&self.root_key, "ratchet-root")?;
+        Ok(SessionRatchetState::new(
+            root_key,
+            session_id,
+            self.message_no,
+            self.strict,
+        ))
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedReplayStore {
+    session_id: String,
+    #[serde(default)]
+    seen: BTreeSet<u64>,
+}
+
+fn load_metadata_file(path: &Path) -> CliResult<SessionMetadata> {
+    let json = fs::read_to_string(path)?;
+    let file: MetadataFile = serde_json::from_str(&json)?;
+    ensure_metadata_ready(&file.metadata)?;
+    Ok(file.metadata)
+}
+
+fn write_metadata_file(path: &Path, metadata: &SessionMetadata) -> CliResult<()> {
+    ensure_metadata_ready(metadata)?;
+    let payload = MetadataFile {
+        metadata: metadata.clone(),
+    };
+    write_json_pretty(path, &payload)
+}
+
+#[allow(clippy::missing_const_for_fn)]
+fn ensure_metadata_ready(metadata: &SessionMetadata) -> CliResult<()> {
+    if metadata.coord_id.is_none() {
+        return Err(CliError::Metadata("coord_id"));
+    }
+    if metadata.coord.is_none() {
+        return Err(CliError::Metadata("coord"));
+    }
+    Ok(())
+}
+
+fn load_or_initialize_ratchet(
+    state_path: &Path,
+    strict: bool,
+    ratchet_root: Option<&str>,
+    session_id: Option<&str>,
+) -> CliResult<SessionRatchet> {
+    if state_path.exists() {
+        let json = fs::read_to_string(state_path)?;
+        let persisted: PersistedRatchet = serde_json::from_str(&json)?;
+        let state = persisted.to_state()?;
+        if let Some(expected) = session_id {
+            let expected_id = decode_fixed::<16>(expected, "session-id")?;
+            if expected_id != state.session_id {
+                return Err(CliError::StateSessionMismatch);
+            }
+        }
+        if state.strict != strict {
+            return Err(CliError::StateStrictMismatch);
+        }
+        Ok(SessionRatchet::from_state(state))
+    } else {
+        let root = ratchet_root.ok_or(CliError::MissingParam("ratchet-root"))?;
+        let session = session_id.ok_or(CliError::MissingParam("session-id"))?;
+        let root_key = decode_fixed::<32>(root, "ratchet-root")?;
+        let session_bytes = decode_fixed::<16>(session, "session-id")?;
+        let state = SessionRatchetState::new(root_key, session_bytes, 0, strict);
+        let ratchet = SessionRatchet::from_state(state);
+        save_ratchet_state(state_path, &ratchet)?;
+        Ok(ratchet)
+    }
+}
+
+fn save_ratchet_state(path: &Path, ratchet: &SessionRatchet) -> CliResult<()> {
+    let state = ratchet.export_state();
+    let persisted = PersistedRatchet::from_state(&state);
+    write_json_pretty(path, &persisted)
+}
+
+fn load_replay_store(path: &Path, session_id_b64: &str) -> CliResult<PersistedReplayStore> {
+    if path.exists() {
+        let json = fs::read_to_string(path)?;
+        let store: PersistedReplayStore = serde_json::from_str(&json)?;
+        if store.session_id != session_id_b64 {
+            return Err(CliError::StoreSessionMismatch);
+        }
+        Ok(store)
+    } else {
+        Ok(PersistedReplayStore {
+            session_id: session_id_b64.to_owned(),
+            seen: BTreeSet::new(),
+        })
+    }
+}
+
+fn save_replay_store(path: &Path, store: &PersistedReplayStore) -> CliResult<()> {
+    write_json_pretty(path, store)
+}
+
+fn write_json_pretty<T: Serialize>(path: &Path, value: &T) -> CliResult<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+    let json = serde_json::to_string_pretty(value)?;
+    fs::write(path, json.as_bytes())?;
+    Ok(())
+}
+
+fn decode_fixed<const N: usize>(value: &str, context: &'static str) -> CliResult<[u8; N]> {
+    let bytes = STANDARD.decode(value.trim())?;
+    if bytes.len() != N {
+        return Err(CliError::InvalidLength {
+            context,
+            expected: N,
+            actual: bytes.len(),
+        });
+    }
+    let mut out = [0_u8; N];
+    out.copy_from_slice(&bytes);
+    Ok(out)
 }
 
 fn load_aad(aad_text: Option<&str>, aad_file: Option<&Path>) -> CliResult<Vec<u8>> {
@@ -426,6 +762,8 @@ fn env_strict() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aunsorm_packet::{AeadAlgorithm, HeaderKem, HeaderProfile, HeaderSalts};
+    use tempfile::NamedTempFile;
 
     #[test]
     fn salts_are_deterministic() {
@@ -441,5 +779,49 @@ mod tests {
     fn aad_conflict_is_rejected() {
         let err = load_aad(Some("demo"), Some(Path::new("/tmp/demo"))).unwrap_err();
         assert!(matches!(err, CliError::AadConflict));
+    }
+
+    #[test]
+    fn metadata_roundtrip() {
+        let metadata = SessionMetadata {
+            version: "1.01".to_string(),
+            profile: HeaderProfile {
+                t: 2,
+                m_kib: 32,
+                p: 1,
+            },
+            calib_id: "calib".to_string(),
+            coord_digest: "digest".to_string(),
+            coord_id: Some("coord-123".to_string()),
+            coord: Some([7_u8; 32]),
+            salts: HeaderSalts {
+                password: "pw".to_string(),
+                calibration: "cal".to_string(),
+                chain: "chain".to_string(),
+                coord: "coord".to_string(),
+            },
+            kem: HeaderKem::none(),
+            algorithm: AeadAlgorithm::AesGcm,
+        };
+        let file = NamedTempFile::new().expect("tmp");
+        write_metadata_file(file.path(), &metadata).expect("write");
+        let loaded = load_metadata_file(file.path()).expect("load");
+        assert_eq!(loaded, metadata);
+    }
+
+    #[test]
+    fn ratchet_state_is_persisted() {
+        let mut ratchet = SessionRatchet::new([9_u8; 32], [4_u8; 16], false);
+        let _ = ratchet.next_step().expect("step");
+        let file = NamedTempFile::new().expect("tmp");
+        save_ratchet_state(file.path(), &ratchet).expect("save");
+        let restored = load_or_initialize_ratchet(file.path(), false, None, None).expect("load");
+        assert_eq!(restored.message_no(), ratchet.message_no());
+    }
+
+    #[test]
+    fn decode_fixed_detects_length() {
+        let err = decode_fixed::<4>("AA==", "test").unwrap_err();
+        assert!(matches!(err, CliError::InvalidLength { .. }));
     }
 }
