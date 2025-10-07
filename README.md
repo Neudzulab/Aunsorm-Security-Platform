@@ -15,7 +15,7 @@ Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsaml�
   - [x] CLI: jwt/x509 akışlarını ekle.
     - [x] JWT anahtar üretimi, imzalama ve doğrulama komutları.
     - [x] X.509 komutları.
-  - [ ] Server katmanını uygula.
+  - [x] Server katmanını uygula.
   - [ ] WASM bağlayıcısını hazırla.
 - [ ] Kimlik bileşenlerini (JWT, X.509, KMS) entegre et.
 - [ ] Test/Fuzz/Bench altyapısını çalışır hale getir.

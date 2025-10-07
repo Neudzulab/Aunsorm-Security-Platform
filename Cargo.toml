@@ -6,6 +6,7 @@ members = [
     "crates/pqc",
     "crates/jwt",
     "crates/x509",
+    "crates/server",
 ]
 resolver = "2"
 
