@@ -6,7 +6,7 @@ türetimi, EXTERNAL kalibrasyon kimlikleri ve oturum ratchet akışı bu crate i
 ## Sağlanan Bileşenler
 
 - Deterministik `Calibration` türetimi ve kimlik üretimi.
-- Argon2id tabanlı `derive_seed64_and_pdk` fonksiyonu ile tohum ve paket türetme anahtarı elde etme.
+- Argon2id tabanlı `derive_seed64_and_pdk` fonksiyonu ile tohum ve paket türetme anahtarı elde etme; `KdfProfile::auto()` donanım kaynaklarına göre uygun profili seçer.
 - HKDF tabanlı `coord32_derive` ve oturum ratchet (`SessionRatchet`).
 
 Tüm API'lar tekrar çağrıldığında aynı girdilerle aynı çıktıyı verir ve güvenlik açısından hassas arabellekler temizlenir.

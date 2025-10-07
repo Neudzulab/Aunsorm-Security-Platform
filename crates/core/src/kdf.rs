@@ -3,6 +3,7 @@ use std::fmt;
 use argon2::{Algorithm, Argon2, Params, Version};
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
+use sysinfo::{System, SystemExt};
 use zeroize::Zeroizing;
 
 use crate::error::CoreError;
@@ -38,34 +39,33 @@ impl KdfProfile {
 
     /// Profil için hazır tanımlı değerler döndürür.
     #[must_use]
-    pub const fn preset(preset: KdfPreset) -> Self {
+    pub fn preset(preset: KdfPreset) -> Self {
         match preset {
-            KdfPreset::Mobile => Self {
-                t: 1,
-                m_kib: 32 * 1024,
-                p: 1,
-            },
-            KdfPreset::Low => Self {
-                t: 2,
-                m_kib: 64 * 1024,
-                p: 1,
-            },
-            KdfPreset::Medium => Self {
-                t: 3,
-                m_kib: 128 * 1024,
-                p: 1,
-            },
-            KdfPreset::High => Self {
-                t: 4,
-                m_kib: 256 * 1024,
-                p: 2,
-            },
-            KdfPreset::Ultra => Self {
-                t: 5,
-                m_kib: 512 * 1024,
-                p: 2,
-            },
+            KdfPreset::Mobile => Self::from_components(1, 32 * 1024, 1),
+            KdfPreset::Low => Self::from_components(2, 64 * 1024, 1),
+            KdfPreset::Medium => Self::from_components(3, 128 * 1024, 1),
+            KdfPreset::High => Self::from_components(4, 256 * 1024, 2),
+            KdfPreset::Ultra => Self::from_components(5, 512 * 1024, 2),
+            KdfPreset::Auto => Self::auto(),
         }
+    }
+
+    const fn from_components(t: u32, m_kib: u32, p: u32) -> Self {
+        Self { t, m_kib, p }
+    }
+
+    /// Donanım kaynaklarına göre en uygun profil seçimini yapar.
+    #[must_use]
+    pub fn auto() -> Self {
+        let mut system = System::new_all();
+        system.refresh_memory();
+        system.refresh_cpu();
+        let total_memory_mib = system.total_memory() / 1024;
+        let physical_cores = system
+            .physical_core_count()
+            .unwrap_or_else(|| system.cpus().len().max(1));
+        let preset = select_preset_for_specs(total_memory_mib, physical_cores);
+        Self::preset(preset)
     }
 
     pub(crate) fn params(&self) -> Result<Params, CoreError> {
@@ -94,6 +94,21 @@ pub enum KdfPreset {
     Medium,
     High,
     Ultra,
+    Auto,
+}
+
+const fn select_preset_for_specs(memory_mib: u64, cores: usize) -> KdfPreset {
+    if memory_mib < 4_096 || cores <= 2 {
+        KdfPreset::Mobile
+    } else if memory_mib < 8_192 || cores <= 4 {
+        KdfPreset::Low
+    } else if memory_mib < 16_384 || cores <= 8 {
+        KdfPreset::Medium
+    } else if memory_mib < 32_768 || cores <= 16 {
+        KdfPreset::High
+    } else {
+        KdfPreset::Ultra
+    }
 }
 
 /// KDF yürütmesi hakkında meta bilgi.
@@ -241,10 +256,20 @@ mod tests {
             KdfPreset::Medium,
             KdfPreset::High,
             KdfPreset::Ultra,
+            KdfPreset::Auto,
         ] {
             let profile = KdfProfile::preset(preset);
             assert!(profile.params().is_ok());
         }
+    }
+
+    #[test]
+    fn auto_selection_scales_with_resources() {
+        assert_eq!(select_preset_for_specs(2_048, 2), KdfPreset::Mobile);
+        assert_eq!(select_preset_for_specs(6_144, 4), KdfPreset::Low);
+        assert_eq!(select_preset_for_specs(12_288, 6), KdfPreset::Medium);
+        assert_eq!(select_preset_for_specs(24_576, 12), KdfPreset::High);
+        assert_eq!(select_preset_for_specs(65_536, 24), KdfPreset::Ultra);
     }
 
     #[test]

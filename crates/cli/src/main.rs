@@ -328,16 +328,18 @@ enum ProfileArg {
     Medium,
     High,
     Ultra,
+    Auto,
 }
 
 impl ProfileArg {
-    const fn as_profile(self) -> KdfProfile {
+    fn as_profile(self) -> KdfProfile {
         KdfProfile::preset(match self {
             Self::Mobile => KdfPreset::Mobile,
             Self::Low => KdfPreset::Low,
             Self::Medium => KdfPreset::Medium,
             Self::High => KdfPreset::High,
             Self::Ultra => KdfPreset::Ultra,
+            Self::Auto => KdfPreset::Auto,
         })
     }
 }
@@ -350,6 +352,7 @@ impl std::fmt::Display for ProfileArg {
             Self::Medium => "medium",
             Self::High => "high",
             Self::Ultra => "ultra",
+            Self::Auto => "auto",
         })
     }
 }
