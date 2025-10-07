@@ -2,6 +2,16 @@
 
 Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsamlı uygulaması için hazırlanmaktadır. Tüm çalışmalar çok ajanlı bir plana göre yürütülecektir.
 
+## 5 Dakikada Başla
+
+```bash
+cargo build --release
+cargo run -p aunsorm-cli -- encrypt --password P --in msg.bin --out pkt.b64 \
+  --org-salt V2VBcmVLdXQuZXU= --calib-text "Neudzulab | Prod | 2025-08"
+cargo run -p aunsorm-cli -- decrypt --password P --in pkt.b64 --out out.bin \
+  --org-salt V2VBcmVLdXQuZXU= --calib-text "Neudzulab | Prod | 2025-08"
+```
+
 ## Sprint 0: Planlama ve Altyapı
 - [x] PLAN.md gereksinimlerini analiz et ve ajan rollerini belirle.
 - [x] Kılavuzları `AGENTS.md` ile belgeleyip iş akışını kur.
@@ -20,11 +30,15 @@ Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsaml�
 - [x] Kimlik bileşenlerini (JWT, X.509, KMS) entegre et.
 - [ ] Test/Fuzz/Bench altyapısını çalışır hale getir.
 - [ ] Dokümantasyon, güvenlik rehberi ve lisansları yayımla.
+  - [x] 5 Dakikada Başla bölümü ve threat model (SECURITY.md) hazırla.
+  - [x] Topluluk süreçleri için CHANGELOG/CONTRIBUTING/CODE_OF_CONDUCT dosyalarını ekle.
+  - [ ] Wire format ve API referans dokümantasyonunu tamamla.
+  - [ ] mdBook/Docsrs yayınını otomatikleştir.
 
 Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosya/dizin açtıklarında kapsamlarına özel `AGENTS.md` oluşturmakla yükümlüdür.
 
 ## Nasıl Katkı Sağlanır?
-Tüm katkılar PR süreci üzerinden yapılmalı; PR açıklamalarında yapılan değişiklikler, ilgili ajan ve kontrol edilen gereksinimler belirtilmelidir. Standart çalışma komutları:
+Tüm katkılar PR süreci üzerinden yapılmalı; PR açıklamalarında yapılan değişiklikler, ilgili ajan ve kontrol edilen gereksinimler belirtilmelidir. Ayrıntılı kurallar için [`CONTRIBUTING.md`](CONTRIBUTING.md) dosyasına başvurabilirsiniz. Standart çalışma komutları:
 
 ```bash
 cargo fmt --all
