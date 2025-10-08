@@ -1,4 +1,4 @@
-# Aunsorm Monorepo Hazırlığı
+# Aunsorm Crypt
 
 Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsamlı uygulaması için hazırlanmaktadır. Tüm çalışmalar çok ajanlı bir plana göre yürütülecektir.
 
