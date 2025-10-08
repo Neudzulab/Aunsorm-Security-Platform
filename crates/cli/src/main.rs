@@ -19,8 +19,8 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 use aunsorm_core::{
-    calib_from_text, salts::Salts, Calibration, KdfPreset, KdfProfile, SessionRatchet,
-    SessionRatchetState,
+    calib_from_text, coord32_derive, derive_seed64_and_pdk, salts::Salts, Calibration, KdfInfo,
+    KdfPreset, KdfProfile, SessionRatchet, SessionRatchetState,
 };
 use aunsorm_jwt::SqliteJtiStore;
 use aunsorm_jwt::{
@@ -84,6 +84,9 @@ enum Commands {
 enum CalibCommands {
     /// Kalibrasyon metninden deterministik parametre üret
     Inspect(CalibInspectArgs),
+    /// Koordinat kimliğini ve değerini türet
+    #[command(name = "derive-coord")]
+    DeriveCoord(CalibCoordArgs),
 }
 
 #[derive(Subcommand)]
@@ -197,6 +200,22 @@ struct CalibInspectArgs {
     /// Kalibrasyon metni
     #[arg(long)]
     calib_text: String,
+}
+
+#[derive(Args)]
+struct CalibCoordArgs {
+    /// Parola
+    #[arg(long)]
+    password: String,
+    /// Organizasyon tuzu (Base64)
+    #[arg(long, value_name = "B64")]
+    org_salt: String,
+    /// Kalibrasyon metni
+    #[arg(long)]
+    calib_text: String,
+    /// KDF profili
+    #[arg(long, default_value = "medium")]
+    kdf: ProfileArg,
 }
 
 #[derive(Args)]
@@ -787,6 +806,7 @@ fn handle_peek(args: &PeekArgs) -> CliResult<()> {
 fn handle_calib(command: CalibCommands) -> CliResult<()> {
     match command {
         CalibCommands::Inspect(args) => handle_calib_inspect(&args),
+        CalibCommands::DeriveCoord(args) => handle_calib_coord(&args),
     }
 }
 
@@ -794,6 +814,28 @@ fn handle_calib_inspect(args: &CalibInspectArgs) -> CliResult<()> {
     let org_salt = decode_org_salt(&args.org_salt)?;
     let (calibration, _) = calib_from_text(&org_salt, &args.calib_text);
     let report = build_calibration_report(&calibration);
+    let json = serde_json::to_string_pretty(&report)?;
+    println!("{json}");
+    Ok(())
+}
+
+fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
+    let org_salt = decode_org_salt(&args.org_salt)?;
+    let (calibration, _) = calib_from_text(&org_salt, &args.calib_text);
+    let profile = args.kdf.as_profile();
+    let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
+    let password = Zeroizing::new(args.password.clone());
+    let (seed64, pdk, info) = derive_seed64_and_pdk(
+        &password,
+        password_salt.as_slice(),
+        salts.calibration(),
+        salts.chain(),
+        profile,
+    )?;
+    let seed64 = Zeroizing::new(seed64);
+    let _pdk_guard = Zeroizing::new(pdk);
+    let (coord_id, coord) = coord32_derive(seed64.as_ref(), &calibration, &salts)?;
+    let report = build_coordinate_report(&calibration, coord_id, coord, args.kdf, &info);
     let json = serde_json::to_string_pretty(&report)?;
     println!("{json}");
     Ok(())
@@ -836,6 +878,35 @@ fn build_calibration_report(calibration: &Calibration) -> CalibrationReport {
         tau: calibration.tau,
         fingerprint: STANDARD.encode(calibration.fingerprint()),
         ranges,
+    }
+}
+
+#[derive(Serialize)]
+struct CoordinateReport {
+    calibration_id: String,
+    coord_id: String,
+    coord: String,
+    profile: String,
+    password_salt_digest: String,
+    calibration_salt_digest: String,
+    chain_salt_digest: String,
+}
+
+fn build_coordinate_report(
+    calibration: &Calibration,
+    coord_id: String,
+    coord: [u8; 32],
+    profile: ProfileArg,
+    info: &KdfInfo,
+) -> CoordinateReport {
+    CoordinateReport {
+        calibration_id: calibration.id.as_str().to_string(),
+        coord_id,
+        coord: STANDARD.encode(coord),
+        profile: profile.to_string(),
+        password_salt_digest: STANDARD.encode(info.password_salt_digest),
+        calibration_salt_digest: STANDARD.encode(info.calibration_salt_digest),
+        chain_salt_digest: STANDARD.encode(info.chain_salt_digest),
     }
 }
 
@@ -1418,6 +1489,42 @@ mod tests {
         assert_eq!(
             report.fingerprint,
             STANDARD.encode(calibration.fingerprint())
+        );
+    }
+
+    #[test]
+    fn coordinate_report_reflects_inputs() {
+        let org = STANDARD.decode("V2VBcmVLdXQuZXU=").expect("org salt");
+        let (calibration, _) = calib_from_text(&org, "demo calib");
+        let (password_salt, salts) = derive_salts(&org, calibration.id.as_str()).expect("salts");
+        let profile = ProfileArg::Low;
+        let (seed, pdk, info) = derive_seed64_and_pdk(
+            "correct horse battery staple",
+            password_salt.as_slice(),
+            salts.calibration(),
+            salts.chain(),
+            profile.as_profile(),
+        )
+        .expect("seed");
+        let seed = zeroize::Zeroizing::new(seed);
+        let _pdk = zeroize::Zeroizing::new(pdk);
+        let (coord_id, coord) = coord32_derive(seed.as_ref(), &calibration, &salts).expect("coord");
+        let report = build_coordinate_report(&calibration, coord_id.clone(), coord, profile, &info);
+        assert_eq!(report.calibration_id, calibration.id.as_str());
+        assert_eq!(report.coord_id, coord_id);
+        assert_eq!(report.coord, STANDARD.encode(coord));
+        assert_eq!(report.profile, profile.to_string());
+        assert_eq!(
+            report.password_salt_digest,
+            STANDARD.encode(info.password_salt_digest)
+        );
+        assert_eq!(
+            report.calibration_salt_digest,
+            STANDARD.encode(info.calibration_salt_digest)
+        );
+        assert_eq!(
+            report.chain_salt_digest,
+            STANDARD.encode(info.chain_salt_digest)
         );
     }
 

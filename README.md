@@ -12,6 +12,9 @@ cargo run -p aunsorm-cli -- decrypt --password P --in pkt.b64 --out out.bin \
   --org-salt V2VBcmVLdXQuZXU= --calib-text "Neudzulab | Prod | 2025-08"
 cargo run -p aunsorm-cli -- calib inspect \
   --org-salt V2VBcmVLdXQuZXU= --calib-text "Neudzulab | Prod | 2025-08"
+cargo run -p aunsorm-cli -- calib derive-coord \
+  --password P --org-salt V2VBcmVLdXQuZXU= \
+  --calib-text "Neudzulab | Prod | 2025-08" --kdf medium
 ```
 
 ## Sprint 0: Planlama ve Altyapı
