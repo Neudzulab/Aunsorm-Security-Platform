@@ -3,6 +3,9 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{KmsError, Result};
 
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure", feature = "kms-pkcs11"))]
+use serde::{de::DeserializeOwned, Deserialize};
+
 /// Desteklenen KMS sağlayıcı türleri.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BackendKind {
@@ -14,6 +17,104 @@ pub enum BackendKind {
     Azure,
     /// PKCS#11 uyumlu HSM entegrasyonu.
     Pkcs11,
+}
+
+#[cfg(feature = "kms-gcp")]
+#[derive(Debug, Clone, Deserialize)]
+pub struct GcpBackendConfig {
+    pub base_url: String,
+    #[serde(default)]
+    pub access_token: Option<String>,
+    #[serde(default = "GcpBackendConfig::default_max_retries")]
+    pub max_retries: usize,
+    #[serde(default = "GcpBackendConfig::default_retry_backoff_ms")]
+    pub retry_backoff_ms: u64,
+    #[serde(default)]
+    pub keys: Vec<GcpKeyConfig>,
+}
+
+#[cfg(feature = "kms-gcp")]
+impl GcpBackendConfig {
+    const fn default_max_retries() -> usize {
+        2
+    }
+
+    const fn default_retry_backoff_ms() -> u64 {
+        50
+    }
+}
+
+#[cfg(feature = "kms-gcp")]
+#[derive(Debug, Clone, Deserialize)]
+pub struct GcpKeyConfig {
+    pub key_id: String,
+    #[serde(default)]
+    pub resource: Option<String>,
+    #[serde(default)]
+    pub public_key: Option<String>,
+    #[serde(default)]
+    pub kid: Option<String>,
+}
+
+#[cfg(feature = "kms-azure")]
+#[derive(Debug, Clone, Deserialize)]
+pub struct AzureBackendConfig {
+    pub base_url: String,
+    #[serde(default)]
+    pub access_token: Option<String>,
+    #[serde(default = "AzureBackendConfig::default_max_retries")]
+    pub max_retries: usize,
+    #[serde(default = "AzureBackendConfig::default_retry_backoff_ms")]
+    pub retry_backoff_ms: u64,
+    #[serde(default)]
+    pub keys: Vec<AzureKeyConfig>,
+}
+
+#[cfg(feature = "kms-azure")]
+impl AzureBackendConfig {
+    const fn default_max_retries() -> usize {
+        2
+    }
+
+    const fn default_retry_backoff_ms() -> u64 {
+        50
+    }
+}
+
+#[cfg(feature = "kms-azure")]
+#[derive(Debug, Clone, Deserialize)]
+pub struct AzureKeyConfig {
+    pub key_id: String,
+    #[serde(default)]
+    pub resource: Option<String>,
+    #[serde(default)]
+    pub key_name: Option<String>,
+    #[serde(default)]
+    pub key_version: Option<String>,
+    #[serde(default)]
+    pub public_key: Option<String>,
+    #[serde(default)]
+    pub kid: Option<String>,
+    #[serde(default)]
+    pub local_private_key: Option<String>,
+}
+
+#[cfg(feature = "kms-pkcs11")]
+#[derive(Debug, Clone, Deserialize)]
+pub struct Pkcs11BackendConfig {
+    #[serde(default)]
+    pub keys: Vec<Pkcs11KeyConfig>,
+}
+
+#[cfg(feature = "kms-pkcs11")]
+#[derive(Debug, Clone, Deserialize)]
+pub struct Pkcs11KeyConfig {
+    pub key_id: String,
+    pub private_key: String,
+    #[serde(default)]
+    pub public_key: Option<String>,
+    #[serde(default)]
+    pub kid: Option<String>,
 }
 
 /// Belirli bir backend ve anahtar kimliğini adresler.
@@ -95,6 +196,12 @@ pub struct KmsConfig {
     pub(crate) strict: bool,
     pub(crate) allow_fallback: bool,
     pub(crate) local_store: Option<LocalStoreConfig>,
+    #[cfg(feature = "kms-gcp")]
+    pub(crate) gcp: Option<GcpBackendConfig>,
+    #[cfg(feature = "kms-azure")]
+    pub(crate) azure: Option<AzureBackendConfig>,
+    #[cfg(feature = "kms-pkcs11")]
+    pub(crate) pkcs11: Option<Pkcs11BackendConfig>,
 }
 
 impl KmsConfig {
@@ -118,10 +225,32 @@ impl KmsConfig {
             }
             _ => None,
         };
+        #[cfg(feature = "kms-gcp")]
+        let gcp = parse_json_config::<GcpBackendConfig>(
+            env::var("AUNSORM_KMS_GCP_CONFIG").ok(),
+            "AUNSORM_KMS_GCP_CONFIG",
+        )?;
+        #[cfg(feature = "kms-azure")]
+        let azure = parse_json_config::<AzureBackendConfig>(
+            env::var("AUNSORM_KMS_AZURE_CONFIG").ok(),
+            "AUNSORM_KMS_AZURE_CONFIG",
+        )?;
+        #[cfg(feature = "kms-pkcs11")]
+        let pkcs11 = parse_json_config::<Pkcs11BackendConfig>(
+            env::var("AUNSORM_KMS_PKCS11_CONFIG").ok(),
+            "AUNSORM_KMS_PKCS11_CONFIG",
+        )?;
+
         Ok(Self {
             strict,
             allow_fallback,
             local_store,
+            #[cfg(feature = "kms-gcp")]
+            gcp,
+            #[cfg(feature = "kms-azure")]
+            azure,
+            #[cfg(feature = "kms-pkcs11")]
+            pkcs11,
         })
     }
 
@@ -139,6 +268,12 @@ impl KmsConfig {
             strict: false,
             allow_fallback: true,
             local_store: Some(LocalStoreConfig::new(store_path.to_path_buf())),
+            #[cfg(feature = "kms-gcp")]
+            gcp: None,
+            #[cfg(feature = "kms-azure")]
+            azure: None,
+            #[cfg(feature = "kms-pkcs11")]
+            pkcs11: None,
         })
     }
 
@@ -147,6 +282,30 @@ impl KmsConfig {
     #[allow(clippy::missing_const_for_fn)]
     pub fn with_local_store(mut self, path: impl Into<PathBuf>) -> Self {
         self.local_store = Some(LocalStoreConfig::new(path.into()));
+        self
+    }
+
+    /// GCP backend yapılandırmasını ekler.
+    #[cfg(feature = "kms-gcp")]
+    #[must_use]
+    pub fn with_gcp(mut self, config: GcpBackendConfig) -> Self {
+        self.gcp = Some(config);
+        self
+    }
+
+    /// Azure backend yapılandırmasını ekler.
+    #[cfg(feature = "kms-azure")]
+    #[must_use]
+    pub fn with_azure(mut self, config: AzureBackendConfig) -> Self {
+        self.azure = Some(config);
+        self
+    }
+
+    /// PKCS#11 backend yapılandırmasını ekler.
+    #[cfg(feature = "kms-pkcs11")]
+    #[must_use]
+    pub fn with_pkcs11(mut self, config: Pkcs11BackendConfig) -> Self {
+        self.pkcs11 = Some(config);
         self
     }
 
@@ -195,4 +354,17 @@ fn parse_bool(value: Option<&str>) -> Option<bool> {
         "0" | "false" | "no" | "off" => Some(false),
         _ => None,
     }
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure", feature = "kms-pkcs11"))]
+fn parse_json_config<T: DeserializeOwned>(value: Option<String>, name: &str) -> Result<Option<T>> {
+    let Some(raw) = value else {
+        return Ok(None);
+    };
+    if raw.trim().is_empty() {
+        return Ok(None);
+    }
+    serde_json::from_str(&raw)
+        .map(Some)
+        .map_err(|err| KmsError::Config(format!("invalid {name} json: {err}")))
 }

@@ -2,11 +2,42 @@ use std::io::Write;
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+use ed25519_dalek::Signer as _;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 
+#[cfg(feature = "kms-azure")]
+use crate::{AzureBackendConfig, AzureKeyConfig};
 use crate::{BackendKind, BackendLocator, KeyDescriptor, KmsClient, KmsConfig, LocalStoreConfig};
+#[cfg(feature = "kms-gcp")]
+use crate::{GcpBackendConfig, GcpKeyConfig};
+#[cfg(feature = "kms-pkcs11")]
+use crate::{Pkcs11BackendConfig, Pkcs11KeyConfig};
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+use std::thread;
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+use tiny_http::{Header, Method, Response, Server};
+
+fn empty_config() -> KmsConfig {
+    KmsConfig {
+        strict: false,
+        allow_fallback: true,
+        local_store: None,
+        #[cfg(feature = "kms-gcp")]
+        gcp: None,
+        #[cfg(feature = "kms-azure")]
+        azure: None,
+        #[cfg(feature = "kms-pkcs11")]
+        pkcs11: None,
+    }
+}
 
 fn write_local_store() -> NamedTempFile {
     let mut file = NamedTempFile::new().expect("tempfile");
@@ -32,11 +63,8 @@ fn write_local_store() -> NamedTempFile {
     // ensure deterministic kid matches expectation
     let verifying = VerifyingKey::from(&signing_key);
     let expected_kid = hex::encode(Sha256::digest(verifying.as_bytes()));
-    let config = KmsConfig {
-        strict: false,
-        allow_fallback: true,
-        local_store: Some(LocalStoreConfig::new(file.path().to_path_buf())),
-    };
+    let mut config = empty_config();
+    config.local_store = Some(LocalStoreConfig::new(file.path().to_path_buf()));
     let client = KmsClient::from_config(config).expect("client");
     let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Local, "jwt-sign"));
     assert_eq!(client.key_kid(&descriptor).unwrap(), expected_kid);
@@ -101,7 +129,7 @@ fn fallback_respects_strict_mode() {
     let err = no_fallback_client
         .sign_ed25519(&descriptor, message)
         .unwrap_err();
-    assert!(matches!(err, crate::KmsError::Unsupported { .. }));
+    assert!(matches!(err, crate::KmsError::BackendNotConfigured { .. }));
 }
 
 #[test]
@@ -115,4 +143,330 @@ fn fallback_when_primary_key_missing() {
         .sign_ed25519(&descriptor, b"fallback")
         .expect("fallback sign");
     assert_eq!(signature.len(), 64);
+}
+
+#[cfg(feature = "kms-gcp")]
+#[test]
+fn gcp_remote_sign_and_public_with_retry() {
+    use serde_json::json;
+
+    let signing = SigningKey::from_bytes(&[5u8; 32]);
+    let verifying = VerifyingKey::from(&signing);
+    let verifying_bytes = verifying.to_bytes();
+    let kid = hex::encode(Sha256::digest(verifying_bytes));
+    let server = Server::http(("127.0.0.1", 0)).expect("server");
+    let base_url = format!("http://{}", server.server_addr());
+    let get_attempts = Arc::new(AtomicUsize::new(0));
+    let total = Arc::new(AtomicUsize::new(0));
+    let get_attempts_thread = Arc::clone(&get_attempts);
+    let total_thread = Arc::clone(&total);
+    let verifying_vec = verifying_bytes.to_vec();
+    let verifying_vec_thread = verifying_vec.clone();
+    let kid_thread = kid.clone();
+    let signing_thread = signing;
+    let handle = thread::spawn(move || {
+        for mut request in server.incoming_requests() {
+            let url = request.url().to_string();
+            let method = request.method().clone();
+            if method == Method::Get
+                && url
+                    == "/v1/projects/demo/locations/global/keyRings/ring/cryptoKeys/key/cryptoKeyVersions/1"
+            {
+                let attempt = get_attempts_thread.fetch_add(1, Ordering::SeqCst);
+                if attempt == 0 {
+                    let response = Response::from_string("temporary error").with_status_code(500);
+                    request.respond(response).expect("respond");
+                } else {
+                    let body = json!({
+                        "public_key": STANDARD.encode(&verifying_vec_thread),
+                        "kid": kid_thread.clone(),
+                    });
+                    let mut response = Response::from_string(body.to_string());
+                    response
+                        .add_header(Header::from_bytes("content-type", "application/json").unwrap());
+                    request.respond(response).expect("respond");
+                }
+            } else if method == Method::Post
+                && url
+                    == "/v1/projects/demo/locations/global/keyRings/ring/cryptoKeys/key/cryptoKeyVersions/1:signEd25519"
+            {
+                let mut buf = String::new();
+                let mut reader = request.as_reader();
+                std::io::Read::read_to_string(&mut reader, &mut buf).expect("read body");
+                let payload: serde_json::Value = serde_json::from_str(&buf).expect("json");
+                let message_b64 = payload
+                    .get("message")
+                    .and_then(|value| value.as_str())
+                    .expect("message field");
+                let message = STANDARD.decode(message_b64.as_bytes()).expect("decode message");
+                let signature = signing_thread.sign(&message);
+                let body = json!({
+                    "signature": STANDARD.encode(signature.to_bytes()),
+                    "public_key": STANDARD.encode(&verifying_vec_thread),
+                    "kid": kid_thread.clone(),
+                });
+                let mut response = Response::from_string(body.to_string());
+                response
+                    .add_header(Header::from_bytes("content-type", "application/json").unwrap());
+                request.respond(response).expect("respond");
+            } else {
+                let response = Response::from_string("not found").with_status_code(404);
+                request.respond(response).expect("respond");
+            }
+            let served_requests = total_thread.fetch_add(1, Ordering::SeqCst) + 1;
+            if served_requests >= 3 {
+                break;
+            }
+        }
+    });
+
+    let resource =
+        "projects/demo/locations/global/keyRings/ring/cryptoKeys/key/cryptoKeyVersions/1";
+    let gcp_config = GcpBackendConfig {
+        base_url,
+        access_token: None,
+        max_retries: 2,
+        retry_backoff_ms: 1,
+        keys: vec![GcpKeyConfig {
+            key_id: "gcp-key".into(),
+            resource: Some(resource.into()),
+            public_key: None,
+            kid: None,
+        }],
+    };
+
+    let mut config = empty_config();
+    config.gcp = Some(gcp_config);
+    let client = KmsClient::from_config(config).expect("client");
+    let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Gcp, "gcp-key"));
+
+    let public = client.public_ed25519(&descriptor).expect("public");
+    assert_eq!(public, verifying_vec);
+
+    let signature = client.sign_ed25519(&descriptor, b"payload").expect("sign");
+    assert_eq!(signature.len(), 64);
+
+    let kid_value = client.key_kid(&descriptor).expect("kid");
+    assert_eq!(kid_value, kid);
+
+    handle.join().expect("join");
+}
+
+#[cfg(feature = "kms-azure")]
+#[test]
+fn azure_local_fallback_uses_private_key() {
+    let signing = SigningKey::from_bytes(&[9u8; 32]);
+    let verifying = VerifyingKey::from(&signing);
+    let private_b64 = STANDARD.encode([9u8; 32]);
+
+    let azure_config = AzureBackendConfig {
+        base_url: "https://example.com".into(),
+        access_token: None,
+        max_retries: 1,
+        retry_backoff_ms: 1,
+        keys: vec![AzureKeyConfig {
+            key_id: "azure-local".into(),
+            resource: Some("keys/local/1".into()),
+            key_name: None,
+            key_version: None,
+            public_key: None,
+            kid: None,
+            local_private_key: Some(private_b64),
+        }],
+    };
+
+    let mut config = empty_config();
+    config.azure = Some(azure_config);
+    let client = KmsClient::from_config(config).expect("client");
+    let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Azure, "azure-local"));
+
+    let signature = client.sign_ed25519(&descriptor, b"payload").expect("sign");
+    assert_eq!(signature.len(), 64);
+
+    let public = client.public_ed25519(&descriptor).expect("public");
+    assert_eq!(public, verifying.to_bytes().to_vec());
+
+    let kid_value = client.key_kid(&descriptor).expect("kid");
+    let expected_kid = hex::encode(Sha256::digest(verifying.as_bytes()));
+    assert_eq!(kid_value, expected_kid);
+}
+
+#[cfg(feature = "kms-azure")]
+#[test]
+fn azure_missing_public_strict_fails() {
+    let private_b64 = STANDARD.encode([11u8; 32]);
+    let azure_config = AzureBackendConfig {
+        base_url: "https://example.com".into(),
+        access_token: None,
+        max_retries: 1,
+        retry_backoff_ms: 1,
+        keys: vec![AzureKeyConfig {
+            key_id: "azure-strict".into(),
+            resource: Some("keys/strict/1".into()),
+            key_name: None,
+            key_version: None,
+            public_key: None,
+            kid: None,
+            local_private_key: Some(private_b64),
+        }],
+    };
+
+    let mut config = empty_config();
+    config.strict = true;
+    config.azure = Some(azure_config);
+    let err = KmsClient::from_config(config)
+        .err()
+        .expect("config should fail");
+    assert!(matches!(err, crate::KmsError::Config(_)));
+}
+
+#[cfg(feature = "kms-azure")]
+#[test]
+fn azure_remote_sign_and_public() {
+    use serde_json::json;
+
+    let signing = SigningKey::from_bytes(&[13u8; 32]);
+    let verifying = VerifyingKey::from(&signing);
+    let verifying_bytes = verifying.to_bytes();
+    let kid = hex::encode(Sha256::digest(verifying_bytes));
+    let server = Server::http(("127.0.0.1", 0)).expect("server");
+    let base_url = format!("http://{}", server.server_addr());
+    let total = Arc::new(AtomicUsize::new(0));
+    let total_thread = Arc::clone(&total);
+    let verifying_vec = verifying_bytes.to_vec();
+    let verifying_vec_thread = verifying_vec.clone();
+    let kid_thread = kid.clone();
+    let signing_thread = signing;
+    let handle = thread::spawn(move || {
+        for mut request in server.incoming_requests() {
+            let url = request.url().to_string();
+            let method = request.method().clone();
+            if method == Method::Get && url == "/keys/demo/123" {
+                let body = json!({
+                    "public_key": STANDARD.encode(&verifying_vec_thread),
+                    "kid": kid_thread.clone(),
+                });
+                let mut response = Response::from_string(body.to_string());
+                response
+                    .add_header(Header::from_bytes("content-type", "application/json").unwrap());
+                request.respond(response).expect("respond");
+            } else if method == Method::Post && url == "/keys/demo/123/sign" {
+                let mut buf = String::new();
+                let mut reader = request.as_reader();
+                std::io::Read::read_to_string(&mut reader, &mut buf).expect("read body");
+                let payload: serde_json::Value = serde_json::from_str(&buf).expect("json");
+                let message_b64 = payload
+                    .get("message")
+                    .and_then(|value| value.as_str())
+                    .expect("message field");
+                let message = STANDARD
+                    .decode(message_b64.as_bytes())
+                    .expect("decode message");
+                let signature = signing_thread.sign(&message);
+                let body = json!({
+                    "signature": STANDARD.encode(signature.to_bytes()),
+                    "public_key": STANDARD.encode(&verifying_vec_thread),
+                    "kid": kid_thread.clone(),
+                });
+                let mut response = Response::from_string(body.to_string());
+                response
+                    .add_header(Header::from_bytes("content-type", "application/json").unwrap());
+                request.respond(response).expect("respond");
+            } else {
+                let response = Response::from_string("not found").with_status_code(404);
+                request.respond(response).expect("respond");
+            }
+            let served_requests = total_thread.fetch_add(1, Ordering::SeqCst) + 1;
+            if served_requests >= 2 {
+                break;
+            }
+        }
+    });
+
+    let azure_config = AzureBackendConfig {
+        base_url,
+        access_token: None,
+        max_retries: 1,
+        retry_backoff_ms: 1,
+        keys: vec![AzureKeyConfig {
+            key_id: "azure-remote".into(),
+            resource: Some("keys/demo/123".into()),
+            key_name: None,
+            key_version: None,
+            public_key: None,
+            kid: None,
+            local_private_key: None,
+        }],
+    };
+
+    let mut config = empty_config();
+    config.azure = Some(azure_config);
+    let client = KmsClient::from_config(config).expect("client");
+    let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Azure, "azure-remote"));
+
+    let public = client.public_ed25519(&descriptor).expect("public");
+    assert_eq!(public, verifying_vec);
+
+    let signature = client.sign_ed25519(&descriptor, b"payload").expect("sign");
+    assert_eq!(signature.len(), 64);
+
+    let kid_value = client.key_kid(&descriptor).expect("kid");
+    assert_eq!(kid_value, kid);
+
+    handle.join().expect("join");
+}
+
+#[cfg(feature = "kms-pkcs11")]
+#[test]
+fn pkcs11_sign_and_public_roundtrip() {
+    let signing = SigningKey::from_bytes(&[21u8; 32]);
+    let verifying = VerifyingKey::from(&signing);
+    let private_b64 = STANDARD.encode([21u8; 32]);
+    let public_b64 = STANDARD.encode(verifying.to_bytes());
+
+    let pkcs11_config = Pkcs11BackendConfig {
+        keys: vec![Pkcs11KeyConfig {
+            key_id: "pkcs-key".into(),
+            private_key: private_b64,
+            public_key: Some(public_b64),
+            kid: None,
+        }],
+    };
+
+    let mut config = empty_config();
+    config.pkcs11 = Some(pkcs11_config);
+    let client = KmsClient::from_config(config).expect("client");
+    let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Pkcs11, "pkcs-key"));
+
+    let signature = client.sign_ed25519(&descriptor, b"payload").expect("sign");
+    assert_eq!(signature.len(), 64);
+
+    let public = client.public_ed25519(&descriptor).expect("public");
+    assert_eq!(public, verifying.to_bytes().to_vec());
+
+    let kid_value = client.key_kid(&descriptor).expect("kid");
+    let expected_kid = hex::encode(Sha256::digest(verifying.as_bytes()));
+    assert_eq!(kid_value, expected_kid);
+}
+
+#[cfg(feature = "kms-pkcs11")]
+#[test]
+fn pkcs11_requires_public_in_strict_mode() {
+    let private_b64 = STANDARD.encode([31u8; 32]);
+    let pkcs11_config = Pkcs11BackendConfig {
+        keys: vec![Pkcs11KeyConfig {
+            key_id: "pkcs-strict".into(),
+            private_key: private_b64,
+            public_key: None,
+            kid: None,
+        }],
+    };
+
+    let mut config = empty_config();
+    config.strict = true;
+    config.pkcs11 = Some(pkcs11_config);
+    let err = KmsClient::from_config(config)
+        .err()
+        .expect("config should fail");
+    assert!(matches!(err, crate::KmsError::Config(_)));
 }
