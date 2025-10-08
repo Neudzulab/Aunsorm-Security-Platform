@@ -7,6 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTDOCFLAGS: -D warnings
 
 jobs:
   checks:
@@ -39,9 +40,42 @@ jobs:
           PROPTEST_CASES: "64"
         run: cargo test --all-features
 
-  extended:
-    name: ${{ matrix.check }} (ubuntu-latest)
-    needs: checks
+  property-tests:
+    name: Property tests
+    needs: lint
+    runs-on: ubuntu-latest
+    env:
+      PROPTEST_CASES: "64"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.76.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Run property tests
+        run: cargo test --all-features --test packet_core_roundtrip
+
+  doc:
+    name: Documentation
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.76.0
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo doc
+        run: cargo doc --all-features --no-deps
+
+  bench:
+    name: Bench (quick)
+    needs:
+      - test
+      - property-tests
+      - doc
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
