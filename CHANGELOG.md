@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configurable tracing initialisation with optional OpenTelemetry OTLP export
   controlled via `AUNSORM_LOG` and `AUNSORM_OTEL_ENDPOINT` environment bindings
   when the `aunsorm-server` crate is built with the `otel` feature.
+- `aunsorm-pytests` crate providing Python 1.01 compatibility vectors and
+  negative/positive decrypt fixtures for AES-GCM and ML-KEM-768 scenarios.
 ### Planned
 - Expand automated fuzzing coverage and long-running soak tests.
 - Publish extended architectural documentation via mdBook.

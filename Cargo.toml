@@ -9,6 +9,7 @@ members = [
     "crates/x509",
     "crates/server",
     "crates/wasm",
+    "crates/pytests",
     "tests",
 ]
 resolver = "2"
