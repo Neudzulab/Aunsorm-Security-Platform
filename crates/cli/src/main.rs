@@ -443,6 +443,9 @@ enum AeadArg {
     AesGcm,
     #[value(alias = "CHACHA20-POLY1305")]
     Chacha20Poly1305,
+    #[cfg(feature = "aes-siv")]
+    #[value(alias = "AES-SIV")]
+    AesSiv,
 }
 
 impl AeadArg {
@@ -450,6 +453,8 @@ impl AeadArg {
         match self {
             Self::AesGcm => AeadAlgorithm::AesGcm,
             Self::Chacha20Poly1305 => AeadAlgorithm::Chacha20Poly1305,
+            #[cfg(feature = "aes-siv")]
+            Self::AesSiv => AeadAlgorithm::AesSiv,
         }
     }
 }
@@ -459,6 +464,8 @@ impl std::fmt::Display for AeadArg {
         f.write_str(match self {
             Self::AesGcm => "aes-gcm",
             Self::Chacha20Poly1305 => "chacha20poly1305",
+            #[cfg(feature = "aes-siv")]
+            Self::AesSiv => "aes-siv",
         })
     }
 }

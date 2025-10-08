@@ -244,6 +244,8 @@ fn parse_aead(label: &str) -> Result<AeadAlgorithm, VectorError> {
     match label {
         "aes-gcm" => Ok(AeadAlgorithm::AesGcm),
         "chacha20poly1305" => Ok(AeadAlgorithm::Chacha20Poly1305),
+        #[cfg(feature = "aes-siv")]
+        "aes-siv" => Ok(AeadAlgorithm::AesSiv),
         other => Err(VectorError::Aead(other.to_string())),
     }
 }

@@ -5,6 +5,10 @@ edition = "2021"
 rust-version = "1.76"
 publish = false
 
+[features]
+default = []
+aes-siv = ["aunsorm-packet/aes-siv"]
+
 [dependencies]
 aunsorm-core = { path = "../crates/core" }
 aunsorm-packet = { path = "../crates/packet" }

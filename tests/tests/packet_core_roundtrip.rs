@@ -43,6 +43,8 @@ fn algorithm_strategy() -> impl Strategy<Value = AeadAlgorithm> {
     prop_oneof![
         Just(AeadAlgorithm::AesGcm),
         Just(AeadAlgorithm::Chacha20Poly1305),
+        #[cfg(feature = "aes-siv")]
+        Just(AeadAlgorithm::AesSiv),
     ]
 }
 

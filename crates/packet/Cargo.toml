@@ -6,6 +6,10 @@ license = "Apache-2.0"
 rust-version = "1.76"
 description = "Aunsorm paket formatı, AEAD şifreleme ve oturum ratchet entegrasyonu"
 
+[features]
+default = []
+aes-siv = ["dep:aes-siv"]
+
 [dependencies]
 aunsorm-core = { path = "../core" }
 serde = { workspace = true, features = ["derive"] }
@@ -23,6 +27,7 @@ pmac = { workspace = true }
 aes = { workspace = true }
 base64 = { workspace = true }
 subtle = { workspace = true }
+aes-siv = { workspace = true, optional = true }
 
 [dev-dependencies]
 hex = { workspace = true }

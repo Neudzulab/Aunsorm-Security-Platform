@@ -7,7 +7,7 @@ use aunsorm_core::{
 
 use crate::crypto::{
     aad_digest, base64_decode, base64_encode, coord_digest, derive_keys, encrypt_aead,
-    random_nonce, verify_body_pmac, verify_header_mac, KeyMaterial, VERSION,
+    verify_body_pmac, verify_header_mac, KeyMaterial, VERSION,
 };
 use crate::error::PacketError;
 use crate::header::{
@@ -175,7 +175,7 @@ pub fn encrypt_one_shot(params: EncryptParams<'_>) -> Result<Packet, PacketError
         params.profile,
         params.calibration,
     )?;
-    let nonce = random_nonce();
+    let nonce = crate::crypto::generate_nonce(params.algorithm);
     let aad_digest_value = aad_digest(params.aad);
 
     let mut header = Header {
@@ -265,15 +265,15 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
     verify_body_pmac(&keys.body_mac, &packet.ciphertext, &packet.body_pmac)?;
 
     let nonce_bytes = base64_decode(&packet.header.aead.nonce)?;
-    let nonce: [u8; 12] = nonce_bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| PacketError::Invalid("nonce length invalid"))?;
+    let expected_len = crate::crypto::nonce_length(packet.header.aead.alg);
+    if nonce_bytes.len() != expected_len {
+        return Err(PacketError::Invalid("nonce length invalid"));
+    }
 
     let plaintext = crate::crypto::decrypt_aead(
         packet.header.aead.alg,
         &keys.aead,
-        &nonce,
+        &nonce_bytes,
         &packet.ciphertext,
         params.aad,
     )?;
@@ -448,6 +448,44 @@ mod tests {
         let err = decrypt_one_shot(&wrong_params).expect_err("should fail");
 
         assert!(matches!(err, PacketError::Integrity(_)));
+    }
+
+    #[cfg(feature = "aes-siv")]
+    #[test]
+    fn aes_siv_roundtrip() {
+        let profile = KdfProfile::preset(KdfPreset::Low);
+        let salts = test_salts();
+        let (calibration, _) = calib_from_text(b"org", "siv-note");
+        let password_salt = b"password-salt-siv";
+        let packet = encrypt_one_shot(EncryptParams {
+            password: PASSWORD,
+            password_salt,
+            calibration: &calibration,
+            salts: &salts,
+            plaintext: b"aes-siv secret",
+            aad: b"meta",
+            profile,
+            algorithm: AeadAlgorithm::AesSiv,
+            strict: false,
+            kem: None,
+        })
+        .expect("encrypt");
+
+        let encoded = packet.to_base64().expect("encode");
+        let decrypt_params = DecryptParams {
+            password: PASSWORD,
+            password_salt,
+            calibration: &calibration,
+            salts: &salts,
+            profile,
+            aad: b"meta",
+            strict: false,
+            packet: &encoded,
+        };
+        let decrypted = decrypt_one_shot(&decrypt_params).expect("decrypt");
+
+        assert_eq!(decrypted.plaintext, b"aes-siv secret");
+        assert_eq!(decrypted.header.aead.alg, AeadAlgorithm::AesSiv);
     }
 
     #[test]

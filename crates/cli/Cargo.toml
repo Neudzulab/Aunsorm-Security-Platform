@@ -6,6 +6,10 @@ license = "Apache-2.0"
 description = "Command-line interface for the Aunsorm secure tooling suite"
 rust-version = "1.76"
 
+[features]
+default = []
+aes-siv = ["aunsorm-packet/aes-siv"]
+
 [dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }

@@ -12,6 +12,15 @@ use proptest::{
     test_runner::Config as ProptestConfig,
 };
 
+fn algorithms() -> Vec<AeadAlgorithm> {
+    let mut list = vec![AeadAlgorithm::AesGcm, AeadAlgorithm::Chacha20Poly1305];
+    #[cfg(feature = "aes-siv")]
+    {
+        list.push(AeadAlgorithm::AesSiv);
+    }
+    list
+}
+
 fn build_salts(calibration_salt: Vec<u8>, chain_salt: Vec<u8>, coord_salt: Vec<u8>) -> Salts {
     Salts::new(calibration_salt, chain_salt, coord_salt).expect("valid salts")
 }
@@ -36,40 +45,42 @@ proptest! {
         let salts = build_salts(calibration_salt.clone(), chain_salt.clone(), coord_salt.clone());
         let profile = KdfProfile::preset(KdfPreset::Low);
 
-        let packet = encrypt_one_shot(EncryptParams {
-            password: &password,
-            password_salt: &password_salt,
-            calibration: &calibration,
-            salts: &salts,
-            plaintext: &plaintext,
-            aad: &aad,
-            profile,
-            algorithm: AeadAlgorithm::AesGcm,
-            strict: false,
-            kem: None,
-        }).expect("encryption succeeds");
+        for algorithm in algorithms() {
+            let packet = encrypt_one_shot(EncryptParams {
+                password: &password,
+                password_salt: &password_salt,
+                calibration: &calibration,
+                salts: &salts,
+                plaintext: &plaintext,
+                aad: &aad,
+                profile,
+                algorithm,
+                strict: false,
+                kem: None,
+            }).expect("encryption succeeds");
 
-        let encoded = packet.to_base64().expect("base64 encoding");
-        let decrypt_params = DecryptParams {
-            password: &password,
-            password_salt: &password_salt,
-            calibration: &calibration,
-            salts: &salts,
-            profile,
-            aad: &aad,
-            strict: false,
-            packet: &encoded,
-        };
-        let decrypted = decrypt_one_shot(&decrypt_params).expect("decryption succeeds");
-        let DecryptOk {
-            plaintext: output,
-            header,
-            ..
-        } = decrypted;
-        let header_plaintext = header.sizes.plaintext;
+            let encoded = packet.to_base64().expect("base64 encoding");
+            let decrypt_params = DecryptParams {
+                password: &password,
+                password_salt: &password_salt,
+                calibration: &calibration,
+                salts: &salts,
+                profile,
+                aad: &aad,
+                strict: false,
+                packet: &encoded,
+            };
+            let decrypted = decrypt_one_shot(&decrypt_params).expect("decryption succeeds");
+            let DecryptOk {
+                plaintext: output,
+                header,
+                ..
+            } = decrypted;
+            let header_plaintext = header.sizes.plaintext;
 
-        prop_assert_eq!(header_plaintext, output.len());
-        prop_assert_eq!(output, plaintext);
+            prop_assert_eq!(header_plaintext, output.len());
+            prop_assert_eq!(output.as_slice(), plaintext.as_slice());
+        }
     }
 }
 
@@ -97,32 +108,37 @@ proptest! {
         let salts = build_salts(calibration_salt.clone(), chain_salt.clone(), coord_salt.clone());
         let profile = KdfProfile::preset(KdfPreset::Low);
 
-        let packet = encrypt_one_shot(EncryptParams {
-            password: &password,
-            password_salt: &password_salt,
-            calibration: &calibration,
-            salts: &salts,
-            plaintext: &plaintext,
-            aad: &aad,
-            profile,
-            algorithm: AeadAlgorithm::AesGcm,
-            strict: false,
-            kem: None,
-        }).expect("encryption succeeds");
+        for algorithm in algorithms() {
+            let packet = encrypt_one_shot(EncryptParams {
+                password: &password,
+                password_salt: &password_salt,
+                calibration: &calibration,
+                salts: &salts,
+                plaintext: &plaintext,
+                aad: &aad,
+                profile,
+                algorithm,
+                strict: false,
+                kem: None,
+            }).expect("encryption succeeds");
 
-        let encoded = packet.to_base64().expect("base64 encoding");
-        let (wrong_calibration, _) = calib_from_text(&org_salt, &wrong_note);
-        let decrypt_params = DecryptParams {
-            password: &password,
-            password_salt: &password_salt,
-            calibration: &wrong_calibration,
-            salts: &salts,
-            profile,
-            aad: &aad,
-            strict: false,
-            packet: &encoded,
-        };
-        let result = decrypt_one_shot(&decrypt_params);
-        prop_assert!(matches!(result, Err(PacketError::Integrity(_)) | Err(PacketError::Invalid(_))));
+            let encoded = packet.to_base64().expect("base64 encoding");
+            let (wrong_calibration, _) = calib_from_text(&org_salt, &wrong_note);
+            let decrypt_params = DecryptParams {
+                password: &password,
+                password_salt: &password_salt,
+                calibration: &wrong_calibration,
+                salts: &salts,
+                profile,
+                aad: &aad,
+                strict: false,
+                packet: &encoded,
+            };
+            let result = decrypt_one_shot(&decrypt_params);
+            prop_assert!(matches!(
+                result,
+                Err(PacketError::Integrity(_)) | Err(PacketError::Invalid(_))
+            ));
+        }
     }
 }

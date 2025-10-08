@@ -10,6 +10,9 @@ use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256, Sha512};
 use subtle::ConstantTimeEq;
 
+#[cfg(feature = "aes-siv")]
+use aes_siv::{aead::generic_array::GenericArray, Aes128SivAead};
+
 use crate::error::PacketError;
 use crate::header::{AeadAlgorithm, Header};
 
@@ -39,16 +42,24 @@ pub fn derive_keys(base: &[u8], label: &str) -> Result<KeyMaterial, PacketError>
     })
 }
 
-pub fn random_nonce() -> [u8; 12] {
-    let mut nonce = [0_u8; 12];
+pub const fn nonce_length(algorithm: AeadAlgorithm) -> usize {
+    match algorithm {
+        AeadAlgorithm::AesGcm | AeadAlgorithm::Chacha20Poly1305 => 12,
+        #[cfg(feature = "aes-siv")]
+        AeadAlgorithm::AesSiv => 16,
+    }
+}
+
+pub fn generate_nonce(algorithm: AeadAlgorithm) -> Vec<u8> {
+    let mut nonce = vec![0_u8; nonce_length(algorithm)];
     OsRng.fill_bytes(&mut nonce);
     nonce
 }
 
 pub fn encrypt_aead(
     algorithm: AeadAlgorithm,
-    key: &[u8; 32],
-    nonce: &[u8; 12],
+    key: &[u8],
+    nonce: &[u8],
     plaintext: &[u8],
     aad: &[u8],
 ) -> Result<Vec<u8>, PacketError> {
@@ -58,6 +69,12 @@ pub fn encrypt_aead(
     };
     match algorithm {
         AeadAlgorithm::AesGcm => {
+            if key.len() != 32 {
+                return Err(PacketError::Aead("aes-gcm requires 32-byte key"));
+            }
+            if nonce.len() != 12 {
+                return Err(PacketError::Aead("aes-gcm requires 12-byte nonce"));
+            }
             let cipher =
                 Aes256Gcm::new_from_slice(key).map_err(|_| PacketError::Aead("invalid key"))?;
             cipher
@@ -65,10 +82,30 @@ pub fn encrypt_aead(
                 .map_err(|_| PacketError::Aead("encryption failure"))
         }
         AeadAlgorithm::Chacha20Poly1305 => {
+            if key.len() != 32 {
+                return Err(PacketError::Aead("chacha20poly1305 requires 32-byte key"));
+            }
+            if nonce.len() != 12 {
+                return Err(PacketError::Aead("chacha20poly1305 requires 12-byte nonce"));
+            }
             let cipher = ChaCha20Poly1305::new_from_slice(key)
                 .map_err(|_| PacketError::Aead("invalid key"))?;
             cipher
                 .encrypt(nonce.into(), payload)
+                .map_err(|_| PacketError::Aead("encryption failure"))
+        }
+        #[cfg(feature = "aes-siv")]
+        AeadAlgorithm::AesSiv => {
+            if key.len() != 32 {
+                return Err(PacketError::Aead("aes-siv requires 32-byte key"));
+            }
+            if nonce.len() != 16 {
+                return Err(PacketError::Aead("aes-siv requires 16-byte nonce"));
+            }
+            let cipher =
+                Aes128SivAead::new_from_slice(key).map_err(|_| PacketError::Aead("invalid key"))?;
+            cipher
+                .encrypt(GenericArray::from_slice(nonce), payload)
                 .map_err(|_| PacketError::Aead("encryption failure"))
         }
     }
@@ -76,8 +113,8 @@ pub fn encrypt_aead(
 
 pub fn decrypt_aead(
     algorithm: AeadAlgorithm,
-    key: &[u8; 32],
-    nonce: &[u8; 12],
+    key: &[u8],
+    nonce: &[u8],
     ciphertext: &[u8],
     aad: &[u8],
 ) -> Result<Vec<u8>, PacketError> {
@@ -87,6 +124,12 @@ pub fn decrypt_aead(
     };
     match algorithm {
         AeadAlgorithm::AesGcm => {
+            if key.len() != 32 {
+                return Err(PacketError::Aead("aes-gcm requires 32-byte key"));
+            }
+            if nonce.len() != 12 {
+                return Err(PacketError::Aead("aes-gcm requires 12-byte nonce"));
+            }
             let cipher =
                 Aes256Gcm::new_from_slice(key).map_err(|_| PacketError::Aead("invalid key"))?;
             cipher
@@ -94,10 +137,30 @@ pub fn decrypt_aead(
                 .map_err(|_| PacketError::Aead("decryption failure"))
         }
         AeadAlgorithm::Chacha20Poly1305 => {
+            if key.len() != 32 {
+                return Err(PacketError::Aead("chacha20poly1305 requires 32-byte key"));
+            }
+            if nonce.len() != 12 {
+                return Err(PacketError::Aead("chacha20poly1305 requires 12-byte nonce"));
+            }
             let cipher = ChaCha20Poly1305::new_from_slice(key)
                 .map_err(|_| PacketError::Aead("invalid key"))?;
             cipher
                 .decrypt(nonce.into(), payload)
+                .map_err(|_| PacketError::Aead("decryption failure"))
+        }
+        #[cfg(feature = "aes-siv")]
+        AeadAlgorithm::AesSiv => {
+            if key.len() != 32 {
+                return Err(PacketError::Aead("aes-siv requires 32-byte key"));
+            }
+            if nonce.len() != 16 {
+                return Err(PacketError::Aead("aes-siv requires 16-byte nonce"));
+            }
+            let cipher =
+                Aes128SivAead::new_from_slice(key).map_err(|_| PacketError::Aead("invalid key"))?;
+            cipher
+                .decrypt(GenericArray::from_slice(nonce), payload)
                 .map_err(|_| PacketError::Aead("decryption failure"))
         }
     }
