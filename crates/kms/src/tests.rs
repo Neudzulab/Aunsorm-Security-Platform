@@ -416,6 +416,79 @@ fn azure_remote_sign_and_public() {
     handle.join().expect("join");
 }
 
+#[cfg(feature = "kms-azure")]
+#[test]
+fn azure_duplicate_identifier_rejected() {
+    let secret = STANDARD.encode([0xAAu8; 32]);
+    let azure_config = AzureBackendConfig {
+        base_url: "https://example.com".into(),
+        access_token: None,
+        max_retries: 1,
+        retry_backoff_ms: 1,
+        keys: vec![
+            AzureKeyConfig {
+                key_id: "dup".into(),
+                resource: Some("keys/dup/1".into()),
+                key_name: None,
+                key_version: None,
+                public_key: None,
+                kid: None,
+                local_private_key: Some(secret.clone()),
+            },
+            AzureKeyConfig {
+                key_id: " dup ".into(),
+                resource: Some("keys/dup/2".into()),
+                key_name: None,
+                key_version: None,
+                public_key: None,
+                kid: None,
+                local_private_key: Some(secret),
+            },
+        ],
+    };
+
+    let mut config = empty_config();
+    config.azure = Some(azure_config);
+    let Err(err) = KmsClient::from_config(config) else {
+        panic!("config should fail");
+    };
+    match err {
+        crate::KmsError::Config(message) => {
+            assert!(message.contains("duplicate azure key identifier"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
+#[cfg(feature = "kms-gcp")]
+#[test]
+fn gcp_resource_validation_rejected() {
+    let gcp_config = GcpBackendConfig {
+        base_url: "https://gcp.example".into(),
+        access_token: None,
+        max_retries: 1,
+        retry_backoff_ms: 1,
+        keys: vec![GcpKeyConfig {
+            key_id: "dup".into(),
+            resource: Some("///".into()),
+            public_key: None,
+            kid: None,
+        }],
+    };
+
+    let mut config = empty_config();
+    config.gcp = Some(gcp_config);
+    let Err(err) = KmsClient::from_config(config) else {
+        panic!("config should fail");
+    };
+    match err {
+        crate::KmsError::Config(message) => {
+            assert!(message.contains("cannot be empty") || message.contains("resource"));
+        }
+        other => panic!("unexpected error variant: {other:?}"),
+    }
+}
+
 #[cfg(feature = "kms-pkcs11")]
 #[test]
 fn pkcs11_sign_and_public_roundtrip() {
