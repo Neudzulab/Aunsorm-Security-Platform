@@ -9,11 +9,11 @@ use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey, VerifyingKey};
 use rand_core::{OsRng, RngCore};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::config::BackendKind;
 use crate::error::{KmsError, Result};
+use crate::util::compute_kid;
 
 /// Yerel JSON store tabanlı backend.
 #[derive(Clone)]
@@ -213,9 +213,4 @@ struct LocalKeyEntry {
 enum KeyPurpose {
     Ed25519Sign,
     Aes256Wrap,
-}
-
-fn compute_kid(public: &[u8; 32]) -> String {
-    let digest = Sha256::digest(public);
-    hex::encode(digest)
 }
