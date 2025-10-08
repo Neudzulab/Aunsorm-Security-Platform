@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- File tabanlı GCP, Azure ve PKCS#11 KMS konnektörleri; strict kip ve fallback
+  politikaları ile uyumlu JSON yapılandırması.
+- Ortak ortam değişkenleri ile (`AUNSORM_KMS_*_STORE`) backend seçimi.
+
 ### Planned
 - Expand automated fuzzing coverage and long-running soak tests.
 - Publish extended architectural documentation via mdBook.

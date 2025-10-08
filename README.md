@@ -44,7 +44,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] PQC köprüsünü (ML-KEM/Falcon/SPHINCS+) tamamla ve `strict` davranışlarını doğrula.
 
 ## Sprint 2: Kimlik ve Platform Katmanları
-- [ ] `aunsorm-kms` için GCP, Azure ve PKCS#11 imzacılarını uygulamaya al.
+- [x] `aunsorm-kms` için GCP, Azure ve PKCS#11 imzacılarını uygulamaya al.
 - [ ] `aunsorm-jwt` üzerinde Ed25519 JWT/JWKS akışlarını ve JTI mağazasını gerçekleştir.
 - [ ] `aunsorm-x509` için calib/policy OID, CPS kontrolleri ve opsiyonel PQ işaretlerini ekle.
 - [ ] CLI oturum/jwt/x509 komutlarını üretim seviyesinde tamamla.

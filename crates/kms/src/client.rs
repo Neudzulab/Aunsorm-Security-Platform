@@ -1,6 +1,10 @@
 use crate::config::{BackendKind, BackendLocator, KeyDescriptor, KmsConfig};
 use crate::error::{KmsError, Result};
 use crate::local::LocalBackend;
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure", feature = "kms-pkcs11"))]
+use crate::remote::RemoteBackend;
+#[cfg(not(any(feature = "kms-gcp", feature = "kms-azure", feature = "kms-pkcs11")))]
+type RemoteBackend = ();
 
 /// KMS backend'leri üzerinde ortak operasyonları gerçekleştiren istemci.
 #[derive(Clone)]
@@ -8,6 +12,12 @@ pub struct KmsClient {
     strict: bool,
     allow_fallback: bool,
     local: Option<LocalBackend>,
+    #[cfg(feature = "kms-gcp")]
+    gcp: Option<RemoteBackend>,
+    #[cfg(feature = "kms-azure")]
+    azure: Option<RemoteBackend>,
+    #[cfg(feature = "kms-pkcs11")]
+    pkcs11: Option<RemoteBackend>,
 }
 
 impl KmsClient {
@@ -21,10 +31,31 @@ impl KmsClient {
             Some(store) => Some(LocalBackend::from_file(store.path())?),
             None => None,
         };
+        #[cfg(feature = "kms-gcp")]
+        let gcp = match config.gcp_store {
+            Some(store) => Some(RemoteBackend::from_file(BackendKind::Gcp, store.path())?),
+            None => None,
+        };
+        #[cfg(feature = "kms-azure")]
+        let azure = match config.azure_store {
+            Some(store) => Some(RemoteBackend::from_file(BackendKind::Azure, store.path())?),
+            None => None,
+        };
+        #[cfg(feature = "kms-pkcs11")]
+        let pkcs11 = match config.pkcs11_store {
+            Some(store) => Some(RemoteBackend::from_file(BackendKind::Pkcs11, store.path())?),
+            None => None,
+        };
         Ok(Self {
             strict: config.strict,
             allow_fallback: config.allow_fallback,
             local,
+            #[cfg(feature = "kms-gcp")]
+            gcp,
+            #[cfg(feature = "kms-azure")]
+            azure,
+            #[cfg(feature = "kms-pkcs11")]
+            pkcs11,
         })
     }
 
@@ -41,9 +72,8 @@ impl KmsClient {
                 backend.sign_ed25519(locator.key_id(), message)
             }
             BackendKind::Gcp | BackendKind::Azure | BackendKind::Pkcs11 => {
-                Err(KmsError::Unsupported {
-                    backend: locator.kind(),
-                })
+                let backend = self.require_remote(locator.kind())?;
+                backend.sign_ed25519(locator.key_id(), message)
             }
         })
     }
@@ -64,9 +94,11 @@ impl KmsClient {
                     .to_vec())
             }
             BackendKind::Gcp | BackendKind::Azure | BackendKind::Pkcs11 => {
-                Err(KmsError::Unsupported {
-                    backend: locator.kind(),
-                })
+                let backend = self.require_remote(locator.kind())?;
+                Ok(backend
+                    .public_ed25519(locator.key_id())?
+                    .to_bytes()
+                    .to_vec())
             }
         })
     }
@@ -84,9 +116,8 @@ impl KmsClient {
                 backend.kid(locator.key_id())
             }
             BackendKind::Gcp | BackendKind::Azure | BackendKind::Pkcs11 => {
-                Err(KmsError::Unsupported {
-                    backend: locator.kind(),
-                })
+                let backend = self.require_remote(locator.kind())?;
+                backend.kid(locator.key_id())
             }
         })
     }
@@ -109,9 +140,8 @@ impl KmsClient {
                 backend.wrap_key(locator.key_id(), plaintext, aad)
             }
             BackendKind::Gcp | BackendKind::Azure | BackendKind::Pkcs11 => {
-                Err(KmsError::Unsupported {
-                    backend: locator.kind(),
-                })
+                let backend = self.require_remote(locator.kind())?;
+                backend.wrap_key(locator.key_id(), plaintext, aad)
             }
         }
     }
@@ -134,9 +164,8 @@ impl KmsClient {
                 backend.unwrap_key(locator.key_id(), ciphertext, aad)
             }
             BackendKind::Gcp | BackendKind::Azure | BackendKind::Pkcs11 => {
-                Err(KmsError::Unsupported {
-                    backend: locator.kind(),
-                })
+                let backend = self.require_remote(locator.kind())?;
+                backend.unwrap_key(locator.key_id(), ciphertext, aad)
             }
         }
     }
@@ -145,6 +174,54 @@ impl KmsClient {
         self.local.as_ref().ok_or(KmsError::BackendNotConfigured {
             backend: BackendKind::Local,
         })
+    }
+
+    fn require_remote(&self, kind: BackendKind) -> Result<&RemoteBackend> {
+        match kind {
+            BackendKind::Local => unreachable!("local backend handled separately"),
+            BackendKind::Gcp => {
+                #[cfg(feature = "kms-gcp")]
+                {
+                    self.gcp.as_ref().ok_or(KmsError::BackendNotConfigured {
+                        backend: BackendKind::Gcp,
+                    })
+                }
+                #[cfg(not(feature = "kms-gcp"))]
+                {
+                    Err(KmsError::Unsupported {
+                        backend: BackendKind::Gcp,
+                    })
+                }
+            }
+            BackendKind::Azure => {
+                #[cfg(feature = "kms-azure")]
+                {
+                    self.azure.as_ref().ok_or(KmsError::BackendNotConfigured {
+                        backend: BackendKind::Azure,
+                    })
+                }
+                #[cfg(not(feature = "kms-azure"))]
+                {
+                    Err(KmsError::Unsupported {
+                        backend: BackendKind::Azure,
+                    })
+                }
+            }
+            BackendKind::Pkcs11 => {
+                #[cfg(feature = "kms-pkcs11")]
+                {
+                    self.pkcs11.as_ref().ok_or(KmsError::BackendNotConfigured {
+                        backend: BackendKind::Pkcs11,
+                    })
+                }
+                #[cfg(not(feature = "kms-pkcs11"))]
+                {
+                    Err(KmsError::Unsupported {
+                        backend: BackendKind::Pkcs11,
+                    })
+                }
+            }
+        }
     }
 
     fn execute_with_fallback<T, F>(&self, descriptor: &KeyDescriptor, mut op: F) -> Result<T>
