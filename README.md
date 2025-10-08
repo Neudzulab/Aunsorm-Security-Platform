@@ -53,7 +53,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 ## Sprint 3: İnterop, Gözlemlenebilirlik ve Dağıtım
 - [x] WASM bağlayıcısını `wasm-bindgen` ile yayımla ve EXTERNAL kalibrasyonunu doğrula.
 - [x] Python uyumluluk testleri için referans karşılaştırmalarını çalıştır.
-- [ ] Benchmark, fuzz ve property test akışlarını CI'ya entegre et.
+- [x] Benchmark, fuzz ve property test akışlarını CI'ya entegre et.
 - [x] OpenTelemetry temelli gözlemlenebilirlik ve yapılandırılabilir logging ekle.
 - [ ] GitHub Actions matris CI'sini (fmt/clippy/test/fuzz/bench/audit/deny) etkinleştir.
 
