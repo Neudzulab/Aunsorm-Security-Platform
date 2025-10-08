@@ -7,6 +7,10 @@ license = "Apache-2.0"
 description = "Python compatibility vectors and conformance tests for Aunsorm"
 publish = false
 
+[features]
+default = []
+aes-siv = ["aunsorm-packet/aes-siv"]
+
 [dependencies]
 aunsorm-core = { path = "../core" }
 aunsorm-packet = { path = "../packet" }

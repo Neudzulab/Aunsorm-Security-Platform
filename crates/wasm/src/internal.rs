@@ -165,6 +165,8 @@ fn parse_aead(input: Option<&str>) -> Result<AeadAlgorithm, WasmError> {
     match input.unwrap_or("aes-gcm").to_ascii_lowercase().as_str() {
         "aes-gcm" => Ok(AeadAlgorithm::AesGcm),
         "chacha20poly1305" => Ok(AeadAlgorithm::Chacha20Poly1305),
+        #[cfg(feature = "aes-siv")]
+        "aes-siv" => Ok(AeadAlgorithm::AesSiv),
         other => Err(WasmError::InvalidAead(other.to_owned())),
     }
 }

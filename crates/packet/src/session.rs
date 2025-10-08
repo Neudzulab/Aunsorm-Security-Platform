@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::convert::TryInto;
 
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -6,8 +7,8 @@ use zeroize::Zeroizing;
 use aunsorm_core::session::SessionRatchet;
 
 use crate::crypto::{
-    aad_digest, base64_encode, compute_body_pmac, compute_header_mac, decrypt_aead, derive_keys,
-    verify_body_pmac, verify_header_mac,
+    aad_digest, base64_decode, base64_encode, compute_body_pmac, compute_header_mac,
+    constant_time_eq, decrypt_aead, derive_keys, nonce_length, verify_body_pmac, verify_header_mac,
 };
 use crate::error::PacketError;
 use crate::header::{
@@ -15,6 +16,11 @@ use crate::header::{
     HeaderSizes,
 };
 use crate::packet::{DecryptOk, Packet};
+
+#[cfg(feature = "aes-siv")]
+use hkdf::Hkdf;
+#[cfg(feature = "aes-siv")]
+use sha2::Sha256;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionMetadata {
@@ -120,6 +126,27 @@ impl SessionStore {
     }
 }
 
+fn session_nonce_for_algorithm(
+    algorithm: AeadAlgorithm,
+    base_nonce: &[u8; 12],
+    step_secret: &[u8],
+) -> Result<Vec<u8>, PacketError> {
+    match algorithm {
+        AeadAlgorithm::AesGcm | AeadAlgorithm::Chacha20Poly1305 => Ok(base_nonce.to_vec()),
+        #[cfg(feature = "aes-siv")]
+        AeadAlgorithm::AesSiv => {
+            if step_secret.len() != 32 {
+                return Err(PacketError::Aead("step secret must be 32 bytes"));
+            }
+            let mut nonce = vec![0_u8; nonce_length(algorithm)];
+            let hk = Hkdf::<Sha256>::new(Some(step_secret), base_nonce);
+            hk.expand(b"Aunsorm/1.01/session-siv-nonce", &mut nonce)
+                .map_err(|_| PacketError::Aead("hkdf expand failed"))?;
+            Ok(nonce)
+        }
+    }
+}
+
 /// Oturum ratchet'ı kullanarak şifreli paket üretir.
 ///
 /// # Errors
@@ -134,9 +161,17 @@ pub fn encrypt_session(
 
     let step_secret = Zeroizing::new(step.step_secret);
     let message_secret = Zeroizing::new(step.message_secret);
+    let nonce_bytes =
+        session_nonce_for_algorithm(params.metadata.algorithm, &step.nonce, step_secret.as_ref())?;
     let label = format!("{}:{}", params.metadata.calib_id, step.message_no);
-    let step_key: &[u8; 32] = &step_secret;
-    let message_key: &[u8; 32] = &message_secret;
+    let step_key: &[u8; 32] = step_secret
+        .as_ref()
+        .try_into()
+        .map_err(|_| PacketError::Aead("step secret length invalid"))?;
+    let message_key: &[u8; 32] = message_secret
+        .as_ref()
+        .try_into()
+        .map_err(|_| PacketError::Aead("message secret length invalid"))?;
     let keys = derive_keys(step_key, &label)?;
     let aad_digest_value = aad_digest(params.aad);
 
@@ -149,7 +184,7 @@ pub fn encrypt_session(
         kem: params.metadata.kem.clone(),
         aead: HeaderAead {
             alg: params.metadata.algorithm,
-            nonce: base64_encode(&step.nonce),
+            nonce: base64_encode(&nonce_bytes),
             aad_digest: aad_digest_value,
         },
         session: Some(HeaderSession {
@@ -167,7 +202,7 @@ pub fn encrypt_session(
     let ciphertext = crate::crypto::encrypt_aead(
         params.metadata.algorithm,
         message_key,
-        &step.nonce,
+        &nonce_bytes,
         params.plaintext,
         params.aad,
     )?;
@@ -229,14 +264,26 @@ pub fn decrypt_session(
     }
 
     let step = params.ratchet.next_step()?;
-    if base64_encode(&step.nonce) != packet.header.aead.nonce {
+    let stored_nonce = base64_decode(&packet.header.aead.nonce)?;
+    if stored_nonce.len() != nonce_length(params.metadata.algorithm) {
+        return Err(PacketError::Invalid("nonce length invalid"));
+    }
+    let step_secret = Zeroizing::new(step.step_secret);
+    let message_secret = Zeroizing::new(step.message_secret);
+    let expected_nonce =
+        session_nonce_for_algorithm(params.metadata.algorithm, &step.nonce, step_secret.as_ref())?;
+    if !constant_time_eq(&stored_nonce, &expected_nonce) {
         return Err(PacketError::Integrity("nonce mismatch"));
     }
     let label = format!("{}:{}", params.metadata.calib_id, step.message_no);
-    let step_secret = Zeroizing::new(step.step_secret);
-    let message_secret = Zeroizing::new(step.message_secret);
-    let step_key: &[u8; 32] = &step_secret;
-    let message_key: &[u8; 32] = &message_secret;
+    let step_key: &[u8; 32] = step_secret
+        .as_ref()
+        .try_into()
+        .map_err(|_| PacketError::Aead("step secret length invalid"))?;
+    let message_key: &[u8; 32] = message_secret
+        .as_ref()
+        .try_into()
+        .map_err(|_| PacketError::Aead("message secret length invalid"))?;
     let keys = derive_keys(step_key, &label)?;
 
     verify_header_mac(&packet.header, &keys.header_mac)?;
@@ -245,7 +292,7 @@ pub fn decrypt_session(
     let plaintext = decrypt_aead(
         params.metadata.algorithm,
         message_key,
-        &step.nonce,
+        &expected_nonce,
         &packet.ciphertext,
         params.aad,
     )?;
