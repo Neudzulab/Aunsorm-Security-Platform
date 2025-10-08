@@ -1,6 +1,8 @@
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 
-use crate::internal::{self, DecryptRequest, EncryptRequest};
+use aunsorm_packet::PacketError;
+
+use crate::internal::{self, DecryptRequest, EncryptRequest, WasmError};
 
 fn sample_encrypt_request() -> EncryptRequest {
     EncryptRequest {
@@ -16,12 +18,8 @@ fn sample_encrypt_request() -> EncryptRequest {
     }
 }
 
-#[test]
-fn encrypt_then_decrypt_roundtrip() {
-    let encrypt_req = sample_encrypt_request();
-    let packet = internal::encrypt(encrypt_req).expect("encrypt");
-
-    let decrypt_req = DecryptRequest {
+fn sample_decrypt_request(packet: String) -> DecryptRequest {
+    DecryptRequest {
         password: "correct horse battery staple".to_string(),
         packet_b64: packet,
         org_salt_b64: STANDARD.encode(b"WeAreKut.eu"),
@@ -29,8 +27,15 @@ fn encrypt_then_decrypt_roundtrip() {
         profile: Some("medium".to_string()),
         aad: None,
         strict: Some(false),
-    };
+    }
+}
 
+#[test]
+fn encrypt_then_decrypt_roundtrip() {
+    let encrypt_req = sample_encrypt_request();
+    let packet = internal::encrypt(encrypt_req).expect("encrypt");
+
+    let decrypt_req = sample_decrypt_request(packet);
     let plaintext = internal::decrypt(decrypt_req).expect("decrypt");
     assert_eq!(plaintext, b"lorem ipsum");
 }
@@ -49,4 +54,22 @@ fn rejects_unknown_profile() {
     let err = internal::encrypt(request).expect_err("should fail");
     let message = err.to_string();
     assert!(message.contains("invalid kdf profile"));
+}
+
+#[test]
+fn decrypt_requires_matching_external_calibration() {
+    let packet = internal::encrypt(sample_encrypt_request()).expect("encrypt");
+    let mut request = sample_decrypt_request(packet);
+    request.calib_text = "Wrong note".to_string();
+
+    let err = internal::decrypt(request).expect_err("calibration should mismatch");
+    match err {
+        WasmError::Packet(PacketError::Integrity(message)) => {
+            assert!(message.contains("coord digest mismatch"));
+        }
+        WasmError::Packet(PacketError::Invalid(message)) => {
+            assert!(message.contains("salt mismatch"));
+        }
+        other => panic!("unexpected error variant: {other}"),
+    }
 }
