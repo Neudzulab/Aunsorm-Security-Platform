@@ -6,6 +6,15 @@ license = "Apache-2.0"
 description = "OAuth-like control plane for the Aunsorm secure tooling suite"
 rust-version = "1.76"
 
+[features]
+default = []
+otel = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:tracing-opentelemetry",
+]
+
 [dependencies]
 axum = { version = "0.7", features = ["json"] }
 base64 = { workspace = true }
@@ -23,6 +32,10 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 rusqlite = { version = "0.31", default-features = false, features = ["bundled"] }
 hyper = { version = "1", features = ["full"] }
+opentelemetry = { version = "0.24", optional = true }
+opentelemetry_sdk = { version = "0.24", optional = true, features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.17", optional = true, features = ["http-proto"] }
+tracing-opentelemetry = { version = "0.25", optional = true }
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }

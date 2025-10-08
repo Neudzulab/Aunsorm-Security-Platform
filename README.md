@@ -54,7 +54,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] WASM bağlayıcısını `wasm-bindgen` ile yayımla ve EXTERNAL kalibrasyonunu doğrula.
 - [ ] Python uyumluluk testleri için referans karşılaştırmalarını çalıştır.
 - [ ] Benchmark, fuzz ve property test akışlarını CI'ya entegre et.
-- [ ] OpenTelemetry temelli gözlemlenebilirlik ve yapılandırılabilir logging ekle.
+- [x] OpenTelemetry temelli gözlemlenebilirlik ve yapılandırılabilir logging ekle.
 - [ ] GitHub Actions matris CI'sini (fmt/clippy/test/fuzz/bench/audit/deny) etkinleştir.
 
 ## Test, Fuzz ve Benchmark Çalıştırma

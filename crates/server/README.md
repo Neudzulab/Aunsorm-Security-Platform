@@ -23,3 +23,9 @@ cargo run -p aunsorm-server
 ```
 
 Strict kip (`AUNSORM_STRICT=1`) etkinleştirildiğinde kalıcı bir JTI veritabanı yolu (`AUNSORM_JTI_DB`) belirtilmelidir.
+
+## Gözlemlenebilirlik
+- `AUNSORM_LOG` (veya `RUST_LOG`) ortam değişkeni ile log seviyesi yapılandırılabilir.
+- `aunsorm-server` varsayılan olarak renkli, RFC3339 zaman damgalı loglar üretir.
+- `otel` özelliği etkinleştirildiğinde ve `AUNSORM_OTEL_ENDPOINT` (ya da `OTEL_EXPORTER_OTLP_ENDPOINT`)
+  tanımlandığında, OTLP/HTTP üzerinden OpenTelemetry izleri yayımlanır.
