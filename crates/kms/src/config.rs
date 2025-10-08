@@ -95,28 +95,6 @@ pub struct KmsConfig {
     pub(crate) strict: bool,
     pub(crate) allow_fallback: bool,
     pub(crate) local_store: Option<LocalStoreConfig>,
-    #[cfg(feature = "kms-gcp")]
-    pub(crate) gcp_store: Option<RemoteStoreConfig>,
-    #[cfg(feature = "kms-azure")]
-    pub(crate) azure_store: Option<RemoteStoreConfig>,
-    #[cfg(feature = "kms-pkcs11")]
-    pub(crate) pkcs11_store: Option<RemoteStoreConfig>,
-}
-
-impl Default for KmsConfig {
-    fn default() -> Self {
-        Self {
-            strict: false,
-            allow_fallback: true,
-            local_store: None,
-            #[cfg(feature = "kms-gcp")]
-            gcp_store: None,
-            #[cfg(feature = "kms-azure")]
-            azure_store: None,
-            #[cfg(feature = "kms-pkcs11")]
-            pkcs11_store: None,
-        }
-    }
 }
 
 impl KmsConfig {
@@ -144,18 +122,6 @@ impl KmsConfig {
             strict,
             allow_fallback,
             local_store,
-            #[cfg(feature = "kms-gcp")]
-            gcp_store: env::var("AUNSORM_KMS_GCP_STORE").ok().and_then(|path| {
-                (!path.trim().is_empty()).then(|| RemoteStoreConfig::new(PathBuf::from(path)))
-            }),
-            #[cfg(feature = "kms-azure")]
-            azure_store: env::var("AUNSORM_KMS_AZURE_STORE").ok().and_then(|path| {
-                (!path.trim().is_empty()).then(|| RemoteStoreConfig::new(PathBuf::from(path)))
-            }),
-            #[cfg(feature = "kms-pkcs11")]
-            pkcs11_store: env::var("AUNSORM_KMS_PKCS11_STORE").ok().and_then(|path| {
-                (!path.trim().is_empty()).then(|| RemoteStoreConfig::new(PathBuf::from(path)))
-            }),
         })
     }
 
@@ -173,12 +139,6 @@ impl KmsConfig {
             strict: false,
             allow_fallback: true,
             local_store: Some(LocalStoreConfig::new(store_path.to_path_buf())),
-            #[cfg(feature = "kms-gcp")]
-            gcp_store: None,
-            #[cfg(feature = "kms-azure")]
-            azure_store: None,
-            #[cfg(feature = "kms-pkcs11")]
-            pkcs11_store: None,
         })
     }
 
@@ -187,30 +147,6 @@ impl KmsConfig {
     #[allow(clippy::missing_const_for_fn)]
     pub fn with_local_store(mut self, path: impl Into<PathBuf>) -> Self {
         self.local_store = Some(LocalStoreConfig::new(path.into()));
-        self
-    }
-
-    /// GCP backend yapılandırmasını ayarlar.
-    #[must_use]
-    #[cfg(feature = "kms-gcp")]
-    pub fn with_gcp_store(mut self, path: impl Into<PathBuf>) -> Self {
-        self.gcp_store = Some(RemoteStoreConfig::new(path.into()));
-        self
-    }
-
-    /// Azure backend yapılandırmasını ayarlar.
-    #[must_use]
-    #[cfg(feature = "kms-azure")]
-    pub fn with_azure_store(mut self, path: impl Into<PathBuf>) -> Self {
-        self.azure_store = Some(RemoteStoreConfig::new(path.into()));
-        self
-    }
-
-    /// PKCS#11 backend yapılandırmasını ayarlar.
-    #[must_use]
-    #[cfg(feature = "kms-pkcs11")]
-    pub fn with_pkcs11_store(mut self, path: impl Into<PathBuf>) -> Self {
-        self.pkcs11_store = Some(RemoteStoreConfig::new(path.into()));
         self
     }
 
@@ -246,25 +182,6 @@ impl LocalStoreConfig {
     }
 
     /// Store dosya yolunu döndürür.
-    #[must_use]
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-#[cfg(any(feature = "kms-gcp", feature = "kms-azure", feature = "kms-pkcs11"))]
-#[derive(Debug, Clone)]
-pub struct RemoteStoreConfig {
-    path: PathBuf,
-}
-
-#[cfg(any(feature = "kms-gcp", feature = "kms-azure", feature = "kms-pkcs11"))]
-impl RemoteStoreConfig {
-    #[must_use]
-    pub const fn new(path: PathBuf) -> Self {
-        Self { path }
-    }
-
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
