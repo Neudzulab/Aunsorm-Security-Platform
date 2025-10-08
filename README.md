@@ -45,10 +45,10 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 
 ## Sprint 2: Kimlik ve Platform Katmanları
 - [x] `aunsorm-kms` için GCP, Azure ve PKCS#11 imzacılarını uygulamaya al.
-- [ ] `aunsorm-jwt` üzerinde Ed25519 JWT/JWKS akışlarını ve JTI mağazasını gerçekleştir.
-- [ ] `aunsorm-x509` için calib/policy OID, CPS kontrolleri ve opsiyonel PQ işaretlerini ekle.
-- [ ] CLI oturum/jwt/x509 komutlarını üretim seviyesinde tamamla.
-- [ ] Sunucu bileşeni için OAuth benzeri uçları, sağlık ve metrikleri çıkar.
+- [x] `aunsorm-jwt` üzerinde Ed25519 JWT/JWKS akışlarını ve JTI mağazasını gerçekleştir.
+- [x] `aunsorm-x509` için calib/policy OID, CPS kontrolleri ve opsiyonel PQ işaretlerini ekle.
+- [x] CLI oturum/jwt/x509 komutlarını üretim seviyesinde tamamla.
+- [x] Sunucu bileşeni için OAuth benzeri uçları, sağlık ve metrikleri çıkar.
 
 ## Sprint 3: İnterop, Gözlemlenebilirlik ve Dağıtım
 - [ ] WASM bağlayıcısını `wasm-bindgen` ile yayımla ve EXTERNAL kalibrasyonunu doğrula.
