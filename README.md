@@ -51,7 +51,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] Sunucu bileşeni için OAuth benzeri uçları, sağlık ve metrikleri çıkar.
 
 ## Sprint 3: İnterop, Gözlemlenebilirlik ve Dağıtım
-- [ ] WASM bağlayıcısını `wasm-bindgen` ile yayımla ve EXTERNAL kalibrasyonunu doğrula.
+- [x] WASM bağlayıcısını `wasm-bindgen` ile yayımla ve EXTERNAL kalibrasyonunu doğrula.
 - [ ] Python uyumluluk testleri için referans karşılaştırmalarını çalıştır.
 - [ ] Benchmark, fuzz ve property test akışlarını CI'ya entegre et.
 - [ ] OpenTelemetry temelli gözlemlenebilirlik ve yapılandırılabilir logging ekle.
