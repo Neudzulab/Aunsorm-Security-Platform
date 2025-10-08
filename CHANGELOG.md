@@ -12,10 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when the `aunsorm-server` crate is built with the `otel` feature.
 - `aunsorm-pytests` crate providing Python 1.01 compatibility vectors and
   negative/positive decrypt fixtures for AES-GCM and ML-KEM-768 scenarios.
+- `session_store_roundtrip` fuzz hedefi ile oturum ratchet ve `SessionStore`
+  etkileşimi için genişletilmiş libFuzzer kapsamı.
+- `aunsorm-tests` crate'i altında `session_ratchet_roundtrip_soak` ve
+  `kms_local_roundtrip_soak` uzun süreli doğrulama senaryoları.
+- Azure ve GCP sağlayıcıları için yeni KMS conformance fixture testleri;
+  tekrarlı/boş `key_id` ve kaynak değerleri artık deterministik `KmsError::Config`
+  mesajları üretir.
+- `docs/` altında mdBook tabanlı mimari rehber ve operasyonel test dökümantasyonu.
 ### Planned
-- Expand automated fuzzing coverage and long-running soak tests.
-- Publish extended architectural documentation via mdBook.
-- Harden KMS provider integrations with additional conformance fixtures.
+- mdBook çıktısının CI pipeline'ına alınması.
+- Uzun süreli fuzz çalışmaları için nightly corpus minimizasyonu.
+- Uzak KMS sağlayıcıları (GCP/Azure) için canlı soak test harness'i.
 
 ## [0.1.0] - 2025-10-07
 ### Added

@@ -67,6 +67,12 @@ Aşağıdaki komutlar test/fuzz/bench altyapısını kullanıma hazır hale geti
 - `cargo test --all-features` — modül testleri ve `tests/` altındaki property testlerini çalıştırır.
 - `cargo bench --benches` — Criterion tabanlı AEAD ve oturum ölçümlerini yürütür.
 - `cargo fuzz run fuzz_packet` ve `cargo fuzz run fuzz_session` — paket/oturum katmanlarını libFuzzer ile zorlar (Nightly + `cargo-fuzz` gerektirir).
+- `cargo fuzz run session_store_roundtrip` — oturum ratchet’ı ve `SessionStore` kayıtlarını çok adımlı senaryolarda doğrular.
+
+### Soak Testleri
+
+- `cargo test -p aunsorm-tests -- --ignored session_ratchet_roundtrip_soak` — uzun süreli oturum ratchet turu; `AUNSORM_SESSION_SOAK` ile iterasyon sayısını artırabilirsiniz.
+- `cargo test -p aunsorm-tests -- --ignored kms_local_roundtrip_soak` — yerel KMS imzalama ve sarma/çözme tekrarlarını doğrular; `AUNSORM_KMS_SOAK` ortam değişkeni desteklenir.
 
 ## Nasıl Katkı Sağlanır?
 Tüm katkılar PR süreci üzerinden yapılmalı; PR açıklamalarında yapılan değişiklikler, ilgili ajan ve kontrol edilen gereksinimler belirtilmelidir. Ayrıntılı kurallar için [`CONTRIBUTING.md`](CONTRIBUTING.md) dosyasına başvurabilirsiniz. Standart çalışma komutları:
@@ -88,6 +94,7 @@ Projeyi keşfetmeye başlamadan önce aşağıdaki belgeleri okuyun:
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Katkı ve kod inceleme süreci.
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Topluluk davranış standartları.
 - [SECURITY.md](SECURITY.md) — Güvenlik açığı bildirim prosedürü.
+- [docs/](docs/) — mdBook tabanlı mimari rehber (`mdbook serve docs`).
 
 ## Örnekler
 

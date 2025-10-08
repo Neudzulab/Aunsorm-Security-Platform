@@ -32,3 +32,10 @@ path = "fuzz_targets/fuzz_session.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "session_store_roundtrip"
+path = "fuzz_targets/session_store_roundtrip.rs"
+test = false
+doc = false
+bench = false

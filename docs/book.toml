@@ -1,0 +1,13 @@
+[book]
+authors = ["Aunsorm Security Team"]
+language = "tr"
+multilingual = false
+src = "src"
+title = "Aunsorm Mimari Rehberi"
+
+[output.html]
+default-theme = "light"
+site-url = "https://aunsorm.dev/docs/"
+
+[output.html.playpen]
+editable = false
