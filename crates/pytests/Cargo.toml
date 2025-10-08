@@ -1,0 +1,18 @@
+[package]
+name = "aunsorm-pytests"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.76"
+license = "Apache-2.0"
+description = "Python compatibility vectors and conformance tests for Aunsorm"
+publish = false
+
+[dependencies]
+aunsorm-core = { path = "../core" }
+aunsorm-packet = { path = "../packet" }
+aunsorm-pqc = { path = "../pqc" }
+base64 = { workspace = true }
+once_cell = "1.21"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
