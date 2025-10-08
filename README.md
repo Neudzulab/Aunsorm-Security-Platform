@@ -55,7 +55,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] Python uyumluluk testleri için referans karşılaştırmalarını çalıştır.
 - [x] Benchmark, fuzz ve property test akışlarını CI'ya entegre et.
 - [x] OpenTelemetry temelli gözlemlenebilirlik ve yapılandırılabilir logging ekle.
-- [ ] GitHub Actions matris CI'sini (fmt/clippy/test/fuzz/bench/audit/deny) etkinleştir.
+- [x] GitHub Actions matris CI'sini (fmt/clippy/test/fuzz/bench/audit/deny) etkinleştir.
 
 ## Test, Fuzz ve Benchmark Çalıştırma
 
