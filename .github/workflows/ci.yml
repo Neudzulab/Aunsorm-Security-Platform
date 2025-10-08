@@ -7,6 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTDOCFLAGS: -D warnings
 
 jobs:
   lint:
@@ -63,11 +64,26 @@ jobs:
       - name: Run property tests
         run: cargo test --all-features --test packet_core_roundtrip
 
+  doc:
+    name: Documentation
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.76.0
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo doc
+        run: cargo doc --all-features --no-deps
+
   bench:
     name: Bench (quick)
     needs:
       - test
       - property-tests
+      - doc
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
