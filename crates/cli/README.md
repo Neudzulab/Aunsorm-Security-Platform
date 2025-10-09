@@ -11,6 +11,8 @@ paket üretme ve çözme iş akışlarını otomatikleştirir.
   seçeneği (dosya sonundaki satır sonları kırpılır).
 - KDF profilleri (`mobile`, `low`, `medium`, `high`, `ultra`) ve
   AEAD seçimleri (`aes-gcm`, `chacha20poly1305`).
+- Kalibrasyon metnini komut satırından veya `--calib-file` ile dosyadan
+  güvenle okuma (satır sonları temizlenir).
 - Opsiyonel ek bağlamsal AAD girişi (metin ya da dosya).
 - KEM alanlarını manuel besleme desteği (ileri sürümler için)
   ve strict kipinin ortam/parametre ile yönetimi.
@@ -31,6 +33,10 @@ cargo run -p aunsorm-cli -- encrypt \
   --calib-text "Neudzulab | Prod | 2025-08"
 ```
 
+Kalibrasyon metni bir dosyada tutuluyorsa, aynı komut
+`--calib-file calib.txt` seçeneği ile de çalıştırılabilir; dosya
+sonundaki boş satırlar otomatik kırpılır.
+
 ```bash
 cargo run -p aunsorm-cli -- decrypt \
   --password-file secret.txt \
@@ -39,6 +45,8 @@ cargo run -p aunsorm-cli -- decrypt \
   --org-salt V2VBcmVLdXQuZXU= \
   --calib-text "Neudzulab | Prod | 2025-08"
 ```
+
+`decrypt` komutu için de aynı şekilde `--calib-file` kullanılabilir.
 
 # Oturum Kullanımı
 
