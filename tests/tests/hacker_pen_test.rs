@@ -1,10 +1,13 @@
 //! Beyaz şapka saldırı senaryosu: başlıktaki AEAD algoritmasını aşağı seviyeye
 //! düşürmeye çalışan saldırganın tespit edildiğini doğrular.
 
-use aunsorm_core::{calib_from_text, Calibration, KdfPreset, KdfProfile, Salts};
+use aunsorm_core::{
+    calib_from_text, session::SessionRatchet, Calibration, KdfPreset, KdfProfile, Salts,
+};
 use aunsorm_packet::{
-    decrypt_one_shot, encrypt_one_shot, AeadAlgorithm, DecryptParams, EncryptParams, Packet,
-    PacketError,
+    decrypt_one_shot, decrypt_session, encrypt_one_shot, encrypt_session, AeadAlgorithm,
+    DecryptParams, EncryptParams, Packet, PacketError, SessionDecryptParams, SessionEncryptParams,
+    SessionStore,
 };
 
 fn build_safe_packet() -> (String, Salts, Calibration, KdfProfile) {
@@ -84,4 +87,81 @@ fn strict_mode_rejects_packets_without_kem_material() {
     assert!(
         matches!(result, Err(PacketError::Strict(message)) if message == "kem material required in strict mode")
     );
+}
+
+#[test]
+fn session_message_number_tamper_is_detected() {
+    let salts = Salts::new(
+        b"session-calib-salt".to_vec(),
+        b"session-chain-salt".to_vec(),
+        b"session-coord-salt".to_vec(),
+    )
+    .expect("salts satisfy minimum entropy");
+    let profile = KdfProfile::preset(KdfPreset::Low);
+    let (calibration, _) = calib_from_text(b"white-hat-org", "penetration-test");
+
+    let bootstrap_packet = encrypt_one_shot(EncryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &calibration,
+        salts: &salts,
+        plaintext: b"bootstrap payload",
+        aad: b"bootstrap aad",
+        profile,
+        algorithm: AeadAlgorithm::Chacha20Poly1305,
+        strict: false,
+        kem: None,
+    })
+    .expect("bootstrap encryption succeeds");
+
+    let bootstrap_encoded = bootstrap_packet
+        .to_base64()
+        .expect("bootstrap packet encodes to base64");
+    let bootstrap_ok = decrypt_one_shot(&DecryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &calibration,
+        salts: &salts,
+        profile,
+        aad: b"bootstrap aad",
+        strict: false,
+        packet: &bootstrap_encoded,
+    })
+    .expect("bootstrap decrypts successfully");
+
+    let metadata = bootstrap_ok.metadata;
+    let mut sender = SessionRatchet::new([5_u8; 32], [7_u8; 16], false);
+    let mut receiver = SessionRatchet::new([5_u8; 32], [7_u8; 16], false);
+
+    let encrypt_params = SessionEncryptParams {
+        ratchet: &mut sender,
+        metadata: &metadata,
+        plaintext: b"session secret",
+        aad: b"session aad",
+    };
+    let (packet, _) = encrypt_session(encrypt_params).expect("session encryption produces packet");
+
+    let mut tampered = packet.clone();
+    let session_header = tampered
+        .header
+        .session
+        .as_mut()
+        .expect("session header is present");
+    session_header.message_no += 1;
+    let tampered_encoded = tampered
+        .to_base64()
+        .expect("tampered packet still encodes as base64");
+
+    let mut store = SessionStore::new();
+    let decrypt_params = SessionDecryptParams {
+        ratchet: &mut receiver,
+        metadata: &metadata,
+        store: &mut store,
+        aad: b"session aad",
+        packet: &tampered_encoded,
+    };
+    let err =
+        decrypt_session(decrypt_params).expect_err("tampered message number must be rejected");
+
+    assert!(matches!(err, PacketError::Invalid(message) if message == "unexpected message number"));
 }
