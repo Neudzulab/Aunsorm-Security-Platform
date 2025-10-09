@@ -7,6 +7,8 @@ paket üretme ve çözme iş akışlarını otomatikleştirir.
 ## Özellikler
 
 - Deterministik salt türetimi ile `encrypt` ve `decrypt` komutları.
+- Parola girdileri için CLI geçmişine yazmayan `--password-file`
+  seçeneği (dosya sonundaki satır sonları kırpılır).
 - KDF profilleri (`mobile`, `low`, `medium`, `high`, `ultra`) ve
   AEAD seçimleri (`aes-gcm`, `chacha20poly1305`).
 - Opsiyonel ek bağlamsal AAD girişi (metin ya da dosya).
@@ -22,7 +24,7 @@ paket üretme ve çözme iş akışlarını otomatikleştirir.
 
 ```bash
 cargo run -p aunsorm-cli -- encrypt \
-  --password "correct horse battery staple" \
+  --password-file secret.txt \
   --in plaintext.bin \
   --out packet.b64 \
   --org-salt V2VBcmVLdXQuZXU= \
@@ -31,7 +33,7 @@ cargo run -p aunsorm-cli -- encrypt \
 
 ```bash
 cargo run -p aunsorm-cli -- decrypt \
-  --password "correct horse battery staple" \
+  --password-file secret.txt \
   --in packet.b64 \
   --out recovered.bin \
   --org-salt V2VBcmVLdXQuZXU= \
@@ -42,7 +44,7 @@ cargo run -p aunsorm-cli -- decrypt \
 
 ```bash
 cargo run -p aunsorm-cli -- decrypt \
-  --password "correct horse battery staple" \
+  --password-file secret.txt \
   --in bootstrap.b64 \
   --out bootstrap.bin \
   --org-salt V2VBcmVLdXQuZXU= \
@@ -68,3 +70,6 @@ cargo run -p aunsorm-cli -- session-decrypt \
 ```
 
 Her komutun ayrıntılı yardım sayfasına `--help` ile erişilebilir.
+
+Parola dosyaları yalnızca satır sonu karakterlerinden arındırılır;
+dosya boşsa komut hata döndürür.

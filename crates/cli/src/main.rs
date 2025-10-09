@@ -110,9 +110,21 @@ enum X509Commands {
 
 #[derive(Args)]
 struct EncryptArgs {
-    /// Parola
-    #[arg(long)]
-    password: String,
+    /// Parola (veya --password-file kullanın)
+    #[arg(
+        long,
+        conflicts_with = "password_file",
+        required_unless_present = "password_file"
+    )]
+    password: Option<String>,
+    /// Parolayı dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "password",
+        required_unless_present = "password"
+    )]
+    password_file: Option<PathBuf>,
     /// Girdi dosyası
     #[arg(long, value_name = "PATH")]
     r#in: PathBuf,
@@ -156,9 +168,21 @@ struct EncryptArgs {
 
 #[derive(Args)]
 struct DecryptArgs {
-    /// Parola
-    #[arg(long)]
-    password: String,
+    /// Parola (veya --password-file kullanın)
+    #[arg(
+        long,
+        conflicts_with = "password_file",
+        required_unless_present = "password_file"
+    )]
+    password: Option<String>,
+    /// Parolayı dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "password",
+        required_unless_present = "password"
+    )]
+    password_file: Option<PathBuf>,
     /// Girdi Base64 paket dosyası
     #[arg(long, value_name = "PATH")]
     r#in: PathBuf,
@@ -204,9 +228,21 @@ struct CalibInspectArgs {
 
 #[derive(Args)]
 struct CalibCoordArgs {
-    /// Parola
-    #[arg(long)]
-    password: String,
+    /// Parola (veya --password-file kullanın)
+    #[arg(
+        long,
+        conflicts_with = "password_file",
+        required_unless_present = "password_file"
+    )]
+    password: Option<String>,
+    /// Parolayı dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "password",
+        required_unless_present = "password"
+    )]
+    password_file: Option<PathBuf>,
     /// Organizasyon tuzu (Base64)
     #[arg(long, value_name = "B64")]
     org_salt: String,
@@ -545,6 +581,8 @@ enum CliError {
     },
     #[error("{0} parametresi gerekli")]
     MissingParam(&'static str),
+    #[error("{0} boş olamaz")]
+    EmptySecret(&'static str),
     #[error("metadata dosyası eksik alan: {0}")]
     Metadata(&'static str),
     #[error("durum dosyası oturum kimliği ile uyuşmuyor")]
@@ -604,23 +642,41 @@ fn run(cli: Cli) -> CliResult<()> {
 }
 
 fn handle_encrypt(args: EncryptArgs, strict: bool) -> CliResult<()> {
-    let plaintext = fs::read(&args.r#in)?;
-    let aad = load_aad(args.aad.as_deref(), args.aad_file.as_deref())?;
-    let org_salt = decode_org_salt(&args.org_salt)?;
-    let password = Zeroizing::new(args.password);
+    let EncryptArgs {
+        password,
+        password_file,
+        r#in,
+        out,
+        org_salt,
+        calib_text,
+        kdf,
+        aead,
+        aad,
+        aad_file,
+        kem,
+        kem_public,
+        kem_ciphertext,
+        kem_responder,
+        kem_shared,
+    } = args;
 
-    let (calibration, _) = calib_from_text(&org_salt, &args.calib_text);
+    let plaintext = fs::read(&r#in)?;
+    let aad = load_aad(aad.as_deref(), aad_file.as_deref())?;
+    let org_salt = decode_org_salt(&org_salt)?;
+    let password = load_password(password.as_deref(), password_file.as_deref())?;
+
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text);
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
 
     let kem_fields = build_kem_fields(
-        args.kem.as_deref(),
-        args.kem_public.as_deref(),
-        args.kem_ciphertext.as_deref(),
-        args.kem_responder.as_deref(),
-        args.kem_shared.as_deref(),
+        kem.as_deref(),
+        kem_public.as_deref(),
+        kem_ciphertext.as_deref(),
+        kem_responder.as_deref(),
+        kem_shared.as_deref(),
     )?;
-    let profile = args.kdf.as_profile();
-    let algorithm = args.aead.as_algorithm();
+    let profile = kdf.as_profile();
+    let algorithm = aead.as_algorithm();
 
     let packet = if let Some(ref kem) = kem_fields {
         encrypt_one_shot(EncryptParams {
@@ -651,14 +707,14 @@ fn handle_encrypt(args: EncryptArgs, strict: bool) -> CliResult<()> {
     };
 
     let encoded = packet.to_base64()?;
-    fs::write(&args.out, encoded.as_bytes())?;
+    fs::write(&out, encoded.as_bytes())?;
 
     println!(
         "şifreleme tamamlandı: çıktı={} | calib_id={} | profile={} | aead={} | strict={} | kem={}",
-        args.out.display(),
+        out.display(),
         calibration.id.as_str(),
-        args.kdf,
-        args.aead,
+        kdf,
+        aead,
         strict,
         kem_fields.as_ref().map_or("none", |k| k.kem_name.as_str()),
     );
@@ -666,14 +722,27 @@ fn handle_encrypt(args: EncryptArgs, strict: bool) -> CliResult<()> {
 }
 
 fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
-    let packet_b64 = fs::read_to_string(&args.r#in)?;
-    let aad = load_aad(args.aad.as_deref(), args.aad_file.as_deref())?;
-    let org_salt = decode_org_salt(&args.org_salt)?;
-    let password = Zeroizing::new(args.password);
+    let DecryptArgs {
+        password,
+        password_file,
+        r#in,
+        out,
+        org_salt,
+        calib_text,
+        kdf,
+        aad,
+        aad_file,
+        metadata_out,
+    } = args;
 
-    let (calibration, _) = calib_from_text(&org_salt, &args.calib_text);
+    let packet_b64 = fs::read_to_string(&r#in)?;
+    let aad = load_aad(aad.as_deref(), aad_file.as_deref())?;
+    let org_salt = decode_org_salt(&org_salt)?;
+    let password = load_password(password.as_deref(), password_file.as_deref())?;
+
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text);
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
-    let profile = args.kdf.as_profile();
+    let profile = kdf.as_profile();
 
     let params = DecryptParams {
         password: &password,
@@ -687,21 +756,20 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
     };
     let decrypted = decrypt_one_shot(&params)?;
 
-    fs::write(&args.out, &decrypted.plaintext)?;
+    fs::write(&out, &decrypted.plaintext)?;
 
-    if let Some(path) = args.metadata_out.as_deref() {
+    if let Some(path) = metadata_out.as_deref() {
         write_metadata_file(path, &decrypted.metadata)?;
     }
 
-    let metadata_note = args
-        .metadata_out
+    let metadata_note = metadata_out
         .as_ref()
         .map(|path| format!(" | metadata={}", path.display()))
         .unwrap_or_default();
 
     println!(
         "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{}",
-        args.out.display(),
+        out.display(),
         decrypted.header.calib_id,
         decrypted.coord_id,
         decrypted.header.aead.alg,
@@ -824,7 +892,7 @@ fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
     let (calibration, _) = calib_from_text(&org_salt, &args.calib_text);
     let profile = args.kdf.as_profile();
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
-    let password = Zeroizing::new(args.password.clone());
+    let password = load_password(args.password.as_deref(), args.password_file.as_deref())?;
     let (seed64, pdk, info) = derive_seed64_and_pdk(
         &password,
         password_salt.as_slice(),
@@ -1272,6 +1340,32 @@ fn decode_fixed<const N: usize>(value: &str, context: &'static str) -> CliResult
     Ok(out)
 }
 
+fn load_password(
+    password: Option<&str>,
+    password_file: Option<&Path>,
+) -> CliResult<Zeroizing<String>> {
+    match (password, password_file) {
+        (Some(pw), None) => {
+            if pw.is_empty() {
+                return Err(CliError::EmptySecret("parola"));
+            }
+            Ok(Zeroizing::new(pw.to_owned()))
+        }
+        (None, Some(path)) => {
+            let mut secret = Zeroizing::new(fs::read_to_string(path)?);
+            while secret.ends_with('\n') || secret.ends_with('\r') {
+                secret.pop();
+            }
+            if secret.is_empty() {
+                return Err(CliError::EmptySecret("parola"));
+            }
+            Ok(secret)
+        }
+        (None, None) => Err(CliError::MissingParam("password")),
+        (Some(_), Some(_)) => unreachable!("clap enforces mutual exclusion"),
+    }
+}
+
 fn load_aad(aad_text: Option<&str>, aad_file: Option<&Path>) -> CliResult<Vec<u8>> {
     match (aad_text, aad_file) {
         (Some(_), Some(_)) => Err(CliError::AadConflict),
@@ -1532,6 +1626,28 @@ mod tests {
     fn aad_conflict_is_rejected() {
         let err = load_aad(Some("demo"), Some(Path::new("/tmp/demo"))).unwrap_err();
         assert!(matches!(err, CliError::AadConflict));
+    }
+
+    #[test]
+    fn password_from_cli_is_validated() {
+        let err = load_password(Some(""), None).unwrap_err();
+        assert!(matches!(err, CliError::EmptySecret("parola")));
+    }
+
+    #[test]
+    fn password_file_trims_newline() {
+        let file = NamedTempFile::new().expect("tmp");
+        fs::write(file.path(), "sekret\n").expect("write");
+        let password = load_password(None, Some(file.path())).expect("password");
+        assert_eq!(&*password, "sekret");
+    }
+
+    #[test]
+    fn password_file_rejects_empty() {
+        let file = NamedTempFile::new().expect("tmp");
+        fs::write(file.path(), "\n").expect("write");
+        let err = load_password(None, Some(file.path())).unwrap_err();
+        assert!(matches!(err, CliError::EmptySecret("parola")));
     }
 
     #[test]
