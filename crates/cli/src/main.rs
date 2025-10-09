@@ -135,8 +135,20 @@ struct EncryptArgs {
     #[arg(long, value_name = "B64")]
     org_salt: String,
     /// Kalibrasyon metni
-    #[arg(long)]
-    calib_text: String,
+    #[arg(
+        long,
+        conflicts_with = "calib_file",
+        required_unless_present = "calib_file"
+    )]
+    calib_text: Option<String>,
+    /// Kalibrasyon metnini dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "calib_text",
+        required_unless_present = "calib_text"
+    )]
+    calib_file: Option<PathBuf>,
     /// KDF profili
     #[arg(long, default_value = "medium")]
     kdf: ProfileArg,
@@ -193,8 +205,20 @@ struct DecryptArgs {
     #[arg(long, value_name = "B64")]
     org_salt: String,
     /// Kalibrasyon metni
-    #[arg(long)]
-    calib_text: String,
+    #[arg(
+        long,
+        conflicts_with = "calib_file",
+        required_unless_present = "calib_file"
+    )]
+    calib_text: Option<String>,
+    /// Kalibrasyon metnini dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "calib_text",
+        required_unless_present = "calib_text"
+    )]
+    calib_file: Option<PathBuf>,
     /// KDF profili
     #[arg(long, default_value = "medium")]
     kdf: ProfileArg,
@@ -222,8 +246,20 @@ struct CalibInspectArgs {
     #[arg(long, value_name = "B64")]
     org_salt: String,
     /// Kalibrasyon metni
-    #[arg(long)]
-    calib_text: String,
+    #[arg(
+        long,
+        conflicts_with = "calib_file",
+        required_unless_present = "calib_file"
+    )]
+    calib_text: Option<String>,
+    /// Kalibrasyon metnini dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "calib_text",
+        required_unless_present = "calib_text"
+    )]
+    calib_file: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -247,8 +283,20 @@ struct CalibCoordArgs {
     #[arg(long, value_name = "B64")]
     org_salt: String,
     /// Kalibrasyon metni
-    #[arg(long)]
-    calib_text: String,
+    #[arg(
+        long,
+        conflicts_with = "calib_file",
+        required_unless_present = "calib_file"
+    )]
+    calib_text: Option<String>,
+    /// Kalibrasyon metnini dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "calib_text",
+        required_unless_present = "calib_text"
+    )]
+    calib_file: Option<PathBuf>,
     /// KDF profili
     #[arg(long, default_value = "medium")]
     kdf: ProfileArg,
@@ -434,8 +482,20 @@ struct X509SelfSignedArgs {
     #[arg(long)]
     common_name: String,
     /// Kalibrasyon metni
-    #[arg(long)]
-    calib_text: String,
+    #[arg(
+        long,
+        conflicts_with = "calib_file",
+        required_unless_present = "calib_file"
+    )]
+    calib_text: Option<String>,
+    /// Kalibrasyon metnini dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "calib_text",
+        required_unless_present = "calib_text"
+    )]
+    calib_file: Option<PathBuf>,
     /// Organizasyon tuzu (Base64)
     #[arg(long, value_name = "B64")]
     org_salt: String,
@@ -649,6 +709,7 @@ fn handle_encrypt(args: EncryptArgs, strict: bool) -> CliResult<()> {
         out,
         org_salt,
         calib_text,
+        calib_file,
         kdf,
         aead,
         aad,
@@ -664,6 +725,7 @@ fn handle_encrypt(args: EncryptArgs, strict: bool) -> CliResult<()> {
     let aad = load_aad(aad.as_deref(), aad_file.as_deref())?;
     let org_salt = decode_org_salt(&org_salt)?;
     let password = load_password(password.as_deref(), password_file.as_deref())?;
+    let calib_text = load_calibration_text(calib_text.as_deref(), calib_file.as_deref())?;
 
     let (calibration, _) = calib_from_text(&org_salt, &calib_text);
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
@@ -729,6 +791,7 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
         out,
         org_salt,
         calib_text,
+        calib_file,
         kdf,
         aad,
         aad_file,
@@ -739,6 +802,7 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
     let aad = load_aad(aad.as_deref(), aad_file.as_deref())?;
     let org_salt = decode_org_salt(&org_salt)?;
     let password = load_password(password.as_deref(), password_file.as_deref())?;
+    let calib_text = load_calibration_text(calib_text.as_deref(), calib_file.as_deref())?;
 
     let (calibration, _) = calib_from_text(&org_salt, &calib_text);
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
@@ -880,7 +944,8 @@ fn handle_calib(command: CalibCommands) -> CliResult<()> {
 
 fn handle_calib_inspect(args: &CalibInspectArgs) -> CliResult<()> {
     let org_salt = decode_org_salt(&args.org_salt)?;
-    let (calibration, _) = calib_from_text(&org_salt, &args.calib_text);
+    let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text);
     let report = build_calibration_report(&calibration);
     let json = serde_json::to_string_pretty(&report)?;
     println!("{json}");
@@ -889,7 +954,8 @@ fn handle_calib_inspect(args: &CalibInspectArgs) -> CliResult<()> {
 
 fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
     let org_salt = decode_org_salt(&args.org_salt)?;
-    let (calibration, _) = calib_from_text(&org_salt, &args.calib_text);
+    let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text);
     let profile = args.kdf.as_profile();
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
     let password = load_password(args.password.as_deref(), args.password_file.as_deref())?;
@@ -1148,10 +1214,11 @@ fn handle_x509_self_signed(args: &X509SelfSignedArgs) -> CliResult<()> {
         return Err(CliError::InvalidValidityDays);
     }
     let org_salt = decode_org_salt(&args.org_salt)?;
+    let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
     let params = X509SelfSignedParams {
         common_name: &args.common_name,
         org_salt: &org_salt,
-        calibration_text: &args.calib_text,
+        calibration_text: &calib_text,
         cps_uris: &args.cps,
         policy_oids: &args.policy_oids,
         validity_days,
@@ -1362,6 +1429,27 @@ fn load_password(
             Ok(secret)
         }
         (None, None) => Err(CliError::MissingParam("password")),
+        (Some(_), Some(_)) => unreachable!("clap enforces mutual exclusion"),
+    }
+}
+
+fn load_calibration_text(calib_text: Option<&str>, calib_file: Option<&Path>) -> CliResult<String> {
+    match (calib_text, calib_file) {
+        (Some(text), None) => {
+            if text.trim().is_empty() {
+                return Err(CliError::EmptySecret("kalibrasyon metni"));
+            }
+            Ok(text.to_owned())
+        }
+        (None, Some(path)) => {
+            let content = fs::read_to_string(path)?;
+            let trimmed = content.trim_end_matches(['\n', '\r']);
+            if trimmed.trim().is_empty() {
+                return Err(CliError::EmptySecret("kalibrasyon metni"));
+            }
+            Ok(trimmed.to_owned())
+        }
+        (None, None) => Err(CliError::MissingParam("calib_text")),
         (Some(_), Some(_)) => unreachable!("clap enforces mutual exclusion"),
     }
 }
@@ -1648,6 +1736,28 @@ mod tests {
         fs::write(file.path(), "\n").expect("write");
         let err = load_password(None, Some(file.path())).unwrap_err();
         assert!(matches!(err, CliError::EmptySecret("parola")));
+    }
+
+    #[test]
+    fn calibration_text_rejects_blank() {
+        let err = load_calibration_text(Some("   \t"), None).unwrap_err();
+        assert!(matches!(err, CliError::EmptySecret("kalibrasyon metni")));
+    }
+
+    #[test]
+    fn calibration_file_trims_newline() {
+        let file = NamedTempFile::new().expect("tmp");
+        fs::write(file.path(), "Context\n").expect("write");
+        let text = load_calibration_text(None, Some(file.path())).expect("calib");
+        assert_eq!(text, "Context");
+    }
+
+    #[test]
+    fn calibration_file_rejects_empty() {
+        let file = NamedTempFile::new().expect("tmp");
+        fs::write(file.path(), "\n").expect("write");
+        let err = load_calibration_text(None, Some(file.path())).unwrap_err();
+        assert!(matches!(err, CliError::EmptySecret("kalibrasyon metni")));
     }
 
     #[test]
