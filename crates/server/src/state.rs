@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use aunsorm_core::{CoreError, SessionRatchet, StepSecret};
+use aunsorm_core::{CoreError, SessionRatchet};
 use aunsorm_jwt::{Jwks, JwtSigner, JwtVerifier};
 use rand_core::{OsRng, RngCore};
 use tokio::sync::Mutex;
@@ -150,20 +150,15 @@ impl SfuContext {
         let Some(session_id) = self.session_id else {
             return Ok(None);
         };
-        let StepSecret {
-            message_no,
-            message_secret,
-            nonce,
-            ..
-        } = {
+        let step = {
             let mut guard = ratchet.lock().await;
             guard.next_step()?
         };
         Ok(Some(SfuStepInfo {
             session_id,
-            message_no,
-            message_secret,
-            nonce,
+            message_no: step.message_no(),
+            message_secret: *step.message_secret(),
+            nonce: *step.nonce(),
             expires_at: self.expires_at,
             room_id: self.room_id.clone(),
             participant: self.participant.clone(),

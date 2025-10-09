@@ -162,11 +162,14 @@ pub fn encrypt_session(
     let step = params.ratchet.next_step()?;
     let session_id = params.ratchet.session_id();
 
-    let step_secret = Zeroizing::new(step.step_secret);
-    let message_secret = Zeroizing::new(step.message_secret);
-    let nonce_bytes =
-        session_nonce_for_algorithm(params.metadata.algorithm, &step.nonce, step_secret.as_ref())?;
-    let label = format!("{}:{}", params.metadata.calib_id, step.message_no);
+    let step_secret = Zeroizing::new(*step.step_secret());
+    let message_secret = Zeroizing::new(*step.message_secret());
+    let nonce_bytes = session_nonce_for_algorithm(
+        params.metadata.algorithm,
+        step.nonce(),
+        step_secret.as_ref(),
+    )?;
+    let label = format!("{}:{}", params.metadata.calib_id, step.message_no());
     let step_key: &[u8; 32] = step_secret
         .as_ref()
         .try_into()
@@ -192,8 +195,8 @@ pub fn encrypt_session(
         },
         session: Some(HeaderSession {
             id: base64_encode(&session_id),
-            message_no: step.message_no,
-            new: step.message_no == 0,
+            message_no: step.message_no(),
+            new: step.message_no() == 0,
         }),
         sizes: HeaderSizes {
             plaintext: params.plaintext.len(),
@@ -224,7 +227,7 @@ pub fn encrypt_session(
         packet,
         SessionStepOutcome {
             session_id,
-            message_no: step.message_no,
+            message_no: step.message_no(),
         },
     ))
 }
@@ -271,14 +274,17 @@ pub fn decrypt_session(
     if stored_nonce.len() != nonce_length(params.metadata.algorithm) {
         return Err(PacketError::Invalid("nonce length invalid"));
     }
-    let step_secret = Zeroizing::new(step.step_secret);
-    let message_secret = Zeroizing::new(step.message_secret);
-    let expected_nonce =
-        session_nonce_for_algorithm(params.metadata.algorithm, &step.nonce, step_secret.as_ref())?;
+    let step_secret = Zeroizing::new(*step.step_secret());
+    let message_secret = Zeroizing::new(*step.message_secret());
+    let expected_nonce = session_nonce_for_algorithm(
+        params.metadata.algorithm,
+        step.nonce(),
+        step_secret.as_ref(),
+    )?;
     if !constant_time_eq(&stored_nonce, &expected_nonce) {
         return Err(PacketError::Integrity("nonce mismatch"));
     }
-    let label = format!("{}:{}", params.metadata.calib_id, step.message_no);
+    let label = format!("{}:{}", params.metadata.calib_id, step.message_no());
     let step_key: &[u8; 32] = step_secret
         .as_ref()
         .try_into()
@@ -326,7 +332,7 @@ pub fn decrypt_session(
         },
         SessionStepOutcome {
             session_id: params.ratchet.session_id(),
-            message_no: step.message_no,
+            message_no: step.message_no(),
         },
     ))
 }
