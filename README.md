@@ -96,6 +96,10 @@ Projeyi keşfetmeye başlamadan önce aşağıdaki belgeleri okuyun:
 - [SECURITY.md](SECURITY.md) — Güvenlik açığı bildirim prosedürü.
 - [docs/](docs/) — mdBook tabanlı mimari rehber (`mdbook serve docs`).
 
+Statik HTML çıktısını yerel olarak üretmek için `mdbook build docs` komutunu
+kullanabilirsiniz; CI pipeline'ı her çalıştığında aynı kitap otomatik olarak
+yayınlanabilir artefakt olarak oluşturulur.
+
 ## Örnekler
 
 Mevcut örnekler aşağıdaki komutlarla çalıştırılabilir:

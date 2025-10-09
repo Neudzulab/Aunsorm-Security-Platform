@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- CI pipeline now builds the mdBook documentation and publishes it as an artifact
+  alongside rustdoc output, ensuring architectural docs remain up to date.
 - Configurable tracing initialisation with optional OpenTelemetry OTLP export
   controlled via `AUNSORM_LOG` and `AUNSORM_OTEL_ENDPOINT` environment bindings
   when the `aunsorm-server` crate is built with the `otel` feature.
@@ -21,7 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mesajları üretir.
 - `docs/` altında mdBook tabanlı mimari rehber ve operasyonel test dökümantasyonu.
 ### Planned
-- mdBook çıktısının CI pipeline'ına alınması.
 - Uzun süreli fuzz çalışmaları için nightly corpus minimizasyonu.
 - Uzak KMS sağlayıcıları (GCP/Azure) için canlı soak test harness'i.
 

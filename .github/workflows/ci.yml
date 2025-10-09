@@ -80,8 +80,19 @@ jobs:
         with:
           toolchain: 1.76.0
       - uses: Swatinem/rust-cache@v2
+      - name: Install mdBook
+        uses: peaceiris/actions-mdbook@v1
+        with:
+          mdbook-version: "0.4.40"
       - name: cargo doc
         run: cargo doc --all-features --no-deps
+      - name: Build mdBook
+        run: mdbook build docs
+      - name: Upload mdBook artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aunsorm-mdbook
+          path: docs/book
 
   bench:
     name: Bench (quick)
