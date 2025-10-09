@@ -260,6 +260,9 @@ struct CalibInspectArgs {
         required_unless_present = "calib_text"
     )]
     calib_file: Option<PathBuf>,
+    /// JSON çıktısını dosyaya yaz
+    #[arg(long, value_name = "PATH")]
+    out: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -300,6 +303,9 @@ struct CalibCoordArgs {
     /// KDF profili
     #[arg(long, default_value = "medium")]
     kdf: ProfileArg,
+    /// JSON çıktısını dosyaya yaz
+    #[arg(long, value_name = "PATH")]
+    out: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -947,9 +953,7 @@ fn handle_calib_inspect(args: &CalibInspectArgs) -> CliResult<()> {
     let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
     let (calibration, _) = calib_from_text(&org_salt, &calib_text);
     let report = build_calibration_report(&calibration);
-    let json = serde_json::to_string_pretty(&report)?;
-    println!("{json}");
-    Ok(())
+    emit_json_pretty(&report, args.out.as_deref())
 }
 
 fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
@@ -968,9 +972,20 @@ fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
     )?;
     let (coord_id, coord) = coord32_derive(seed64.as_ref(), &calibration, &salts)?;
     let report = build_coordinate_report(&calibration, coord_id, coord, args.kdf, &info);
-    let json = serde_json::to_string_pretty(&report)?;
-    println!("{json}");
-    Ok(())
+    emit_json_pretty(&report, args.out.as_deref())
+}
+
+fn emit_json_pretty<T>(value: &T, out: Option<&Path>) -> CliResult<()>
+where
+    T: Serialize,
+{
+    if let Some(path) = out {
+        write_json_pretty(path, value)
+    } else {
+        let json = serde_json::to_string_pretty(value)?;
+        println!("{json}");
+        Ok(())
+    }
 }
 
 #[derive(Serialize)]
@@ -1647,6 +1662,7 @@ where
 mod tests {
     use super::*;
     use aunsorm_packet::{AeadAlgorithm, HeaderKem, HeaderProfile, HeaderSalts};
+    use serde_json::json;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -1703,6 +1719,18 @@ mod tests {
         assert_eq!(
             report.chain_salt_digest,
             STANDARD.encode(info.chain_salt_digest)
+        );
+    }
+
+    #[test]
+    fn emit_json_pretty_writes_to_file_when_requested() {
+        let tmp = NamedTempFile::new().expect("tmp");
+        let payload = json!({ "key": "value" });
+        emit_json_pretty(&payload, Some(tmp.path())).expect("emit");
+        let written = fs::read_to_string(tmp.path()).expect("read");
+        assert_eq!(
+            written,
+            serde_json::to_string_pretty(&payload).expect("json")
         );
     }
 
