@@ -29,7 +29,7 @@ fn bench_coord_derivation(c: &mut Criterion) {
                 (seed, calibration, salts)
             },
             |(seed, calibration, salts)| {
-                let _ = coord32_derive(&seed, &calibration, &salts).expect("coord");
+                let _ = coord32_derive(seed.as_ref(), &calibration, &salts).expect("coord");
             },
             BatchSize::SmallInput,
         );

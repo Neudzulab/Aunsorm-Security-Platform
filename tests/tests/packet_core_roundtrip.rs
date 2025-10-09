@@ -106,7 +106,7 @@ proptest! {
         .map_err(|err| to_test_error(err, "derive seed"))?;
 
         let (expected_coord_id, expected_coord) =
-            coord32_derive(&seed64, &calibration, &salts)
+            coord32_derive(seed64.as_ref(), &calibration, &salts)
                 .map_err(|err| to_test_error(err, "derive coord"))?;
 
         let mut digest_hasher = Sha256::new();

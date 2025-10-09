@@ -959,15 +959,13 @@ fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
     let profile = args.kdf.as_profile();
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
     let password = load_password(args.password.as_deref(), args.password_file.as_deref())?;
-    let (seed64, pdk, info) = derive_seed64_and_pdk(
+    let (seed64, _pdk, info) = derive_seed64_and_pdk(
         &password,
         password_salt.as_slice(),
         salts.calibration(),
         salts.chain(),
         profile,
     )?;
-    let seed64 = Zeroizing::new(seed64);
-    let _pdk_guard = Zeroizing::new(pdk);
     let (coord_id, coord) = coord32_derive(seed64.as_ref(), &calibration, &salts)?;
     let report = build_coordinate_report(&calibration, coord_id, coord, args.kdf, &info);
     let json = serde_json::to_string_pretty(&report)?;
@@ -1680,7 +1678,7 @@ mod tests {
         let (calibration, _) = calib_from_text(&org, "demo calib");
         let (password_salt, salts) = derive_salts(&org, calibration.id.as_str()).expect("salts");
         let profile = ProfileArg::Low;
-        let (seed, pdk, info) = derive_seed64_and_pdk(
+        let (seed, _pdk, info) = derive_seed64_and_pdk(
             "correct horse battery staple",
             password_salt.as_slice(),
             salts.calibration(),
@@ -1688,8 +1686,6 @@ mod tests {
             profile.as_profile(),
         )
         .expect("seed");
-        let seed = zeroize::Zeroizing::new(seed);
-        let _pdk = zeroize::Zeroizing::new(pdk);
         let (coord_id, coord) = coord32_derive(seed.as_ref(), &calibration, &salts).expect("coord");
         let report = build_coordinate_report(&calibration, coord_id.clone(), coord, profile, &info);
         assert_eq!(report.calibration_id, calibration.id.as_str());

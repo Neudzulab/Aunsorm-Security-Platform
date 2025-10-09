@@ -151,7 +151,7 @@ pub fn calib_from_text(org_salt: &[u8], note_text: &str) -> (Calibration, String
 /// ).unwrap();
 /// let (calib, _) = calib_from_text(b"org", "note");
 /// let salts = Salts::new(b"salt-calib-456".to_vec(), b"salt-chain-789".to_vec(), b"coord-salt".to_vec()).unwrap();
-/// let (coord_id, coord_bytes) = coord32_derive(&seed, &calib, &salts).unwrap();
+/// let (coord_id, coord_bytes) = coord32_derive(seed.as_ref(), &calib, &salts).unwrap();
 /// assert_eq!(coord_bytes.len(), 32);
 /// assert!(!coord_id.is_empty());
 /// ```
@@ -212,8 +212,8 @@ mod tests {
             b"coord-salt".to_vec(),
         )
         .unwrap();
-        let (coord_id_a, coord_a) = coord32_derive(&seed, &calibration, &salts).unwrap();
-        let (coord_id_b, coord_b) = coord32_derive(&seed, &calibration, &salts).unwrap();
+        let (coord_id_a, coord_a) = coord32_derive(seed.as_ref(), &calibration, &salts).unwrap();
+        let (coord_id_b, coord_b) = coord32_derive(seed.as_ref(), &calibration, &salts).unwrap();
         assert_eq!(coord_id_a, coord_id_b);
         assert_eq!(coord_a, coord_b);
     }
