@@ -11,6 +11,16 @@ Bu bölüm, kalite komutlarıyla birlikte genişletilen fuzz ve soak senaryolar�
 decrypt akışı beklenmedik panik üretmeden hataları yüzeye çıkarır.
 - Fuzzer çıktıları `fuzz/artifacts/session_store_roundtrip/` altında saklanır.
 
+## Gece (Nightly) Corpus Minimizasyonu
+
+- `.github/workflows/nightly-fuzz.yml` iş akışı her gece 02:00 UTC’de tetiklenir.
+- `cargo fuzz run` komutlarını her hedef için 5 dakikalık `-max_total_time=300`
+  parametresiyle çalıştırarak korpusları ısıtır.
+- Ardından `cargo fuzz cmin` ile her hedefin korpusunu `fuzz/corpus-min/<hedef>`
+  dizinine minimize eder ve `nightly-corpus.tar.gz` artefaktı olarak yükler.
+- Yeni korpus dosyalarını yerel çalışma alanına almak için artefaktı indirip
+  `tar -xzf nightly-corpus.tar.gz -C fuzz` komutuyla açabilirsiniz.
+
 ## Soak Testleri
 
 - `cargo test -p aunsorm-tests -- --ignored session_ratchet_roundtrip_soak`

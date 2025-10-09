@@ -22,8 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tekrarlı/boş `key_id` ve kaynak değerleri artık deterministik `KmsError::Config`
   mesajları üretir.
 - `docs/` altında mdBook tabanlı mimari rehber ve operasyonel test dökümantasyonu.
+- Nightly zamanlanmış iş akışı fuzz korpuslarını ısıtıp `cargo fuzz cmin` ile minimize
+  ederek indirilebilir artefakt üretir.
 ### Planned
-- Uzun süreli fuzz çalışmaları için nightly corpus minimizasyonu.
 - Uzak KMS sağlayıcıları (GCP/Azure) için canlı soak test harness'i.
 
 ## [0.1.0] - 2025-10-07

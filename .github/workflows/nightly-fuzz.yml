@@ -1,0 +1,82 @@
+name: Nightly Fuzz Corpus
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: nightly
+
+jobs:
+  nightly-fuzz:
+    name: Nightly fuzz corpus minimization
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly
+          components: llvm-tools-preview
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: nightly-fuzz-corpus
+          toolchain: nightly
+
+      - name: Warm fuzz corpora
+        run: |
+          set -euo pipefail
+          targets=(fuzz_packet fuzz_session session_store_roundtrip)
+          mkdir -p fuzz/corpus
+          for target in "${targets[@]}"; do
+            mkdir -p "fuzz/corpus/${target}"
+            mkdir -p "fuzz/artifacts/${target}"
+            echo "Running corpus warm-up for ${target}"
+            cargo fuzz run "${target}" -- -max_total_time=300 -artifact_prefix=fuzz/artifacts/${target}/
+          done
+
+      - name: Minimize fuzz corpora
+        run: |
+          set -euo pipefail
+          targets=(fuzz_packet fuzz_session session_store_roundtrip)
+          rm -rf fuzz/corpus-min
+          mkdir -p fuzz/corpus-min
+          for target in "${targets[@]}"; do
+            src="fuzz/corpus/${target}"
+            dst="fuzz/corpus-min/${target}"
+            if [ ! -d "${src}" ] || [ -z "$(ls -A "${src}")" ]; then
+              echo "Corpus for ${target} is empty, skipping minimization" >&2
+              continue
+            fi
+            mkdir -p "${dst}"
+            echo "Minimizing corpus for ${target}"
+            cargo fuzz cmin "${target}" "${src}" "${dst}"
+          done
+
+      - name: Package minimized corpora
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [ -d fuzz/corpus-min ] && [ -n "$(find fuzz/corpus-min -mindepth 1 -type f -print -quit)" ]; then
+            tar -czf nightly-corpus.tar.gz -C fuzz corpus-min
+          else
+            echo "No minimized corpora produced; skipping archive"
+          fi
+
+      - name: Upload minimized corpora
+        if: ${{ always() && hashFiles('nightly-corpus.tar.gz') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-corpus-${{ github.run_id }}
+          path: nightly-corpus.tar.gz
