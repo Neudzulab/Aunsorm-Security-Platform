@@ -75,6 +75,8 @@ Aşağıdaki komutlar test/fuzz/bench altyapısını kullanıma hazır hale geti
 - `cargo bench --benches` — Criterion tabanlı AEAD ve oturum ölçümlerini yürütür.
 - `cargo fuzz run fuzz_packet` ve `cargo fuzz run fuzz_session` — paket/oturum katmanlarını libFuzzer ile zorlar (Nightly + `cargo-fuzz` gerektirir).
 - `cargo fuzz run session_store_roundtrip` — oturum ratchet’ı ve `SessionStore` kayıtlarını çok adımlı senaryolarda doğrular.
+- GitHub Actions üzerindeki **Nightly Fuzz Corpus** iş akışı korpusları her gece ısıtır,
+  minimize eder ve indirilebilir artefakt olarak yayımlar.
 
 ### Soak Testleri
 
