@@ -16,7 +16,7 @@ use aunsorm_jwt::{Audience, Claims, JwtError, VerificationOptions};
 
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
-use crate::state::{auth_ttl, ServerState};
+use crate::state::{auth_ttl, ServerState, SfuStepOutcome};
 use serde_json::Value;
 
 pub fn build_router(state: Arc<ServerState>) -> Router {
@@ -27,6 +27,8 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/oauth/jwks.json", get(jwks))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
+        .route("/sfu/context", post(create_sfu_context))
+        .route("/sfu/context/step", post(next_sfu_step))
         .with_state(state)
 }
 
@@ -281,8 +283,9 @@ async fn metrics(State(state): State<Arc<ServerState>>) -> Result<Response, ApiE
         .active_token_count(now)
         .await
         .map_err(|err| ApiError::server_error(format!("Metrik hesaplanamadı: {err}")))?;
+    let sfu_contexts = state.sfu_context_count(now).await;
     let body = format!(
-        "# HELP aunsorm_pending_auth_requests Bekleyen PKCE yetkilendirme istekleri\n# TYPE aunsorm_pending_auth_requests gauge\naunsorm_pending_auth_requests {pending}\n# HELP aunsorm_active_tokens Aktif erişim belirteci sayısı\n# TYPE aunsorm_active_tokens gauge\naunsorm_active_tokens {active}\n"
+        "# HELP aunsorm_pending_auth_requests Bekleyen PKCE yetkilendirme istekleri\n# TYPE aunsorm_pending_auth_requests gauge\naunsorm_pending_auth_requests {pending}\n# HELP aunsorm_active_tokens Aktif erişim belirteci sayısı\n# TYPE aunsorm_active_tokens gauge\naunsorm_active_tokens {active}\n# HELP aunsorm_sfu_contexts Aktif SFU oturum bağlamı sayısı\n# TYPE aunsorm_sfu_contexts gauge\naunsorm_sfu_contexts {sfu_contexts}\n"
     );
     let mut response = Response::new(body.into());
     *response.status_mut() = StatusCode::OK;
@@ -291,4 +294,124 @@ async fn metrics(State(state): State<Arc<ServerState>>) -> Result<Response, ApiE
         HeaderValue::from_static("text/plain; version=0.0.4"),
     );
     Ok(response)
+}
+
+#[derive(Debug, Deserialize)]
+struct CreateSfuContextRequest {
+    room_id: String,
+    participant: String,
+    #[serde(default = "default_enable_e2ee")]
+    enable_e2ee: bool,
+}
+
+const fn default_enable_e2ee() -> bool {
+    true
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct SfuE2eeEnvelope {
+    session_id: String,
+    message_no: u64,
+    key: String,
+    nonce: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CreateSfuContextResponse {
+    context_id: String,
+    room_id: String,
+    participant: String,
+    expires_in: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    e2ee: Option<SfuE2eeEnvelope>,
+}
+
+async fn create_sfu_context(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<CreateSfuContextRequest>,
+) -> Result<Json<CreateSfuContextResponse>, ApiError> {
+    if payload.room_id.trim().is_empty() {
+        return Err(ApiError::invalid_request("room_id boş olamaz"));
+    }
+    if payload.participant.trim().is_empty() {
+        return Err(ApiError::invalid_request("participant boş olamaz"));
+    }
+    let provision = state
+        .create_sfu_context(payload.room_id, payload.participant, payload.enable_e2ee)
+        .await
+        .map_err(|err| ApiError::server_error(format!("SFU bağlamı oluşturulamadı: {err}")))?;
+    let now = SystemTime::now();
+    let expires_in = provision
+        .expires_at
+        .duration_since(now)
+        .unwrap_or_default()
+        .as_secs();
+    let e2ee = provision.e2ee.map(|step| SfuE2eeEnvelope {
+        session_id: URL_SAFE_NO_PAD.encode(step.session_id),
+        message_no: step.message_no,
+        key: URL_SAFE_NO_PAD.encode(step.message_secret),
+        nonce: URL_SAFE_NO_PAD.encode(step.nonce),
+    });
+    Ok(Json(CreateSfuContextResponse {
+        context_id: provision.context_id,
+        room_id: provision.room_id,
+        participant: provision.participant,
+        expires_in,
+        e2ee,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct NextSfuStepRequest {
+    context_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct NextSfuStepResponse {
+    context_id: String,
+    room_id: String,
+    participant: String,
+    session_id: String,
+    message_no: u64,
+    key: String,
+    nonce: String,
+    expires_in: u64,
+}
+
+async fn next_sfu_step(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<NextSfuStepRequest>,
+) -> Result<Json<NextSfuStepResponse>, ApiError> {
+    if payload.context_id.trim().is_empty() {
+        return Err(ApiError::invalid_request("context_id boş olamaz"));
+    }
+    let outcome = state
+        .next_sfu_step(&payload.context_id)
+        .await
+        .map_err(|err| ApiError::server_error(format!("SFU ratchet adımı üretilemedi: {err}")))?;
+    match outcome {
+        SfuStepOutcome::NotFound => Err(ApiError::invalid_request("SFU bağlamı bulunamadı")),
+        SfuStepOutcome::Expired => Err(ApiError::invalid_grant("SFU bağlamının süresi doldu")),
+        SfuStepOutcome::E2eeDisabled => Err(ApiError::invalid_request(
+            "SFU bağlamı için uçtan uca şifreleme etkin değil",
+        )),
+        SfuStepOutcome::Step(step) => {
+            let now = SystemTime::now();
+            let expires_in = step
+                .expires_at
+                .duration_since(now)
+                .unwrap_or_default()
+                .as_secs();
+            Ok(Json(NextSfuStepResponse {
+                context_id: payload.context_id,
+                room_id: step.room_id,
+                participant: step.participant,
+                session_id: URL_SAFE_NO_PAD.encode(step.session_id),
+                message_no: step.message_no,
+                key: URL_SAFE_NO_PAD.encode(step.message_secret),
+                nonce: URL_SAFE_NO_PAD.encode(step.nonce),
+                expires_in,
+            }))
+        }
+    }
 }

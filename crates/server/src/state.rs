@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use aunsorm_core::{CoreError, SessionRatchet, StepSecret};
 use aunsorm_jwt::{Jwks, JwtSigner, JwtVerifier};
 use rand_core::{OsRng, RngCore};
 use tokio::sync::Mutex;
@@ -10,6 +11,7 @@ use crate::config::{LedgerBackend, ServerConfig};
 use crate::error::ServerError;
 
 const AUTH_TTL: Duration = Duration::from_secs(300);
+const SFU_CONTEXT_TTL: Duration = Duration::from_secs(900);
 
 #[derive(Debug, Clone)]
 pub struct AuthRequest {
@@ -61,6 +63,195 @@ fn generate_id() -> String {
     let mut buf = [0_u8; 16];
     OsRng.fill_bytes(&mut buf);
     hex::encode(buf)
+}
+
+#[derive(Debug, Clone)]
+pub struct SfuStepInfo {
+    pub session_id: [u8; 16],
+    pub message_no: u64,
+    pub message_secret: [u8; 32],
+    pub nonce: [u8; 12],
+    pub expires_at: SystemTime,
+    pub room_id: String,
+    pub participant: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SfuContextProvision {
+    pub context_id: String,
+    pub expires_at: SystemTime,
+    pub room_id: String,
+    pub participant: String,
+    pub e2ee: Option<SfuStepInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SfuStepOutcome {
+    NotFound,
+    Expired,
+    E2eeDisabled,
+    Step(SfuStepInfo),
+}
+
+#[derive(Debug)]
+struct SfuContext {
+    room_id: String,
+    participant: String,
+    expires_at: SystemTime,
+    ratchet: Option<Mutex<SessionRatchet>>,
+    session_id: Option<[u8; 16]>,
+}
+
+impl SfuContext {
+    fn new(
+        room_id: String,
+        participant: String,
+        strict: bool,
+        enable_e2ee: bool,
+        now: SystemTime,
+    ) -> Self {
+        let expires_at = now + SFU_CONTEXT_TTL;
+        if enable_e2ee {
+            let mut root = [0_u8; 32];
+            OsRng.fill_bytes(&mut root);
+            let mut session_id = [0_u8; 16];
+            OsRng.fill_bytes(&mut session_id);
+            let ratchet = SessionRatchet::new(root, session_id, strict);
+            Self {
+                room_id,
+                participant,
+                expires_at,
+                ratchet: Some(Mutex::new(ratchet)),
+                session_id: Some(session_id),
+            }
+        } else {
+            Self {
+                room_id,
+                participant,
+                expires_at,
+                ratchet: None,
+                session_id: None,
+            }
+        }
+    }
+
+    fn is_expired(&self, now: SystemTime) -> bool {
+        self.expires_at <= now
+    }
+
+    const fn has_e2ee(&self) -> bool {
+        self.ratchet.is_some()
+    }
+
+    async fn produce_step(&self) -> Result<Option<SfuStepInfo>, CoreError> {
+        let Some(ratchet) = &self.ratchet else {
+            return Ok(None);
+        };
+        let Some(session_id) = self.session_id else {
+            return Ok(None);
+        };
+        let StepSecret {
+            message_no,
+            message_secret,
+            nonce,
+            ..
+        } = {
+            let mut guard = ratchet.lock().await;
+            guard.next_step()?
+        };
+        Ok(Some(SfuStepInfo {
+            session_id,
+            message_no,
+            message_secret,
+            nonce,
+            expires_at: self.expires_at,
+            room_id: self.room_id.clone(),
+            participant: self.participant.clone(),
+        }))
+    }
+}
+
+#[derive(Debug, Default)]
+struct SfuStore {
+    entries: Mutex<HashMap<String, Arc<SfuContext>>>,
+}
+
+impl SfuStore {
+    fn new() -> Self {
+        Self {
+            entries: Mutex::new(HashMap::new()),
+        }
+    }
+
+    async fn create(
+        &self,
+        room_id: String,
+        participant: String,
+        strict: bool,
+        enable_e2ee: bool,
+    ) -> Result<SfuContextProvision, ServerError> {
+        let now = SystemTime::now();
+        let context = Arc::new(SfuContext::new(
+            room_id,
+            participant,
+            strict,
+            enable_e2ee,
+            now,
+        ));
+        let e2ee = context.produce_step().await.map_err(|err| {
+            ServerError::Configuration(format!("SFU ratchet adımı üretilemedi: {err}"))
+        })?;
+        let id = generate_id();
+        {
+            let mut guard = self.entries.lock().await;
+            Self::purge_locked(&mut guard, now);
+            guard.insert(id.clone(), Arc::clone(&context));
+        }
+        Ok(SfuContextProvision {
+            context_id: id,
+            expires_at: context.expires_at,
+            room_id: context.room_id.clone(),
+            participant: context.participant.clone(),
+            e2ee,
+        })
+    }
+
+    async fn next_step(&self, id: &str, now: SystemTime) -> Result<SfuStepOutcome, ServerError> {
+        let mut guard = self.entries.lock().await;
+        let context = match guard.get(id) {
+            Some(ctx) if ctx.is_expired(now) => {
+                guard.remove(id);
+                return Ok(SfuStepOutcome::Expired);
+            }
+            Some(ctx) => Arc::clone(ctx),
+            None => {
+                Self::purge_locked(&mut guard, now);
+                return Ok(SfuStepOutcome::NotFound);
+            }
+        };
+        Self::purge_locked(&mut guard, now);
+        drop(guard);
+        if !context.has_e2ee() {
+            return Ok(SfuStepOutcome::E2eeDisabled);
+        }
+        let step = context.produce_step().await.map_err(|err| {
+            ServerError::Configuration(format!("SFU ratchet adımı üretilemedi: {err}"))
+        })?;
+        let Some(step) = step else {
+            return Ok(SfuStepOutcome::E2eeDisabled);
+        };
+        Ok(SfuStepOutcome::Step(step))
+    }
+
+    async fn count(&self, now: SystemTime) -> usize {
+        let mut guard = self.entries.lock().await;
+        Self::purge_locked(&mut guard, now);
+        guard.len()
+    }
+
+    fn purge_locked(map: &mut HashMap<String, Arc<SfuContext>>, now: SystemTime) {
+        map.retain(|_, ctx| !ctx.is_expired(now));
+    }
 }
 
 pub struct TokenLedger {
@@ -273,6 +464,7 @@ pub struct ServerState {
     jwks: Jwks,
     auth_store: AuthStore,
     ledger: TokenLedger,
+    sfu_store: SfuStore,
 }
 
 impl ServerState {
@@ -308,6 +500,7 @@ impl ServerState {
             jwks,
             auth_store: AuthStore::new(),
             ledger,
+            sfu_store: SfuStore::new(),
         })
     }
 
@@ -398,6 +591,37 @@ impl ServerState {
     /// Depo sorgusu başarısız olursa `ServerError` döner.
     pub async fn active_token_count(&self, now: SystemTime) -> Result<usize, ServerError> {
         self.ledger.count_active(now).await
+    }
+
+    /// SFU entegrasyonu için yeni bir bağlam oluşturur.
+    ///
+    /// # Errors
+    ///
+    /// Ratchet üretimi veya depo erişimi başarısız olursa `ServerError` döner.
+    pub async fn create_sfu_context(
+        &self,
+        room_id: String,
+        participant: String,
+        enable_e2ee: bool,
+    ) -> Result<SfuContextProvision, ServerError> {
+        self.sfu_store
+            .create(room_id, participant, self.strict, enable_e2ee)
+            .await
+    }
+
+    /// Mevcut SFU bağlamı için bir sonraki anahtar adımını hesaplar.
+    ///
+    /// # Errors
+    ///
+    /// Depo erişimi veya ratchet üretimi başarısız olursa `ServerError` döner.
+    pub async fn next_sfu_step(&self, context_id: &str) -> Result<SfuStepOutcome, ServerError> {
+        self.sfu_store
+            .next_step(context_id, SystemTime::now())
+            .await
+    }
+
+    pub async fn sfu_context_count(&self, now: SystemTime) -> usize {
+        self.sfu_store.count(now).await
     }
 }
 
