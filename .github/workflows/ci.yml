@@ -10,14 +10,13 @@ env:
   RUSTDOCFLAGS: -D warnings
 
 jobs:
-  checks:
-    name: ${{ matrix.check }} (${{ matrix.os }})
+  lint:
+    name: Lint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        check: [fmt, clippy, test]
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust
@@ -27,15 +26,29 @@ jobs:
           components: rustfmt,clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ${{ matrix.os }}-${{ matrix.check }}
+          shared-key: lint-${{ matrix.os }}
       - name: cargo fmt
-        if: matrix.check == 'fmt'
         run: cargo fmt --all --check
       - name: cargo clippy
-        if: matrix.check == 'clippy'
         run: cargo clippy --all-targets --all-features -- -D warnings
+
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.76.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test-${{ matrix.os }}
       - name: cargo test
-        if: matrix.check == 'test'
         env:
           PROPTEST_CASES: "64"
         run: cargo test --all-features
