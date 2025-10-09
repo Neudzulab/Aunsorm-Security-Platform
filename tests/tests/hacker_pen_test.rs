@@ -65,3 +65,23 @@ fn hacker_agent_detects_aead_downgrade_attempt() {
         Err(PacketError::Integrity(_)) | Err(PacketError::Invalid(_))
     ));
 }
+
+#[test]
+fn strict_mode_rejects_packets_without_kem_material() {
+    let (encoded, salts, calibration, profile) = build_safe_packet();
+
+    let result = decrypt_one_shot(&DecryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &calibration,
+        salts: &salts,
+        profile,
+        aad: b"classified aad",
+        strict: true,
+        packet: &encoded,
+    });
+
+    assert!(
+        matches!(result, Err(PacketError::Strict(message)) if message == "kem material required in strict mode")
+    );
+}
