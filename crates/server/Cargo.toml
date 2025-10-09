@@ -24,6 +24,7 @@ thiserror = { workspace = true }
 sha2 = { workspace = true }
 hkdf = { workspace = true }
 aunsorm-jwt = { path = "../jwt" }
+aunsorm-core = { path = "../core" }
 zeroize = { workspace = true }
 rand_core = { workspace = true }
 hex = { workspace = true }
