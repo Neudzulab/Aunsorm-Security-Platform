@@ -167,3 +167,85 @@ fn session_message_number_tamper_is_detected() {
 
     assert!(matches!(err, PacketError::Invalid(message) if message == "unexpected message number"));
 }
+
+#[test]
+fn replayed_session_packet_is_rejected() {
+    let salts = Salts::new(
+        b"replay-calib-salt".to_vec(),
+        b"replay-chain-salt".to_vec(),
+        b"replay-coord-salt".to_vec(),
+    )
+    .expect("salts satisfy minimum entropy");
+    let profile = KdfProfile::preset(KdfPreset::Low);
+    let (calibration, _) =
+        calib_from_text(b"white-hat-org", "penetration-test").expect("calibration");
+
+    let bootstrap_packet = encrypt_one_shot(EncryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &calibration,
+        salts: &salts,
+        plaintext: b"bootstrap payload",
+        aad: b"bootstrap aad",
+        profile,
+        algorithm: AeadAlgorithm::Chacha20Poly1305,
+        strict: false,
+        kem: None,
+    })
+    .expect("bootstrap encryption succeeds");
+
+    let bootstrap_encoded = bootstrap_packet
+        .to_base64()
+        .expect("bootstrap packet encodes to base64");
+    let bootstrap_ok = decrypt_one_shot(&DecryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &calibration,
+        salts: &salts,
+        profile,
+        aad: b"bootstrap aad",
+        strict: false,
+        packet: &bootstrap_encoded,
+    })
+    .expect("bootstrap decrypts successfully");
+
+    let metadata = bootstrap_ok.metadata;
+    let mut sender = SessionRatchet::new([5_u8; 32], [9_u8; 16], false);
+
+    let encrypt_params = SessionEncryptParams {
+        ratchet: &mut sender,
+        metadata: &metadata,
+        plaintext: b"session replay secret",
+        aad: b"session aad",
+    };
+    let (packet, _) = encrypt_session(encrypt_params).expect("session encryption succeeds");
+    let encoded_packet = packet
+        .to_base64()
+        .expect("session packet encodes to base64");
+
+    let mut store = SessionStore::new();
+    let mut receiver_first = SessionRatchet::new([5_u8; 32], [9_u8; 16], false);
+    let decrypt_params_first = SessionDecryptParams {
+        ratchet: &mut receiver_first,
+        metadata: &metadata,
+        store: &mut store,
+        aad: b"session aad",
+        packet: &encoded_packet,
+    };
+
+    let (ok, _) = decrypt_session(decrypt_params_first).expect("initial decrypt succeeds");
+    assert_eq!(ok.plaintext.as_slice(), b"session replay secret");
+
+    let mut receiver_replay = SessionRatchet::new([5_u8; 32], [9_u8; 16], false);
+    let decrypt_params_replay = SessionDecryptParams {
+        ratchet: &mut receiver_replay,
+        metadata: &metadata,
+        store: &mut store,
+        aad: b"session aad",
+        packet: &encoded_packet,
+    };
+
+    let err = decrypt_session(decrypt_params_replay)
+        .expect_err("replayed packet must be rejected by session store");
+    assert!(matches!(err, PacketError::Replay));
+}
