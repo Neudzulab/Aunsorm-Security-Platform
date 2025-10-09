@@ -21,6 +21,9 @@ Kalibrasyon değerini bir dosyada saklıyorsanız aynı komutlara
 `--calib-file calib.txt` seçeneğini ekleyebilir, dosya sonundaki satır
 sonlarının otomatik kırpılmasını sağlayabilirsiniz.
 
+Kalibrasyon raporlarını insan tarafından okunur biçimde görmek için
+`calib` komutlarına `--format text` parametresini ekleyebilirsiniz.
+
 ## Sprint 0: Planlama ve Altyapı
 - [x] PLAN.md gereksinimlerini analiz et ve ajan rollerini belirle.
 - [x] Kılavuzları `AGENTS.md` ile belgeleyip iş akışını kur.
