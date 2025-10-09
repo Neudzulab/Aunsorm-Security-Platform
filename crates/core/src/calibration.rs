@@ -6,6 +6,9 @@ use sha2::{Digest, Sha256, Sha512};
 
 use crate::{error::CoreError, salts::Salts};
 
+const MIN_ORG_SALT_LEN: usize = 8;
+const MAX_NOTE_LEN: usize = 2048;
+
 /// Kalibrasyon aralığı.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CalibrationRange {
@@ -116,15 +119,20 @@ impl Calibration {
 /// ```
 /// use aunsorm_core::calibration::calib_from_text;
 ///
-/// let (calibration, id) = calib_from_text(b"org-salt", "Example calibration note");
+/// # fn main() -> Result<(), aunsorm_core::CoreError> {
+/// let (calibration, id) = calib_from_text(b"org-salt", "Example calibration note")?;
 /// assert_eq!(calibration.id.as_str(), id);
+/// # Ok(())
+/// # }
 /// ```
-#[must_use]
-#[allow(clippy::missing_panics_doc)]
-pub fn calib_from_text(org_salt: &[u8], note_text: &str) -> (Calibration, String) {
+pub fn calib_from_text(
+    org_salt: &[u8],
+    note_text: &str,
+) -> Result<(Calibration, String), CoreError> {
+    validate_calibration_inputs(org_salt, note_text)?;
     let calibration = Calibration::new(org_salt, note_text);
     let id = calibration.id.as_str().to_owned();
-    (calibration, id)
+    Ok((calibration, id))
 }
 
 /// Kalibrasyon ve salt girdilerinden deterministik koordinat üretir.
@@ -141,6 +149,7 @@ pub fn calib_from_text(org_salt: &[u8], note_text: &str) -> (Calibration, String
 ///     salts::Salts,
 /// };
 ///
+/// # fn main() -> Result<(), aunsorm_core::CoreError> {
 /// let profile = KdfProfile::preset(KdfPreset::Low);
 /// let (seed, _, _) = derive_seed64_and_pdk(
 ///     "password",
@@ -148,12 +157,18 @@ pub fn calib_from_text(org_salt: &[u8], note_text: &str) -> (Calibration, String
 ///     b"salt-calib-456",
 ///     b"salt-chain-789",
 ///     profile,
-/// ).unwrap();
-/// let (calib, _) = calib_from_text(b"org", "note");
-/// let salts = Salts::new(b"salt-calib-456".to_vec(), b"salt-chain-789".to_vec(), b"coord-salt".to_vec()).unwrap();
-/// let (coord_id, coord_bytes) = coord32_derive(seed.as_ref(), &calib, &salts).unwrap();
+/// )?;
+/// let (calib, _) = calib_from_text(b"org-salt", "note")?;
+/// let salts = Salts::new(
+///     b"salt-calib-456".to_vec(),
+///     b"salt-chain-789".to_vec(),
+///     b"coord-salt".to_vec(),
+/// )?;
+/// let (coord_id, coord_bytes) = coord32_derive(seed.as_ref(), &calib, &salts)?;
 /// assert_eq!(coord_bytes.len(), 32);
 /// assert!(!coord_id.is_empty());
+/// # Ok(())
+/// # }
 /// ```
 pub fn coord32_derive(
     seed64: &[u8],
@@ -182,6 +197,36 @@ pub fn coord32_derive(
     Ok((coord_id, coord))
 }
 
+fn validate_calibration_inputs(org_salt: &[u8], note_text: &str) -> Result<(), CoreError> {
+    if org_salt.len() < MIN_ORG_SALT_LEN {
+        return Err(CoreError::salt_too_short("org salt must be >= 8 bytes"));
+    }
+
+    if note_text.len() > MAX_NOTE_LEN {
+        return Err(CoreError::invalid_input(
+            "calibration text must be <= 2048 bytes",
+        ));
+    }
+
+    let trimmed = note_text.trim();
+    if trimmed.is_empty() {
+        return Err(CoreError::invalid_input(
+            "calibration text must not be empty",
+        ));
+    }
+
+    if note_text
+        .chars()
+        .any(|ch| ch.is_control() && !matches!(ch, '\n' | '\r' | '\t'))
+    {
+        return Err(CoreError::invalid_input(
+            "calibration text contains disallowed control characters",
+        ));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,8 +234,8 @@ mod tests {
 
     #[test]
     fn calibration_is_deterministic() {
-        let (cal_a, id_a) = calib_from_text(b"org", "note");
-        let (cal_b, id_b) = calib_from_text(b"org", "note");
+        let (cal_a, id_a) = calib_from_text(b"org-salt", "note").expect("calibration");
+        let (cal_b, id_b) = calib_from_text(b"org-salt", "note").expect("calibration");
         assert_eq!(cal_a, cal_b);
         assert_eq!(id_a, id_b);
     }
@@ -205,7 +250,7 @@ mod tests {
             KdfProfile::preset(KdfPreset::Low),
         )
         .unwrap();
-        let (calibration, _) = calib_from_text(b"org", "note");
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
         let salts = Salts::new(
             b"calib-salt".to_vec(),
             b"chain-salt".to_vec(),
@@ -220,7 +265,7 @@ mod tests {
 
     #[test]
     fn rejects_wrong_seed_length() {
-        let (calibration, _) = calib_from_text(b"org", "note");
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
         let salts = Salts::new(
             b"calib-salt".to_vec(),
             b"chain-salt".to_vec(),
@@ -229,5 +274,30 @@ mod tests {
         .unwrap();
         let result = coord32_derive(&[0_u8; 32], &calibration, &salts);
         assert!(matches!(result, Err(CoreError::InvalidInput(_))));
+    }
+
+    #[test]
+    fn rejects_short_org_salt() {
+        let err = calib_from_text(b"short", "note").unwrap_err();
+        assert!(matches!(err, CoreError::SaltTooShort(_)));
+    }
+
+    #[test]
+    fn rejects_empty_note() {
+        let err = calib_from_text(b"org-salt", "   \t\n").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn rejects_control_characters() {
+        let err = calib_from_text(b"org-salt", "ok\u{07}bad").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn rejects_overlong_note() {
+        let long = "a".repeat(MAX_NOTE_LEN + 1);
+        let err = calib_from_text(b"org-salt", &long).unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
     }
 }

@@ -33,7 +33,7 @@ fn build_handshake() -> aunsorm_packet::DecryptOk {
         b"soak-coord-salt".to_vec(),
     )
     .expect("salts");
-    let (calibration, _) = calib_from_text(b"soak-org", "session-soak");
+    let (calibration, _) = calib_from_text(b"soak-org", "session-soak").expect("calibration");
 
     let packet = encrypt_one_shot(EncryptParams {
         password: "session-password",

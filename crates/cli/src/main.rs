@@ -1018,7 +1018,7 @@ fn handle_encrypt(args: EncryptArgs, strict: bool) -> CliResult<()> {
     let password = load_password(password.as_deref(), password_file.as_deref())?;
     let calib_text = load_calibration_text(calib_text.as_deref(), calib_file.as_deref())?;
 
-    let (calibration, _) = calib_from_text(&org_salt, &calib_text);
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text)?;
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
 
     let kem_fields = build_kem_fields(
@@ -1095,7 +1095,7 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
     let password = load_password(password.as_deref(), password_file.as_deref())?;
     let calib_text = load_calibration_text(calib_text.as_deref(), calib_file.as_deref())?;
 
-    let (calibration, _) = calib_from_text(&org_salt, &calib_text);
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text)?;
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
     let profile = kdf.as_profile();
 
@@ -1236,7 +1236,7 @@ fn handle_calib(command: CalibCommands) -> CliResult<()> {
 fn handle_calib_inspect(args: &CalibInspectArgs) -> CliResult<()> {
     let org_salt = decode_org_salt(&args.org_salt)?;
     let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
-    let (calibration, _) = calib_from_text(&org_salt, &calib_text);
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text)?;
     let report = build_calibration_report(&calibration);
     emit_json_pretty(&report, args.out.as_deref())
 }
@@ -1244,7 +1244,7 @@ fn handle_calib_inspect(args: &CalibInspectArgs) -> CliResult<()> {
 fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
     let org_salt = decode_org_salt(&args.org_salt)?;
     let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
-    let (calibration, _) = calib_from_text(&org_salt, &calib_text);
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text)?;
     let profile = args.kdf.as_profile();
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
     let password = load_password(args.password.as_deref(), args.password_file.as_deref())?;
@@ -1981,7 +1981,7 @@ mod tests {
     #[test]
     fn salts_are_deterministic() {
         let org = STANDARD.decode("V2VBcmVLdXQuZXU=").expect("org salt");
-        let (calibration, _) = calib_from_text(&org, "demo calib");
+        let (calibration, _) = calib_from_text(&org, "demo calib").expect("calibration");
         let (pwd_a, salts_a) = derive_salts(&org, calibration.id.as_str()).expect("salts");
         let (pwd_b, salts_b) = derive_salts(&org, calibration.id.as_str()).expect("salts");
         assert_eq!(pwd_a.as_slice(), pwd_b.as_slice());
@@ -1990,7 +1990,7 @@ mod tests {
 
     #[test]
     fn calibration_report_reflects_calibration() {
-        let (calibration, _) = calib_from_text(b"org", "note");
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
         let report = build_calibration_report(&calibration);
         assert_eq!(report.calibration_id, calibration.id.as_str());
         assert_eq!(report.alpha_long, calibration.alpha_long);
@@ -2004,7 +2004,7 @@ mod tests {
     #[test]
     fn coordinate_report_reflects_inputs() {
         let org = STANDARD.decode("V2VBcmVLdXQuZXU=").expect("org salt");
-        let (calibration, _) = calib_from_text(&org, "demo calib");
+        let (calibration, _) = calib_from_text(&org, "demo calib").expect("calibration");
         let (password_salt, salts) = derive_salts(&org, calibration.id.as_str()).expect("salts");
         let profile = ProfileArg::Low;
         let (seed, _pdk, info) = derive_seed64_and_pdk(

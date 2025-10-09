@@ -24,7 +24,8 @@ fuzz_target!(|data: &[u8]| {
         Ok(s) => s,
         Err(_) => return,
     };
-    let (calibration, _) = aunsorm_core::calib_from_text(b"fuzz-org", "fuzz-note");
+    let (calibration, _) = aunsorm_core::calib_from_text(b"fuzz-org", "fuzz-note")
+        .expect("calibration");
     let password = "fuzz-password";
     let password_salt = b"fuzz-password-salt";
 

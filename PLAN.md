@@ -84,7 +84,7 @@ PQC KEM (opsiyonel): crates/pqc üzerinden; NONE sadece pqc kapalıysa ve strict
 
 Kalibrasyon şeması (v1): alpha_L, alpha_S, beta_L, beta_S, tau, A..E aralık/step clamp; EXTERNAL metin→kalibrasyon deterministik türetme:
 
-pub fn calib_from_text(org_salt: &[u8], note_text: &str) -> (Calibration, String /*calib_id*/);
+pub fn calib_from_text(org_salt: &[u8], note_text: &str) -> Result<(Calibration, String /*calib_id*/), CoreError>;
 pub fn coord32_derive(seed64: &[u8], calib: &Calibration, salts: &Salts) -> (String /*calib_id*/, [u8;32] /*coord32*/);
 
 

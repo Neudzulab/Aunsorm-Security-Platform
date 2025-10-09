@@ -66,7 +66,8 @@ proptest! {
         algorithm in algorithm_strategy(),
         salts in salts_strategy(),
     ) {
-        let (calibration, _) = calib_from_text(&org_salt, &note_text);
+        let (calibration, _) =
+            calib_from_text(&org_salt, &note_text).expect("calibration");
         let packet = encrypt_one_shot(EncryptParams {
             password: &password,
             password_salt: password_salt.as_slice(),
@@ -142,7 +143,8 @@ proptest! {
         algorithm in algorithm_strategy(),
         salts in salts_strategy(),
     ) {
-        let (calibration, _) = calib_from_text(&org_salt, &note_text);
+        let (calibration, _) =
+            calib_from_text(&org_salt, &note_text).expect("calibration");
         let packet = encrypt_one_shot(EncryptParams {
             password: &password,
             password_salt: password_salt.as_slice(),
@@ -161,7 +163,8 @@ proptest! {
             .map_err(|err| to_test_error(err, "encode"))?;
 
         let alt_text = format!("{note_text}-{tamper_suffix}");
-        let (wrong_calibration, _) = calib_from_text(&org_salt, &alt_text);
+        let (wrong_calibration, _) =
+            calib_from_text(&org_salt, &alt_text).expect("calibration");
         let result = decrypt_one_shot(&DecryptParams {
             password: &password,
             password_salt: password_salt.as_slice(),

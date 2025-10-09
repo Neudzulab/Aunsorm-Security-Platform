@@ -28,6 +28,9 @@ pub enum X509Error {
     /// Sertifika parametreleri oluşturulamadı.
     #[error("sertifika üretimi başarısız: {0}")]
     Rcgen(#[from] rcgen::Error),
+    /// Kalibrasyon girdileri geçersiz.
+    #[error("kalibrasyon hatası: {0}")]
+    Core(#[from] aunsorm_core::CoreError),
 }
 
 /// Öz-imzalı sertifika üretimi için parametreler.
@@ -68,7 +71,7 @@ pub struct SelfSignedCert {
 pub fn generate_self_signed(
     params: &SelfSignedCertParams<'_>,
 ) -> Result<SelfSignedCert, X509Error> {
-    let (calibration, calibration_id) = calib_from_text(params.org_salt, params.calibration_text);
+    let (calibration, calibration_id) = calib_from_text(params.org_salt, params.calibration_text)?;
     let base_oid =
         std::env::var("AUNSORM_OID_BASE").unwrap_or_else(|_| DEFAULT_BASE_OID.to_owned());
     let extension_oid = build_extension_oid(&base_oid, CALIBRATION_EXTENSION_ARC)?;

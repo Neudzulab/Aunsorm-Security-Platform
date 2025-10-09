@@ -19,7 +19,8 @@ fn bench_coord_derivation(c: &mut Criterion) {
                     profile,
                 )
                 .expect("kdf");
-                let (calibration, _) = calib_from_text(b"bench-org", "bench-note");
+                let (calibration, _) =
+                    calib_from_text(b"bench-org", "bench-note").expect("calibration");
                 let salts = Salts::new(
                     b"bench-calibration-salt".to_vec(),
                     b"bench-chain-salt".to_vec(),

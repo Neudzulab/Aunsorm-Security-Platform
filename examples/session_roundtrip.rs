@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     const PASSWORD: &str = "correct horse battery staple";
     const CALIB_TEXT: &str = "Neudzulab | Prod | 2025-08";
     let profile = KdfProfile::preset(KdfPreset::Low);
-    let (calibration, calib_id) = calib_from_text(b"demo-org", CALIB_TEXT);
+    let (calibration, calib_id) = calib_from_text(b"demo-org", CALIB_TEXT)?;
 
     let password_salt = *b"bootstrap-salt!!";
     let salts = Salts::new(

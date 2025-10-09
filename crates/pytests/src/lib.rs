@@ -42,7 +42,8 @@ pub struct ReferenceCase {
 impl ReferenceCase {
     /// Şifre çözme işlemini gerçekleştirir.
     pub fn decrypt(&self) -> Result<aunsorm_packet::DecryptOk, PacketError> {
-        let (calibration, _) = calib_from_text(&self.org_salt, &self.calib_text);
+        let (calibration, _) =
+            calib_from_text(&self.org_salt, &self.calib_text).expect("valid calibration");
         let params = DecryptParams {
             password: &self.password,
             password_salt: &self.password_salt,
