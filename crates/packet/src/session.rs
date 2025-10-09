@@ -132,7 +132,10 @@ fn session_nonce_for_algorithm(
     step_secret: &[u8],
 ) -> Result<Vec<u8>, PacketError> {
     match algorithm {
-        AeadAlgorithm::AesGcm | AeadAlgorithm::Chacha20Poly1305 => Ok(base_nonce.to_vec()),
+        AeadAlgorithm::AesGcm | AeadAlgorithm::Chacha20Poly1305 => {
+            let _ = step_secret;
+            Ok(base_nonce.to_vec())
+        }
         #[cfg(feature = "aes-siv")]
         AeadAlgorithm::AesSiv => {
             if step_secret.len() != 32 {
