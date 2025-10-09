@@ -13,6 +13,7 @@ paket üretme ve çözme iş akışlarını otomatikleştirir.
   AEAD seçimleri (`aes-gcm`, `chacha20poly1305`).
 - Kalibrasyon metnini komut satırından veya `--calib-file` ile dosyadan
   güvenle okuma (satır sonları temizlenir).
+- Kalibrasyon raporlarını JSON ya da metin formatında üretme (`--format text`).
 - Opsiyonel ek bağlamsal AAD girişi (metin ya da dosya).
 - KEM alanlarını manuel besleme desteği (ileri sürümler için)
   ve strict kipinin ortam/parametre ile yönetimi.
@@ -47,6 +48,9 @@ cargo run -p aunsorm-cli -- decrypt \
 ```
 
 `decrypt` komutu için de aynı şekilde `--calib-file` kullanılabilir.
+
+Raporları insan tarafından okunur biçimde almak için `calib` alt
+komutlarına `--format text` parametresini ekleyebilirsiniz.
 
 # Oturum Kullanımı
 

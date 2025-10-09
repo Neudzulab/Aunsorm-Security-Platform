@@ -120,6 +120,20 @@ impl Default for PqStatusFormat {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+enum ReportFormat {
+    /// JSON çıktısı
+    Json,
+    /// Metin tabanlı çıktı
+    Text,
+}
+
+impl Default for ReportFormat {
+    fn default() -> Self {
+        Self::Json
+    }
+}
+
 #[derive(Subcommand)]
 enum JwtCommands {
     /// Ed25519 JWT anahtarı üret
@@ -291,7 +305,10 @@ struct CalibInspectArgs {
         required_unless_present = "calib_text"
     )]
     calib_file: Option<PathBuf>,
-    /// JSON çıktısını dosyaya yaz
+    /// Çıktı formatı (text veya json)
+    #[arg(long, value_enum, default_value_t = ReportFormat::Json)]
+    format: ReportFormat,
+    /// Çıktıyı dosyaya yaz
     #[arg(long, value_name = "PATH")]
     out: Option<PathBuf>,
 }
@@ -334,7 +351,10 @@ struct CalibCoordArgs {
     /// KDF profili
     #[arg(long, default_value = "medium")]
     kdf: ProfileArg,
-    /// JSON çıktısını dosyaya yaz
+    /// Çıktı formatı (text veya json)
+    #[arg(long, value_enum, default_value_t = ReportFormat::Json)]
+    format: ReportFormat,
+    /// Çıktıyı dosyaya yaz
     #[arg(long, value_name = "PATH")]
     out: Option<PathBuf>,
 }
@@ -1238,7 +1258,7 @@ fn handle_calib_inspect(args: &CalibInspectArgs) -> CliResult<()> {
     let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
     let (calibration, _) = calib_from_text(&org_salt, &calib_text)?;
     let report = build_calibration_report(&calibration);
-    emit_json_pretty(&report, args.out.as_deref())
+    emit_calibration_report(&report, args.format, args.out.as_deref())
 }
 
 fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
@@ -1257,7 +1277,7 @@ fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
     )?;
     let (coord_id, coord) = coord32_derive(seed64.as_ref(), &calibration, &salts)?;
     let report = build_coordinate_report(&calibration, coord_id, coord, args.kdf, &info);
-    emit_json_pretty(&report, args.out.as_deref())
+    emit_coordinate_report(&report, args.format, args.out.as_deref())
 }
 
 fn emit_json_pretty<T>(value: &T, out: Option<&Path>) -> CliResult<()>
@@ -1270,6 +1290,45 @@ where
         let json = serde_json::to_string_pretty(value)?;
         println!("{json}");
         Ok(())
+    }
+}
+
+fn emit_text(value: &str, out: Option<&Path>) -> CliResult<()> {
+    if let Some(path) = out {
+        let mut owned = value.to_owned();
+        owned.push('\n');
+        fs::write(path, owned)?;
+    } else {
+        println!("{value}");
+    }
+    Ok(())
+}
+
+fn emit_calibration_report(
+    report: &CalibrationReport,
+    format: ReportFormat,
+    out: Option<&Path>,
+) -> CliResult<()> {
+    match format {
+        ReportFormat::Json => emit_json_pretty(report, out),
+        ReportFormat::Text => {
+            let rendered = render_calibration_report_text(report);
+            emit_text(&rendered, out)
+        }
+    }
+}
+
+fn emit_coordinate_report(
+    report: &CoordinateReport,
+    format: ReportFormat,
+    out: Option<&Path>,
+) -> CliResult<()> {
+    match format {
+        ReportFormat::Json => emit_json_pretty(report, out),
+        ReportFormat::Text => {
+            let rendered = render_coordinate_report_text(report);
+            emit_text(&rendered, out)
+        }
     }
 }
 
@@ -1313,6 +1372,32 @@ fn build_calibration_report(calibration: &Calibration) -> CalibrationReport {
     }
 }
 
+fn render_calibration_report_text(report: &CalibrationReport) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!("Kalibrasyon Kimliği : {}", report.calibration_id));
+    lines.push(format!(
+        "Alpha (L/S)          : {}/{}",
+        report.alpha_long, report.alpha_short
+    ));
+    lines.push(format!(
+        "Beta (L/S)           : {}/{}",
+        report.beta_long, report.beta_short
+    ));
+    lines.push(format!("Tau                  : {}", report.tau));
+    lines.push(format!("Parmak izi (B64)     : {}", report.fingerprint));
+    lines.push("Aralıklar:".to_string());
+    for (idx, range) in report.ranges.iter().enumerate() {
+        lines.push(format!(
+            "  [{}] başlangıç={} | bitiş={} | adım={}",
+            idx + 1,
+            range.start,
+            range.end,
+            range.step
+        ));
+    }
+    lines.join("\n")
+}
+
 #[derive(Serialize)]
 struct CoordinateReport {
     calibration_id: String,
@@ -1340,6 +1425,28 @@ fn build_coordinate_report(
         calibration_salt_digest: STANDARD.encode(info.calibration_salt_digest),
         chain_salt_digest: STANDARD.encode(info.chain_salt_digest),
     }
+}
+
+fn render_coordinate_report_text(report: &CoordinateReport) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!("Kalibrasyon Kimliği : {}", report.calibration_id));
+    lines.push(format!("Koordinat Kimliği   : {}", report.coord_id));
+    lines.push(format!("Koordinat (B64)     : {}", report.coord));
+    lines.push(format!("KDF Profili         : {}", report.profile));
+    lines.push("Tuz Özetleri:".to_string());
+    lines.push(format!(
+        "  parola            : {}",
+        report.password_salt_digest
+    ));
+    lines.push(format!(
+        "  kalibrasyon       : {}",
+        report.calibration_salt_digest
+    ));
+    lines.push(format!(
+        "  zincir            : {}",
+        report.chain_salt_digest
+    ));
+    lines.join("\n")
 }
 
 fn handle_jwt(command: JwtCommands) -> CliResult<()> {
@@ -2002,6 +2109,16 @@ mod tests {
     }
 
     #[test]
+    fn calibration_text_report_is_human_readable() {
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
+        let report = build_calibration_report(&calibration);
+        let rendered = render_calibration_report_text(&report);
+        assert!(rendered.contains("Kalibrasyon Kimliği"));
+        assert!(rendered.contains(calibration.id.as_str()));
+        assert!(rendered.contains("Aralıklar:"));
+    }
+
+    #[test]
     fn coordinate_report_reflects_inputs() {
         let org = STANDARD.decode("V2VBcmVLdXQuZXU=").expect("org salt");
         let (calibration, _) = calib_from_text(&org, "demo calib").expect("calibration");
@@ -2036,6 +2153,29 @@ mod tests {
     }
 
     #[test]
+    fn coordinate_text_report_lists_salts() {
+        let org = STANDARD.decode("V2VBcmVLdXQuZXU=").expect("org salt");
+        let (calibration, _) = calib_from_text(&org, "demo calib").expect("calibration");
+        let (password_salt, salts) = derive_salts(&org, calibration.id.as_str()).expect("salts");
+        let profile = ProfileArg::Medium;
+        let (seed, _pdk, info) = derive_seed64_and_pdk(
+            "correct horse battery staple",
+            password_salt.as_slice(),
+            salts.calibration(),
+            salts.chain(),
+            profile.as_profile(),
+        )
+        .expect("seed");
+        let (coord_id, coord) = coord32_derive(seed.as_ref(), &calibration, &salts).expect("coord");
+        let report = build_coordinate_report(&calibration, coord_id, coord, profile, &info);
+        let rendered = render_coordinate_report_text(&report);
+        assert!(rendered.contains("Tuz Özetleri:"));
+        assert!(rendered.contains(report.password_salt_digest.as_str()));
+        assert!(rendered.contains(report.calibration_salt_digest.as_str()));
+        assert!(rendered.contains(report.chain_salt_digest.as_str()));
+    }
+
+    #[test]
     fn emit_json_pretty_writes_to_file_when_requested() {
         let tmp = NamedTempFile::new().expect("tmp");
         let payload = json!({ "key": "value" });
@@ -2045,6 +2185,14 @@ mod tests {
             written,
             serde_json::to_string_pretty(&payload).expect("json")
         );
+    }
+
+    #[test]
+    fn emit_text_writes_to_file_when_requested() {
+        let tmp = NamedTempFile::new().expect("tmp");
+        emit_text("deneme çıktısı", Some(tmp.path())).expect("emit text");
+        let written = fs::read_to_string(tmp.path()).expect("read");
+        assert_eq!(written, "deneme çıktısı\n");
     }
 
     #[test]
