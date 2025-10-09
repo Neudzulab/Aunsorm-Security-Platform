@@ -1,6 +1,6 @@
 use hkdf::Hkdf;
 use sha2::Sha256;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::error::CoreError;
 
@@ -34,11 +34,52 @@ impl SessionRatchetState {
 /// Ratchet adımı çıktısı.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StepSecret {
-    pub message_no: u64,
-    pub step_secret: [u8; 32],
-    pub message_secret: [u8; 32],
-    pub root_key: [u8; 32],
-    pub nonce: [u8; 12],
+    message_no: u64,
+    step_key: [u8; 32],
+    message_key: [u8; 32],
+    root_key_value: [u8; 32],
+    nonce_value: [u8; 12],
+}
+
+impl StepSecret {
+    /// Döngüdeki mesaj numarasını döndürür.
+    #[must_use]
+    pub const fn message_no(&self) -> u64 {
+        self.message_no
+    }
+
+    /// Bir sonraki adımın gizini döndürür.
+    #[must_use]
+    pub const fn step_secret(&self) -> &[u8; 32] {
+        &self.step_key
+    }
+
+    /// Mesaj için kullanılacak gizli anahtarı döndürür.
+    #[must_use]
+    pub const fn message_secret(&self) -> &[u8; 32] {
+        &self.message_key
+    }
+
+    /// Güncellenmiş kök anahtarı döndürür.
+    #[must_use]
+    pub const fn root_key(&self) -> &[u8; 32] {
+        &self.root_key_value
+    }
+
+    /// AEAD nonce değerini döndürür.
+    #[must_use]
+    pub const fn nonce(&self) -> &[u8; 12] {
+        &self.nonce_value
+    }
+}
+
+impl Drop for StepSecret {
+    fn drop(&mut self) {
+        self.step_key.zeroize();
+        self.message_key.zeroize();
+        self.root_key_value.zeroize();
+        self.nonce_value.zeroize();
+    }
 }
 
 /// Oturum anahtarı ratchet'i; deterministik fakat ileri gizlilik sağlar.
@@ -154,10 +195,10 @@ impl SessionRatchet {
 
         Ok(StepSecret {
             message_no: msg_no,
-            step_secret,
-            message_secret: msg_secret,
-            root_key: next_root,
-            nonce,
+            step_key: step_secret,
+            message_key: msg_secret,
+            root_key_value: next_root,
+            nonce_value: nonce,
         })
     }
 }
@@ -181,7 +222,7 @@ mod tests {
         let mut relaxed = SessionRatchet::new([1_u8; 32], [2_u8; 16], false);
         let strict_step = strict.next_step().unwrap();
         let relaxed_step = relaxed.next_step().unwrap();
-        assert_ne!(strict_step.nonce, relaxed_step.nonce);
+        assert_ne!(strict_step.nonce(), relaxed_step.nonce());
     }
 
     #[test]
@@ -204,8 +245,8 @@ mod tests {
         let next_from_restored = restored.next_step().expect("next");
         let next_from_original = ratchet.next_step().expect("next");
         assert_eq!(
-            next_from_restored.step_secret,
-            next_from_original.step_secret
+            next_from_restored.step_secret(),
+            next_from_original.step_secret()
         );
     }
 }
