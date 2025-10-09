@@ -20,7 +20,7 @@ use aunsorm_packet::{encrypt_one_shot, decrypt_one_shot, EncryptParams, DecryptP
 let profile = KdfProfile::preset(KdfPreset::Low);
 let password_salt = b"password-salt";
 let salts = Salts::new(b"calib-salt".to_vec(), b"chain-salt".to_vec(), b"coord-salt".to_vec())?;
-let (calibration, _) = calib_from_text(b"org", "note");
+let (calibration, _) = calib_from_text(b"org-salt", "note")?;
 let packet = encrypt_one_shot(EncryptParams {
     password: "correct horse battery staple",
     password_salt,

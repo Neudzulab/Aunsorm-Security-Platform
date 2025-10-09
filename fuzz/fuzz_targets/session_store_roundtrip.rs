@@ -16,7 +16,7 @@ fn build_handshake() -> Option<DecryptOk> {
         b"fuzz-coord-salt-789".to_vec(),
     )
     .ok()?;
-    let (calibration, _) = calib_from_text(b"fuzz-org", "fuzz-note");
+    let (calibration, _) = calib_from_text(b"fuzz-org", "fuzz-note").ok()?;
     let password = "fuzz-password";
     let password_salt = b"fuzz-password-salt";
 

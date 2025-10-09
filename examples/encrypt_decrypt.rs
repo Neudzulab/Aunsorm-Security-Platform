@@ -19,7 +19,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Derived seed: {} bytes, PDK: {} bytes", seed.len(), pdk.len());
     println!("KDF profile: {}", info.profile);
 
-    let (calibration, calib_id) = calib_from_text(b"example-org", "Neudzulab | Prod | 2025-08");
+    let (calibration, calib_id) =
+        calib_from_text(b"example-org", "Neudzulab | Prod | 2025-08")?;
     println!("Calibration id: {}", calib_id);
 
     let salts = Salts::new(

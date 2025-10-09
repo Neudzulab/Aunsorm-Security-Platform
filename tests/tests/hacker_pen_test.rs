@@ -18,7 +18,8 @@ fn build_safe_packet() -> (String, Salts, Calibration, KdfProfile) {
     )
     .expect("salts satisfy minimum entropy");
     let profile = KdfProfile::preset(KdfPreset::Low);
-    let (calibration, _) = calib_from_text(b"white-hat-org", "penetration-test");
+    let (calibration, _) =
+        calib_from_text(b"white-hat-org", "penetration-test").expect("calibration");
 
     let packet = encrypt_one_shot(EncryptParams {
         password: "penetration-password",
@@ -98,7 +99,8 @@ fn session_message_number_tamper_is_detected() {
     )
     .expect("salts satisfy minimum entropy");
     let profile = KdfProfile::preset(KdfPreset::Low);
-    let (calibration, _) = calib_from_text(b"white-hat-org", "penetration-test");
+    let (calibration, _) =
+        calib_from_text(b"white-hat-org", "penetration-test").expect("calibration");
 
     let bootstrap_packet = encrypt_one_shot(EncryptParams {
         password: "penetration-password",

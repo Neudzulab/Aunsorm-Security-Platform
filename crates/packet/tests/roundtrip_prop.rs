@@ -41,7 +41,8 @@ proptest! {
     ) {
         let password: String = password_chars.into_iter().collect();
         let note_text: String = note_chars.into_iter().collect();
-        let (calibration, _) = calib_from_text(&org_salt, &note_text);
+        let (calibration, _) =
+            calib_from_text(&org_salt, &note_text).expect("calibration");
         let salts = build_salts(calibration_salt.clone(), chain_salt.clone(), coord_salt.clone());
         let profile = KdfProfile::preset(KdfPreset::Low);
 
@@ -104,7 +105,8 @@ proptest! {
         let wrong_note: String = wrong_note_chars.into_iter().collect();
         prop_assume!(note_text != wrong_note);
 
-        let (calibration, _) = calib_from_text(&org_salt, &note_text);
+        let (calibration, _) =
+            calib_from_text(&org_salt, &note_text).expect("calibration");
         let salts = build_salts(calibration_salt.clone(), chain_salt.clone(), coord_salt.clone());
         let profile = KdfProfile::preset(KdfPreset::Low);
 
@@ -123,7 +125,8 @@ proptest! {
             }).expect("encryption succeeds");
 
             let encoded = packet.to_base64().expect("base64 encoding");
-            let (wrong_calibration, _) = calib_from_text(&org_salt, &wrong_note);
+            let (wrong_calibration, _) =
+                calib_from_text(&org_salt, &wrong_note).expect("calibration");
             let decrypt_params = DecryptParams {
                 password: &password,
                 password_salt: &password_salt,

@@ -21,7 +21,8 @@ proptest! {
         seed.copy_from_slice(&seed_bytes);
 
         let note_text: String = note_chars.into_iter().collect();
-        let (calibration, _) = calib_from_text(&org_salt, &note_text);
+        let (calibration, _) =
+            calib_from_text(&org_salt, &note_text).expect("calibration");
         let salts = Salts::new(calibration_salt, chain_salt, coord_salt).expect("valid salts");
 
         let (coord_id, coord) = coord32_derive(&seed, &calibration, &salts).expect("coord derivation");

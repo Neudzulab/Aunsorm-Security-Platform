@@ -316,7 +316,7 @@ mod tests {
     fn one_shot_roundtrip() {
         let profile = KdfProfile::preset(KdfPreset::Low);
         let salts = test_salts();
-        let (calibration, _) = calib_from_text(b"org", "note");
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
         let password_salt = b"password-salt-888";
         let packet = encrypt_one_shot(EncryptParams {
             password: PASSWORD,
@@ -361,7 +361,7 @@ mod tests {
 
         let profile = KdfProfile::preset(KdfPreset::Low);
         let salts = test_salts();
-        let (calibration, _) = calib_from_text(b"org", "strict-note");
+        let (calibration, _) = calib_from_text(b"org-salt", "strict-note").expect("calibration");
         let password_salt = b"password-salt-999";
 
         let kem_keys =
@@ -414,7 +414,7 @@ mod tests {
     fn decrypt_rejects_wrong_calibration() {
         let profile = KdfProfile::preset(KdfPreset::Low);
         let salts = test_salts();
-        let (calibration, _) = calib_from_text(b"org", "note");
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
         let password_salt = b"password-salt-888";
         let packet = encrypt_one_shot(EncryptParams {
             password: PASSWORD,
@@ -431,7 +431,8 @@ mod tests {
         .expect("encrypt");
         let encoded = packet.to_base64().expect("encode");
 
-        let (wrong_calibration, _) = calib_from_text(b"org", "wrong-note");
+        let (wrong_calibration, _) =
+            calib_from_text(b"org-salt", "wrong-note").expect("calibration");
         let wrong_params = DecryptParams {
             password: PASSWORD,
             password_salt,
@@ -452,7 +453,7 @@ mod tests {
     fn aes_siv_roundtrip() {
         let profile = KdfProfile::preset(KdfPreset::Low);
         let salts = test_salts();
-        let (calibration, _) = calib_from_text(b"org", "siv-note");
+        let (calibration, _) = calib_from_text(b"org-salt", "siv-note").expect("calibration");
         let password_salt = b"password-salt-siv";
         let packet = encrypt_one_shot(EncryptParams {
             password: PASSWORD,
@@ -489,7 +490,7 @@ mod tests {
     fn session_roundtrip() {
         let profile = KdfProfile::preset(KdfPreset::Low);
         let salts = test_salts();
-        let (calibration, _) = calib_from_text(b"org", "session-note");
+        let (calibration, _) = calib_from_text(b"org-salt", "session-note").expect("calibration");
         let password_salt = b"password-salt-888";
         let bootstrap = encrypt_one_shot(EncryptParams {
             password: PASSWORD,

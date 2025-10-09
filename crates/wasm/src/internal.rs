@@ -93,7 +93,7 @@ impl KemInput {
 
 pub fn encrypt(request: EncryptRequest) -> Result<String, WasmError> {
     let org_salt = decode_org_salt(&request.org_salt_b64)?;
-    let (calibration, _) = calib_from_text(&org_salt, &request.calib_text);
+    let (calibration, _) = calib_from_text(&org_salt, &request.calib_text)?;
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
     let profile = parse_profile(request.profile.as_deref())?;
     let algorithm = parse_aead(request.aead.as_deref())?;
@@ -119,7 +119,7 @@ pub fn encrypt(request: EncryptRequest) -> Result<String, WasmError> {
 
 pub fn decrypt(request: DecryptRequest) -> Result<Vec<u8>, WasmError> {
     let org_salt = decode_org_salt(&request.org_salt_b64)?;
-    let (calibration, _) = calib_from_text(&org_salt, &request.calib_text);
+    let (calibration, _) = calib_from_text(&org_salt, &request.calib_text)?;
     let (password_salt, salts) = derive_salts(&org_salt, calibration.id.as_str())?;
     let profile = parse_profile(request.profile.as_deref())?;
     let aad = request.aad.unwrap_or_default();
