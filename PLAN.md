@@ -75,7 +75,7 @@ KDF: Argon2id (argon2 crate) dinamik profiller: MOBILE/LOW/MEDIUM/HIGH/ULTRA/AUT
 API:
 
 pub struct KdfProfile { pub t: u32, pub m_kib: u32, pub p: u32 }
-pub fn derive_seed64_and_pdk(password: &str, salt_pwd: &[u8], salt_calib: &[u8], salt_chain: &[u8], profile: KdfProfile) -> (Vec<u8>, Vec<u8>, KdfInfo);
+pub fn derive_seed64_and_pdk(password: &str, salt_pwd: &[u8], salt_calib: &[u8], salt_chain: &[u8], profile: KdfProfile) -> (SensitiveVec, SensitiveVec, KdfInfo);
 
 
 AEAD’ler: aes-gcm (256-bit), chacha20poly1305, opsiyonel aes-siv. Nonce 96-bit random; key HKDF-SHA256 ile türetilir.

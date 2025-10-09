@@ -1,10 +1,61 @@
 use std::fmt;
+use std::ops::{Deref, DerefMut};
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
 use sysinfo::{System, SystemExt};
 use zeroize::Zeroizing;
+
+/// Zeroize garantisi sağlayan byte vektörü sargısı.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SensitiveVec(Zeroizing<Vec<u8>>);
+
+impl SensitiveVec {
+    /// Yeni bir `SensitiveVec` oluşturur.
+    #[must_use]
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(Zeroizing::new(bytes))
+    }
+
+    /// İçerdiği veriyi dilim olarak döndürür.
+    #[must_use]
+    pub fn as_slice(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+
+    /// İçerdiği veriyi mut dilim olarak döndürür.
+    #[must_use]
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
+        self.0.as_mut_slice()
+    }
+}
+
+impl AsRef<[u8]> for SensitiveVec {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl AsMut<[u8]> for SensitiveVec {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.0.as_mut()
+    }
+}
+
+impl Deref for SensitiveVec {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for SensitiveVec {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 use crate::error::CoreError;
 
@@ -154,7 +205,7 @@ fn derive_hkdf_outputs(
     master: &[u8; 64],
     salt_calib: &[u8],
     salt_chain: &[u8],
-) -> Result<(Vec<u8>, Vec<u8>), CoreError> {
+) -> Result<(SensitiveVec, SensitiveVec), CoreError> {
     let mut salt_hasher = Sha256::new();
     salt_hasher.update(b"Aunsorm/1.01/hkdf-salt");
     salt_hasher.update(salt_calib);
@@ -163,16 +214,16 @@ fn derive_hkdf_outputs(
 
     let hk = Hkdf::<Sha256>::new(Some(&hkdf_salt), master);
 
-    let mut seed64 = vec![0_u8; 64];
-    let mut pdk = vec![0_u8; 32];
+    let mut seed64 = SensitiveVec::new(vec![0_u8; 64]);
+    let mut pdk = SensitiveVec::new(vec![0_u8; 32]);
     let mut info_seed = b"Aunsorm/1.01/seed64".to_vec();
     info_seed.extend_from_slice(salt_calib);
-    hk.expand(&info_seed, &mut seed64)
+    hk.expand(&info_seed, seed64.as_mut_slice())
         .map_err(|_| CoreError::hkdf_length())?;
 
     let mut info_pdk = b"Aunsorm/1.01/pdk".to_vec();
     info_pdk.extend_from_slice(salt_chain);
-    hk.expand(&info_pdk, &mut pdk)
+    hk.expand(&info_pdk, pdk.as_mut_slice())
         .map_err(|_| CoreError::hkdf_length())?;
 
     Ok((seed64, pdk))
@@ -214,7 +265,7 @@ pub fn derive_seed64_and_pdk(
     salt_calib: &[u8],
     salt_chain: &[u8],
     profile: KdfProfile,
-) -> Result<(Vec<u8>, Vec<u8>, KdfInfo), CoreError> {
+) -> Result<(SensitiveVec, SensitiveVec, KdfInfo), CoreError> {
     if salt_pwd.len() < 8 {
         return Err(CoreError::salt_too_short(
             "password salt must be >= 8 bytes",

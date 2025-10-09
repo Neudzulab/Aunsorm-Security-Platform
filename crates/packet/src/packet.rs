@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroizing;
 
 use aunsorm_core::{
     calibration::Calibration, derive_seed64_and_pdk, kdf::KdfProfile, salts::Salts,
@@ -144,10 +143,8 @@ fn derive_material(
         salts.chain(),
         profile,
     )?;
-    let seed = Zeroizing::new(seed);
-    let pdk = Zeroizing::new(pdk);
-    let (coord_id, coord) = aunsorm_core::coord32_derive(&seed, calibration, salts)?;
-    let keys = derive_keys(&pdk, calibration.id.as_str())?;
+    let (coord_id, coord) = aunsorm_core::coord32_derive(seed.as_ref(), calibration, salts)?;
+    let keys = derive_keys(pdk.as_ref(), calibration.id.as_str())?;
     Ok((coord_id, coord, keys))
 }
 

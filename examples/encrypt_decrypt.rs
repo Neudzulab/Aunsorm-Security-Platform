@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         b"example-coord-salt".to_vec(),
     )?;
 
-    let (coord_id, coord) = coord32_derive(&seed, &calibration, &salts)?;
+    let (coord_id, coord) = coord32_derive(seed.as_ref(), &calibration, &salts)?;
     println!("Coord id: {} ({} bytes)", coord_id, coord.len());
     println!("First eight coord bytes: {:02x?}", &coord[..8]);
 
