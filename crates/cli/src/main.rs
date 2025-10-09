@@ -36,6 +36,7 @@ use aunsorm_packet::{
     AeadAlgorithm, DecryptParams, EncryptParams, KemPayload, SessionDecryptParams,
     SessionEncryptParams, SessionMetadata, SessionStore,
 };
+use aunsorm_pqc::{kem::KemAlgorithm, signature::SignatureAlgorithm, strict::StrictMode};
 use aunsorm_x509::{
     generate_self_signed as generate_self_signed_cert, SelfSignedCertParams as X509SelfSignedParams,
 };
@@ -72,6 +73,9 @@ enum Commands {
     /// Oturum mesajını çöz
     #[command(name = "session-decrypt")]
     SessionDecrypt(SessionDecryptArgs),
+    /// PQC hazır olma durumunu raporla
+    #[command(subcommand)]
+    Pq(PqCommands),
     /// JWT işlemleri
     #[command(subcommand)]
     Jwt(JwtCommands),
@@ -87,6 +91,33 @@ enum CalibCommands {
     /// Koordinat kimliğini ve değerini türet
     #[command(name = "derive-coord")]
     DeriveCoord(CalibCoordArgs),
+}
+
+#[derive(Subcommand)]
+enum PqCommands {
+    /// PQC hazır olma durumunu görüntüle
+    Status(PqStatusArgs),
+}
+
+#[derive(Args)]
+struct PqStatusArgs {
+    /// Çıktı formatı (text veya json)
+    #[arg(long, value_enum, default_value_t = PqStatusFormat::Text)]
+    format: PqStatusFormat,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+enum PqStatusFormat {
+    /// Metin tabanlı çıktı
+    Text,
+    /// JSON çıktısı
+    Json,
+}
+
+impl Default for PqStatusFormat {
+    fn default() -> Self {
+        Self::Text
+    }
 }
 
 #[derive(Subcommand)]
@@ -690,11 +721,264 @@ fn main() {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct StrictContext {
+    cli_flag: bool,
+    env_active: bool,
+}
+
+impl StrictContext {
+    #[must_use]
+    const fn effective(self) -> bool {
+        self.cli_flag || self.env_active
+    }
+}
+
+#[derive(Copy, Clone)]
+struct AlgorithmDescriptor<A> {
+    algorithm: A,
+    description: &'static str,
+    feature: &'static str,
+}
+
+const KEM_DESCRIPTORS: &[AlgorithmDescriptor<KemAlgorithm>] = &[
+    AlgorithmDescriptor {
+        algorithm: KemAlgorithm::MlKem768,
+        description: "ML-KEM-768 (NIST L3, varsayılan)",
+        feature: "kem-mlkem-768",
+    },
+    AlgorithmDescriptor {
+        algorithm: KemAlgorithm::MlKem1024,
+        description: "ML-KEM-1024 (NIST L5, yüksek güven)",
+        feature: "kem-mlkem-1024",
+    },
+];
+
+const SIGNATURE_DESCRIPTORS: &[AlgorithmDescriptor<SignatureAlgorithm>] = &[
+    AlgorithmDescriptor {
+        algorithm: SignatureAlgorithm::MlDsa65,
+        description: "ML-DSA-65 (Dilithium5, NIST L5)",
+        feature: "sig-mldsa-65",
+    },
+    AlgorithmDescriptor {
+        algorithm: SignatureAlgorithm::Falcon512,
+        description: "Falcon-512 (NIST L3, düşük imza boyu)",
+        feature: "sig-falcon-512",
+    },
+    AlgorithmDescriptor {
+        algorithm: SignatureAlgorithm::SphincsShake128f,
+        description: "SPHINCS+-SHAKE-128f (stateless hash imzası)",
+        feature: "sig-sphincs-shake-128f",
+    },
+];
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct PqAlgorithmStatus {
+    name: &'static str,
+    description: &'static str,
+    feature: &'static str,
+    available: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct StrictStatus {
+    cli_flag: bool,
+    env_flag: bool,
+    effective: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct ReadinessStatus {
+    kem_ready: bool,
+    signature_ready: bool,
+    strict_compliant: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct PqStatusReport {
+    strict: StrictStatus,
+    readiness: ReadinessStatus,
+    kem: Vec<PqAlgorithmStatus>,
+    signatures: Vec<PqAlgorithmStatus>,
+    warnings: Vec<String>,
+}
+
+fn handle_pq(command: PqCommands, strict: StrictContext) -> CliResult<()> {
+    match command {
+        PqCommands::Status(args) => handle_pq_status(&args, strict),
+    }
+}
+
+fn handle_pq_status(args: &PqStatusArgs, strict: StrictContext) -> CliResult<()> {
+    let report = build_pq_status_report(strict);
+    match args.format {
+        PqStatusFormat::Text => {
+            println!("{}", render_pq_status_text(&report));
+        }
+        PqStatusFormat::Json => {
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+    }
+    Ok(())
+}
+
+fn build_pq_status_report(strict: StrictContext) -> PqStatusReport {
+    let kem: Vec<PqAlgorithmStatus> = KEM_DESCRIPTORS
+        .iter()
+        .map(|descriptor| PqAlgorithmStatus {
+            name: descriptor.algorithm.name(),
+            description: descriptor.description,
+            feature: descriptor.feature,
+            available: descriptor.algorithm.is_available(),
+        })
+        .collect();
+    let signatures: Vec<PqAlgorithmStatus> = SIGNATURE_DESCRIPTORS
+        .iter()
+        .map(|descriptor| PqAlgorithmStatus {
+            name: descriptor.algorithm.name(),
+            description: descriptor.description,
+            feature: descriptor.feature,
+            available: descriptor.algorithm.is_available(),
+        })
+        .collect();
+
+    let kem_ready = kem.iter().any(|status| status.available);
+    let signature_ready = signatures.iter().any(|status| status.available);
+    let strict_compliant = kem_ready && signature_ready;
+    let effective_strict = strict.effective();
+
+    let mut warnings = Vec::new();
+    if !kem_ready {
+        warnings.push(format!(
+            "PQ KEM etkin değil; şu özelliklerden birini etkinleştirin: {}",
+            format_feature_list(&kem)
+        ));
+    }
+    if !signature_ready {
+        warnings.push(format!(
+            "PQ imza algoritması etkin değil; şu özelliklerden birini etkinleştirin: {}",
+            format_feature_list(&signatures)
+        ));
+    }
+    if effective_strict && !strict_compliant {
+        warnings.push(
+            "Strict kip etkin ancak PQ kapsamı eksik; lütfen eksik algoritmaları etkinleştirin."
+                .to_owned(),
+        );
+    }
+
+    PqStatusReport {
+        strict: StrictStatus {
+            cli_flag: strict.cli_flag,
+            env_flag: strict.env_active,
+            effective: effective_strict,
+        },
+        readiness: ReadinessStatus {
+            kem_ready,
+            signature_ready,
+            strict_compliant,
+        },
+        kem,
+        signatures,
+        warnings,
+    }
+}
+
+fn render_pq_status_text(report: &PqStatusReport) -> String {
+    use std::fmt::Write as _;
+
+    let mut out = String::new();
+    out.push_str("Strict flag (--strict): ");
+    out.push_str(bool_word(report.strict.cli_flag));
+    out.push('\n');
+    out.push_str("Strict env (AUNSORM_STRICT): ");
+    out.push_str(bool_word(report.strict.env_flag));
+    out.push('\n');
+    out.push_str("Effective strict: ");
+    out.push_str(bool_word(report.strict.effective));
+    out.push('\n');
+    out.push_str("KEM ready: ");
+    out.push_str(bool_word(report.readiness.kem_ready));
+    out.push('\n');
+    out.push_str("Signature ready: ");
+    out.push_str(bool_word(report.readiness.signature_ready));
+    out.push('\n');
+    out.push_str("Strict compliant: ");
+    out.push_str(bool_word(report.readiness.strict_compliant));
+    out.push_str("\n\n");
+
+    out.push_str("KEM algoritmaları:\n");
+    for status in &report.kem {
+        writeln!(
+            &mut out,
+            "  - {:<24} {} ({})",
+            status.name,
+            availability_label(status),
+            status.description
+        )
+        .expect("writing to string");
+    }
+    out.push('\n');
+    out.push_str("İmza algoritmaları:\n");
+    for status in &report.signatures {
+        writeln!(
+            &mut out,
+            "  - {:<24} {} ({})",
+            status.name,
+            availability_label(status),
+            status.description
+        )
+        .expect("writing to string");
+    }
+    out.push('\n');
+    if report.warnings.is_empty() {
+        out.push_str("Warnings: none\n");
+    } else {
+        out.push_str("Warnings:\n");
+        for warning in &report.warnings {
+            out.push_str("  - ");
+            out.push_str(warning);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+fn availability_label(status: &PqAlgorithmStatus) -> String {
+    if status.available {
+        "available".to_owned()
+    } else {
+        format!("missing (enable feature `{}`)", status.feature)
+    }
+}
+
+const fn bool_word(value: bool) -> &'static str {
+    if value {
+        "yes"
+    } else {
+        "no"
+    }
+}
+
+fn format_feature_list(statuses: &[PqAlgorithmStatus]) -> String {
+    statuses
+        .iter()
+        .map(|status| format!("`{}`", status.feature))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn run(cli: Cli) -> CliResult<()> {
-    let strict = cli.strict || env_strict();
-    if cli.strict {
+    let cli_flag = cli.strict;
+    if cli_flag {
         std::env::set_var("AUNSORM_STRICT", "1");
     }
+    let env_active = env_strict();
+    let strict_ctx = StrictContext {
+        cli_flag,
+        env_active,
+    };
+    let strict = strict_ctx.effective();
     match cli.command {
         Commands::Encrypt(args) => handle_encrypt(args, strict),
         Commands::Decrypt(args) => handle_decrypt(args, strict),
@@ -702,6 +986,7 @@ fn run(cli: Cli) -> CliResult<()> {
         Commands::Calib(command) => handle_calib(command),
         Commands::SessionEncrypt(args) => handle_session_encrypt(&args, strict),
         Commands::SessionDecrypt(args) => handle_session_decrypt(&args, strict),
+        Commands::Pq(command) => handle_pq(command, strict_ctx),
         Commands::Jwt(command) => handle_jwt(command),
         Commands::X509(command) => handle_x509(command),
     }
@@ -1547,13 +1832,7 @@ fn derive_salts(org_salt: &[u8], calibration_id: &str) -> CliResult<(Zeroizing<V
 }
 
 fn env_strict() -> bool {
-    matches!(
-        std::env::var("AUNSORM_STRICT")
-            .ok()
-            .as_deref()
-            .map(str::trim),
-        Some("1" | "true" | "TRUE" | "on" | "ON")
-    )
+    StrictMode::from_env().is_strict()
 }
 
 fn write_jwt_key_file(path: &Path, key: &Ed25519KeyPair) -> CliResult<()> {
@@ -1664,6 +1943,40 @@ mod tests {
     use aunsorm_packet::{AeadAlgorithm, HeaderKem, HeaderProfile, HeaderSalts};
     use serde_json::json;
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn pq_status_marks_default_algorithms_available() {
+        let ctx = StrictContext {
+            cli_flag: false,
+            env_active: false,
+        };
+        let report = build_pq_status_report(ctx);
+        assert!(report.readiness.kem_ready);
+        assert!(report.readiness.signature_ready);
+        assert!(report.readiness.strict_compliant);
+        assert!(report.warnings.is_empty());
+        assert!(report
+            .kem
+            .iter()
+            .any(|status| status.name == "ml-kem-768" && status.available));
+        assert!(report
+            .signatures
+            .iter()
+            .any(|status| status.name == "ml-dsa-65" && status.available));
+    }
+
+    #[test]
+    fn pq_status_text_output_is_human_readable() {
+        let ctx = StrictContext {
+            cli_flag: true,
+            env_active: true,
+        };
+        let report = build_pq_status_report(ctx);
+        let rendered = render_pq_status_text(&report);
+        assert!(rendered.contains("Strict flag (--strict): yes"));
+        assert!(rendered.contains("ml-kem-768"));
+        assert!(rendered.contains("Warnings:"));
+    }
 
     #[test]
     fn salts_are_deterministic() {
