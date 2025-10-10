@@ -3,11 +3,26 @@ use std::fmt;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256, Sha512};
+use unicode_normalization::UnicodeNormalization;
 
 use crate::{error::CoreError, salts::Salts};
 
 const MIN_ORG_SALT_LEN: usize = 8;
 const MAX_NOTE_LEN: usize = 2048;
+
+fn normalize_note_text(note_text: &str) -> String {
+    let nfc = note_text.nfc().collect::<String>();
+    let mut normalized = String::with_capacity(nfc.len());
+    let mut parts = nfc.split_whitespace();
+    if let Some(first) = parts.next() {
+        normalized.push_str(first);
+        for part in parts {
+            normalized.push(' ');
+            normalized.push_str(part);
+        }
+    }
+    normalized
+}
 
 /// Kalibrasyon aralığı.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -114,6 +129,8 @@ impl Calibration {
 /// # Errors
 /// Girdi boyutları bekleneni sağlamazsa veya HKDF işlemi başarısız olursa `CoreError`
 /// döndürülür.
+/// Kalibrasyon metni otomatik olarak NFC normalize edilir ve boşluk dizileri tek
+/// boşluğa indirgenir; böylece aynı anlamlı içerik aynı kimliği üretir.
 ///
 /// # Örnek
 /// ```
@@ -129,8 +146,9 @@ pub fn calib_from_text(
     org_salt: &[u8],
     note_text: &str,
 ) -> Result<(Calibration, String), CoreError> {
-    validate_calibration_inputs(org_salt, note_text)?;
-    let calibration = Calibration::new(org_salt, note_text);
+    let normalized_note = normalize_note_text(note_text);
+    validate_calibration_inputs(org_salt, note_text, &normalized_note)?;
+    let calibration = Calibration::new(org_salt, &normalized_note);
     let id = calibration.id.as_str().to_owned();
     Ok((calibration, id))
 }
@@ -197,25 +215,28 @@ pub fn coord32_derive(
     Ok((coord_id, coord))
 }
 
-fn validate_calibration_inputs(org_salt: &[u8], note_text: &str) -> Result<(), CoreError> {
+fn validate_calibration_inputs(
+    org_salt: &[u8],
+    raw_note_text: &str,
+    normalized_note_text: &str,
+) -> Result<(), CoreError> {
     if org_salt.len() < MIN_ORG_SALT_LEN {
         return Err(CoreError::salt_too_short("org salt must be >= 8 bytes"));
     }
 
-    if note_text.len() > MAX_NOTE_LEN {
+    if normalized_note_text.len() > MAX_NOTE_LEN {
         return Err(CoreError::invalid_input(
             "calibration text must be <= 2048 bytes",
         ));
     }
 
-    let trimmed = note_text.trim();
-    if trimmed.is_empty() {
+    if normalized_note_text.is_empty() {
         return Err(CoreError::invalid_input(
             "calibration text must not be empty",
         ));
     }
 
-    if note_text
+    if raw_note_text
         .chars()
         .any(|ch| ch.is_control() && !matches!(ch, '\n' | '\r' | '\t'))
     {
@@ -299,5 +320,22 @@ mod tests {
         let long = "a".repeat(MAX_NOTE_LEN + 1);
         let err = calib_from_text(b"org-salt", &long).unwrap_err();
         assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn normalizes_unicode_and_whitespace() {
+        let baseline = "Neudzulab Prod 2025";
+        let variant_spacing = "  Neudzulab\nProd\t2025  ";
+        let composed = "\u{00C5}rhus | Kanal";
+        let decomposed = "A\u{030A}rhus | Kanal";
+
+        let (cal_a, id_a) = calib_from_text(b"org-salt", baseline).expect("calibration");
+        let (cal_b, id_b) = calib_from_text(b"org-salt", variant_spacing).expect("calibration");
+        let (_, id_c) = calib_from_text(b"org-salt", composed).expect("calibration");
+        let (_, id_d) = calib_from_text(b"org-salt", decomposed).expect("calibration");
+
+        assert_eq!(cal_a, cal_b);
+        assert_eq!(id_a, id_b);
+        assert_eq!(id_c, id_d);
     }
 }
