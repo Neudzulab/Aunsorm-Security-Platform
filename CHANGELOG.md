@@ -27,6 +27,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ederek indirilebilir artefakt üretir.
 - `aunsorm-packet` içinde X25519/HKDF-SHA256 tabanlı HPKE modu (`hpke` özelliği)
   ve exporter secret türetimi için yeni yardımcı API'ler.
+- Paket ve oturum akışları için deterministik `TranscriptHash` üretimi;
+  CLI çıktılarında ve denetim loglarında hex olarak raporlanır.
+- `aunsorm-server` başlangıç JWKS yayımını `KeyTransparencyLog` içine
+  kaydedip `/transparency/tree` uç noktası üzerinden Merkle benzeri ağaç
+  başlığını JSON olarak sunar.
 ### Planned
 - Uzak KMS sağlayıcıları (GCP/Azure) için canlı soak test harness'i.
 

@@ -16,6 +16,22 @@ use crate::config::{LedgerBackend, ServerConfig};
 use crate::routes::build_router;
 use crate::state::ServerState;
 
+#[derive(Debug, Deserialize)]
+struct TransparencyTree {
+    domain: String,
+    tree_head: String,
+    latest_sequence: u64,
+    records: Vec<TransparencyTreeRecord>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TransparencyTreeRecord {
+    sequence: u64,
+    timestamp: u64,
+    key_id: String,
+    action: String,
+}
+
 fn test_seed() -> [u8; 32] {
     [7_u8; 32]
 }
@@ -128,6 +144,34 @@ async fn pkce_flow_succeeds() {
     let metrics_text = String::from_utf8(metrics_body.to_vec()).expect("metrics str");
     assert!(metrics_text.contains("aunsorm_active_tokens"));
     assert!(metrics_text.contains("aunsorm_sfu_contexts"));
+}
+
+#[tokio::test]
+async fn transparency_endpoint_returns_snapshot() {
+    let state = setup_state();
+    let app = build_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/transparency/tree")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let tree: TransparencyTree = serde_json::from_slice(&body).expect("json");
+    assert_eq!(tree.domain, "aunsorm-server");
+    let first = tree.records.first().expect("records");
+    assert!(tree.latest_sequence >= first.sequence);
+    assert!(!tree.tree_head.is_empty());
+    assert_eq!(first.key_id, "test");
+    assert_eq!(first.action, "publish");
+    assert!(first.timestamp > 0);
 }
 
 #[tokio::test]

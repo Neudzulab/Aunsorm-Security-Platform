@@ -7,16 +7,21 @@ use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine as _,
+};
+use hex::encode as hex_encode;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tracing::{info, warn};
 
+use aunsorm_core::transparency::TransparencyRecord;
 use aunsorm_jwt::{Audience, Claims, JwtError, VerificationOptions};
 
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
-use crate::state::{auth_ttl, ServerState, SfuStepOutcome};
+use crate::state::{auth_ttl, ServerState, SfuStepOutcome, TransparencySnapshot};
 use serde_json::Value;
 
 pub fn build_router(state: Arc<ServerState>) -> Router {
@@ -29,6 +34,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/metrics", get(metrics))
         .route("/sfu/context", post(create_sfu_context))
         .route("/sfu/context/step", post(next_sfu_step))
+        .route("/transparency/tree", get(transparency_tree))
         .with_state(state)
 }
 
@@ -261,6 +267,80 @@ async fn introspect(
             "Token doğrulanamadı: {err}"
         ))),
     }
+}
+
+#[derive(Debug, Serialize)]
+struct TransparencyRecordBody {
+    sequence: u64,
+    timestamp: u64,
+    key_id: String,
+    action: String,
+    public_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    witness: Option<String>,
+    event_hash: String,
+    previous_hash: String,
+    tree_hash: String,
+}
+
+impl From<TransparencyRecord> for TransparencyRecordBody {
+    fn from(record: TransparencyRecord) -> Self {
+        let TransparencyRecord {
+            sequence,
+            timestamp,
+            event,
+            event_hash,
+            previous_hash,
+            tree_hash,
+        } = record;
+        let witness = event.witness.map(|bytes| STANDARD.encode(bytes));
+        Self {
+            sequence,
+            timestamp,
+            key_id: event.key_id,
+            action: event.action.to_string(),
+            public_key: STANDARD.encode(&event.public_key),
+            note: event.note,
+            witness,
+            event_hash: hex_encode(event_hash),
+            previous_hash: hex_encode(previous_hash),
+            tree_hash: hex_encode(tree_hash),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct TransparencyResponse {
+    domain: String,
+    tree_head: String,
+    latest_sequence: u64,
+    records: Vec<TransparencyRecordBody>,
+}
+
+impl From<TransparencySnapshot> for TransparencyResponse {
+    fn from(snapshot: TransparencySnapshot) -> Self {
+        let latest_sequence = snapshot.latest_sequence();
+        let records = snapshot
+            .records
+            .into_iter()
+            .map(TransparencyRecordBody::from)
+            .collect();
+        Self {
+            domain: snapshot.domain,
+            tree_head: hex_encode(snapshot.head),
+            latest_sequence,
+            records,
+        }
+    }
+}
+
+async fn transparency_tree(
+    State(state): State<Arc<ServerState>>,
+) -> Result<Json<TransparencyResponse>, ApiError> {
+    let snapshot = state.transparency_snapshot().await;
+    Ok(Json(TransparencyResponse::from(snapshot)))
 }
 
 async fn jwks(State(state): State<Arc<ServerState>>) -> Json<aunsorm_jwt::Jwks> {

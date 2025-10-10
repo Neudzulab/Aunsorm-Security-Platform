@@ -1079,17 +1079,19 @@ fn handle_encrypt(args: EncryptArgs, strict: bool) -> CliResult<()> {
         })?
     };
 
+    let transcript = packet.transcript_hash(&aad)?;
     let encoded = packet.to_base64()?;
     fs::write(&out, encoded.as_bytes())?;
 
     println!(
-        "şifreleme tamamlandı: çıktı={} | calib_id={} | profile={} | aead={} | strict={} | kem={}",
+        "şifreleme tamamlandı: çıktı={} | calib_id={} | profile={} | aead={} | strict={} | kem={} | transcript={}",
         out.display(),
         calibration.id.as_str(),
         kdf,
         aead,
         strict,
         kem_fields.as_ref().map_or("none", |k| k.kem_name.as_str()),
+        transcript,
     );
     Ok(())
 }
@@ -1143,7 +1145,7 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
         .unwrap_or_default();
 
     println!(
-        "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{}",
+        "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{} | transcript={}",
         out.display(),
         decrypted.header.calib_id,
         decrypted.coord_id,
@@ -1151,6 +1153,7 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
         strict,
         decrypted.plaintext.len(),
         metadata_note,
+        decrypted.transcript,
     );
     Ok(())
 }
@@ -1177,17 +1180,19 @@ fn handle_session_encrypt(args: &SessionEncryptArgs, strict: bool) -> CliResult<
         aad: &aad,
     };
     let (packet, outcome) = encrypt_session(params)?;
+    let transcript = packet.transcript_hash(&aad)?;
     let encoded = packet.to_base64()?;
     fs::write(&args.out, encoded.as_bytes())?;
 
     save_ratchet_state(&args.state, &ratchet)?;
 
     println!(
-        "oturum şifreleme tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={}",
+        "oturum şifreleme tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | transcript={}",
         args.out.display(),
         STANDARD.encode(outcome.session_id),
         outcome.message_no,
         ratchet.is_strict(),
+        transcript,
     );
     Ok(())
 }
@@ -1228,12 +1233,13 @@ fn handle_session_decrypt(args: &SessionDecryptArgs, strict: bool) -> CliResult<
     save_ratchet_state(&args.state, &ratchet)?;
 
     println!(
-        "oturum deşifre tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | replay_seen={}",
+        "oturum deşifre tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | replay_seen={} | transcript={}",
         args.out.display(),
         session_id_b64,
         outcome.message_no,
         ratchet.is_strict(),
         replay_store.seen.len(),
+        decrypted.transcript,
     );
     Ok(())
 }

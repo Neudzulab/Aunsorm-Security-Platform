@@ -2,10 +2,13 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use aunsorm_core::{CoreError, SessionRatchet};
+use aunsorm_core::{
+    transparency::{unix_timestamp, KeyTransparencyLog, TransparencyEvent, TransparencyRecord},
+    CoreError, SessionRatchet,
+};
 use aunsorm_jwt::{Jwks, JwtSigner, JwtVerifier};
 use rand_core::{OsRng, RngCore};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::error::ServerError;
@@ -460,6 +463,7 @@ pub struct ServerState {
     auth_store: AuthStore,
     ledger: TokenLedger,
     sfu_store: SfuStore,
+    transparency: RwLock<KeyTransparencyLog>,
 }
 
 impl ServerState {
@@ -485,6 +489,15 @@ impl ServerState {
             keys: vec![public.to_jwk()],
         };
         let ledger = TokenLedger::new(ledger)?;
+        let mut transparency = KeyTransparencyLog::new("aunsorm-server");
+        let timestamp = unix_timestamp(SystemTime::now())?;
+        let publish = TransparencyEvent::publish(
+            key_pair.kid().to_owned(),
+            public.verifying_key().as_bytes(),
+            timestamp,
+            Some("initial-jwks".to_string()),
+        );
+        transparency.append(publish)?;
         Ok(Self {
             issuer,
             audience,
@@ -496,6 +509,7 @@ impl ServerState {
             auth_store: AuthStore::new(),
             ledger,
             sfu_store: SfuStore::new(),
+            transparency: RwLock::new(transparency),
         })
     }
 
@@ -618,8 +632,32 @@ impl ServerState {
     pub async fn sfu_context_count(&self, now: SystemTime) -> usize {
         self.sfu_store.count(now).await
     }
+
+    /// Şeffaflık defterinin anlık görüntüsünü döndürür.
+    pub async fn transparency_snapshot(&self) -> TransparencySnapshot {
+        let guard = self.transparency.read().await;
+        TransparencySnapshot {
+            domain: guard.domain().to_owned(),
+            head: guard.tree_head(),
+            records: guard.records().to_vec(),
+        }
+    }
 }
 
 pub const fn auth_ttl() -> Duration {
     AUTH_TTL
+}
+
+#[derive(Debug, Clone)]
+pub struct TransparencySnapshot {
+    pub domain: String,
+    pub head: [u8; 32],
+    pub records: Vec<TransparencyRecord>,
+}
+
+impl TransparencySnapshot {
+    #[must_use]
+    pub fn latest_sequence(&self) -> u64 {
+        self.records.last().map_or(0, |record| record.sequence)
+    }
 }

@@ -11,6 +11,8 @@ sağlar.
 - Oturum bazlı ratchet şifreleme/çözme API'ları
 - Replay engelleme için `SessionStore`
 - JSON başlık + Base64 kabı ile taşınabilir paket formatı
+- Paket başlık/AAD/gövde P-MAC birleşiminden `TranscriptHash` üretimi
+  ile denetlenebilir kayıt zinciri
 
 ## Kullanım
 ```
