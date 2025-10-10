@@ -15,9 +15,16 @@ senaryosu sunar.
 ```rust
 use aunsorm_pqc::{
     kem::{negotiate_kem, KemAlgorithm},
+    signature::SignatureAlgorithm,
     strict::StrictMode,
 };
 
 let selection = negotiate_kem(&[KemAlgorithm::MlKem768], StrictMode::Strict)?;
 println!("Seçilen algoritma: {}", selection.algorithm.name());
+
+let checklist = SignatureAlgorithm::MlDsa65.checklist();
+println!("ML-DSA NIST kategorisi: {}", checklist.nist_category());
+for action in checklist.client_actions() {
+    println!("İstemci aksiyonu: {action}");
+}
 ```

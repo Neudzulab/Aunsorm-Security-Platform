@@ -30,6 +30,17 @@ decrypt akışı beklenmedik panik üretmeden hataları yüzeye çıkarır.
   doğrulamasını 128 iterasyon boyunca tekrar eder. `AUNSORM_KMS_SOAK` ile iterasyon
   sayısı artırılabilir.
 
+## PQC Sertleştirme Kontrol Listesi
+
+- `cargo run -p aunsorm-cli -- pq checklist --algorithm ml-dsa-65 --format text`
+  komutu, seçilen imza algoritması için NIST kategorisi, anahtar boyları ve zorunlu
+  çalışma zamanı kontrollerini insan tarafından okunur biçimde raporlar.
+- `--format json` seçeneği ile aynı rapor CI pipeline’larına veya harici denetim
+  araçlarına JSON olarak aktarılabilir.
+- Kontrol listeleri strict kip etkinken eksik özellik bayraklarını belirgin
+  uyarılarla bildirir; bu sayede PQc downgrade girişimleri devreye alınmadan önce
+  yakalanabilir.
+
 ## Kalite Komutları
 
 ```bash

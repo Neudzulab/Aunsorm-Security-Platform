@@ -36,7 +36,11 @@ use aunsorm_packet::{
     AeadAlgorithm, DecryptParams, EncryptParams, KemPayload, SessionDecryptParams,
     SessionEncryptParams, SessionMetadata, SessionStore,
 };
-use aunsorm_pqc::{kem::KemAlgorithm, signature::SignatureAlgorithm, strict::StrictMode};
+use aunsorm_pqc::{
+    kem::KemAlgorithm,
+    signature::{SignatureAlgorithm, SignatureChecklist},
+    strict::StrictMode,
+};
 use aunsorm_x509::{
     generate_self_signed as generate_self_signed_cert, SelfSignedCertParams as X509SelfSignedParams,
 };
@@ -97,6 +101,8 @@ enum CalibCommands {
 enum PqCommands {
     /// PQC hazır olma durumunu görüntüle
     Status(PqStatusArgs),
+    /// İmza algoritmaları için sertleştirme kontrol listesi
+    Checklist(PqChecklistArgs),
 }
 
 #[derive(Args)]
@@ -104,6 +110,16 @@ struct PqStatusArgs {
     /// Çıktı formatı (text veya json)
     #[arg(long, value_enum, default_value_t = PqStatusFormat::Text)]
     format: PqStatusFormat,
+}
+
+#[derive(Args)]
+struct PqChecklistArgs {
+    /// İncelenecek PQC imza algoritması
+    #[arg(long, value_enum, default_value_t = SignatureAlgorithmArg::MlDsa65)]
+    algorithm: SignatureAlgorithmArg,
+    /// Çıktı formatı (text veya json)
+    #[arg(long, value_enum, default_value_t = ReportFormat::Text)]
+    format: ReportFormat,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -117,6 +133,26 @@ enum PqStatusFormat {
 impl Default for PqStatusFormat {
     fn default() -> Self {
         Self::Text
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+enum SignatureAlgorithmArg {
+    #[value(alias = "ml-dsa-65")]
+    MlDsa65,
+    #[value(alias = "falcon-512")]
+    Falcon512,
+    #[value(alias = "sphincs-shake-128f", alias = "sphincs+-shake-128f")]
+    SphincsShake128f,
+}
+
+impl SignatureAlgorithmArg {
+    const fn to_algorithm(self) -> SignatureAlgorithm {
+        match self {
+            Self::MlDsa65 => SignatureAlgorithm::MlDsa65,
+            Self::Falcon512 => SignatureAlgorithm::Falcon512,
+            Self::SphincsShake128f => SignatureAlgorithm::SphincsShake128f,
+        }
     }
 }
 
@@ -823,9 +859,25 @@ struct PqStatusReport {
     warnings: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct SignatureChecklistReport {
+    algorithm: &'static str,
+    available: bool,
+    nist_category: &'static str,
+    public_key_bytes: usize,
+    secret_key_bytes: usize,
+    signature_bytes: usize,
+    deterministic: bool,
+    strict_effective: bool,
+    client_actions: Vec<String>,
+    runtime_assertions: Vec<String>,
+    references: Vec<String>,
+}
+
 fn handle_pq(command: PqCommands, strict: StrictContext) -> CliResult<()> {
     match command {
         PqCommands::Status(args) => handle_pq_status(&args, strict),
+        PqCommands::Checklist(args) => handle_pq_checklist(&args, strict),
     }
 }
 
@@ -838,6 +890,17 @@ fn handle_pq_status(args: &PqStatusArgs, strict: StrictContext) -> CliResult<()>
         PqStatusFormat::Json => {
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
+    }
+    Ok(())
+}
+
+fn handle_pq_checklist(args: &PqChecklistArgs, strict: StrictContext) -> CliResult<()> {
+    let algorithm = args.algorithm.to_algorithm();
+    let checklist = algorithm.checklist();
+    let report = build_signature_checklist_report(&checklist, strict);
+    match args.format {
+        ReportFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        ReportFormat::Text => println!("{}", render_signature_checklist_text(&report)),
     }
     Ok(())
 }
@@ -961,6 +1024,95 @@ fn render_pq_status_text(report: &PqStatusReport) -> String {
             out.push('\n');
         }
     }
+    out
+}
+
+fn build_signature_checklist_report(
+    checklist: &SignatureChecklist,
+    strict: StrictContext,
+) -> SignatureChecklistReport {
+    SignatureChecklistReport {
+        algorithm: checklist.algorithm().name(),
+        available: checklist.algorithm().is_available(),
+        nist_category: checklist.nist_category(),
+        public_key_bytes: checklist.public_key_bytes(),
+        secret_key_bytes: checklist.secret_key_bytes(),
+        signature_bytes: checklist.signature_bytes(),
+        deterministic: checklist.deterministic(),
+        strict_effective: strict.effective(),
+        client_actions: checklist
+            .client_actions()
+            .map(std::string::ToString::to_string)
+            .collect(),
+        runtime_assertions: checklist
+            .runtime_assertions()
+            .map(std::string::ToString::to_string)
+            .collect(),
+        references: checklist
+            .references()
+            .map(std::string::ToString::to_string)
+            .collect(),
+    }
+}
+
+fn render_signature_checklist_text(report: &SignatureChecklistReport) -> String {
+    use std::fmt::Write as _;
+
+    let mut out = String::new();
+    writeln!(&mut out, "Algorithm: {}", report.algorithm).expect("writing algorithm");
+    writeln!(&mut out, "NIST category: {}", report.nist_category).expect("writing category");
+    writeln!(&mut out, "Public key bytes: {}", report.public_key_bytes).expect("writing pk size");
+    writeln!(&mut out, "Secret key bytes: {}", report.secret_key_bytes).expect("writing sk size");
+    writeln!(&mut out, "Signature bytes: {}", report.signature_bytes).expect("writing sig size");
+    writeln!(
+        &mut out,
+        "Deterministic: {}",
+        bool_word(report.deterministic)
+    )
+    .expect("writing determinism");
+    writeln!(
+        &mut out,
+        "Available in build: {}",
+        bool_word(report.available)
+    )
+    .expect("writing availability");
+    writeln!(
+        &mut out,
+        "Strict active: {}",
+        bool_word(report.strict_effective)
+    )
+    .expect("writing strict state");
+
+    if !report.available {
+        writeln!(
+            &mut out,
+            "Warning: enable the corresponding feature flag before production rollout."
+        )
+        .expect("writing availability warning");
+    }
+    if report.strict_effective && !report.available {
+        writeln!(
+            &mut out,
+            "Warning: strict mode is active but this algorithm is missing; enable the feature to avoid downgrade."
+        )
+        .expect("writing strict warning");
+    }
+
+    out.push_str("\nClient hardening steps:\n");
+    for action in &report.client_actions {
+        writeln!(&mut out, "  - {action}").expect("writing client action");
+    }
+
+    out.push_str("\nRuntime assertions:\n");
+    for assertion in &report.runtime_assertions {
+        writeln!(&mut out, "  - {assertion}").expect("writing runtime assertion");
+    }
+
+    out.push_str("\nReferences:\n");
+    for reference in &report.references {
+        writeln!(&mut out, "  - {reference}").expect("writing reference");
+    }
+
     out
 }
 
@@ -2089,6 +2241,37 @@ mod tests {
         assert!(rendered.contains("Strict flag (--strict): yes"));
         assert!(rendered.contains("ml-kem-768"));
         assert!(rendered.contains("Warnings:"));
+    }
+
+    #[test]
+    fn pq_checklist_text_is_actionable() {
+        let strict = StrictContext {
+            cli_flag: true,
+            env_active: false,
+        };
+        let checklist = SignatureAlgorithm::MlDsa65.checklist();
+        let report = build_signature_checklist_report(&checklist, strict);
+        let rendered = render_signature_checklist_text(&report);
+        assert!(rendered.contains("Algorithm: ml-dsa-65"));
+        assert!(rendered.contains("Client hardening steps"));
+        assert!(rendered.contains("Strict active: yes"));
+        assert!(rendered.contains("NIST category: 5"));
+    }
+
+    #[test]
+    fn pq_checklist_json_includes_metadata() {
+        let strict = StrictContext {
+            cli_flag: false,
+            env_active: false,
+        };
+        let checklist = SignatureAlgorithm::Falcon512.checklist();
+        let report = build_signature_checklist_report(&checklist, strict);
+        let value = serde_json::to_value(&report).expect("json value");
+        assert_eq!(value["algorithm"], "falcon-512");
+        assert_eq!(value["nist_category"], "3");
+        assert!(value["client_actions"]
+            .as_array()
+            .is_some_and(|arr| arr.len() >= 3));
     }
 
     #[test]

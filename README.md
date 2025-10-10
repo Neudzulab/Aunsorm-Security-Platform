@@ -15,6 +15,7 @@ cargo run -p aunsorm-cli -- calib inspect \
 cargo run -p aunsorm-cli -- calib derive-coord \
   --password P --org-salt V2VBcmVLdXQuZXU= \
   --calib-text "Neudzulab | Prod | 2025-08" --kdf medium
+cargo run -p aunsorm-cli -- pq checklist --algorithm ml-dsa-65 --format text
 ```
 
 Kalibrasyon değerini bir dosyada saklıyorsanız aynı komutlara

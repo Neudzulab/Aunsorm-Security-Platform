@@ -35,6 +35,146 @@ impl SignatureAlgorithm {
             Self::SphincsShake128f => cfg!(feature = "sig-sphincs-shake-128f"),
         }
     }
+
+    /// İstemci sertleştirme kontrol listesini döndürür.
+    #[must_use]
+    pub const fn checklist(self) -> SignatureChecklist {
+        match self {
+            Self::MlDsa65 => SignatureChecklist {
+                algorithm: Self::MlDsa65,
+                nist_category: "5",
+                public_key_bytes: 2_592,
+                secret_key_bytes: 4_864,
+                signature_bytes: 4_595,
+                deterministic: true,
+                client_actions: &[
+                    "Build with the `sig-mldsa-65` feature enabled and document the flag in release notes.",
+                    "Pin pqcrypto-dilithium to the audited version and require reproducible builds in CI.",
+                    "Validate transparency log entries for Dilithium5 public keys before trusting remote peers.",
+                ],
+                runtime_assertions: &[
+                    "Reject handshake transcripts that omit `ml-dsa-65` when `AUNSORM_STRICT=1`.",
+                    "Abort if the peer advertises a key shorter than 2592 bytes for ML-DSA public keys.",
+                    "Bind calibration identifiers to the Dilithium5 public key hash prior to accepting sessions.",
+                ],
+                references: &[
+                    "NIST FIPS 204 — Module-Lattice-based Digital Signature Standard (ML-DSA) §4",
+                    "Aunsorm Threat Model — External calibration binding requirements",
+                ],
+            },
+            Self::Falcon512 => SignatureChecklist {
+                algorithm: Self::Falcon512,
+                nist_category: "3",
+                public_key_bytes: 897,
+                secret_key_bytes: 1_281,
+                signature_bytes: 690,
+                deterministic: false,
+                client_actions: &[
+                    "Confirm the `sig-falcon-512` feature flag is enabled in production builds.",
+                    "Ensure the floating-point implementation passes the vendor conformance vectors.",
+                    "Document fallback to ML-DSA in strict environments where Falcon is unavailable.",
+                ],
+                runtime_assertions: &[
+                    "Monitor for unusually small Falcon signatures (expected 690 bytes).",
+                    "Fail closed if lattice trapdoor sampling errors are reported by the runtime.",
+                    "Record Falcon public key fingerprints in the transparency log for auditability.",
+                ],
+                references: &[
+                    "RFC 9180 §7.1 — Guidance on PQ signature algorithm agility",
+                    "Falcon submission to NIST PQC Round 4 — Implementation considerations",
+                ],
+            },
+            Self::SphincsShake128f => SignatureChecklist {
+                algorithm: Self::SphincsShake128f,
+                nist_category: "1",
+                public_key_bytes: 32,
+                secret_key_bytes: 64,
+                signature_bytes: 17_088,
+                deterministic: true,
+                client_actions: &[
+                    "Enable the `sig-sphincs-shake-128f` feature flag for deployments requiring stateless hash signatures.",
+                    "Budget for 17KB signatures in transport limits and document MTU considerations.",
+                    "Protect long-term seeds with hardware-backed key wrapping where available.",
+                ],
+                runtime_assertions: &[
+                    "Reject peers advertising truncated SPHINCS+ signatures (<17088 bytes).",
+                    "Log calibration identifiers together with SPHINCS+ tree heights for incident response.",
+                    "Alert when strict mode is active but SPHINCS+ is negotiated, signalling a potential downgrade.",
+                ],
+                references: &[
+                    "NIST FIPS 205 — Stateless Hash-Based Digital Signature Standard",
+                    "SPHINCS+ specification §5 — Parameter set SHAKE-128f-simple",
+                ],
+            },
+        }
+    }
+}
+
+/// PQC imza algoritmaları için sertleştirme kontrol listesi.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignatureChecklist {
+    algorithm: SignatureAlgorithm,
+    nist_category: &'static str,
+    public_key_bytes: usize,
+    secret_key_bytes: usize,
+    signature_bytes: usize,
+    deterministic: bool,
+    client_actions: &'static [&'static str],
+    runtime_assertions: &'static [&'static str],
+    references: &'static [&'static str],
+}
+
+impl SignatureChecklist {
+    /// İlgili algoritmayı döndürür.
+    #[must_use]
+    pub const fn algorithm(&self) -> SignatureAlgorithm {
+        self.algorithm
+    }
+
+    /// NIST güvenlik kategorisini döndürür.
+    #[must_use]
+    pub const fn nist_category(&self) -> &'static str {
+        self.nist_category
+    }
+
+    /// Açık anahtar boyutunu bayt cinsinden döndürür.
+    #[must_use]
+    pub const fn public_key_bytes(&self) -> usize {
+        self.public_key_bytes
+    }
+
+    /// Gizli anahtar boyutunu bayt cinsinden döndürür.
+    #[must_use]
+    pub const fn secret_key_bytes(&self) -> usize {
+        self.secret_key_bytes
+    }
+
+    /// İmza boyutunu bayt cinsinden döndürür.
+    #[must_use]
+    pub const fn signature_bytes(&self) -> usize {
+        self.signature_bytes
+    }
+
+    /// Algoritmanın deterministik imza üretip üretmediğini belirtir.
+    #[must_use]
+    pub const fn deterministic(&self) -> bool {
+        self.deterministic
+    }
+
+    /// İstemci tarafında uygulanması önerilen aksiyonları iteratör olarak döndürür.
+    pub fn client_actions(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.client_actions.iter().copied()
+    }
+
+    /// Çalışma zamanında zorunlu kontrolleri iteratör olarak döndürür.
+    pub fn runtime_assertions(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.runtime_assertions.iter().copied()
+    }
+
+    /// Referans dokümanları iteratör olarak döndürür.
+    pub fn references(&self) -> impl Iterator<Item = &'static str> + '_ {
+        self.references.iter().copied()
+    }
 }
 
 /// İmza anahtar çifti.
@@ -488,5 +628,42 @@ mod tests {
             err,
             PqcError::CryptoFailure { .. } | PqcError::InvalidInput { .. }
         ));
+    }
+
+    #[test]
+    fn checklist_metadata_for_ml_dsa_matches_expectations() {
+        let checklist = SignatureAlgorithm::MlDsa65.checklist();
+        assert_eq!(checklist.algorithm(), SignatureAlgorithm::MlDsa65);
+        assert_eq!(checklist.nist_category(), "5");
+        assert_eq!(checklist.public_key_bytes(), 2_592);
+        assert_eq!(checklist.secret_key_bytes(), 4_864);
+        assert_eq!(checklist.signature_bytes(), 4_595);
+        assert!(checklist.deterministic());
+        let actions: Vec<_> = checklist.client_actions().collect();
+        assert!(actions.len() >= 3);
+        assert!(actions[0].contains("sig-mldsa-65"));
+        let runtime: Vec<_> = checklist.runtime_assertions().collect();
+        assert!(runtime.iter().any(|item| item.contains("AUNSORM_STRICT")));
+        let references: Vec<_> = checklist.references().collect();
+        assert!(references.iter().any(|item| item.contains("ML-DSA")));
+    }
+
+    #[test]
+    fn checklist_distinguishes_falcon_and_sphincs() {
+        let falcon = SignatureAlgorithm::Falcon512.checklist();
+        assert_eq!(falcon.nist_category(), "3");
+        assert!(!falcon.deterministic());
+        assert_eq!(falcon.signature_bytes(), 690);
+        assert!(falcon
+            .runtime_assertions()
+            .any(|item| item.contains("Falcon")));
+
+        let sphincs = SignatureAlgorithm::SphincsShake128f.checklist();
+        assert_eq!(sphincs.nist_category(), "1");
+        assert!(sphincs.deterministic());
+        assert!(sphincs.signature_bytes() >= 17_000);
+        assert!(sphincs
+            .client_actions()
+            .any(|item| item.contains("17KB signatures")));
     }
 }
