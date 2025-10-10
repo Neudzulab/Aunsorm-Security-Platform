@@ -1,6 +1,9 @@
 use base64::DecodeError;
 use thiserror::Error;
 
+#[cfg(feature = "hpke")]
+use hpke::HpkeError;
+
 use aunsorm_core::CoreError;
 
 /// Paketleme katmanı hata türü.
@@ -30,4 +33,8 @@ pub enum PacketError {
     /// Girdi doğrulaması başarısız oldu.
     #[error("invalid input: {0}")]
     Invalid(&'static str),
+    /// HPKE işlemi sırasında hata.
+    #[cfg(feature = "hpke")]
+    #[error("hpke error: {0}")]
+    Hpke(#[from] HpkeError),
 }
