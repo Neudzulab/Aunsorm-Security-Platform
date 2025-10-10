@@ -265,6 +265,9 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
     if packet.header.coord_digest != coord_digest(&coord) {
         return Err(PacketError::Integrity("coord digest mismatch"));
     }
+    if packet.header.calib_id != params.calibration.id.as_str() {
+        return Err(PacketError::Integrity("coord digest mismatch"));
+    }
 
     let aad_digest_value = aad_digest(params.aad);
     if packet.header.aead.aad_digest != aad_digest_value {
@@ -460,7 +463,10 @@ mod tests {
         };
         let err = decrypt_one_shot(&wrong_params).expect_err("should fail");
 
-        assert!(matches!(err, PacketError::Invalid(_)));
+        assert!(matches!(
+            err,
+            PacketError::Integrity(message) if message == "coord digest mismatch"
+        ));
     }
 
     #[cfg(feature = "aes-siv")]

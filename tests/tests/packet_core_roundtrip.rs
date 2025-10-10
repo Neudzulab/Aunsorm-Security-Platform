@@ -33,19 +33,25 @@ fn salts_strategy() -> impl Strategy<Value = Salts> {
 }
 
 fn profile_strategy() -> impl Strategy<Value = KdfProfile> {
-    prop_oneof![
-        Just(KdfProfile::preset(KdfPreset::Mobile)),
-        Just(KdfProfile::preset(KdfPreset::Low)),
-    ]
+    let profiles = vec![
+        KdfProfile::preset(KdfPreset::Mobile),
+        KdfProfile::preset(KdfPreset::Low),
+    ];
+    prop::sample::select(profiles)
 }
 
 fn algorithm_strategy() -> impl Strategy<Value = AeadAlgorithm> {
-    prop_oneof![
-        Just(AeadAlgorithm::AesGcm),
-        Just(AeadAlgorithm::Chacha20Poly1305),
-        #[cfg(feature = "aes-siv")]
-        Just(AeadAlgorithm::AesSiv),
-    ]
+    #[cfg(feature = "aes-siv")]
+    let algorithms = {
+        let mut variants = vec![AeadAlgorithm::AesGcm, AeadAlgorithm::Chacha20Poly1305];
+        variants.push(AeadAlgorithm::AesSiv);
+        variants
+    };
+
+    #[cfg(not(feature = "aes-siv"))]
+    let algorithms = vec![AeadAlgorithm::AesGcm, AeadAlgorithm::Chacha20Poly1305];
+
+    prop::sample::select(algorithms)
 }
 
 fn to_test_error<E: std::fmt::Display>(err: E, ctx: &str) -> TestCaseError {

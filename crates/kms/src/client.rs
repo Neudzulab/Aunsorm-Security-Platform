@@ -78,7 +78,7 @@ impl KmsClient {
                 backend.sign_ed25519(locator.key_id(), message)
             }
             #[cfg(not(feature = "kms-gcp"))]
-            BackendKind::Gcp => Err(KmsError::Unsupported {
+            BackendKind::Gcp => Err(KmsError::BackendNotConfigured {
                 backend: locator.kind(),
             }),
             #[cfg(feature = "kms-azure")]
@@ -87,7 +87,7 @@ impl KmsClient {
                 backend.sign_ed25519(locator.key_id(), message)
             }
             #[cfg(not(feature = "kms-azure"))]
-            BackendKind::Azure => Err(KmsError::Unsupported {
+            BackendKind::Azure => Err(KmsError::BackendNotConfigured {
                 backend: locator.kind(),
             }),
             #[cfg(feature = "kms-pkcs11")]
@@ -96,7 +96,7 @@ impl KmsClient {
                 backend.sign_ed25519(locator.key_id(), message)
             }
             #[cfg(not(feature = "kms-pkcs11"))]
-            BackendKind::Pkcs11 => Err(KmsError::Unsupported {
+            BackendKind::Pkcs11 => Err(KmsError::BackendNotConfigured {
                 backend: locator.kind(),
             }),
         })
@@ -123,7 +123,7 @@ impl KmsClient {
                 backend.public_ed25519(locator.key_id())
             }
             #[cfg(not(feature = "kms-gcp"))]
-            BackendKind::Gcp => Err(KmsError::Unsupported {
+            BackendKind::Gcp => Err(KmsError::BackendNotConfigured {
                 backend: locator.kind(),
             }),
             #[cfg(feature = "kms-azure")]
@@ -132,7 +132,7 @@ impl KmsClient {
                 backend.public_ed25519(locator.key_id())
             }
             #[cfg(not(feature = "kms-azure"))]
-            BackendKind::Azure => Err(KmsError::Unsupported {
+            BackendKind::Azure => Err(KmsError::BackendNotConfigured {
                 backend: locator.kind(),
             }),
             #[cfg(feature = "kms-pkcs11")]
@@ -141,7 +141,7 @@ impl KmsClient {
                 backend.public_ed25519(locator.key_id())
             }
             #[cfg(not(feature = "kms-pkcs11"))]
-            BackendKind::Pkcs11 => Err(KmsError::Unsupported {
+            BackendKind::Pkcs11 => Err(KmsError::BackendNotConfigured {
                 backend: locator.kind(),
             }),
         })
@@ -165,7 +165,7 @@ impl KmsClient {
                 backend.key_kid(locator.key_id())
             }
             #[cfg(not(feature = "kms-gcp"))]
-            BackendKind::Gcp => Err(KmsError::Unsupported {
+            BackendKind::Gcp => Err(KmsError::BackendNotConfigured {
                 backend: locator.kind(),
             }),
             #[cfg(feature = "kms-azure")]
@@ -174,7 +174,7 @@ impl KmsClient {
                 backend.key_kid(locator.key_id())
             }
             #[cfg(not(feature = "kms-azure"))]
-            BackendKind::Azure => Err(KmsError::Unsupported {
+            BackendKind::Azure => Err(KmsError::BackendNotConfigured {
                 backend: locator.kind(),
             }),
             #[cfg(feature = "kms-pkcs11")]
@@ -183,7 +183,7 @@ impl KmsClient {
                 backend.key_kid(locator.key_id())
             }
             #[cfg(not(feature = "kms-pkcs11"))]
-            BackendKind::Pkcs11 => Err(KmsError::Unsupported {
+            BackendKind::Pkcs11 => Err(KmsError::BackendNotConfigured {
                 backend: locator.kind(),
             }),
         })

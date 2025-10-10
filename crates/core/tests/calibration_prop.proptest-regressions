@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc eccf74d941a8b205aaa00ee0b80033eb89305d98a9c32ccacc9fa79b94ddf1fe # shrinks to seed_bytes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 104, 250, 122, 221, 48, 211, 106, 93, 202, 125, 58, 108, 18, 183, 67, 139, 207, 143, 227, 106, 103, 39, 124, 12, 107, 33, 226, 50, 237, 65, 213, 19, 209, 224, 34, 132, 192, 223, 44, 70, 176, 235, 93, 55, 41, 128], org_salt = [82, 50, 88, 112, 189, 13, 202, 20, 27, 140, 104, 236, 46], note_chars = [' '], calibration_salt = [169, 238, 197, 20, 48, 135, 10, 1, 65, 8, 208, 71, 246, 110, 79, 204, 119, 241], chain_salt = [226, 109, 175, 3, 46, 252, 6, 190, 253, 196, 224, 224, 35, 237, 61, 132, 139, 56, 177, 237, 238, 9, 250, 10, 27, 201, 86], coord_salt = [89, 70, 62, 138, 73, 41, 189, 116, 7, 195, 29, 244, 194]

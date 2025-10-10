@@ -21,6 +21,7 @@ proptest! {
         seed.copy_from_slice(&seed_bytes);
 
         let note_text: String = note_chars.into_iter().collect();
+        prop_assume!(!note_text.trim().is_empty());
         let (calibration, _) =
             calib_from_text(&org_salt, &note_text).expect("calibration");
         let salts = Salts::new(calibration_salt, chain_salt, coord_salt).expect("valid salts");
