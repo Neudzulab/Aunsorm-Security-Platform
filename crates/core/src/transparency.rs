@@ -85,6 +85,58 @@ impl TransparencyEvent {
         }
     }
 
+    /// Anahtarın geri çekildiğini bildiren olay oluşturur.
+    ///
+    /// Public key alanı revokasyon kayıtlarında boş bırakılır; bu davranış zincir
+    /// karması hesaplamalarında da göz önünde bulundurulur.
+    ///
+    /// # Örnek
+    /// ```
+    /// use aunsorm_core::transparency::{TransparencyEvent, TransparencyEventKind};
+    ///
+    /// let event = TransparencyEvent::revoke("kid-1", 42, Some("compromised".into()));
+    /// assert_eq!(event.action, TransparencyEventKind::Revoke);
+    /// assert!(event.public_key.is_empty());
+    /// ```
+    #[must_use]
+    pub fn revoke(key_id: impl Into<String>, timestamp: u64, note: Option<String>) -> Self {
+        Self {
+            key_id: key_id.into(),
+            action: TransparencyEventKind::Revoke,
+            public_key: Vec::new(),
+            timestamp,
+            note,
+            witness: None,
+        }
+    }
+
+    /// Anahtar döndürmesini bildiren olay oluşturur.
+    ///
+    /// # Örnek
+    /// ```
+    /// use aunsorm_core::transparency::{TransparencyEvent, TransparencyEventKind};
+    ///
+    /// let event = TransparencyEvent::rotate("kid-1", [0xAB_u8; 32], 7, None);
+    /// assert_eq!(event.action, TransparencyEventKind::Rotate);
+    /// assert_eq!(event.public_key.len(), 32);
+    /// ```
+    #[must_use]
+    pub fn rotate(
+        key_id: impl Into<String>,
+        public_key: impl AsRef<[u8]>,
+        timestamp: u64,
+        note: Option<String>,
+    ) -> Self {
+        Self {
+            key_id: key_id.into(),
+            action: TransparencyEventKind::Rotate,
+            public_key: public_key.as_ref().to_vec(),
+            timestamp,
+            note,
+            witness: None,
+        }
+    }
+
     /// Şeffaflık olayına transcript kanıtı ekler.
     #[must_use]
     pub fn with_witness(mut self, witness: Option<Vec<u8>>) -> Self {
@@ -322,7 +374,7 @@ impl fmt::Display for TransparencyRecord {
 
 #[cfg(test)]
 mod tests {
-    use super::{KeyTransparencyLog, TransparencyEvent};
+    use super::{KeyTransparencyLog, TransparencyEvent, TransparencyEventKind};
 
     #[test]
     fn transcript_hash_is_deterministic() {
@@ -363,5 +415,23 @@ mod tests {
         records[0].timestamp += 1;
         let result = KeyTransparencyLog::transcript_hash("aunsorm-demo", &records);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn revoke_event_has_expected_shape() {
+        let event = TransparencyEvent::revoke("key-1", 5, Some("suspected".into()));
+        assert_eq!(event.action, TransparencyEventKind::Revoke);
+        assert!(event.public_key.is_empty());
+        assert_eq!(event.timestamp, 5);
+        assert_eq!(event.note.as_deref(), Some("suspected"));
+    }
+
+    #[test]
+    fn rotate_event_preserves_public_key() {
+        let event = TransparencyEvent::rotate("key-2", [0xAA_u8; 16], 9, None);
+        assert_eq!(event.action, TransparencyEventKind::Rotate);
+        assert_eq!(event.public_key, vec![0xAA; 16]);
+        assert_eq!(event.timestamp, 9);
+        assert!(event.note.is_none());
     }
 }
