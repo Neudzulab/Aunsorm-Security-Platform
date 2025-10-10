@@ -69,7 +69,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 
 ## Bonus (Vizyon)
 - [x] WebTransport/DataChannel E2EE adaptor örneği.
-- [ ] Kilitli bellek / SGX / SEV entegrasyon planı.
+- [x] Kilitli bellek / SGX / SEV entegrasyon planı.
 - [ ] Key transparency ve transcript hash (gelecek sürüm).
 
 ## Test, Fuzz ve Benchmark Çalıştırma
