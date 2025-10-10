@@ -13,12 +13,18 @@ use proptest::{
 };
 
 fn algorithms() -> Vec<AeadAlgorithm> {
-    let mut list = vec![AeadAlgorithm::AesGcm, AeadAlgorithm::Chacha20Poly1305];
     #[cfg(feature = "aes-siv")]
     {
-        list.push(AeadAlgorithm::AesSiv);
+        vec![
+            AeadAlgorithm::AesGcm,
+            AeadAlgorithm::Chacha20Poly1305,
+            AeadAlgorithm::AesSiv,
+        ]
     }
-    list
+    #[cfg(not(feature = "aes-siv"))]
+    {
+        vec![AeadAlgorithm::AesGcm, AeadAlgorithm::Chacha20Poly1305]
+    }
 }
 
 fn build_salts(calibration_salt: Vec<u8>, chain_salt: Vec<u8>, coord_salt: Vec<u8>) -> Salts {
@@ -143,10 +149,7 @@ proptest! {
                 packet: &encoded,
             };
             let result = decrypt_one_shot(&decrypt_params);
-            prop_assert!(matches!(
-                result,
-                Err(PacketError::Integrity(_)) | Err(PacketError::Invalid(_))
-            ));
+            prop_assert!(matches!(result, Err(PacketError::Invalid(_))));
         }
     }
 }
