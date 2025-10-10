@@ -13,6 +13,9 @@
 - `session_store_roundtrip` fuzz hedefi, yeni mesaj numaraları ve AAD digest
   hesaplamalarını doğrulamak için ratchet akışını tekrar tekrar işletir.
 - `SessionStore::register` tekrarlanan mesajları engelleyerek replay koruması sunar.
+- Her paket için `TranscriptHash`, başlık + AAD + ciphertext + PMAC
+  kombinasyonunu hex olarak raporlayarak olay kayıtlarında kullanılacak
+  deterministik bir özet üretir.
 
 ## Kimlik
 
@@ -27,9 +30,9 @@
 - CLI, server ve wasm katmanları aynı `SessionMetadata` sözleşmesini kullanarak
   koordinatları paylaşır.
 - OpenTelemetry entegrasyonu `AUNSORM_OTEL_ENDPOINT` üzerinden yapılandırılabilir.
-- OAuth sunucusu, `GET /oauth/transparency` uç noktasıyla JWK yayınlarını ve
-  token üretimlerini hash zinciri olarak raporlayarak transcript doğrulaması
-  sağlar.
+- `aunsorm-server` başlangıçta yayınladığı JWKS anahtarını şeffaflık defterine
+  işler ve `/transparency/tree` uç noktası üzerinden Merkle benzeri ağaç
+  başlığını JSON olarak sunar.
 
 ## Dokümantasyon ve Gözlemlenebilirlik
 

@@ -321,6 +321,7 @@ pub fn decrypt_session(
         .ok_or(PacketError::Invalid("coord unavailable"))?;
 
     let metadata = params.metadata.clone();
+    let transcript = packet.transcript_hash(params.aad)?;
 
     Ok((
         DecryptOk {
@@ -329,6 +330,7 @@ pub fn decrypt_session(
             coord_id,
             coord,
             metadata,
+            transcript,
         },
         SessionStepOutcome {
             session_id: params.ratchet.session_id(),

@@ -60,6 +60,9 @@ proptest! {
                 kem: None,
             }).expect("encryption succeeds");
 
+            let transcript = packet
+                .transcript_hash(&aad)
+                .expect("transcript hash");
             let encoded = packet.to_base64().expect("base64 encoding");
             let decrypt_params = DecryptParams {
                 password: &password,
@@ -75,12 +78,14 @@ proptest! {
             let DecryptOk {
                 plaintext: output,
                 header,
+                transcript: decoded_transcript,
                 ..
             } = decrypted;
             let header_plaintext = header.sizes.plaintext;
 
             prop_assert_eq!(header_plaintext, output.len());
             prop_assert_eq!(output.as_slice(), plaintext.as_slice());
+            prop_assert_eq!(decoded_transcript, transcript);
         }
     }
 }

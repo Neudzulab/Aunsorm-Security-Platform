@@ -30,9 +30,9 @@ base64 = { workspace = true }
 subtle = { workspace = true }
 aes-siv = { workspace = true, optional = true }
 hpke = { workspace = true, optional = true }
+hex = { workspace = true }
 
 [dev-dependencies]
-hex = { workspace = true }
 aunsorm-pqc = { path = "../pqc" }
 proptest = "1"
 rand_chacha = { workspace = true }

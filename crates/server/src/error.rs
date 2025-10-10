@@ -22,6 +22,9 @@ pub enum ServerError {
     /// HTTP sunucu hatası.
     #[error(transparent)]
     Http(#[from] hyper::Error),
+    /// Şeffaflık defteri hatası.
+    #[error(transparent)]
+    Transparency(#[from] aunsorm_core::transparency::TransparencyError),
 }
 
 /// RFC 6749 uyumlu API hata yanıtı.

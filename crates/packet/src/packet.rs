@@ -13,6 +13,7 @@ use crate::header::{
     AeadAlgorithm, Header, HeaderAead, HeaderKem, HeaderProfile, HeaderSalts, HeaderSizes,
 };
 use crate::session::SessionMetadata;
+use crate::transcript::{compute_transcript, TranscriptHash};
 
 /// Tek-atım şifreleme parametreleri.
 pub struct EncryptParams<'a> {
@@ -57,6 +58,7 @@ pub struct DecryptOk {
     pub coord_id: String,
     pub coord: [u8; 32],
     pub metadata: SessionMetadata,
+    pub transcript: TranscriptHash,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -116,6 +118,14 @@ impl Packet {
             ciphertext,
             body_pmac: pmac,
         })
+    }
+
+    /// Transcript karmasını hesaplar.
+    ///
+    /// # Errors
+    /// JSON serileştirmesi başarısız olursa `PacketError::Serialization` döner.
+    pub fn transcript_hash(&self, aad: &[u8]) -> Result<TranscriptHash, PacketError> {
+        compute_transcript(&self.header, aad, &self.ciphertext, &self.body_pmac)
     }
 }
 
@@ -280,6 +290,7 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
     }
 
     let metadata = SessionMetadata::from_header(&packet.header).with_coord(coord_id.clone(), coord);
+    let transcript = packet.transcript_hash(params.aad)?;
 
     Ok(DecryptOk {
         plaintext,
@@ -287,6 +298,7 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
         coord_id,
         coord,
         metadata,
+        transcript,
     })
 }
 

@@ -9,6 +9,7 @@ mod error;
 mod header;
 mod packet;
 mod session;
+mod transcript;
 mod util;
 
 #[cfg(feature = "hpke")]
@@ -26,4 +27,5 @@ pub use crate::session::{
     decrypt_session, encrypt_session, SessionDecryptParams, SessionEncryptParams, SessionMetadata,
     SessionStepOutcome, SessionStore,
 };
+pub use crate::transcript::{compute_transcript, TranscriptHash};
 pub use crate::util::peek_header;
