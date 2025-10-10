@@ -99,6 +99,37 @@ fn tampered_coord_digest_is_detected() {
 }
 
 #[test]
+fn ciphertext_truncation_is_detected() {
+    let (encoded, salts, calibration, profile) = build_safe_packet();
+
+    let mut tampered = Packet::from_base64(&encoded).expect("original packet decodes");
+    assert!(
+        !tampered.ciphertext.is_empty(),
+        "ciphertext must not be empty"
+    );
+    tampered.ciphertext.truncate(tampered.ciphertext.len() - 1);
+    let tampered_encoded = tampered
+        .to_base64()
+        .expect("tampered packet still encodes as base64");
+
+    let result = decrypt_one_shot(&DecryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &calibration,
+        salts: &salts,
+        profile,
+        aad: b"classified aad",
+        strict: false,
+        packet: &tampered_encoded,
+    });
+
+    assert!(matches!(
+        result,
+        Err(PacketError::Integrity(message)) if message == "body pmac mismatch"
+    ));
+}
+
+#[test]
 fn strict_mode_rejects_packets_without_kem_material() {
     let (encoded, salts, calibration, profile) = build_safe_packet();
 
