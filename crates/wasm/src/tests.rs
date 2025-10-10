@@ -64,11 +64,8 @@ fn decrypt_requires_matching_external_calibration() {
 
     let err = internal::decrypt(request).expect_err("calibration should mismatch");
     match err {
-        WasmError::Packet(PacketError::Integrity(message)) => {
-            assert!(message.contains("coord digest mismatch"));
-        }
         WasmError::Packet(PacketError::Invalid(message)) => {
-            assert!(message.contains("salt mismatch"));
+            assert!(message.contains("calibration id mismatch"));
         }
         other => panic!("unexpected error variant: {other}"),
     }
