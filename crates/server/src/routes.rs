@@ -21,7 +21,8 @@ use aunsorm_jwt::{Audience, Claims, JwtError, VerificationOptions};
 
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
-use crate::state::{auth_ttl, ServerState, SfuStepOutcome, TransparencySnapshot};
+use crate::state::{auth_ttl, ServerState, SfuStepOutcome, TransparencyTreeSnapshot};
+use crate::transparency::TransparencySnapshot as LedgerTransparencySnapshot;
 use serde_json::Value;
 
 pub fn build_router(state: Arc<ServerState>) -> Router {
@@ -334,8 +335,8 @@ struct TransparencyResponse {
     records: Vec<TransparencyRecordBody>,
 }
 
-impl From<TransparencySnapshot> for TransparencyResponse {
-    fn from(snapshot: TransparencySnapshot) -> Self {
+impl From<TransparencyTreeSnapshot> for TransparencyResponse {
+    fn from(snapshot: TransparencyTreeSnapshot) -> Self {
         let latest_sequence = snapshot.latest_sequence();
         let records = snapshot
             .records
@@ -351,10 +352,20 @@ impl From<TransparencySnapshot> for TransparencyResponse {
     }
 }
 
+async fn transparency(
+    State(state): State<Arc<ServerState>>,
+) -> Result<Json<LedgerTransparencySnapshot>, ApiError> {
+    let snapshot = state
+        .transparency_ledger_snapshot()
+        .await
+        .map_err(|err| ApiError::server_error(format!("Şeffaflık günlüğü alınamadı: {err}")))?;
+    Ok(Json(snapshot))
+}
+
 async fn transparency_tree(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<TransparencyResponse>, ApiError> {
-    let snapshot = state.transparency_snapshot().await;
+    let snapshot = state.transparency_tree_snapshot().await;
     Ok(Json(TransparencyResponse::from(snapshot)))
 }
 
