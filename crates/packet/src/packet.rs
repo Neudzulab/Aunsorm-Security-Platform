@@ -239,6 +239,9 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
             "session field present in one-shot packet",
         ));
     }
+    if packet.header.calib_id != params.calibration.id.as_str() {
+        return Err(PacketError::Invalid("calibration id mismatch"));
+    }
     if !packet
         .header
         .salts
@@ -457,7 +460,7 @@ mod tests {
         };
         let err = decrypt_one_shot(&wrong_params).expect_err("should fail");
 
-        assert!(matches!(err, PacketError::Integrity(_)));
+        assert!(matches!(err, PacketError::Invalid(_)));
     }
 
     #[cfg(feature = "aes-siv")]
