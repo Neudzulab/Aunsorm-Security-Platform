@@ -11,6 +11,9 @@ mod packet;
 mod session;
 mod util;
 
+#[cfg(feature = "hpke")]
+pub mod hpke;
+
 pub use crate::error::PacketError;
 pub use crate::header::{
     AeadAlgorithm, Header, HeaderAead, HeaderKem, HeaderProfile, HeaderSalts, HeaderSession,

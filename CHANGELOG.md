@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/` altında mdBook tabanlı mimari rehber ve operasyonel test dökümantasyonu.
 - Nightly zamanlanmış iş akışı fuzz korpuslarını ısıtıp `cargo fuzz cmin` ile minimize
   ederek indirilebilir artefakt üretir.
+- `aunsorm-packet` içinde X25519/HKDF-SHA256 tabanlı HPKE modu (`hpke` özelliği)
+  ve exporter secret türetimi için yeni yardımcı API'ler.
 ### Planned
 - Uzak KMS sağlayıcıları (GCP/Azure) için canlı soak test harness'i.
 

@@ -67,6 +67,12 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] OpenTelemetry temelli gözlemlenebilirlik ve yapılandırılabilir logging ekle.
 - [x] GitHub Actions matris CI'sini (fmt/clippy/test/fuzz/bench/audit/deny) etkinleştir.
 
+## Bonus (Vizyon)
+- [x] HPKE modu (opsiyonel, geleceğe hazır).
+- [ ] WebTransport/DataChannel E2EE adaptor örneği.
+- [ ] Kilitli bellek / SGX / SEV entegrasyon planı.
+- [ ] Key transparency ve transcript hash (gelecek sürüm).
+
 ## Test, Fuzz ve Benchmark Çalıştırma
 
 Aşağıdaki komutlar test/fuzz/bench altyapısını kullanıma hazır hale getirir:

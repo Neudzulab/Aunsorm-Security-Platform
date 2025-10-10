@@ -9,6 +9,7 @@ description = "Aunsorm paket formatı, AEAD şifreleme ve oturum ratchet entegra
 [features]
 default = []
 aes-siv = ["dep:aes-siv"]
+hpke = ["dep:hpke"]
 
 [dependencies]
 aunsorm-core = { path = "../core" }
@@ -28,8 +29,10 @@ aes = { workspace = true }
 base64 = { workspace = true }
 subtle = { workspace = true }
 aes-siv = { workspace = true, optional = true }
+hpke = { workspace = true, optional = true }
 
 [dev-dependencies]
 hex = { workspace = true }
 aunsorm-pqc = { path = "../pqc" }
 proptest = "1"
+rand_chacha = { workspace = true }
