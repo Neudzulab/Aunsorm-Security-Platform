@@ -24,7 +24,7 @@
   },
   {
     "name": "wrong_calibration_text",
-    "description": "Decrypting with an incorrect calibration text must fail with a calibration id mismatch.",
+    "description": "Decrypting with an incorrect calibration text must fail with a coord digest mismatch.",
     "profile": "low",
     "aead": "aes-gcm",
     "strict": false,
@@ -43,7 +43,7 @@
     "pqc_label": null,
     "expected": {
       "result": "error",
-      "contains": "calibration id mismatch"
+      "contains": "coord digest mismatch"
     }
   },
   {

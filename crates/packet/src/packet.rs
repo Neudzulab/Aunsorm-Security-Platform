@@ -239,9 +239,6 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
             "session field present in one-shot packet",
         ));
     }
-    if packet.header.calib_id != params.calibration.id.as_str() {
-        return Err(PacketError::Invalid("calibration id mismatch"));
-    }
     if !packet
         .header
         .salts
