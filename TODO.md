@@ -15,4 +15,4 @@
 - [ ] Harici KMS/HSM sağlayıcıları için ek conformance fixture'ları ve sertifikasyon raporlarını üret. (Bkz. docs/src/appendix/roadmap.md.)
 
 ## Dokümantasyon ve İzleme
-- [ ] Yol haritasındaki mdBook otomasyon maddesini (artık tamamlandı) güncel durumu yansıtacak şekilde revize et. (Bkz. docs/src/appendix/roadmap.md ile CHANGELOG.md.)
+- [x] Yol haritasındaki mdBook otomasyon maddesini (artık tamamlandı) güncel durumu yansıtacak şekilde revize et. (Bkz. docs/src/appendix/roadmap.md ile CHANGELOG.md.)
