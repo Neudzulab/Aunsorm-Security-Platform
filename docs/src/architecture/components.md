@@ -27,6 +27,9 @@
 - CLI, server ve wasm katmanları aynı `SessionMetadata` sözleşmesini kullanarak
   koordinatları paylaşır.
 - OpenTelemetry entegrasyonu `AUNSORM_OTEL_ENDPOINT` üzerinden yapılandırılabilir.
+- OAuth sunucusu, `GET /oauth/transparency` uç noktasıyla JWK yayınlarını ve
+  token üretimlerini hash zinciri olarak raporlayarak transcript doğrulaması
+  sağlar.
 
 ## Dokümantasyon ve Gözlemlenebilirlik
 
