@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-server` başlangıç JWKS yayımını `KeyTransparencyLog` içine
   kaydedip `/transparency/tree` uç noktası üzerinden Merkle benzeri ağaç
   başlığını JSON olarak sunar.
+### Fixed
+- `aunsorm-core` calibration metni artık NFC normalizasyonu ve boşluk daraltması
+  uygulayarak aynı anlamlı içeriğe sahip girdiler için farklı kimliklerin
+  üretilmesini engeller.
 ### Planned
 - Uzak KMS sağlayıcıları (GCP/Azure) için canlı soak test harness'i.
 
