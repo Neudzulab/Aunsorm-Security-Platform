@@ -62,8 +62,8 @@ async fn pkce_flow_succeeds() {
     let digest = Sha256::digest(code_verifier.as_bytes());
     let code_challenge = URL_SAFE_NO_PAD.encode(digest);
     let begin_payload = json!({
-        "username": "alice",
-        "client_id": "demo-client",
+        "username": "  alice  ",
+        "client_id": "  demo-client  ",
         "code_challenge": code_challenge,
         "code_challenge_method": "S256"
     });
@@ -129,6 +129,7 @@ async fn pkce_flow_succeeds() {
     let introspect: IntrospectResponse = serde_json::from_slice(&body).expect("introspect");
     assert!(introspect.active);
     assert_eq!(introspect.username.as_deref(), Some("alice"));
+    assert_eq!(introspect.client_id.as_deref(), Some("demo-client"));
 
     let metrics_response = app
         .clone()
@@ -255,6 +256,65 @@ async fn reject_non_s256_method() {
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn reject_blank_identity_fields() {
+    let state = setup_state();
+    let app = build_router(state);
+    let verifier = "identity-verifier-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let digest = Sha256::digest(verifier.as_bytes());
+    let code_challenge = URL_SAFE_NO_PAD.encode(digest);
+    let payloads = vec![
+        json!({
+            "username": "   ",
+            "client_id": "demo-client",
+            "code_challenge": code_challenge.clone(),
+            "code_challenge_method": "S256"
+        }),
+        json!({
+            "username": "alice",
+            "client_id": "\n\tdemo",
+            "code_challenge": code_challenge.clone(),
+            "code_challenge_method": "S256"
+        }),
+        json!({
+            "username": "alice\u{0007}",
+            "client_id": "demo-client",
+            "code_challenge": code_challenge.clone(),
+            "code_challenge_method": "S256"
+        }),
+        json!({
+            "username": "alice",
+            "client_id": "   ",
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256"
+        }),
+    ];
+
+    for payload in payloads {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/oauth/begin-auth")
+                    .header("content-type", "application/json")
+                    .body(Body::from(payload.to_string()))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let error: serde_json::Value = serde_json::from_slice(&body).expect("error json");
+        assert_eq!(
+            error.get("error").and_then(|value| value.as_str()),
+            Some("invalid_request")
+        );
+    }
 }
 
 #[tokio::test]

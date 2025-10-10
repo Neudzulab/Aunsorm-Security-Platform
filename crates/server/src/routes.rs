@@ -83,13 +83,38 @@ async fn begin_auth(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<BeginAuthRequest>,
 ) -> Result<Json<BeginAuthResponse>, ApiError> {
-    if payload.code_challenge_method != "S256" {
+    let BeginAuthRequest {
+        username,
+        client_id,
+        code_challenge,
+        code_challenge_method,
+    } = payload;
+
+    if code_challenge_method != "S256" {
         return Err(ApiError::invalid_request(
             "PKCE yöntemi yalnızca S256 desteklenir",
         ));
     }
+    if username.chars().any(char::is_control) {
+        return Err(ApiError::invalid_request(
+            "kullanıcı adı kontrol karakteri içeremez",
+        ));
+    }
+    let sanitized_username = username.trim();
+    if sanitized_username.is_empty() {
+        return Err(ApiError::invalid_request("kullanıcı adı boş bırakılamaz"));
+    }
+    if client_id.chars().any(char::is_control) {
+        return Err(ApiError::invalid_request(
+            "client_id kontrol karakteri içeremez",
+        ));
+    }
+    let sanitized_client_id = client_id.trim();
+    if sanitized_client_id.is_empty() {
+        return Err(ApiError::invalid_request("client_id boş bırakılamaz"));
+    }
     if URL_SAFE_NO_PAD
-        .decode(&payload.code_challenge)
+        .decode(&code_challenge)
         .map(|bytes| bytes.len())
         .unwrap_or_default()
         != Sha256::output_size()
@@ -99,7 +124,11 @@ async fn begin_auth(
         ));
     }
     let auth_id = state
-        .register_auth_request(payload.username, payload.client_id, payload.code_challenge)
+        .register_auth_request(
+            sanitized_username.to_owned(),
+            sanitized_client_id.to_owned(),
+            code_challenge,
+        )
         .await;
     Ok(Json(BeginAuthResponse {
         auth_request_id: auth_id,
