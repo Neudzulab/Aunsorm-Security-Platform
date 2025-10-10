@@ -149,7 +149,10 @@ proptest! {
                 packet: &encoded,
             };
             let result = decrypt_one_shot(&decrypt_params);
-            prop_assert!(matches!(result, Err(PacketError::Invalid(_))));
+            prop_assert!(matches!(
+                result,
+                Err(PacketError::Integrity(message)) if message == "coord digest mismatch"
+            ));
         }
     }
 }
