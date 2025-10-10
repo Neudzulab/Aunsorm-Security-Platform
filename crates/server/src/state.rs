@@ -4,8 +4,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use aunsorm_core::{
     transparency::{
-        unix_timestamp, KeyTransparencyLog, TransparencyEvent as CoreTransparencyEvent,
-        TransparencyRecord,
+        unix_timestamp, KeyTransparencyLog, TransparencyError,
+        TransparencyEvent as CoreTransparencyEvent, TransparencyRecord,
     },
     CoreError, SessionRatchet,
 };
@@ -695,5 +695,13 @@ impl TransparencyTreeSnapshot {
     #[must_use]
     pub fn latest_sequence(&self) -> u64 {
         self.records.last().map_or(0, |record| record.sequence)
+    }
+
+    /// Transkript karmasını döndürür.
+    pub fn transcript_hash(&self) -> Result<Option<[u8; 32]>, TransparencyError> {
+        if self.records.is_empty() {
+            return Ok(None);
+        }
+        KeyTransparencyLog::transcript_hash(&self.domain, &self.records).map(Some)
     }
 }

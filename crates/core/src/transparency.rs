@@ -268,6 +268,33 @@ impl KeyTransparencyLog {
         }
         Ok(())
     }
+
+    /// Kayıt dizisi için transkript karması üretir.
+    ///
+    /// Fonksiyon önce zincirin bütünlüğünü `verify_chain` ile doğrular. Alan adı
+    /// uyuşmazlığı veya kayıtların bozulması durumunda hata döner.
+    ///
+    /// # Errors
+    /// Alan adı uyuşmazsa veya zincirde tahrifat tespit edilirse
+    /// `TransparencyError` döndürülür.
+    pub fn transcript_hash(
+        domain: &str,
+        records: &[TransparencyRecord],
+    ) -> Result<[u8; 32], TransparencyError> {
+        if records.is_empty() {
+            return Ok([0_u8; 32]);
+        }
+        Self::verify_chain(domain, records)?;
+        let mut hasher = Sha256::new();
+        hasher.update(b"Aunsorm/1.01/key-transparency/transcript");
+        hash_with_length(&mut hasher, domain.as_bytes());
+        for record in records {
+            hasher.update(record.sequence.to_be_bytes());
+            hasher.update(record.timestamp.to_be_bytes());
+            hash_with_length(&mut hasher, &record.tree_hash);
+        }
+        Ok(hasher.finalize().into())
+    }
 }
 
 /// UNIX zaman damgasını saniye cinsinden döndürür.
@@ -290,5 +317,51 @@ impl fmt::Display for TransparencyRecord {
             self.event.action.label(),
             self.event.key_id
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{KeyTransparencyLog, TransparencyEvent};
+
+    #[test]
+    fn transcript_hash_is_deterministic() {
+        let mut log = KeyTransparencyLog::new("aunsorm-demo");
+        let record1 = log
+            .append(TransparencyEvent::publish(
+                "key-1",
+                [1_u8, 2, 3, 4],
+                1,
+                Some("first".to_string()),
+            ))
+            .expect("record");
+        let record2 = log
+            .append(TransparencyEvent::publish(
+                "key-2",
+                [5_u8, 6, 7, 8],
+                2,
+                Some("second".to_string()),
+            ))
+            .expect("record");
+        let log_entries = vec![record1, record2];
+        let hash_a = KeyTransparencyLog::transcript_hash("aunsorm-demo", &log_entries).unwrap();
+        let hash_b = KeyTransparencyLog::transcript_hash("aunsorm-demo", &log_entries).unwrap();
+        assert_eq!(hash_a, hash_b);
+    }
+
+    #[test]
+    fn transcript_hash_detects_tampering() {
+        let mut log = KeyTransparencyLog::new("aunsorm-demo");
+        log.append(TransparencyEvent::publish(
+            "key-1",
+            [1_u8, 2, 3, 4],
+            1,
+            None,
+        ))
+        .expect("record");
+        let mut records = log.records().to_vec();
+        records[0].timestamp += 1;
+        let result = KeyTransparencyLog::transcript_hash("aunsorm-demo", &records);
+        assert!(result.is_err());
     }
 }

@@ -332,23 +332,34 @@ struct TransparencyResponse {
     domain: String,
     tree_head: String,
     latest_sequence: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    transcript_hash: Option<String>,
     records: Vec<TransparencyRecordBody>,
 }
 
-impl From<TransparencyTreeSnapshot> for TransparencyResponse {
-    fn from(snapshot: TransparencyTreeSnapshot) -> Self {
+impl TransparencyResponse {
+    fn from_snapshot(snapshot: TransparencyTreeSnapshot) -> Result<Self, ApiError> {
         let latest_sequence = snapshot.latest_sequence();
+        let transcript_hash = snapshot
+            .transcript_hash()
+            .map_err(|err| {
+                ApiError::server_error(
+                    format!("Şeffaflık transkript karması doğrulanamadı: {err}",),
+                )
+            })?
+            .map(hex_encode);
         let records = snapshot
             .records
             .into_iter()
             .map(TransparencyRecordBody::from)
             .collect();
-        Self {
+        Ok(Self {
             domain: snapshot.domain,
             tree_head: hex_encode(snapshot.head),
             latest_sequence,
+            transcript_hash,
             records,
-        }
+        })
     }
 }
 
@@ -366,7 +377,8 @@ async fn transparency_tree(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<TransparencyResponse>, ApiError> {
     let snapshot = state.transparency_tree_snapshot().await;
-    Ok(Json(TransparencyResponse::from(snapshot)))
+    let response = TransparencyResponse::from_snapshot(snapshot)?;
+    Ok(Json(response))
 }
 
 async fn jwks(State(state): State<Arc<ServerState>>) -> Json<aunsorm_jwt::Jwks> {

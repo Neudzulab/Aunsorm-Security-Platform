@@ -21,6 +21,8 @@ struct TransparencyTree {
     domain: String,
     tree_head: String,
     latest_sequence: u64,
+    #[serde(default)]
+    transcript_hash: Option<String>,
     records: Vec<TransparencyTreeRecord>,
 }
 
@@ -200,7 +202,7 @@ async fn pkce_flow_succeeds() {
 #[tokio::test]
 async fn transparency_endpoint_returns_snapshot() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(Arc::clone(&state));
     let response = app
         .oneshot(
             Request::builder()
@@ -223,6 +225,12 @@ async fn transparency_endpoint_returns_snapshot() {
     assert_eq!(first.key_id, "test");
     assert_eq!(first.action, "publish");
     assert!(first.timestamp > 0);
+    let snapshot = state.transparency_tree_snapshot().await;
+    let expected_hash = snapshot
+        .transcript_hash()
+        .expect("transcript hash")
+        .map(hex::encode);
+    assert_eq!(tree.transcript_hash, expected_hash);
 }
 
 #[tokio::test]
