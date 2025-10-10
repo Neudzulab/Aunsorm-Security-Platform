@@ -68,8 +68,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] GitHub Actions matris CI'sini (fmt/clippy/test/fuzz/bench/audit/deny) etkinleştir.
 
 ## Bonus (Vizyon)
-- [x] HPKE modu (opsiyonel, geleceğe hazır).
-- [ ] WebTransport/DataChannel E2EE adaptor örneği.
+- [x] WebTransport/DataChannel E2EE adaptor örneği.
 - [ ] Kilitli bellek / SGX / SEV entegrasyon planı.
 - [ ] Key transparency ve transcript hash (gelecek sürüm).
 
@@ -123,4 +122,5 @@ Mevcut örnekler aşağıdaki komutlarla çalıştırılabilir:
 cargo run --example encrypt_decrypt
 cargo run --example session_roundtrip
 cargo run --example jwt_flow
+cargo run --example webtransport_adapter
 ```
