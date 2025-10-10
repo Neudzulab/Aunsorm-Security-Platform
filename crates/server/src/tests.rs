@@ -6,7 +6,7 @@ use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
 use tower::util::ServiceExt;
 
-use aunsorm_jwt::Ed25519KeyPair;
+use aunsorm_jwt::{Ed25519KeyPair, Jwk};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Deserialize;
 use serde_json::json;
@@ -51,6 +51,7 @@ fn setup_state() -> Arc<ServerState> {
     Arc::new(ServerState::try_new(config).expect("state"))
 }
 
+#[allow(clippy::too_many_lines)]
 #[tokio::test]
 async fn pkce_flow_succeeds() {
     let state = setup_state();
@@ -128,6 +129,7 @@ async fn pkce_flow_succeeds() {
     assert_eq!(introspect.username.as_deref(), Some("alice"));
 
     let metrics_response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("GET")
@@ -144,6 +146,55 @@ async fn pkce_flow_succeeds() {
     let metrics_text = String::from_utf8(metrics_body.to_vec()).expect("metrics str");
     assert!(metrics_text.contains("aunsorm_active_tokens"));
     assert!(metrics_text.contains("aunsorm_sfu_contexts"));
+
+    let transparency_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/oauth/transparency")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("transparency");
+    assert_eq!(transparency_response.status(), StatusCode::OK);
+    let transparency_body = to_bytes(transparency_response.into_body(), usize::MAX)
+        .await
+        .expect("transparency body");
+    let transparency: TransparencySnapshotResponse =
+        serde_json::from_slice(&transparency_body).expect("transparency json");
+    assert!(transparency.transcript_hash.is_some());
+    assert!(transparency.entries.len() >= 2);
+    assert!(matches!(
+        transparency.entries.first().map(|entry| &entry.event),
+        Some(TransparencyEventResponse::KeyPublished { .. })
+    ));
+    let last_hash = transparency.entries.last().map(|entry| entry.hash.clone());
+    assert_eq!(last_hash, transparency.transcript_hash);
+    let token_entry = transparency
+        .entries
+        .iter()
+        .find(|entry| matches!(entry.event, TransparencyEventResponse::TokenIssued { .. }))
+        .expect("token entry");
+    let expected_subject_hash = URL_SAFE_NO_PAD.encode(Sha256::digest(b"alice"));
+    match &token_entry.event {
+        TransparencyEventResponse::TokenIssued {
+            jti,
+            subject_hash,
+            audience,
+            expires_at,
+        } => {
+            assert_eq!(jti, introspect.jti.as_ref().expect("jti"));
+            assert_eq!(
+                subject_hash.as_deref(),
+                Some(expected_subject_hash.as_str())
+            );
+            assert_eq!(audience.as_deref(), Some("\"aunsorm-audience\""));
+            assert_eq!(*expires_at, introspect.exp.expect("exp"));
+        }
+        TransparencyEventResponse::KeyPublished { .. } => panic!("unexpected event kind"),
+    }
 }
 
 #[tokio::test]
@@ -298,10 +349,55 @@ struct TokenResponse {
     expires_in: u64,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct IntrospectResponse {
     active: bool,
+    scope: Option<String>,
+    client_id: Option<String>,
     username: Option<String>,
+    token_type: Option<String>,
+    exp: Option<u64>,
+    iat: Option<u64>,
+    iss: Option<String>,
+    aud: Option<String>,
+    sub: Option<String>,
+    jti: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct TransparencySnapshotResponse {
+    transcript_hash: Option<String>,
+    entries: Vec<TransparencyEntryResponse>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct TransparencyEntryResponse {
+    index: u64,
+    timestamp: u64,
+    event: TransparencyEventResponse,
+    hash: String,
+    #[serde(default)]
+    previous_hash: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum TransparencyEventResponse {
+    KeyPublished {
+        jwk: Jwk,
+    },
+    TokenIssued {
+        jti: String,
+        #[serde(default)]
+        subject_hash: Option<String>,
+        #[serde(default)]
+        audience: Option<String>,
+        expires_at: u64,
+    },
 }
 
 #[derive(Debug, Deserialize)]

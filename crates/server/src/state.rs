@@ -12,6 +12,7 @@ use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::error::ServerError;
+use crate::transparency::{TransparencyEvent, TransparencyLedger, TransparencySnapshot};
 
 const AUTH_TTL: Duration = Duration::from_secs(300);
 const SFU_CONTEXT_TTL: Duration = Duration::from_secs(900);
@@ -484,10 +485,12 @@ impl ServerState {
         } = config;
         let signer = JwtSigner::new(key_pair.clone());
         let public = key_pair.public_key();
-        let verifier = JwtVerifier::new(vec![public.clone()]);
+        let public_jwk = public.to_jwk();
+        let verifier = JwtVerifier::new(vec![public]);
         let jwks = Jwks {
-            keys: vec![public.to_jwk()],
+            keys: vec![public_jwk.clone()],
         };
+        let ledger_backend = ledger.clone();
         let ledger = TokenLedger::new(ledger)?;
         let mut transparency = KeyTransparencyLog::new("aunsorm-server");
         let timestamp = unix_timestamp(SystemTime::now())?;
@@ -566,13 +569,22 @@ impl ServerState {
         self.auth_store.len(SystemTime::now()).await
     }
 
-    /// Aktif belirteç defterine bir kayıt ekler.
+    /// Aktif belirteç defterine bir kayıt ekler ve şeffaflık günlüğüne yazar.
     ///
     /// # Errors
     ///
-    /// `SQLite` işlemi veya bellek kilidi başarısız olursa `ServerError` döner.
-    pub async fn record_token(&self, jti: &str, expires_at: SystemTime) -> Result<(), ServerError> {
-        self.ledger.insert(jti, expires_at).await
+    /// `SQLite` işlemi, bellek kilidi veya günlük kaydı başarısız olursa `ServerError` döner.
+    pub async fn record_token(
+        &self,
+        jti: &str,
+        expires_at: SystemTime,
+        subject: Option<&str>,
+        audience: Option<&str>,
+    ) -> Result<(), ServerError> {
+        self.ledger.insert(jti, expires_at).await?;
+        self.transparency
+            .record_token(jti, subject, audience, expires_at)
+            .await
     }
 
     /// Belirtilen `jti` değerinin aktif olup olmadığını döndürür.
@@ -600,6 +612,15 @@ impl ServerState {
     /// Depo sorgusu başarısız olursa `ServerError` döner.
     pub async fn active_token_count(&self, now: SystemTime) -> Result<usize, ServerError> {
         self.ledger.count_active(now).await
+    }
+
+    /// Şeffaflık günlüğünün anlık görüntüsünü döndürür.
+    ///
+    /// # Errors
+    ///
+    /// Günlük sorgusu sırasında hata oluşursa `ServerError` döner.
+    pub async fn transparency_snapshot(&self) -> Result<TransparencySnapshot, ServerError> {
+        self.transparency.snapshot().await
     }
 
     /// SFU entegrasyonu için yeni bir bağlam oluşturur.
