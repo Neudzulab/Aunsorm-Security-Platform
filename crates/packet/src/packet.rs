@@ -239,9 +239,6 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
             "session field present in one-shot packet",
         ));
     }
-    if packet.header.calib_id != params.calibration.id.as_str() {
-        return Err(PacketError::Invalid("calibration id mismatch"));
-    }
     if !packet
         .header
         .salts
@@ -263,6 +260,9 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
     )?;
 
     if packet.header.coord_digest != coord_digest(&coord) {
+        return Err(PacketError::Integrity("coord digest mismatch"));
+    }
+    if packet.header.calib_id != params.calibration.id.as_str() {
         return Err(PacketError::Integrity("coord digest mismatch"));
     }
 
@@ -460,7 +460,10 @@ mod tests {
         };
         let err = decrypt_one_shot(&wrong_params).expect_err("should fail");
 
-        assert!(matches!(err, PacketError::Invalid(_)));
+        assert!(matches!(
+            err,
+            PacketError::Integrity(message) if message == "coord digest mismatch"
+        ));
     }
 
     #[cfg(feature = "aes-siv")]
