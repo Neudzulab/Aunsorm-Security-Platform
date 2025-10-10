@@ -68,6 +68,8 @@ pub fn init_tracing(service_name: &str) -> Result<TelemetryGuard, TelemetryError
     let filter = env::var("AUNSORM_LOG")
         .or_else(|_| env::var("RUST_LOG"))
         .unwrap_or_else(|_| "info".to_string());
+    #[cfg(not(feature = "otel"))]
+    let _ = service_name;
     #[cfg(feature = "otel")]
     let otel_enabled = {
         if let Some((layer, provider)) = otel_layer(service_name)? {

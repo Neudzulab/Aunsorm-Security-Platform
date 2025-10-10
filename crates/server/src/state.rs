@@ -3,7 +3,10 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use aunsorm_core::{
-    transparency::{unix_timestamp, KeyTransparencyLog, TransparencyEvent, TransparencyRecord},
+    transparency::{
+        unix_timestamp, KeyTransparencyLog, TransparencyEvent as CoreTransparencyEvent,
+        TransparencyRecord,
+    },
     CoreError, SessionRatchet,
 };
 use aunsorm_jwt::{Jwks, JwtSigner, JwtVerifier};
@@ -12,7 +15,10 @@ use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::error::ServerError;
-use crate::transparency::{TransparencyEvent, TransparencyLedger, TransparencySnapshot};
+use crate::transparency::{
+    TransparencyEvent as LedgerTransparencyEvent, TransparencyLedger,
+    TransparencySnapshot as LedgerTransparencySnapshot,
+};
 
 const AUTH_TTL: Duration = Duration::from_secs(300);
 const SFU_CONTEXT_TTL: Duration = Duration::from_secs(900);
@@ -464,7 +470,8 @@ pub struct ServerState {
     auth_store: AuthStore,
     ledger: TokenLedger,
     sfu_store: SfuStore,
-    transparency: RwLock<KeyTransparencyLog>,
+    transparency_tree: RwLock<KeyTransparencyLog>,
+    transparency_ledger: TransparencyLedger,
 }
 
 impl ServerState {
@@ -486,21 +493,25 @@ impl ServerState {
         let signer = JwtSigner::new(key_pair.clone());
         let public = key_pair.public_key();
         let public_jwk = public.to_jwk();
-        let verifier = JwtVerifier::new(vec![public]);
+        let verifier = JwtVerifier::new(vec![public.clone()]);
         let jwks = Jwks {
             keys: vec![public_jwk.clone()],
         };
-        let ledger_backend = ledger.clone();
+        let transparency_backend = ledger.clone();
         let ledger = TokenLedger::new(ledger)?;
-        let mut transparency = KeyTransparencyLog::new("aunsorm-server");
+        let mut transparency_tree = KeyTransparencyLog::new("aunsorm-server");
         let timestamp = unix_timestamp(SystemTime::now())?;
-        let publish = TransparencyEvent::publish(
+        let publish = CoreTransparencyEvent::publish(
             key_pair.kid().to_owned(),
             public.verifying_key().as_bytes(),
             timestamp,
             Some("initial-jwks".to_string()),
         );
-        transparency.append(publish)?;
+        transparency_tree.append(publish)?;
+        let transparency_ledger = TransparencyLedger::new(
+            transparency_backend,
+            vec![LedgerTransparencyEvent::key_published(public_jwk)],
+        )?;
         Ok(Self {
             issuer,
             audience,
@@ -512,7 +523,8 @@ impl ServerState {
             auth_store: AuthStore::new(),
             ledger,
             sfu_store: SfuStore::new(),
-            transparency: RwLock::new(transparency),
+            transparency_tree: RwLock::new(transparency_tree),
+            transparency_ledger,
         })
     }
 
@@ -582,9 +594,10 @@ impl ServerState {
         audience: Option<&str>,
     ) -> Result<(), ServerError> {
         self.ledger.insert(jti, expires_at).await?;
-        self.transparency
+        self.transparency_ledger
             .record_token(jti, subject, audience, expires_at)
-            .await
+            .await?;
+        Ok(())
     }
 
     /// Belirtilen `jti` değerinin aktif olup olmadığını döndürür.
@@ -614,13 +627,15 @@ impl ServerState {
         self.ledger.count_active(now).await
     }
 
-    /// Şeffaflık günlüğünün anlık görüntüsünü döndürür.
+    /// Şeffaflık günlüğünün (token kayıtları) anlık görüntüsünü döndürür.
     ///
     /// # Errors
     ///
     /// Günlük sorgusu sırasında hata oluşursa `ServerError` döner.
-    pub async fn transparency_snapshot(&self) -> Result<TransparencySnapshot, ServerError> {
-        self.transparency.snapshot().await
+    pub async fn transparency_ledger_snapshot(
+        &self,
+    ) -> Result<LedgerTransparencySnapshot, ServerError> {
+        self.transparency_ledger.snapshot().await
     }
 
     /// SFU entegrasyonu için yeni bir bağlam oluşturur.
@@ -654,10 +669,10 @@ impl ServerState {
         self.sfu_store.count(now).await
     }
 
-    /// Şeffaflık defterinin anlık görüntüsünü döndürür.
-    pub async fn transparency_snapshot(&self) -> TransparencySnapshot {
-        let guard = self.transparency.read().await;
-        TransparencySnapshot {
+    /// Şeffaflık ağacının anlık görüntüsünü döndürür.
+    pub async fn transparency_tree_snapshot(&self) -> TransparencyTreeSnapshot {
+        let guard = self.transparency_tree.read().await;
+        TransparencyTreeSnapshot {
             domain: guard.domain().to_owned(),
             head: guard.tree_head(),
             records: guard.records().to_vec(),
@@ -670,13 +685,13 @@ pub const fn auth_ttl() -> Duration {
 }
 
 #[derive(Debug, Clone)]
-pub struct TransparencySnapshot {
+pub struct TransparencyTreeSnapshot {
     pub domain: String,
     pub head: [u8; 32],
     pub records: Vec<TransparencyRecord>,
 }
 
-impl TransparencySnapshot {
+impl TransparencyTreeSnapshot {
     #[must_use]
     pub fn latest_sequence(&self) -> u64 {
         self.records.last().map_or(0, |record| record.sequence)
