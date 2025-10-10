@@ -17,7 +17,8 @@ use aunsorm_jwt::{Audience, Claims, JwtError, VerificationOptions};
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
 use crate::state::{auth_ttl, ServerState, SfuStepOutcome};
-use serde_json::Value;
+use crate::transparency::TransparencySnapshot;
+use serde_json::{self, Value};
 
 pub fn build_router(state: Arc<ServerState>) -> Router {
     Router::new()
@@ -25,6 +26,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/oauth/token", post(exchange_token))
         .route("/oauth/introspect", post(introspect))
         .route("/oauth/jwks.json", get(jwks))
+        .route("/oauth/transparency", get(transparency))
         .route("/health", get(health))
         .route("/metrics", get(metrics))
         .route("/sfu/context", post(create_sfu_context))
@@ -148,6 +150,15 @@ async fn exchange_token(
     claims
         .extra
         .insert("client_id".to_string(), Value::String(payload.client_id));
+    let subject_for_log = claims.subject.clone();
+    let audience_for_log = claims
+        .audience
+        .clone()
+        .map(|aud| {
+            serde_json::to_string(&aud)
+                .map_err(|err| ApiError::server_error(format!("audience serileştirilemedi: {err}")))
+        })
+        .transpose()?;
     let access_token = state
         .signer()
         .sign(&claims)
@@ -160,7 +171,12 @@ async fn exchange_token(
         .expiration
         .ok_or_else(|| ApiError::server_error("exp claim'i eksik"))?;
     state
-        .record_token(&jti, expires_at)
+        .record_token(
+            &jti,
+            expires_at,
+            subject_for_log.as_deref(),
+            audience_for_log.as_deref(),
+        )
         .await
         .map_err(|err| ApiError::server_error(format!("Token kaydı başarısız: {err}")))?;
 
@@ -261,6 +277,16 @@ async fn introspect(
             "Token doğrulanamadı: {err}"
         ))),
     }
+}
+
+async fn transparency(
+    State(state): State<Arc<ServerState>>,
+) -> Result<Json<TransparencySnapshot>, ApiError> {
+    let snapshot = state
+        .transparency_snapshot()
+        .await
+        .map_err(|err| ApiError::server_error(format!("Şeffaflık günlüğü alınamadı: {err}")))?;
+    Ok(Json(snapshot))
 }
 
 async fn jwks(State(state): State<Arc<ServerState>>) -> Json<aunsorm_jwt::Jwks> {

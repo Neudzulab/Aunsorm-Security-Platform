@@ -8,6 +8,7 @@ EXTERNAL kalibrasyon bağlamını zorunlu kılan JWT üretimini ve JTI tabanlı 
 - `/oauth/token`: Yetkilendirme isteğini koda çevirir ve Ed25519 imzalı erişim belirteci üretir.
 - `/oauth/introspect`: Erişim belirtecinin geçerliliğini kontrol eder.
 - `/oauth/jwks.json`: Sunucunun JWKS anahtar kümesini döndürür.
+- `/oauth/transparency`: Yayınlanan anahtarlar ve verilen belirteçler için transcript özetini döndürür.
 - `/health`: Durum kontrolü.
 - `/metrics`: Temel metrikler (bekleyen yetkilendirme istekleri ve aktif belirteç sayısı).
 - `/sfu/context`: Zasian SFU gibi ortamlar için uçtan uca şifreleme hazır oturum bağlamı üretir.

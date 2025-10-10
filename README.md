@@ -70,7 +70,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 ## Bonus (Vizyon)
 - [x] WebTransport/DataChannel E2EE adaptor örneği.
 - [x] Kilitli bellek / SGX / SEV entegrasyon planı.
-- [ ] Key transparency ve transcript hash (gelecek sürüm).
+- [x] Key transparency ve transcript hash doğrulamasını etkinleştir.
 
 ## Test, Fuzz ve Benchmark Çalıştırma
 
