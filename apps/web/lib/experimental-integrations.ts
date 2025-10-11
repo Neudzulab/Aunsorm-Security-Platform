@@ -165,9 +165,25 @@ function isLoopbackHost(value: string | undefined): boolean {
     return true;
   }
 
+  if (
+    hostname === '::' ||
+    hostname === '::0' ||
+    hostname === '0:0:0:0:0:0:0:0'
+  ) {
+    return true;
+  }
+
   if (hostname.startsWith('::ffff:')) {
     const mapped = hostname.slice('::ffff:'.length);
-    return mapped.startsWith('127.') || mapped === '127.0.0.1';
+    return (
+      mapped.startsWith('127.') ||
+      mapped === '127.0.0.1' ||
+      mapped === '0.0.0.0'
+    );
+  }
+
+  if (hostname === '0.0.0.0') {
+    return true;
   }
 
   if (hostname.startsWith('127.')) {

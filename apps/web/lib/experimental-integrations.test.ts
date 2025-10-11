@@ -57,6 +57,22 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(bareLoopback)).toBe('http://[::1]/aunsorm');
   });
 
+  it('treats unspecified IP addresses as loopback and forces http', () => {
+    const ipv4Unspecified = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: '0.0.0.0:4500',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(ipv4Unspecified)).toBe('http://0.0.0.0:4500/aunsorm');
+
+    const ipv6Unspecified = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: '[::]:5500',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(ipv6Unspecified)).toBe('http://[::]:5500/aunsorm');
+  });
+
   it('falls back to local defaults when nothing is set', () => {
     const env = {} satisfies NodeJS.ProcessEnv;
     expect(resolveAunsormBaseUrl(env)).toBe('http://localhost:50047/aunsorm');
