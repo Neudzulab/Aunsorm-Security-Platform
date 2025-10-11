@@ -1,0 +1,23 @@
+{
+  "provider": "pkcs11",
+  "key_id": "pkcs11-conformance-ed25519",
+  "certificate": {
+    "report_id": "AUN-KMS-2025-003",
+    "auditor": "Aunsorm QA Guild",
+    "issued": "2025-02-12",
+    "expires": "2026-02-12",
+    "summary": "SoftHSM-compatible PKCS#11 slot validated for deterministic Ed25519 operations."
+  },
+  "key_material": {
+    "private_key": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM=",
+    "public_key": "F8t5+ytBIPKx7GXkGY1uCLKOgT/rAeSkAIObheGAgM4=",
+    "kid": "6c8f8607dbe87077a62a2990ce07d94aaf749df76f87b98eb786a6d10f030765"
+  },
+  "messages": [
+    {
+      "name": "baseline",
+      "message": "QXVuc29ybSBLTVMgQ29uZm9ybWFuY2UgdjE=",
+      "signature": "LZz1VDmt/4VuqDYGIFoKGzkWdVjOdyP9J+KNu4hpoGwuEsqg8P1BFHpVyVhu460ZeRlr/9j6UJF/rq/tFd88CA=="
+    }
+  ]
+}

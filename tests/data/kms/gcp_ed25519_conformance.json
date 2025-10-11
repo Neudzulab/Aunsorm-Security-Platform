@@ -1,0 +1,25 @@
+{
+  "provider": "gcp",
+  "key_id": "gcp-conformance-ed25519",
+  "resource": "projects/aunsorm-test/locations/global/keyRings/conformance/cryptoKeys/ed25519/cryptoKeyVersions/1",
+  "base_url": "https://cloudkms.googleapis.com",
+  "certificate": {
+    "report_id": "AUN-KMS-2025-001",
+    "auditor": "Aunsorm QA Guild",
+    "issued": "2025-02-10",
+    "expires": "2026-02-10",
+    "summary": "GCP Cloud KMS Ed25519 signing endpoint validated via deterministic replay harness."
+  },
+  "key_material": {
+    "private_key": "ERERERERERERERERERERERERERERERERERERERERERE=",
+    "public_key": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc=",
+    "kid": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d"
+  },
+  "messages": [
+    {
+      "name": "baseline",
+      "message": "QXVuc29ybSBLTVMgQ29uZm9ybWFuY2UgdjE=",
+      "signature": "9QNciUgnwDstTQjz0XC7rnd/LpAPEmO/dPpRGI6xTnDt9XlK9usEYGjCV+d8nTNgmXrSFQ0YbSShQrhd9KpJCw=="
+    }
+  ]
+}
