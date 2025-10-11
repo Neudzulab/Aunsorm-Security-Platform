@@ -9,6 +9,7 @@
 - [x] mdBook dokümantasyonunun CI pipeline'ında otomatik derlenmesi ve artefakt olarak yayımlanması. (Bkz. CHANGELOG.md "Added" ve README.md "Belgeler".)
 
 ## Öncelikli Geliştirme İşleri
+- Tamamlanan maddeler revizyon kilidi altındadır; değişiklik gerekiyorsa aşağıdaki listede `Revize:` önekiyle yeni bir madde açın ve ilgili kilitli göreve referans verin.
 - [ ] Uzak KMS sağlayıcıları (GCP/Azure) için canlı soak test harness'ini tamamla. (Bkz. CHANGELOG.md "Planned".)
 - [ ] ML-DSA için üretim düzeyi sertleştirme ve istemci tarafı denetim listelerini genişlet. (Bkz. docs/src/appendix/roadmap.md.)
 - [ ] `cargo fuzz cmin` tabanlı uzun süreli fuzz korpusu minimizasyonunu nightly pipeline'a entegre et. (Bkz. docs/src/appendix/roadmap.md.)

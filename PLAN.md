@@ -20,6 +20,13 @@ CI: GitHub Actions; Linux/macOS/Windows matris; cargo fmt/clippy/test/fuzz (sani
 
 Sürümleme: semver, CHANGELOG.md (Keep a Changelog), CONTRIBUTING.md, SECURITY.md, CODE_OF_CONDUCT.md.
 
+### Revizyon Kilidi ve İş Yönetimi
+
+- README.md, TODO.md ve sprint listelerinde `[x]` veya "done" olarak işaretlenmiş teslimatlar **revizyon kilidi** altındadır.
+- Bu maddeler üzerinde değişiklik yapılması gerekiyorsa mevcut girdi değiştirilmez; bunun yerine ilgili bölümde `Revize:` önekiyle yeni bir madde açılır ve kilitli teslimata bağlantı verilir.
+- Revizyon maddesi, ilgili ajan ve kapsamlı gereksinimle birlikte PLAN.md'ye eklenmeli, tamamlanana kadar açık bırakılmalıdır.
+- Kilitli teslimatın dokunduğu kaynak dosyalar tekrar ele alınacaksa, önce bu revizyon maddesi için yetkilendirme alınmalı ve plan güncellenmelidir.
+
 1) Monorepo yapısı
 aunsorm/
   Cargo.toml                    # workspace
