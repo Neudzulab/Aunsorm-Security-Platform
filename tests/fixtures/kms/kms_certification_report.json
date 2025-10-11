@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "generated_at": "2025-10-11T01:51:10.511017093+00:00",
+  "fixtures": [
+    "kms_gcp_ed25519.json",
+    "kms_pkcs11_ed25519.json",
+    "kms_azure_aes_wrap.json"
+  ],
+  "notes": "These fixtures validate signature determinism and AES-GCM key wrapping semantics across external KMS/HSM providers."
+}

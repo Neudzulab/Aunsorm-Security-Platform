@@ -25,9 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `kms_remote_live_soak` testi; GCP ve Azure anahtarlarını ortam değişkeni
   tabanlı yapılandırma ile canlı olarak doğrular ve iterasyon/filtresi
   `AUNSORM_KMS_REMOTE_SOAK` ile kontrol edilebilir.
-- Azure ve GCP sağlayıcıları için yeni KMS conformance fixture testleri;
-  tekrarlı/boş `key_id` ve kaynak değerleri artık deterministik `KmsError::Config`
-  mesajları üretir.
+- Azure, GCP ve PKCS#11 sağlayıcıları için JSON tabanlı KMS conformance fixture
+  seti ve sertifikasyon raporu; tekrarlı/boş `key_id` değerleri deterministik
+  `KmsError::Config` mesajları üretir ve `kms_conformance` testi kriptografik
+  tutarlılığı doğrular.
 - `docs/` altında mdBook tabanlı mimari rehber ve operasyonel test dökümantasyonu.
 - Nightly zamanlanmış iş akışı fuzz korpuslarını ısıtıp `cargo fuzz cmin` ile minimize
   ederek indirilebilir artefakt üretir.
