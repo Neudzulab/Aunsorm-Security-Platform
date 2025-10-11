@@ -80,6 +80,16 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(env)).toBe('https://gateway.aunsorm.dev/api');
   });
 
+  it('falls back to defaults when the domain override is blank but a path is provided', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: '   ',
+      AUNSORM_BASE_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('https://aunsorm.dev/bridge');
+  });
+
   it('removes trailing slash when the path override is empty', () => {
     const env = {
       NODE_ENV: 'production',

@@ -198,8 +198,11 @@ export function resolveAunsormBaseUrl(env: NodeJS.ProcessEnv = process.env): str
       : nodeEnv === 'production'
         ? 'https'
         : 'http';
+    const domainOverride = domain.value;
+    const hasDomainOverride =
+      domainOverride !== undefined && domainOverride.length > 0;
     const resolvedOrigin = ensureProtocol(
-      domain.value ?? fallbackDefaults.origin,
+      hasDomainOverride ? domainOverride : fallbackDefaults.origin,
       scheme,
     );
     const resolvedPath = normalisePath(path.value, fallbackDefaults.path);
