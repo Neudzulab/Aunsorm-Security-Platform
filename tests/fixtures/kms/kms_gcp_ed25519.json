@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "provider": "gcp",
+  "capability": "ed25519-sign",
+  "fips_level": "FIPS 140-3 Level 3",
+  "certification_refs": [
+    {
+      "name": "Google Cloud KMS FIPS 140-3 Certificate #4382",
+      "url": "https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4382"
+    }
+  ],
+  "vector": {
+    "vector_type": "signing",
+    "resource": "projects/aunsorm-prod/locations/global/keyRings/primary/cryptoKeys/signing",
+    "message_b64": "QXVuc29ybSBHQ1AgQ29uZm9ybWFuY2UgVmVjdG9y",
+    "signature_b64": "nqG8gowJn0U4qvk2Sr5MrrJUkiOontYXFRqZv4ScqRAyfjVmX+RuKpxNelc6oID6zuuXW0oGhnTg5nzc3pAMAA==",
+    "public_key_b64": "BIN5BVYkh8gUKpKQwfBa6tkGzy23zU7i1y5kZmvfZzo=",
+    "kid": "e0b89424d7c0d207247ab4297370a0d9c076a70a43d0de6884e5e9155ca3dd33"
+  }
+}

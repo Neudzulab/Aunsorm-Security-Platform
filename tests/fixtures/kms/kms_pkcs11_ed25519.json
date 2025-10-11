@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "provider": "pkcs11",
+  "capability": "ed25519-sign",
+  "fips_level": "FIPS 140-3 Level 3",
+  "certification_refs": [
+    {
+      "name": "Entrust nShield 5 F3 FIPS 140-3 Certificate #4429",
+      "url": "https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/4429"
+    },
+    {
+      "name": "PCI HSM v3 Audit Report Excerpt",
+      "url": "https://example.com/certifications/pci-hsm-v3-aunsorm.pdf"
+    }
+  ],
+  "vector": {
+    "vector_type": "signing",
+    "resource": "slot/7/token/aunsorm-hsm/key/ed25519",
+    "message_b64": "QXVuc29ybSBQS0NTIzExIENlcnRpZmljYXRpb24gVmVjdG9y",
+    "signature_b64": "UJwld5UmA1x3R11DeDaxMbdcOGJH/Z3R3mxGvdH3N1aqn1DnLYGuQmPAaQkZv38DsQu5GhvsiB935vNqzvAJBQ==",
+    "public_key_b64": "7twocViPKDTZ9jab5iIMzCuRa+tm/0gulchsytfhT6E=",
+    "kid": "9dba12a6c70e81bad3d8ee839e6748706a1bbb2612165ebf532f28d57f1e76f9"
+  }
+}
