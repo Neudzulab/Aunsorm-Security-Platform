@@ -1536,7 +1536,7 @@ fn build_calibration_report(calibration: &Calibration) -> CalibrationReport {
         beta_long: calibration.beta_long,
         beta_short: calibration.beta_short,
         tau: calibration.tau,
-        fingerprint: STANDARD.encode(calibration.fingerprint()),
+        fingerprint: calibration.fingerprint_b64(),
         ranges,
     }
 }
@@ -2302,10 +2302,7 @@ mod tests {
         assert_eq!(report.calibration_id, calibration.id.as_str());
         assert_eq!(report.alpha_long, calibration.alpha_long);
         assert_eq!(report.ranges[0].start, calibration.ranges[0].start);
-        assert_eq!(
-            report.fingerprint,
-            STANDARD.encode(calibration.fingerprint())
-        );
+        assert_eq!(report.fingerprint, calibration.fingerprint_b64());
     }
 
     #[test]

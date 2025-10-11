@@ -5,7 +5,6 @@
 
 //! Ed25519 tabanlı X.509 sertifika üretim yardımcıları.
 
-use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use rcgen::{
     CertificateParams, CustomExtension, DnType, IsCa, KeyPair, KeyUsagePurpose, SerialNumber,
 };
@@ -152,7 +151,7 @@ fn build_calibration_extension(
 
     let metadata = CalibrationMetadata {
         calibration_id: calibration.id.as_str(),
-        fingerprint_b64: STANDARD_NO_PAD.encode(calibration.fingerprint()),
+        fingerprint_b64: calibration.fingerprint_b64(),
         note_sha256: hex::encode(note_hash),
         cps_uris: params.cps_uris,
         policy_oids: params.policy_oids,

@@ -122,6 +122,12 @@ impl Calibration {
     pub const fn fingerprint(&self) -> &[u8; 32] {
         &self.fingerprint
     }
+
+    /// Kalibrasyon parmak izini URL-safe Base64 (padding'siz) olarak döndürür.
+    #[must_use]
+    pub fn fingerprint_b64(&self) -> String {
+        URL_SAFE_NO_PAD.encode(self.fingerprint)
+    }
 }
 
 /// Organizasyon tuzu ve kalibrasyon metninden kalibrasyon bilgisi üretir.
@@ -337,5 +343,13 @@ mod tests {
         assert_eq!(cal_a, cal_b);
         assert_eq!(id_a, id_b);
         assert_eq!(id_c, id_d);
+    }
+
+    #[test]
+    fn fingerprint_b64_is_url_safe() {
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
+        let expected = URL_SAFE_NO_PAD.encode(calibration.fingerprint());
+        assert_eq!(calibration.fingerprint_b64(), expected);
+        assert!(!calibration.fingerprint_b64().contains(['+', '/', '=']));
     }
 }
