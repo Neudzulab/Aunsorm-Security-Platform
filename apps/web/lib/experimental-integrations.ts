@@ -68,6 +68,10 @@ function ensureProtocol(origin: string, fallbackScheme: 'http' | 'https'): strin
   return `${scheme}${origin}`;
 }
 
+function collapseSlashes(input: string): string {
+  return input.replace(/\/{2,}/g, '/');
+}
+
 function normalisePath(pathValue: string | undefined, defaultPath: string): string {
   if (pathValue === undefined) {
     return defaultPath;
@@ -77,11 +81,19 @@ function normalisePath(pathValue: string | undefined, defaultPath: string): stri
     return '';
   }
 
-  if (pathValue.startsWith('/')) {
-    return pathValue;
+  const hasTrailingSlash = pathValue.endsWith('/');
+  const withLeadingSlash = pathValue.startsWith('/') ? pathValue : `/${pathValue}`;
+  const collapsed = collapseSlashes(withLeadingSlash);
+
+  if (collapsed === '/') {
+    return '/';
   }
 
-  return `/${pathValue}`;
+  if (hasTrailingSlash) {
+    return collapsed.endsWith('/') ? collapsed : `${collapsed}/`;
+  }
+
+  return collapsed.endsWith('/') ? collapsed.replace(/\/+$/, '') : collapsed;
 }
 
 function joinUrl(origin: string, path: string): string {
