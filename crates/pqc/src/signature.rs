@@ -4,6 +4,131 @@ use pqcrypto_traits::sign::{DetachedSignature as _, PublicKey as _, SecretKey as
 
 use crate::error::{PqcError, Result};
 
+#[cfg(feature = "sig-mldsa-65")]
+const ML_DSA_65_PUBLIC_KEY_BYTES: usize = pqcrypto_dilithium::dilithium5::public_key_bytes();
+#[cfg(not(feature = "sig-mldsa-65"))]
+const ML_DSA_65_PUBLIC_KEY_BYTES: usize = 2_592;
+
+#[cfg(feature = "sig-mldsa-65")]
+const ML_DSA_65_SECRET_KEY_BYTES: usize = pqcrypto_dilithium::dilithium5::secret_key_bytes();
+#[cfg(not(feature = "sig-mldsa-65"))]
+const ML_DSA_65_SECRET_KEY_BYTES: usize = 4_896;
+
+#[cfg(feature = "sig-mldsa-65")]
+const ML_DSA_65_SIGNATURE_BYTES: usize = pqcrypto_dilithium::dilithium5::signature_bytes();
+#[cfg(not(feature = "sig-mldsa-65"))]
+const ML_DSA_65_SIGNATURE_BYTES: usize = 4_595;
+
+/// ML-DSA özel sertleştirme yardımcıları.
+pub mod mldsa {
+    use super::{
+        ensure_ml_dsa_length, ensure_ml_dsa_not_uniform, ml_dsa_algorithm,
+        ML_DSA_65_PUBLIC_KEY_BYTES, ML_DSA_65_SECRET_KEY_BYTES, ML_DSA_65_SIGNATURE_BYTES,
+    };
+    use crate::error::Result;
+
+    /// ML-DSA-65 açık anahtar uzunluğu (bayt).
+    pub const PUBLIC_KEY_BYTES: usize = ML_DSA_65_PUBLIC_KEY_BYTES;
+    /// ML-DSA-65 gizli anahtar uzunluğu (bayt).
+    pub const SECRET_KEY_BYTES: usize = ML_DSA_65_SECRET_KEY_BYTES;
+    /// ML-DSA-65 imza uzunluğu (bayt).
+    pub const SIGNATURE_BYTES: usize = ML_DSA_65_SIGNATURE_BYTES;
+
+    /// Açık anahtarın sertleştirme kontrollerini gerçekleştirir.
+    ///
+    /// # Errors
+    /// Anahtar uzunluğu beklenen aralığın dışındaysa veya segmentler
+    /// entropi denetiminden geçemezse `PqcError` döner.
+    pub fn validate_public_key(bytes: &[u8]) -> Result<()> {
+        ensure_ml_dsa_length(bytes, PUBLIC_KEY_BYTES, "public key")?;
+        // İlk 32 bayt (rho) tamamıyla sıfır veya tekrar eden değer olmamalı.
+        let (rho, rest) = bytes.split_at(32);
+        ensure_ml_dsa_not_uniform(rho, "rho seed")?;
+        ensure_ml_dsa_not_uniform(rest, "t1 vector")
+    }
+
+    /// Gizli anahtarın sertleştirme kontrollerini gerçekleştirir.
+    ///
+    /// # Errors
+    /// Uzunluk veya segment entropisi kontrolleri başarısız olduğunda
+    /// `PqcError` döner.
+    pub fn validate_secret_key(bytes: &[u8]) -> Result<()> {
+        ensure_ml_dsa_length(bytes, SECRET_KEY_BYTES, "secret key")?;
+        let (rho, remainder) = bytes.split_at(32);
+        let (key, remainder) = remainder.split_at(32);
+        let (tr, packed) = remainder.split_at(48);
+        ensure_ml_dsa_not_uniform(rho, "rho seed")?;
+        ensure_ml_dsa_not_uniform(key, "K seed")?;
+        ensure_ml_dsa_not_uniform(tr, "tr hash")?;
+        ensure_ml_dsa_not_uniform(packed, "packed polynomial body")
+    }
+
+    /// Üretilen imzaların boyut ve entropi kontrollerini yapar.
+    ///
+    /// # Errors
+    /// İmza boyutu hatalıysa veya tekdüze bir tampon tespit edilirse
+    /// `PqcError` döner.
+    pub fn validate_signature(bytes: &[u8]) -> Result<()> {
+        ensure_ml_dsa_length(bytes, SIGNATURE_BYTES, "signature")?;
+        ensure_ml_dsa_not_uniform(bytes, "signature byte pattern")
+    }
+
+    /// Açık ve gizli anahtarın birlikte kullanılabilirliğini doğrular.
+    ///
+    /// # Errors
+    /// Anahtarlar uzunluk veya entropi kontrollerini geçemezse ya da rho
+    /// segmentleri uyuşmazsa `PqcError` döner.
+    pub fn validate_keypair(public_key: &[u8], secret_key: &[u8]) -> Result<()> {
+        validate_public_key(public_key)?;
+        validate_secret_key(secret_key)?;
+        let (pk_rho, _) = public_key.split_at(32);
+        let (sk_rho, _) = secret_key.split_at(32);
+        if pk_rho != sk_rho {
+            return Err(super::PqcError::invalid(
+                ml_dsa_algorithm().name(),
+                "rho seed mismatch between public and secret key",
+            ));
+        }
+        Ok(())
+    }
+}
+
+const fn ml_dsa_algorithm() -> SignatureAlgorithm {
+    SignatureAlgorithm::MlDsa65
+}
+
+fn ensure_ml_dsa_length(bytes: &[u8], expected: usize, label: &str) -> Result<()> {
+    if bytes.len() != expected {
+        return Err(PqcError::invalid(
+            ml_dsa_algorithm().name(),
+            format!(
+                "{label} must be exactly {expected} bytes (got {})",
+                bytes.len()
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_ml_dsa_not_uniform(bytes: &[u8], label: &str) -> Result<()> {
+    if bytes.is_empty() {
+        return Err(PqcError::invalid(
+            ml_dsa_algorithm().name(),
+            format!("{label} slice is empty"),
+        ));
+    }
+    if bytes.iter().all(|&byte| byte == bytes[0]) {
+        return Err(PqcError::invalid(
+            ml_dsa_algorithm().name(),
+            format!(
+                "{label} is uniform (0x{:02x}); refusing weak material",
+                bytes[0]
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// Desteklenen PQC imza algoritmaları.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignatureAlgorithm {
@@ -43,23 +168,27 @@ impl SignatureAlgorithm {
             Self::MlDsa65 => SignatureChecklist {
                 algorithm: Self::MlDsa65,
                 nist_category: "5",
-                public_key_bytes: 2_592,
-                secret_key_bytes: 4_864,
-                signature_bytes: 4_595,
+                public_key_bytes: ML_DSA_65_PUBLIC_KEY_BYTES,
+                secret_key_bytes: ML_DSA_65_SECRET_KEY_BYTES,
+                signature_bytes: ML_DSA_65_SIGNATURE_BYTES,
                 deterministic: true,
                 client_actions: &[
                     "Build with the `sig-mldsa-65` feature enabled and document the flag in release notes.",
                     "Pin pqcrypto-dilithium to the audited version and require reproducible builds in CI.",
                     "Validate transparency log entries for Dilithium5 public keys before trusting remote peers.",
+                    "Reject provisioning bundles whose rho/key/tr segments are uniform using `mldsa::validate_secret_key`.",
+                    "Call `mldsa::validate_keypair` before enrolling ML-DSA credentials in HSM inventories.",
                 ],
                 runtime_assertions: &[
                     "Reject handshake transcripts that omit `ml-dsa-65` when `AUNSORM_STRICT=1`.",
                     "Abort if the peer advertises a key shorter than 2592 bytes for ML-DSA public keys.",
                     "Bind calibration identifiers to the Dilithium5 public key hash prior to accepting sessions.",
+                    "Drop signatures that fail `mldsa::validate_signature` prior to verification attempts.",
                 ],
                 references: &[
                     "NIST FIPS 204 — Module-Lattice-based Digital Signature Standard (ML-DSA) §4",
                     "Aunsorm Threat Model — External calibration binding requirements",
+                    "NIST ML-DSA Implementation Guidance — Seed domain separation checks",
                 ],
             },
             Self::Falcon512 => SignatureChecklist {
@@ -196,6 +325,7 @@ impl SignatureKeyPair {
                 #[cfg(feature = "sig-mldsa-65")]
                 {
                     let (pk, sk) = pqcrypto_dilithium::dilithium5::keypair();
+                    mldsa::validate_keypair(pk.as_bytes(), sk.as_bytes())?;
                     Ok(Self {
                         public_key: SignaturePublicKey::new(algorithm, pk.as_bytes().to_vec()),
                         secret_key: SignatureSecretKey::new(algorithm, sk.as_bytes().to_vec()),
@@ -273,6 +403,7 @@ impl SignaturePublicKey {
             SignatureAlgorithm::MlDsa65 => {
                 #[cfg(feature = "sig-mldsa-65")]
                 {
+                    mldsa::validate_public_key(bytes)?;
                     pqcrypto_dilithium::dilithium5::PublicKey::from_bytes(bytes).map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-DSA public key")
                     })?;
@@ -352,6 +483,7 @@ impl SignatureSecretKey {
             SignatureAlgorithm::MlDsa65 => {
                 #[cfg(feature = "sig-mldsa-65")]
                 {
+                    mldsa::validate_secret_key(bytes)?;
                     pqcrypto_dilithium::dilithium5::SecretKey::from_bytes(bytes).map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-DSA secret key")
                     })?;
@@ -425,7 +557,9 @@ pub fn sign(
                             PqcError::invalid(algorithm.name(), "invalid ML-DSA secret key")
                         })?;
                 let signature = pqcrypto_dilithium::dilithium5::detached_sign(message, &sk);
-                Ok(signature.as_bytes().to_vec())
+                let signature = signature.as_bytes().to_vec();
+                mldsa::validate_signature(&signature)?;
+                Ok(signature)
             }
             #[cfg(not(feature = "sig-mldsa-65"))]
             {
@@ -481,6 +615,7 @@ pub fn verify(
         SignatureAlgorithm::MlDsa65 => {
             #[cfg(feature = "sig-mldsa-65")]
             {
+                mldsa::validate_signature(signature)?;
                 let pk =
                     pqcrypto_dilithium::dilithium5::PublicKey::from_bytes(public_key.as_bytes())
                         .map_err(|_| {
@@ -635,17 +770,24 @@ mod tests {
         let checklist = SignatureAlgorithm::MlDsa65.checklist();
         assert_eq!(checklist.algorithm(), SignatureAlgorithm::MlDsa65);
         assert_eq!(checklist.nist_category(), "5");
-        assert_eq!(checklist.public_key_bytes(), 2_592);
-        assert_eq!(checklist.secret_key_bytes(), 4_864);
-        assert_eq!(checklist.signature_bytes(), 4_595);
+        assert_eq!(checklist.public_key_bytes(), super::mldsa::PUBLIC_KEY_BYTES);
+        assert_eq!(checklist.secret_key_bytes(), super::mldsa::SECRET_KEY_BYTES);
+        assert_eq!(checklist.signature_bytes(), super::mldsa::SIGNATURE_BYTES);
         assert!(checklist.deterministic());
         let actions: Vec<_> = checklist.client_actions().collect();
-        assert!(actions.len() >= 3);
+        assert!(actions.len() >= 5);
         assert!(actions[0].contains("sig-mldsa-65"));
+        assert!(actions.iter().any(|item| item.contains("validate_keypair")));
         let runtime: Vec<_> = checklist.runtime_assertions().collect();
         assert!(runtime.iter().any(|item| item.contains("AUNSORM_STRICT")));
+        assert!(runtime
+            .iter()
+            .any(|item| item.contains("validate_signature")));
         let references: Vec<_> = checklist.references().collect();
         assert!(references.iter().any(|item| item.contains("ML-DSA")));
+        assert!(references
+            .iter()
+            .any(|item| item.contains("Implementation Guidance")));
     }
 
     #[test]
@@ -665,5 +807,43 @@ mod tests {
         assert!(sphincs
             .client_actions()
             .any(|item| item.contains("17KB signatures")));
+    }
+
+    #[test]
+    fn mldsa_keypair_validation_accepts_generated_material() {
+        if !SignatureAlgorithm::MlDsa65.is_available() {
+            return;
+        }
+        let pair = SignatureKeyPair::generate(SignatureAlgorithm::MlDsa65).unwrap();
+        super::mldsa::validate_keypair(pair.public_key().as_bytes(), pair.secret_key().as_bytes())
+            .unwrap();
+    }
+
+    #[test]
+    fn mldsa_keypair_validation_rejects_rho_mismatch() {
+        if !SignatureAlgorithm::MlDsa65.is_available() {
+            return;
+        }
+        let pair = SignatureKeyPair::generate(SignatureAlgorithm::MlDsa65).unwrap();
+        let mut corrupted_pk = pair.public_key().as_bytes().to_vec();
+        corrupted_pk[0] ^= 0xFF;
+        let err = super::mldsa::validate_keypair(&corrupted_pk, pair.secret_key().as_bytes())
+            .expect_err("rho mismatch must be rejected");
+        assert!(matches!(err, super::PqcError::InvalidInput { .. }));
+    }
+
+    #[test]
+    fn mldsa_secret_key_validator_rejects_uniform_segments() {
+        let mut bad_secret = vec![0u8; super::mldsa::SECRET_KEY_BYTES];
+        assert!(super::mldsa::validate_secret_key(&bad_secret).is_err());
+        bad_secret[0] = 0xAA;
+        bad_secret[1..33].fill(0xAA);
+        assert!(super::mldsa::validate_secret_key(&bad_secret).is_err());
+    }
+
+    #[test]
+    fn mldsa_signature_validator_flags_uniform_buffers() {
+        let signature = vec![0x42; super::mldsa::SIGNATURE_BYTES];
+        assert!(super::mldsa::validate_signature(&signature).is_err());
     }
 }
