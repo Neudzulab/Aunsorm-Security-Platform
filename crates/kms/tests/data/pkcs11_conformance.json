@@ -1,0 +1,13 @@
+{
+  "provider": "pkcs11",
+  "description": "PKCS#11 uyumlu HSM için Ed25519 imza vektörü.",
+  "key_id": "hsm-ed25519",
+  "slot_label": "ConformanceSlot0",
+  "private_key_b64": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM=",
+  "public_key_b64": "F8t5+ytBIPKx7GXkGY1uCLKOgT/rAeSkAIObheGAgM4=",
+  "message_b64": "QXVuc29ybSBQS0NTMTEgS01TIENvbmZvcm1hbmNlIDIwMjU=",
+  "message_hex": "41756e736f726d20504b43533131204b4d5320436f6e666f726d616e63652032303235",
+  "signature_b64": "OgEo0b9unObsHgKjZv2PbfHUUhgRKd6fR09tUnJ5/0+fk0Fvuu2cYm0ka9PuUUKa9Q8uDMpitKYB7nl/v85uBg==",
+  "kid": "6c8f8607dbe87077a62a2990ce07d94aaf749df76f87b98eb786a6d10f030765",
+  "notes": "HSM üreticilerinin conformance testlerinde yeniden kullanabileceği deterministik bir kayıt sunar."
+}

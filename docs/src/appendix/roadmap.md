@@ -12,4 +12,5 @@
    iş akışına otomatikleştirildi; çıktı korpusları ve özet metrikler JSON
    olarak artefakt paketlerine ekleniyor.
 4. **Harici KMS Sağlayıcıları:** Yeni conformance fixture’ları ile HSM/PKCS#11
-   sertifikasyon raporlarının genişletilmesi.
+   sertifikasyon raporlarının genişletilmesi. (Tamamlandı; bkz.
+   [KMS Conformance Raporu](../operations/kms_conformance.md).)

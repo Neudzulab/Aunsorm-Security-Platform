@@ -1,0 +1,14 @@
+{
+  "provider": "gcp",
+  "description": "GCP Cloud KMS Ed25519 imza akışı için deterministik conformance vektörü.",
+  "resource": "projects/demo/locations/global/keyRings/conformance/cryptoKeys/ed25519/cryptoKeyVersions/1",
+  "public_endpoint": "/v1/projects/demo/locations/global/keyRings/conformance/cryptoKeys/ed25519/cryptoKeyVersions/1",
+  "sign_endpoint": "/v1/projects/demo/locations/global/keyRings/conformance/cryptoKeys/ed25519/cryptoKeyVersions/1:signEd25519",
+  "message_b64": "QXVuc29ybSBHQ1AgS01TIENvbmZvcm1hbmNlIDIwMjU=",
+  "message_hex": "41756e736f726d20474350204b4d5320436f6e666f726d616e63652032303235",
+  "signature_b64": "X/Mbr+jQGlNYEtCaetB54+c5HBB4j+RQtgg14FPUxe90nn+G6MdYtsKhLgqBFLoNKgKme4GTgKKW3zFATF7iDw==",
+  "public_key_b64": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc=",
+  "private_seed_b64": "ERERERERERERERERERERERERERERERERERERERERERE=",
+  "kid": "10ba682c8ad13513971e8b56881aab8bd702bb807796eca81932c735a94d6e6d",
+  "notes": "Mesaj ve imza değerleri PyNaCl referans uygulaması ile üretilmiştir; diğer SDK'lar aynı çıktıyı vermelidir."
+}

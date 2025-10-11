@@ -6,4 +6,5 @@
 - [Kilitli Bellek ve Güvenli Donanım](architecture/trusted_compute.md)
 - [Operasyonel Testler](operations/testing.md)
 - [Pazar İstihbaratı ve Gelecek Vizyonu Çalıştayı](operations/market-intelligence.md)
+- [KMS Conformance Raporu](operations/kms_conformance.md)
 - [Gelecek Yol Haritası](appendix/roadmap.md)

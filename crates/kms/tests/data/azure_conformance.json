@@ -1,0 +1,14 @@
+{
+  "provider": "azure",
+  "description": "Azure Key Vault Ed25519 imzası için deterministik conformance vektörü.",
+  "resource": "keys/conformance/primary",
+  "public_endpoint": "/keys/conformance/primary",
+  "sign_endpoint": "/keys/conformance/primary/sign",
+  "message_b64": "QXVuc29ybSBBenVyZSBLTVMgQ29uZm9ybWFuY2UgMjAyNQ==",
+  "message_hex": "41756e736f726d20417a757265204b4d5320436f6e666f726d616e63652032303235",
+  "signature_b64": "uwCf6uB0mFD7CJdYN4qyr6Hm2pG6blVjTV0tqwOVutxqQn13KRizBxQ1cJ7IbINtJ4bxIX8wzNMXcWHcILC3Bw==",
+  "public_key_b64": "oJql9HpnWYAv+VX43C0qFKXJnSO+l/hkEn/5ODRVpPA=",
+  "private_seed_b64": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=",
+  "kid": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6",
+  "notes": "Azure REST API'sinin `sign` uç noktası ile birebir eşleşecek JSON alanları örneklenmiştir."
+}

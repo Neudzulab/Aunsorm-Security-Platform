@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Azure ve GCP sağlayıcıları için yeni KMS conformance fixture testleri;
   tekrarlı/boş `key_id` ve kaynak değerleri artık deterministik `KmsError::Config`
   mesajları üretir.
+- Harici KMS/HSM conformance fixture seti ve `KMS Conformance Raporu`
+  dokümantasyonu; entegrasyon testleri JSON vektörlerini yeniden imzalama
+  yoluyla doğrular.
 - `docs/` altında mdBook tabanlı mimari rehber ve operasyonel test dökümantasyonu.
 - Nightly zamanlanmış iş akışı fuzz korpuslarını ısıtıp `cargo fuzz cmin` ile minimize
   ederek indirilebilir artefakt üretir.
