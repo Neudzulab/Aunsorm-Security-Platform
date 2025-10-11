@@ -72,4 +72,30 @@ describe('resolveAunsormBaseUrl', () => {
 
     expect(resolveAunsormBaseUrl(env)).toBe('https://gateway.aunsorm.dev');
   });
+
+  it('collapses duplicate slashes in path overrides while respecting trailing slash intent', () => {
+    const envWithTrailing = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'gateway.aunsorm.dev',
+      AUNSORM_BASE_PATH: '//bridge///v1//',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(envWithTrailing)).toBe('https://gateway.aunsorm.dev/bridge/v1/');
+
+    const envSingle = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'gateway.aunsorm.dev',
+      AUNSORM_BASE_PATH: '///bridge///v1',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(envSingle)).toBe('https://gateway.aunsorm.dev/bridge/v1');
+
+    const envRoot = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'gateway.aunsorm.dev',
+      AUNSORM_BASE_PATH: '////',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(envRoot)).toBe('https://gateway.aunsorm.dev/');
+  });
 });
