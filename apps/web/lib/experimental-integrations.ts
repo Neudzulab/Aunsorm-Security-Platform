@@ -33,6 +33,7 @@ const PATH_KEYS = [
 interface ReadResult {
   found: boolean;
   value?: string;
+  key?: string;
 }
 
 function readEnvValue(keys: string[], env: NodeJS.ProcessEnv): ReadResult {
@@ -40,15 +41,15 @@ function readEnvValue(keys: string[], env: NodeJS.ProcessEnv): ReadResult {
     if (Object.prototype.hasOwnProperty.call(env, key)) {
       const raw = env[key];
       if (raw === undefined || raw === null) {
-        return { found: true, value: '' };
+        return { found: true, value: '', key };
       }
 
       const trimmed = raw.trim();
       if (trimmed.length === 0) {
-        return { found: true, value: '' };
+        return { found: true, value: '', key };
       }
 
-      return { found: true, value: trimmed };
+      return { found: true, value: trimmed, key };
     }
   }
 
@@ -197,9 +198,46 @@ function isLoopbackHost(value: string | undefined): boolean {
 }
 
 export function resolveAunsormBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return resolveAunsormBaseUrlDetails(env).baseUrl;
+}
+
+export type AunsormBaseUrlSource =
+  | {
+      kind: 'direct';
+      key?: string;
+    }
+  | {
+      kind: 'domain-path';
+      domainKey?: string;
+      pathKey?: string;
+    }
+  | {
+      kind: 'default';
+      nodeEnv: 'production' | 'other';
+    };
+
+export interface AunsormBaseUrlDetails {
+  baseUrl: string;
+  origin: string;
+  path: string;
+  source: AunsormBaseUrlSource;
+}
+
+export function resolveAunsormBaseUrlDetails(
+  env: NodeJS.ProcessEnv = process.env,
+): AunsormBaseUrlDetails {
   const direct = readEnvValue(DIRECT_BASE_URL_KEYS, env);
   if (direct.found) {
-    return direct.value ?? '';
+    const directValue = direct.value ?? '';
+    return {
+      baseUrl: directValue,
+      origin: directValue,
+      path: '',
+      source: {
+        kind: 'direct',
+        key: direct.key,
+      },
+    };
   }
 
   const nodeEnv = resolveNodeEnv(env);
@@ -222,8 +260,25 @@ export function resolveAunsormBaseUrl(env: NodeJS.ProcessEnv = process.env): str
       scheme,
     );
     const resolvedPath = normalisePath(path.value, fallbackDefaults.path);
-    return joinUrl(resolvedOrigin, resolvedPath);
+    return {
+      baseUrl: joinUrl(resolvedOrigin, resolvedPath),
+      origin: resolvedOrigin,
+      path: resolvedPath,
+      source: {
+        kind: 'domain-path',
+        domainKey: domain.key,
+        pathKey: path.key,
+      },
+    };
   }
 
-  return joinUrl(fallbackDefaults.origin, fallbackDefaults.path);
+  return {
+    baseUrl: joinUrl(fallbackDefaults.origin, fallbackDefaults.path),
+    origin: fallbackDefaults.origin,
+    path: fallbackDefaults.path,
+    source: {
+      kind: 'default',
+      nodeEnv,
+    },
+  };
 }
