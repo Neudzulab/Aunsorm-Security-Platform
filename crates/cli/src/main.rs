@@ -393,6 +393,9 @@ struct CalibCoordArgs {
     /// Çıktıyı dosyaya yaz
     #[arg(long, value_name = "PATH")]
     out: Option<PathBuf>,
+    /// Türetilen koordinat değerini ham bayt olarak yaz
+    #[arg(long = "coord-raw-out", value_name = "PATH")]
+    coord_raw_out: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -1434,8 +1437,16 @@ fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
         profile,
     )?;
     let (coord_id, coord) = coord32_derive(seed64.as_ref(), &calibration, &salts)?;
+    write_coord_raw(args.coord_raw_out.as_deref(), &coord)?;
     let report = build_coordinate_report(&calibration, coord_id, coord, args.kdf, &info);
     emit_coordinate_report(&report, args.format, args.out.as_deref())
+}
+
+fn write_coord_raw(path: Option<&Path>, coord: &[u8; 32]) -> CliResult<()> {
+    if let Some(path) = path {
+        fs::write(path, coord)?;
+    }
+    Ok(())
 }
 
 fn emit_json_pretty<T>(value: &T, out: Option<&Path>) -> CliResult<()>
@@ -2339,6 +2350,56 @@ mod tests {
             report.chain_salt_digest,
             STANDARD.encode(info.chain_salt_digest)
         );
+    }
+
+    #[test]
+    fn write_coord_raw_writes_exact_bytes() {
+        let tmp = NamedTempFile::new().expect("tmp");
+        let coord = [0xAA_u8; 32];
+        write_coord_raw(Some(tmp.path()), &coord).expect("write");
+        let raw = fs::read(tmp.path()).expect("raw");
+        assert_eq!(raw, coord);
+    }
+
+    #[test]
+    fn handle_calib_coord_respects_raw_output() {
+        let password = "correct horse battery staple";
+        let org_salt_b64 = "V2VBcmVLdXQuZXU=";
+        let calibration_text = "Neudzulab | Prod | 2025-08";
+        let tmp = NamedTempFile::new().expect("tmp");
+
+        let args = CalibCoordArgs {
+            password: Some(password.to_string()),
+            password_file: None,
+            org_salt: org_salt_b64.to_string(),
+            calib_text: Some(calibration_text.to_string()),
+            calib_file: None,
+            kdf: ProfileArg::Low,
+            format: ReportFormat::Json,
+            out: None,
+            coord_raw_out: Some(tmp.path().to_path_buf()),
+        };
+
+        handle_calib_coord(&args).expect("coord");
+
+        let raw = fs::read(tmp.path()).expect("raw");
+        assert_eq!(raw.len(), 32);
+
+        let org_salt = decode_org_salt(org_salt_b64).expect("salt");
+        let (calibration, _) = calib_from_text(&org_salt, calibration_text).expect("calib");
+        let (password_salt, salts) =
+            derive_salts(&org_salt, calibration.id.as_str()).expect("salts");
+        let (seed64, _, _) = derive_seed64_and_pdk(
+            password,
+            password_salt.as_slice(),
+            salts.calibration(),
+            salts.chain(),
+            args.kdf.as_profile(),
+        )
+        .expect("seed");
+        let (_, expected_coord) =
+            coord32_derive(seed64.as_ref(), &calibration, &salts).expect("coord");
+        assert_eq!(raw, expected_coord);
     }
 
     #[test]
