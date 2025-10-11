@@ -8,7 +8,8 @@
    adımı eklendi ve her sürümde statik site çıktısı yayımlanıyor. Bu kalem
    artık bakım aşamasında; gerektiğinde yeni kitap bölümleri CI çıktısına
    otomatik olarak dahil ediliyor.
-3. **Uzun Süreli Fuzzing:** `cargo fuzz cmin` entegre edilerek minimize edilmiş
-   corpus koleksiyonunun nightly pipeline’da saklanması.
+3. **Uzun Süreli Fuzzing (Tamamlandı):** `cargo fuzz cmin` minimizasyonu gece
+   iş akışına otomatikleştirildi; çıktı korpusları ve özet metrikler JSON
+   olarak artefakt paketlerine ekleniyor.
 4. **Harici KMS Sağlayıcıları:** Yeni conformance fixture’ları ile HSM/PKCS#11
    sertifikasyon raporlarının genişletilmesi.

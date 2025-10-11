@@ -49,20 +49,13 @@ jobs:
       - name: Minimize fuzz corpora
         run: |
           set -euo pipefail
-          targets=(fuzz_packet fuzz_session session_store_roundtrip)
-          rm -rf fuzz/corpus-min
-          mkdir -p fuzz/corpus-min
-          for target in "${targets[@]}"; do
-            src="fuzz/corpus/${target}"
-            dst="fuzz/corpus-min/${target}"
-            if [ ! -d "${src}" ] || [ -z "$(ls -A "${src}")" ]; then
-              echo "Corpus for ${target} is empty, skipping minimization" >&2
-              continue
-            fi
-            mkdir -p "${dst}"
-            echo "Minimizing corpus for ${target}"
-            cargo fuzz cmin "${target}" "${src}" "${dst}"
-          done
+          python3 .github/scripts/minimize_fuzz_corpus.py
+
+      - name: Show minimization summary
+        if: ${{ always() && hashFiles('fuzz/corpus-min/minimization-summary.json') != '' }}
+        run: |
+          set -euo pipefail
+          cat fuzz/corpus-min/minimization-summary.json
 
       - name: Package minimized corpora
         if: ${{ always() }}

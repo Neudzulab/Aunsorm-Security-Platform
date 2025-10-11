@@ -11,7 +11,7 @@
 ## Öncelikli Geliştirme İşleri
 - [x] Uzak KMS sağlayıcıları (GCP/Azure) için canlı soak test harness'ini tamamla. (Bkz. CHANGELOG.md "Added".)
 - [x] ML-DSA için üretim düzeyi sertleştirme ve istemci tarafı denetim listelerini genişlet. (Bkz. docs/src/appendix/roadmap.md.)
-- [ ] `cargo fuzz cmin` tabanlı uzun süreli fuzz korpusu minimizasyonunu nightly pipeline'a entegre et. (Bkz. docs/src/appendix/roadmap.md.)
+- [x] `cargo fuzz cmin` tabanlı uzun süreli fuzz korpusu minimizasyonunu nightly pipeline'a entegre et. (Bkz. docs/src/appendix/roadmap.md.)
 - [ ] Harici KMS/HSM sağlayıcıları için ek conformance fixture'ları ve sertifikasyon raporlarını üret. (Bkz. docs/src/appendix/roadmap.md.)
 
 ## Dokümantasyon ve İzleme
