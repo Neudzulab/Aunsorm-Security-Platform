@@ -259,10 +259,10 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
         params.calibration,
     )?;
 
-    if packet.header.coord_digest != coord_digest(&coord) {
-        return Err(PacketError::Integrity("coord digest mismatch"));
-    }
     if packet.header.calib_id != params.calibration.id.as_str() {
+        return Err(PacketError::Integrity("calibration id mismatch"));
+    }
+    if packet.header.coord_digest != coord_digest(&coord) {
         return Err(PacketError::Integrity("coord digest mismatch"));
     }
 
@@ -462,7 +462,7 @@ mod tests {
 
         assert!(matches!(
             err,
-            PacketError::Integrity(message) if message == "coord digest mismatch"
+            PacketError::Integrity(message) if message == "calibration id mismatch"
         ));
     }
 

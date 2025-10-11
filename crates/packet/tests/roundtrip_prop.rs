@@ -151,7 +151,7 @@ proptest! {
             let result = decrypt_one_shot(&decrypt_params);
             prop_assert!(matches!(
                 result,
-                Err(PacketError::Integrity(message)) if message == "coord digest mismatch"
+                Err(PacketError::Integrity(message)) if message == "calibration id mismatch"
             ));
         }
     }
