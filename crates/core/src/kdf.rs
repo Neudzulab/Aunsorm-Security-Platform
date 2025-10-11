@@ -8,8 +8,16 @@ use sysinfo::{System, SystemExt};
 use zeroize::Zeroizing;
 
 /// Zeroize garantisi sağlayan byte vektörü sargısı.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct SensitiveVec(Zeroizing<Vec<u8>>);
+
+impl PartialEq for SensitiveVec {
+    fn eq(&self, other: &Self) -> bool {
+        constant_time_eq(self.as_slice(), other.as_slice())
+    }
+}
+
+impl Eq for SensitiveVec {}
 
 impl SensitiveVec {
     /// Yeni bir `SensitiveVec` oluşturur.
@@ -229,6 +237,15 @@ fn derive_hkdf_outputs(
     Ok((seed64, pdk))
 }
 
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    let mut diff = left.len() ^ right.len();
+    let min_len = left.len().min(right.len());
+    for idx in 0..min_len {
+        diff |= usize::from(left[idx] ^ right[idx]);
+    }
+    diff == 0
+}
+
 /// Parola ve salt girdilerinden 64 baytlık tohum ve paket türetme anahtarı üretir.
 ///
 /// Fonksiyon Argon2id algoritmasını kullanır; çıktı deterministiktir ve aynı girdiler
@@ -340,5 +357,20 @@ mod tests {
         assert_eq!(pdk_a, pdk_b);
         assert_eq!(info_a.profile, info_b.profile);
         assert_eq!(info_a.password_salt_digest, info_b.password_salt_digest);
+    }
+
+    #[test]
+    fn sensitive_vec_comparison_is_constant_time_like() {
+        let a = SensitiveVec::new(vec![0xAA, 0xBB, 0xCC]);
+        let mut b = SensitiveVec::new(vec![0xAA, 0xBB, 0xCC]);
+        let c = SensitiveVec::new(vec![0xAA, 0xBB, 0xCD]);
+        let shorter = SensitiveVec::new(vec![0xAA, 0xBB]);
+
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+        assert_ne!(a, shorter);
+
+        b.as_mut_slice()[2] ^= 0x01;
+        assert_ne!(a, b);
     }
 }
