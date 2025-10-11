@@ -95,6 +95,8 @@ enum CalibCommands {
     /// Koordinat kimliğini ve değerini türet
     #[command(name = "derive-coord")]
     DeriveCoord(CalibCoordArgs),
+    /// Kalibrasyon parmak izini raporla
+    Fingerprint(CalibFingerprintArgs),
 }
 
 #[derive(Subcommand)]
@@ -323,6 +325,34 @@ struct PeekArgs {
 
 #[derive(Args)]
 struct CalibInspectArgs {
+    /// Organizasyon tuzu (Base64)
+    #[arg(long, value_name = "B64")]
+    org_salt: String,
+    /// Kalibrasyon metni
+    #[arg(
+        long,
+        conflicts_with = "calib_file",
+        required_unless_present = "calib_file"
+    )]
+    calib_text: Option<String>,
+    /// Kalibrasyon metnini dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "calib_text",
+        required_unless_present = "calib_text"
+    )]
+    calib_file: Option<PathBuf>,
+    /// Çıktı formatı (text veya json)
+    #[arg(long, value_enum, default_value_t = ReportFormat::Json)]
+    format: ReportFormat,
+    /// Çıktıyı dosyaya yaz
+    #[arg(long, value_name = "PATH")]
+    out: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct CalibFingerprintArgs {
     /// Organizasyon tuzu (Base64)
     #[arg(long, value_name = "B64")]
     org_salt: String,
@@ -1411,6 +1441,7 @@ fn handle_calib(command: CalibCommands) -> CliResult<()> {
     match command {
         CalibCommands::Inspect(args) => handle_calib_inspect(&args),
         CalibCommands::DeriveCoord(args) => handle_calib_coord(&args),
+        CalibCommands::Fingerprint(args) => handle_calib_fingerprint(&args),
     }
 }
 
@@ -1440,6 +1471,14 @@ fn handle_calib_coord(args: &CalibCoordArgs) -> CliResult<()> {
     write_coord_raw(args.coord_raw_out.as_deref(), &coord)?;
     let report = build_coordinate_report(&calibration, coord_id, coord, args.kdf, &info);
     emit_coordinate_report(&report, args.format, args.out.as_deref())
+}
+
+fn handle_calib_fingerprint(args: &CalibFingerprintArgs) -> CliResult<()> {
+    let org_salt = decode_org_salt(&args.org_salt)?;
+    let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text)?;
+    let report = build_calibration_fingerprint_report(&calibration);
+    emit_calibration_fingerprint_report(&report, args.format, args.out.as_deref())
 }
 
 fn write_coord_raw(path: Option<&Path>, coord: &[u8; 32]) -> CliResult<()> {
@@ -1473,6 +1512,16 @@ fn emit_text(value: &str, out: Option<&Path>) -> CliResult<()> {
     Ok(())
 }
 
+fn encode_hex_lower(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        output.push(char::from(HEX[(byte >> 4) as usize]));
+        output.push(char::from(HEX[(byte & 0x0F) as usize]));
+    }
+    output
+}
+
 fn emit_calibration_report(
     report: &CalibrationReport,
     format: ReportFormat,
@@ -1482,6 +1531,20 @@ fn emit_calibration_report(
         ReportFormat::Json => emit_json_pretty(report, out),
         ReportFormat::Text => {
             let rendered = render_calibration_report_text(report);
+            emit_text(&rendered, out)
+        }
+    }
+}
+
+fn emit_calibration_fingerprint_report(
+    report: &CalibrationFingerprintReport,
+    format: ReportFormat,
+    out: Option<&Path>,
+) -> CliResult<()> {
+    match format {
+        ReportFormat::Json => emit_json_pretty(report, out),
+        ReportFormat::Text => {
+            let rendered = render_calibration_fingerprint_report_text(report);
             emit_text(&rendered, out)
         }
     }
@@ -1520,6 +1583,13 @@ struct CalibrationReport {
     ranges: [CalibrationRangeReport; 5],
 }
 
+#[derive(Serialize)]
+struct CalibrationFingerprintReport {
+    calibration_id: String,
+    fingerprint_b64: String,
+    fingerprint_hex: String,
+}
+
 fn build_calibration_report(calibration: &Calibration) -> CalibrationReport {
     let ranges = std::array::from_fn(|idx| {
         let range = calibration.ranges[idx];
@@ -1538,6 +1608,16 @@ fn build_calibration_report(calibration: &Calibration) -> CalibrationReport {
         tau: calibration.tau,
         fingerprint: calibration.fingerprint_b64(),
         ranges,
+    }
+}
+
+fn build_calibration_fingerprint_report(calibration: &Calibration) -> CalibrationFingerprintReport {
+    let fingerprint_b64 = calibration.fingerprint_b64();
+    let fingerprint_hex = encode_hex_lower(calibration.fingerprint());
+    CalibrationFingerprintReport {
+        calibration_id: calibration.id.as_str().to_string(),
+        fingerprint_b64,
+        fingerprint_hex,
     }
 }
 
@@ -1564,6 +1644,23 @@ fn render_calibration_report_text(report: &CalibrationReport) -> String {
             range.step
         ));
     }
+    lines.join("\n")
+}
+
+fn render_calibration_fingerprint_report_text(report: &CalibrationFingerprintReport) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "Kalibrasyon Kimliği     : {}",
+        report.calibration_id
+    ));
+    lines.push(format!(
+        "Parmak izi (Base64)     : {}",
+        report.fingerprint_b64
+    ));
+    lines.push(format!(
+        "Parmak izi (hex)        : {}",
+        report.fingerprint_hex
+    ));
     lines.join("\n")
 }
 
@@ -2313,6 +2410,28 @@ mod tests {
         assert!(rendered.contains("Kalibrasyon Kimliği"));
         assert!(rendered.contains(calibration.id.as_str()));
         assert!(rendered.contains("Aralıklar:"));
+    }
+
+    #[test]
+    fn calibration_fingerprint_report_is_consistent() {
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
+        let report = build_calibration_fingerprint_report(&calibration);
+        assert_eq!(report.calibration_id, calibration.id.as_str());
+        assert_eq!(report.fingerprint_b64, calibration.fingerprint_b64());
+        assert_eq!(
+            report.fingerprint_hex,
+            encode_hex_lower(calibration.fingerprint())
+        );
+    }
+
+    #[test]
+    fn calibration_fingerprint_text_is_human_readable() {
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
+        let report = build_calibration_fingerprint_report(&calibration);
+        let rendered = render_calibration_fingerprint_report_text(&report);
+        assert!(rendered.contains("Kalibrasyon Kimliği"));
+        assert!(rendered.contains(report.fingerprint_b64.as_str()));
+        assert!(rendered.contains(report.fingerprint_hex.as_str()));
     }
 
     #[test]
