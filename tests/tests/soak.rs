@@ -1,9 +1,15 @@
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+use std::collections::BTreeSet;
 use std::convert::TryInto;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
 
 use aunsorm_core::{calib_from_text, KdfPreset, KdfProfile, Salts, SessionRatchet};
+#[cfg(feature = "kms-azure")]
+use aunsorm_kms::AzureBackendConfig;
+#[cfg(feature = "kms-gcp")]
+use aunsorm_kms::GcpBackendConfig;
 use aunsorm_kms::{BackendKind, BackendLocator, KeyDescriptor, KmsClient, KmsConfig};
 use aunsorm_packet::{
     decrypt_one_shot, decrypt_session, encrypt_one_shot, encrypt_session, AeadAlgorithm,
@@ -16,6 +22,8 @@ use sha2::{Digest, Sha256};
 
 const DEFAULT_SESSION_ITERATIONS: usize = 256;
 const DEFAULT_KMS_ITERATIONS: usize = 128;
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+const DEFAULT_REMOTE_KMS_ITERATIONS: usize = 64;
 
 fn parse_iterations(var: &str, default: usize) -> usize {
     std::env::var(var)
@@ -161,4 +169,177 @@ fn kms_local_roundtrip_soak() {
     }
 
     fs::remove_file(path).ok();
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+#[derive(Clone)]
+struct RemoteTarget {
+    backend: BackendKind,
+    key_id: String,
+    descriptor: KeyDescriptor,
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+impl RemoteTarget {
+    fn new(backend: BackendKind, key_id: impl Into<String>) -> Self {
+        let key_id_str = key_id.into();
+        let locator = BackendLocator::new(backend, key_id_str.clone());
+        let descriptor = KeyDescriptor::new(locator);
+        Self {
+            backend,
+            key_id: key_id_str,
+            descriptor,
+        }
+    }
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+fn remote_key_filter() -> Option<BTreeSet<String>> {
+    let raw = std::env::var("AUNSORM_KMS_REMOTE_KEYS").ok()?;
+    let filtered = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .collect::<BTreeSet<_>>();
+    if filtered.is_empty() {
+        None
+    } else {
+        Some(filtered)
+    }
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+fn filter_allows(filter: Option<&BTreeSet<String>>, alias: &str) -> bool {
+    filter.map_or(true, |set| set.contains(alias))
+}
+
+#[cfg(feature = "kms-gcp")]
+fn gather_gcp_targets(filter: Option<&BTreeSet<String>>) -> Result<Vec<RemoteTarget>, String> {
+    let raw = match std::env::var("AUNSORM_KMS_GCP_CONFIG") {
+        Ok(value) => value,
+        Err(_) => return Ok(Vec::new()),
+    };
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let config: GcpBackendConfig = serde_json::from_str(&raw)
+        .map_err(|err| format!("failed to parse AUNSORM_KMS_GCP_CONFIG: {err}"))?;
+    let mut targets = Vec::new();
+    for key in &config.keys {
+        let alias = key.key_id.trim();
+        if alias.is_empty() {
+            continue;
+        }
+        if filter_allows(filter, alias) {
+            targets.push(RemoteTarget::new(BackendKind::Gcp, alias.to_string()));
+        }
+    }
+    Ok(targets)
+}
+
+#[cfg(feature = "kms-azure")]
+fn gather_azure_targets(filter: Option<&BTreeSet<String>>) -> Result<Vec<RemoteTarget>, String> {
+    let raw = match std::env::var("AUNSORM_KMS_AZURE_CONFIG") {
+        Ok(value) => value,
+        Err(_) => return Ok(Vec::new()),
+    };
+    if raw.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let config: AzureBackendConfig = serde_json::from_str(&raw)
+        .map_err(|err| format!("failed to parse AUNSORM_KMS_AZURE_CONFIG: {err}"))?;
+    let mut targets = Vec::new();
+    for key in &config.keys {
+        let alias = key.key_id.trim();
+        if alias.is_empty() || key.local_private_key.is_some() {
+            continue;
+        }
+        if filter_allows(filter, alias) {
+            targets.push(RemoteTarget::new(BackendKind::Azure, alias.to_string()));
+        }
+    }
+    Ok(targets)
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+fn run_remote_sign_soak(client: &KmsClient, target: &RemoteTarget, iterations: usize) {
+    println!(
+        "remote soak: {:?} key {} ({} iterations)",
+        target.backend, target.key_id, iterations
+    );
+    let public = client
+        .public_ed25519(&target.descriptor)
+        .unwrap_or_else(|err| panic!("failed to fetch public key for {}: {err}", target.key_id));
+    let public_bytes: [u8; 32] = public
+        .as_slice()
+        .try_into()
+        .expect("public key must be 32 bytes");
+    let verifying = VerifyingKey::from_bytes(&public_bytes)
+        .unwrap_or_else(|err| panic!("invalid public key for {}: {err}", target.key_id));
+    let kid = client
+        .key_kid(&target.descriptor)
+        .unwrap_or_else(|err| panic!("failed to fetch kid for {}: {err}", target.key_id));
+    assert!(
+        !kid.is_empty(),
+        "KMS kid should never be empty for {}",
+        target.key_id
+    );
+
+    for counter in 0..iterations {
+        let message = format!(
+            "remote-kms-soak-{:?}-{}-{}",
+            target.backend, target.key_id, counter
+        );
+        let signature = client
+            .sign_ed25519(&target.descriptor, message.as_bytes())
+            .unwrap_or_else(|err| panic!("failed to sign via {}: {err}", target.key_id));
+        let sig_bytes: [u8; 64] = signature
+            .as_slice()
+            .try_into()
+            .expect("signature must be 64 bytes");
+        let signature = Signature::from_bytes(&sig_bytes);
+        verifying
+            .verify_strict(message.as_bytes(), &signature)
+            .unwrap_or_else(|err| {
+                panic!("signature verification failed for {}: {err}", target.key_id)
+            });
+    }
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+#[test]
+#[ignore]
+fn kms_remote_live_soak() {
+    let iterations = parse_iterations("AUNSORM_KMS_REMOTE_SOAK", DEFAULT_REMOTE_KMS_ITERATIONS);
+    let filter = remote_key_filter();
+    let mut targets = Vec::new();
+
+    #[cfg(feature = "kms-gcp")]
+    {
+        targets.extend(
+            gather_gcp_targets(filter.as_ref()).expect("failed to gather GCP remote targets"),
+        );
+    }
+
+    #[cfg(feature = "kms-azure")]
+    {
+        targets.extend(
+            gather_azure_targets(filter.as_ref()).expect("failed to gather Azure remote targets"),
+        );
+    }
+
+    if targets.is_empty() {
+        eprintln!(
+            "kms_remote_live_soak skipped: configure remote keys via \
+             AUNSORM_KMS_GCP_CONFIG or AUNSORM_KMS_AZURE_CONFIG"
+        );
+        return;
+    }
+
+    let config = KmsConfig::from_env().expect("load kms config from env");
+    let client = KmsClient::from_config(config).expect("kms client from env config");
+    for target in &targets {
+        run_remote_sign_soak(&client, target, iterations);
+    }
 }

@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   etkileşimi için genişletilmiş libFuzzer kapsamı.
 - `aunsorm-tests` crate'i altında `session_ratchet_roundtrip_soak` ve
   `kms_local_roundtrip_soak` uzun süreli doğrulama senaryoları.
+- `kms_remote_live_soak` testi; GCP ve Azure anahtarlarını ortam değişkeni
+  tabanlı yapılandırma ile canlı olarak doğrular ve iterasyon/filtresi
+  `AUNSORM_KMS_REMOTE_SOAK` ile kontrol edilebilir.
 - Azure ve GCP sağlayıcıları için yeni KMS conformance fixture testleri;
   tekrarlı/boş `key_id` ve kaynak değerleri artık deterministik `KmsError::Config`
   mesajları üretir.
@@ -40,7 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   uygulayarak aynı anlamlı içeriğe sahip girdiler için farklı kimliklerin
   üretilmesini engeller.
 ### Planned
-- Uzak KMS sağlayıcıları (GCP/Azure) için canlı soak test harness'i.
 
 ## [0.1.0] - 2025-10-07
 ### Added
