@@ -135,6 +135,7 @@ fn otel_layer(
 fn otel_endpoint_from_env() -> Option<String> {
     env::var("AUNSORM_OTEL_ENDPOINT")
         .ok()
+        .or_else(|| env::var("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT").ok())
         .or_else(|| env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok())
 }
 
@@ -169,4 +170,102 @@ fn build_tracer(
         .install_batch(opentelemetry_sdk::runtime::Tokio)?;
     let tracer = provider.tracer(service_name.to_string());
     Ok((provider, tracer))
+}
+
+#[cfg(all(test, feature = "otel"))]
+mod tests {
+    use super::otel_endpoint_from_env;
+    use std::{
+        env,
+        sync::{Mutex, OnceLock},
+    };
+
+    static ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn env_lock() -> &'static Mutex<()> {
+        ENV_MUTEX.get_or_init(|| Mutex::new(()))
+    }
+
+    fn clear_env(keys: &[&str]) {
+        for key in keys {
+            env::remove_var(key);
+        }
+    }
+
+    #[test]
+    fn prefers_aunsorm_specific_endpoint() {
+        const KEYS: [&str; 3] = [
+            "AUNSORM_OTEL_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+        ];
+        let _guard = env_lock().lock().expect("env mutex poisoned");
+        clear_env(&KEYS);
+        env::set_var("AUNSORM_OTEL_ENDPOINT", "https://otel.aunsorm.local");
+        env::set_var(
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "https://trace.example",
+        );
+        env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "https://otlp.example");
+
+        let endpoint = otel_endpoint_from_env();
+        assert_eq!(endpoint.as_deref(), Some("https://otel.aunsorm.local"));
+
+        clear_env(&KEYS);
+    }
+
+    #[test]
+    fn prefers_trace_specific_endpoint_over_general() {
+        const KEYS: [&str; 3] = [
+            "AUNSORM_OTEL_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+        ];
+        let _guard = env_lock().lock().expect("env mutex poisoned");
+        clear_env(&KEYS);
+        env::set_var(
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "https://trace-only.example",
+        );
+        env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "https://general.example");
+
+        let endpoint = otel_endpoint_from_env();
+        assert_eq!(endpoint.as_deref(), Some("https://trace-only.example"));
+
+        clear_env(&KEYS);
+    }
+
+    #[test]
+    fn falls_back_to_general_endpoint() {
+        const KEYS: [&str; 3] = [
+            "AUNSORM_OTEL_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+        ];
+        let _guard = env_lock().lock().expect("env mutex poisoned");
+        clear_env(&KEYS);
+        env::set_var(
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "https://general-only.example",
+        );
+
+        let endpoint = otel_endpoint_from_env();
+        assert_eq!(endpoint.as_deref(), Some("https://general-only.example"));
+
+        clear_env(&KEYS);
+    }
+
+    #[test]
+    fn returns_none_when_no_endpoint_configured() {
+        const KEYS: [&str; 3] = [
+            "AUNSORM_OTEL_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+        ];
+        let _guard = env_lock().lock().expect("env mutex poisoned");
+        clear_env(&KEYS);
+
+        let endpoint = otel_endpoint_from_env();
+        assert!(endpoint.is_none());
+    }
 }
