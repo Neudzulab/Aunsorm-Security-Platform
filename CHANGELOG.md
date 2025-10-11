@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-server` başlangıç JWKS yayımını `KeyTransparencyLog` içine
   kaydedip `/transparency/tree` uç noktası üzerinden Merkle benzeri ağaç
   başlığını JSON olarak sunar.
+- CLI `calib derive-coord` komutuna `--coord-raw-out` seçeneği eklenerek
+  türetilen koordinatın 32 baytlık ham değeri güvenli biçimde dosyaya
+  yazılabilir hale geldi; rapor çıktılarındaki Base64 değer ile birebir
+  doğrulanabilir.
 ### Changed
 - Uzak KMS soak testi `kid` değerini public anahtarın SHA-256 özetine göre
   doğrular ve isteğe bağlı JSON raporunda anahtar özeti/public anahtar
