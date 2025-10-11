@@ -1,0 +1,25 @@
+{
+  "provider": "azure",
+  "key_id": "azure-conformance-ed25519",
+  "resource": "keys/conformance-ed25519/versions/1",
+  "base_url": "https://aunsorm.vault.azure.net",
+  "certificate": {
+    "report_id": "AUN-KMS-2025-002",
+    "auditor": "Aunsorm QA Guild",
+    "issued": "2025-02-11",
+    "expires": "2026-02-11",
+    "summary": "Azure Key Vault remote Ed25519 API exercised with strict cache preconditions."
+  },
+  "key_material": {
+    "private_key": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=",
+    "public_key": "oJql9HpnWYAv+VX43C0qFKXJnSO+l/hkEn/5ODRVpPA=",
+    "kid": "1325b850c2871916eae203f0efc3c8987f64e5e3cdb27679e6d1fa97808357e6"
+  },
+  "messages": [
+    {
+      "name": "baseline",
+      "message": "QXVuc29ybSBLTVMgQ29uZm9ybWFuY2UgdjE=",
+      "signature": "RYqvNlDmyRSxcEMZ61WZYK3i+nl8RX/HWI/PJ8j8RLaUO5oV8r9wJVyx892qciZHTO1IJv99VFVUMojvmaHLCQ=="
+    }
+  ]
+}
