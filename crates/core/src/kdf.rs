@@ -4,6 +4,7 @@ use std::ops::{Deref, DerefMut};
 use argon2::{Algorithm, Argon2, Params, Version};
 use hkdf::Hkdf;
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use sysinfo::{System, SystemExt};
 use zeroize::Zeroizing;
 
@@ -13,7 +14,7 @@ pub struct SensitiveVec(Zeroizing<Vec<u8>>);
 
 impl PartialEq for SensitiveVec {
     fn eq(&self, other: &Self) -> bool {
-        constant_time_eq(self.as_slice(), other.as_slice())
+        self.as_slice().ct_eq(other.as_slice()).into()
     }
 }
 
@@ -235,15 +236,6 @@ fn derive_hkdf_outputs(
         .map_err(|_| CoreError::hkdf_length())?;
 
     Ok((seed64, pdk))
-}
-
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    let mut diff = left.len() ^ right.len();
-    let min_len = left.len().min(right.len());
-    for idx in 0..min_len {
-        diff |= usize::from(left[idx] ^ right[idx]);
-    }
-    diff == 0
 }
 
 /// Parola ve salt girdilerinden 64 baytlık tohum ve paket türetme anahtarı üretir.
