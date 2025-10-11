@@ -201,6 +201,8 @@ struct RemoteSoakOutcome {
     backend: String,
     key_id: String,
     kid: String,
+    expected_kid: String,
+    public_key_hex: String,
     iterations: usize,
     duration_ms: u128,
 }
@@ -308,6 +310,12 @@ fn run_remote_sign_soak(
     let kid = client
         .key_kid(&target.descriptor)
         .unwrap_or_else(|err| panic!("failed to fetch kid for {}: {err}", target.key_id));
+    let expected_kid = hex::encode(Sha256::digest(verifying.as_bytes()));
+    assert_eq!(
+        kid, expected_kid,
+        "remote kid mismatch for {} (expected sha256 digest of public key)",
+        target.key_id
+    );
     assert!(
         !kid.is_empty(),
         "KMS kid should never be empty for {}",
@@ -342,6 +350,8 @@ fn run_remote_sign_soak(
         backend: backend_label(backend).to_string(),
         key_id: target.key_id.clone(),
         kid,
+        expected_kid,
+        public_key_hex: hex::encode(verifying.as_bytes()),
         iterations,
         duration_ms,
     }

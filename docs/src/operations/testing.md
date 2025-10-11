@@ -32,8 +32,10 @@ decrypt akışı beklenmedik panik üretmeden hataları yüzeye çıkarır.
 - `cargo test -p aunsorm-tests --features "kms-remote" -- --ignored kms_remote_live_soak`
   GCP/Azure uzak anahtarlarını `AUNSORM_KMS_GCP_CONFIG`/`AUNSORM_KMS_AZURE_CONFIG`
   ortam değişkenlerinde tanımlanan JSON yapılandırmalarla test eder. Döngü sayısı
-  `AUNSORM_KMS_REMOTE_SOAK`, hedef filtrelemesi ise `AUNSORM_KMS_REMOTE_KEYS` ile
-  kontrol edilir.
+  `AUNSORM_KMS_REMOTE_SOAK`, hedef filtrelemesi `AUNSORM_KMS_REMOTE_KEYS` ile
+  kontrol edilir. Sonuçlar `AUNSORM_KMS_REMOTE_REPORT` değişkeni ile belirtilen
+  dosyaya JSON olarak kaydedilebilir; rapor girdileri public anahtarın hex
+  gösterimini ve beklenen `kid` özetini içerir.
 
 ## PQC Sertleştirme Kontrol Listesi
 
