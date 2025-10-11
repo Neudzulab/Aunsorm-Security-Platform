@@ -25,3 +25,4 @@ criterion = { workspace = true }
 hex = { workspace = true }
 rand = "0.8"
 proptest = "1"
+serde_json = { workspace = true }

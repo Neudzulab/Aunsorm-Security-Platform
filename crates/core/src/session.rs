@@ -5,7 +5,7 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::error::CoreError;
 
 /// Serileştirilebilir oturum ratchet durumu.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SessionRatchetState {
     pub root_key: [u8; 32],
     pub session_id: [u8; 16],
@@ -248,5 +248,16 @@ mod tests {
             next_from_restored.step_secret(),
             next_from_original.step_secret()
         );
+    }
+
+    #[test]
+    fn state_serializes_with_serde() {
+        let state = SessionRatchetState::new([1_u8; 32], [2_u8; 16], 42, true);
+        let serialized = serde_json::to_string(&state).expect("serialize");
+        let restored: SessionRatchetState = serde_json::from_str(&serialized).expect("deserialize");
+        assert_eq!(restored.root_key, state.root_key);
+        assert_eq!(restored.session_id, state.session_id);
+        assert_eq!(restored.message_no, state.message_no);
+        assert_eq!(restored.strict, state.strict);
     }
 }
