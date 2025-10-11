@@ -40,6 +40,23 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(env)).toBe('http://localhost:3100/callback');
   });
 
+  it('forces http when the domain points at an IPv6 loopback host', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: '[::1]:4100',
+      AUNSORM_INTEGRATIONS_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://[::1]:4100/bridge');
+
+    const bareLoopback = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: '::1',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(bareLoopback)).toBe('http://[::1]/aunsorm');
+  });
+
   it('falls back to local defaults when nothing is set', () => {
     const env = {} satisfies NodeJS.ProcessEnv;
     expect(resolveAunsormBaseUrl(env)).toBe('http://localhost:50047/aunsorm');

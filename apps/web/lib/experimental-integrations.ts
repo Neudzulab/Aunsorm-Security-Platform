@@ -65,7 +65,11 @@ function ensureProtocol(origin: string, fallbackScheme: 'http' | 'https'): strin
   }
 
   const scheme = fallbackScheme === 'https' ? 'https://' : 'http://';
-  return `${scheme}${origin}`;
+  const colonCount = (origin.match(/:/g) ?? []).length;
+  const needsIpv6Brackets = colonCount > 1 && !origin.startsWith('[');
+  const normalisedOrigin = needsIpv6Brackets ? `[${origin}]` : origin;
+
+  return `${scheme}${normalisedOrigin}`;
 }
 
 function collapseSlashes(input: string): string {
@@ -120,6 +124,62 @@ function resolveNodeEnv(env: NodeJS.ProcessEnv): 'production' | 'other' {
   return raw.trim().toLowerCase() === 'production' ? 'production' : 'other';
 }
 
+function extractHostname(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const colonCount = (trimmed.match(/:/g) ?? []).length;
+  const maybeIpv6 = colonCount > 1 && !/^\w+:\/\//i.test(trimmed);
+  const bracketed = maybeIpv6 && !trimmed.startsWith('[') ? `[${trimmed}]` : trimmed;
+  const candidate = /^\w+:\/\//i.test(bracketed) ? bracketed : `http://${bracketed}`;
+
+  try {
+    const url = new URL(candidate);
+    let host = url.hostname;
+    if (host.startsWith('[') && host.endsWith(']')) {
+      host = host.slice(1, -1);
+    }
+    return host.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+function isLoopbackHost(value: string | undefined): boolean {
+  const hostname = extractHostname(value);
+  if (!hostname) {
+    return false;
+  }
+
+  if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
+    return true;
+  }
+
+  if (hostname === '::1' || hostname === '0:0:0:0:0:0:0:1') {
+    return true;
+  }
+
+  if (hostname.startsWith('::ffff:')) {
+    const mapped = hostname.slice('::ffff:'.length);
+    return mapped.startsWith('127.') || mapped === '127.0.0.1';
+  }
+
+  if (hostname.startsWith('127.')) {
+    const parts = hostname.split('.');
+    if (parts.length === 4 && parts.every((part) => /^\d+$/.test(part) && Number(part) <= 255)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function resolveAunsormBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
   const direct = readEnvValue(DIRECT_BASE_URL_KEYS, env);
   if (direct.found) {
@@ -133,7 +193,7 @@ export function resolveAunsormBaseUrl(env: NodeJS.ProcessEnv = process.env): str
   const path = readEnvValue(PATH_KEYS, env);
 
   if (domain.found || path.found) {
-    const scheme: 'http' | 'https' = domain.value && /localhost|127\.0\.0\.1/i.test(domain.value)
+    const scheme: 'http' | 'https' = isLoopbackHost(domain.value)
       ? 'http'
       : nodeEnv === 'production'
         ? 'https'
