@@ -18,6 +18,8 @@ use aunsorm_packet::{
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use ed25519_dalek::{Signature, VerifyingKey};
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 const DEFAULT_SESSION_ITERATIONS: usize = 256;
@@ -194,6 +196,26 @@ impl RemoteTarget {
 }
 
 #[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+#[derive(Serialize)]
+struct RemoteSoakOutcome {
+    backend: String,
+    key_id: String,
+    kid: String,
+    iterations: usize,
+    duration_ms: u128,
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+fn backend_label(kind: BackendKind) -> &'static str {
+    match kind {
+        BackendKind::Local => "local",
+        BackendKind::Gcp => "gcp",
+        BackendKind::Azure => "azure",
+        BackendKind::Pkcs11 => "pkcs11",
+    }
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
 fn remote_key_filter() -> Option<BTreeSet<String>> {
     let raw = std::env::var("AUNSORM_KMS_REMOTE_KEYS").ok()?;
     let filtered = raw
@@ -263,11 +285,17 @@ fn gather_azure_targets(filter: Option<&BTreeSet<String>>) -> Result<Vec<RemoteT
 }
 
 #[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
-fn run_remote_sign_soak(client: &KmsClient, target: &RemoteTarget, iterations: usize) {
+fn run_remote_sign_soak(
+    client: &KmsClient,
+    target: &RemoteTarget,
+    iterations: usize,
+) -> RemoteSoakOutcome {
+    let backend = target.backend;
     println!(
         "remote soak: {:?} key {} ({} iterations)",
-        target.backend, target.key_id, iterations
+        backend, target.key_id, iterations
     );
+    let start = std::time::Instant::now();
     let public = client
         .public_ed25519(&target.descriptor)
         .unwrap_or_else(|err| panic!("failed to fetch public key for {}: {err}", target.key_id));
@@ -305,6 +333,18 @@ fn run_remote_sign_soak(client: &KmsClient, target: &RemoteTarget, iterations: u
                 panic!("signature verification failed for {}: {err}", target.key_id)
             });
     }
+    let duration_ms = start.elapsed().as_millis();
+    println!(
+        "remote soak: {:?} key {} completed in {} ms",
+        backend, target.key_id, duration_ms
+    );
+    RemoteSoakOutcome {
+        backend: backend_label(backend).to_string(),
+        key_id: target.key_id.clone(),
+        kid,
+        iterations,
+        duration_ms,
+    }
 }
 
 #[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
@@ -339,7 +379,50 @@ fn kms_remote_live_soak() {
 
     let config = KmsConfig::from_env().expect("load kms config from env");
     let client = KmsClient::from_config(config).expect("kms client from env config");
+    let mut outcomes = Vec::with_capacity(targets.len());
     for target in &targets {
-        run_remote_sign_soak(&client, target, iterations);
+        outcomes.push(run_remote_sign_soak(&client, target, iterations));
     }
+    maybe_write_remote_report(&outcomes);
+}
+
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+fn maybe_write_remote_report(outcomes: &[RemoteSoakOutcome]) {
+    let path = match std::env::var("AUNSORM_KMS_REMOTE_REPORT") {
+        Ok(raw) => raw.trim().to_owned(),
+        Err(_) => return,
+    };
+    if path.is_empty() {
+        return;
+    }
+    let path_buf = PathBuf::from(&path);
+    let mut file = File::create(&path_buf).unwrap_or_else(|err| {
+        panic!(
+            "failed to create remote soak report at {}: {err}",
+            path_buf.display()
+        )
+    });
+    serde_json::to_writer_pretty(&mut file, outcomes).unwrap_or_else(|err| {
+        panic!(
+            "failed to serialize remote soak report to {}: {err}",
+            path_buf.display()
+        )
+    });
+    file.flush().unwrap_or_else(|err| {
+        panic!(
+            "failed to flush remote soak report {}: {err}",
+            path_buf.display()
+        )
+    });
+    file.sync_all().unwrap_or_else(|err| {
+        panic!(
+            "failed to sync remote soak report {}: {err}",
+            path_buf.display()
+        )
+    });
+    println!(
+        "remote soak report written to {} ({} entries)",
+        path_buf.display(),
+        outcomes.len()
+    );
 }
