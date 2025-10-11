@@ -154,8 +154,24 @@ describe('resolveAunsormBaseUrlDetails', () => {
 
     expect(resolveAunsormBaseUrlDetails(env)).toEqual({
       baseUrl: 'https://example.invalid/custom',
-      origin: 'https://example.invalid/custom',
-      path: '',
+      origin: 'https://example.invalid',
+      path: '/custom',
+      source: {
+        kind: 'direct',
+        key: 'AUNSORM_BASE_URL',
+      },
+    });
+  });
+
+  it('derives origin and path for direct overrides without a scheme', () => {
+    const env = {
+      AUNSORM_BASE_URL: 'localhost:3100/callback?debug=1',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'localhost:3100/callback?debug=1',
+      origin: 'http://localhost:3100',
+      path: '/callback?debug=1',
       source: {
         kind: 'direct',
         key: 'AUNSORM_BASE_URL',

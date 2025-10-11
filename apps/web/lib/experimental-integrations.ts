@@ -36,6 +36,11 @@ interface ReadResult {
   key?: string;
 }
 
+interface DirectBaseComponents {
+  origin: string;
+  path: string;
+}
+
 function readEnvValue(keys: string[], env: NodeJS.ProcessEnv): ReadResult {
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(env, key)) {
@@ -229,10 +234,11 @@ export function resolveAunsormBaseUrlDetails(
   const direct = readEnvValue(DIRECT_BASE_URL_KEYS, env);
   if (direct.found) {
     const directValue = direct.value ?? '';
+    const components = deriveDirectBaseComponents(directValue);
     return {
       baseUrl: directValue,
-      origin: directValue,
-      path: '',
+      origin: components.origin,
+      path: components.path,
       source: {
         kind: 'direct',
         key: direct.key,
@@ -281,4 +287,24 @@ export function resolveAunsormBaseUrlDetails(
       nodeEnv,
     },
   };
+}
+
+function deriveDirectBaseComponents(baseUrl: string): DirectBaseComponents {
+  if (baseUrl === '') {
+    return { origin: '', path: '' };
+  }
+
+  const fallbackScheme: 'http' | 'https' = isLoopbackHost(baseUrl) ? 'http' : 'https';
+  const candidate = ensureProtocol(baseUrl, fallbackScheme);
+
+  try {
+    const url = new URL(candidate);
+    const pathWithQueryAndFragment = `${url.pathname}${url.search}${url.hash}`;
+    return {
+      origin: url.origin,
+      path: pathWithQueryAndFragment.length > 0 ? pathWithQueryAndFragment : '',
+    };
+  } catch {
+    return { origin: baseUrl, path: '' };
+  }
 }
