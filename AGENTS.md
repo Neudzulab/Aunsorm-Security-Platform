@@ -13,6 +13,10 @@ Bu depo tek bir ajan tarafından değil, alan uzmanı takımlar tarafından yön
 2. Her ajan kendi bölümünde çalışır; çakışma durumunda koordinasyon bu dosyada güncellenir.
 3. `cargo fmt --all`, `cargo clippy --all-targets --all-features`, `cargo test --all-features` komutları her değişiklikte çalıştırılmalıdır.
 4. Güvenlik gerekçesiyle `unsafe` kod yasaktır.
+5. README, PLAN.md, TODO.md veya diğer planlama dosyalarında **tamamlandı (`[x]` veya `done`)** olarak işaretlenmiş kalemler kilitlidir; ajanlar bu maddeleri tekrar açmak yerine yeni bir iş maddesi olarak revizyon talebi oluşturmalıdır.
+   - Revizyon ihtiyacı varsa, ilgili bölümde `Revize:` önekiyle yeni bir madde ekleyin ve eski maddeye referans verin.
+   - Kilitli maddelerdeki dosyalara dokunmanız gerekiyorsa, PLAN.md içerisinde yeni teslimat maddesi olarak belgeleyin ve yetkilendirme gelmeden değişiklik yapmayın.
+6. Ajanlar yalnızca yapılacak işleri, `README.md` ana planını ve kapsamlarındaki `AGENTS.md` yönergelerini esas almalıdır; tamamlanan maddeleri değiştirmek iş akışını bozduğundan kaçınılmalıdır.
 
 ## Planlama Ajanları
 - **Crypto Agent**: `crates/core`, `crates/pqc`, `crates/packet`.

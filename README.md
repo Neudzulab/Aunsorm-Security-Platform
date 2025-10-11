@@ -2,6 +2,12 @@
 
 Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsamlı uygulaması için hazırlanmaktadır. Tüm çalışmalar çok ajanlı bir plana göre yürütülecektir.
 
+## Revizyon Kilidi Prensipleri
+
+- README, PLAN ve TODO gibi planlama belgelerinde `[x]` veya "done" olarak işaretlenen tüm teslimatlar kilitlidir.
+- Revizyon gerekiyorsa mevcut maddeyi değiştirmek yerine ilgili bölümde `Revize:` önekiyle yeni bir madde açıp kilitli göreve referans verin.
+- Ajanlar yalnızca açık/to-do maddeleri, ana planı ve kapsamlarındaki `AGENTS.md` yönergelerini baz almalı; tamamlanan işlere tekrar dokunmamalıdır.
+
 ## 5 Dakikada Başla
 
 ```bash
