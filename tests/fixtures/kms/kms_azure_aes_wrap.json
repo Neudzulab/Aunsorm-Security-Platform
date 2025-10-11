@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "provider": "azure",
+  "capability": "aes256-wrap",
+  "fips_level": "FIPS 140-2 Level 3",
+  "certification_refs": [
+    {
+      "name": "Microsoft Azure Key Vault FIPS 140-2 Certificate #3575",
+      "url": "https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/3575"
+    }
+  ],
+  "vector": {
+    "vector_type": "wrap",
+    "key_reference": "vaults/aunsorm-prod/keys/wrap-key",
+    "wrapping_key_b64": "uOUf1OPh2aftUruoMOMdPR61cO/IYM7E3YCfiggQHKg=",
+    "aad_b64": "QXp1cmVDb25mb3JtYW5jZUFBRC12MQ==",
+    "plaintext_b64": "v27cce2NtEZWHiGtA9iPU1fxsS8hQ3vl",
+    "nonce_b64": "UQyfkuGgEKycy1lj",
+    "ciphertext_b64": "AePfHSuhJn7O9E8sRg6AohziAkyDN/hi",
+    "tag_b64": "80dR+6zPnawAYFbsbziQag=="
+  }
+}

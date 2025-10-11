@@ -11,5 +11,6 @@
 3. **Uzun Süreli Fuzzing (Tamamlandı):** `cargo fuzz cmin` minimizasyonu gece
    iş akışına otomatikleştirildi; çıktı korpusları ve özet metrikler JSON
    olarak artefakt paketlerine ekleniyor.
-4. **Harici KMS Sağlayıcıları:** Yeni conformance fixture’ları ile HSM/PKCS#11
-   sertifikasyon raporlarının genişletilmesi.
+4. **Harici KMS Sağlayıcıları (Tamamlandı):** Yeni conformance fixture’ları ile
+   HSM/PKCS#11 sertifikasyon raporları genişletildi ve `kms_certification_report`
+   çıktısı doğrulama sürecine eklendi.
