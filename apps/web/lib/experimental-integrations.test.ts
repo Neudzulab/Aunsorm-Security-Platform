@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveAunsormBaseUrl } from './experimental-integrations.js';
+import {
+  resolveAunsormBaseUrl,
+  resolveAunsormBaseUrlDetails,
+} from './experimental-integrations.js';
 
 describe('resolveAunsormBaseUrl', () => {
   it('returns direct base url when an explicit variable is provided', () => {
@@ -140,5 +143,58 @@ describe('resolveAunsormBaseUrl', () => {
     } satisfies NodeJS.ProcessEnv;
 
     expect(resolveAunsormBaseUrl(envRoot)).toBe('https://gateway.aunsorm.dev/');
+  });
+});
+
+describe('resolveAunsormBaseUrlDetails', () => {
+  it('reports direct overrides with the source key', () => {
+    const env = {
+      AUNSORM_BASE_URL: 'https://example.invalid/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'https://example.invalid/custom',
+      origin: 'https://example.invalid/custom',
+      path: '',
+      source: {
+        kind: 'direct',
+        key: 'AUNSORM_BASE_URL',
+      },
+    });
+  });
+
+  it('captures the keys used when resolving from domain/path', () => {
+    const env = {
+      NODE_ENV: 'production',
+      NEXT_PUBLIC_AUNSORM_INTEGRATIONS_DOMAIN: 'localhost:3100',
+      NEXT_PUBLIC_AUNSORM_INTEGRATIONS_PATH: 'callback',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'http://localhost:3100/callback',
+      origin: 'http://localhost:3100',
+      path: '/callback',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'NEXT_PUBLIC_AUNSORM_INTEGRATIONS_DOMAIN',
+        pathKey: 'NEXT_PUBLIC_AUNSORM_INTEGRATIONS_PATH',
+      },
+    });
+  });
+
+  it('returns production defaults when nothing is set but NODE_ENV=production', () => {
+    const env = {
+      NODE_ENV: 'production',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'https://aunsorm.dev/aunsorm',
+      origin: 'https://aunsorm.dev',
+      path: '/aunsorm',
+      source: {
+        kind: 'default',
+        nodeEnv: 'production',
+      },
+    });
   });
 });
