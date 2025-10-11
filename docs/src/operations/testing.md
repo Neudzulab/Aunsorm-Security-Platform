@@ -29,6 +29,11 @@ decrypt akışı beklenmedik panik üretmeden hataları yüzeye çıkarır.
 - `cargo test -p aunsorm-tests -- --ignored kms_local_roundtrip_soak` KMS yerel store
   doğrulamasını 128 iterasyon boyunca tekrar eder. `AUNSORM_KMS_SOAK` ile iterasyon
   sayısı artırılabilir.
+- `cargo test -p aunsorm-tests --features "kms-remote" -- --ignored kms_remote_live_soak`
+  GCP/Azure uzak anahtarlarını `AUNSORM_KMS_GCP_CONFIG`/`AUNSORM_KMS_AZURE_CONFIG`
+  ortam değişkenlerinde tanımlanan JSON yapılandırmalarla test eder. Döngü sayısı
+  `AUNSORM_KMS_REMOTE_SOAK`, hedef filtrelemesi ise `AUNSORM_KMS_REMOTE_KEYS` ile
+  kontrol edilir.
 
 ## PQC Sertleştirme Kontrol Listesi
 
