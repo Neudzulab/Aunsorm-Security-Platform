@@ -1,0 +1,124 @@
+use std::path::PathBuf;
+
+use assert_cmd::Command;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
+use hkdf::Hkdf;
+use predicates::prelude::*;
+use sha2::Sha256;
+use tempfile::NamedTempFile;
+
+use aunsorm_core::{
+    calib_from_text, coord32_derive, derive_seed64_and_pdk, salts::Salts, KdfPreset, KdfProfile,
+};
+
+fn derive_salts(org_salt: &[u8], calibration_id: &str) -> (Vec<u8>, Salts) {
+    let hk = Hkdf::<Sha256>::new(Some(org_salt), calibration_id.as_bytes());
+    let mut password_salt = vec![0_u8; 32];
+    let mut calibration_salt = vec![0_u8; 32];
+    let mut chain_salt = vec![0_u8; 32];
+    let mut coord_salt = vec![0_u8; 32];
+
+    hk.expand(b"Aunsorm/1.01/password-salt", &mut password_salt)
+        .expect("password salt");
+    hk.expand(b"Aunsorm/1.01/calibration-salt", &mut calibration_salt)
+        .expect("calibration salt");
+    hk.expand(b"Aunsorm/1.01/chain-salt", &mut chain_salt)
+        .expect("chain salt");
+    hk.expand(b"Aunsorm/1.01/coord-salt", &mut coord_salt)
+        .expect("coord salt");
+
+    let salts = Salts::new(calibration_salt, chain_salt, coord_salt).expect("salts");
+    (password_salt, salts)
+}
+
+fn cli_command() -> Command {
+    Command::cargo_bin("aunsorm-cli").expect("cli bin")
+}
+
+#[test]
+fn calib_fingerprint_out_dash_json_streams_stdout() {
+    let mut cmd = cli_command();
+    cmd.args([
+        "calib",
+        "fingerprint",
+        "--org-salt",
+        "V2VBcmVLdXQuZXU=",
+        "--calib-text",
+        "Neudzulab | Prod | 2025-08",
+        "--format",
+        "json",
+        "--out",
+        "-",
+    ]);
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("\"calibration_id\""));
+}
+
+#[test]
+fn calib_fingerprint_out_dash_text_streams_stdout() {
+    let mut cmd = cli_command();
+    cmd.args([
+        "calib",
+        "fingerprint",
+        "--org-salt",
+        "V2VBcmVLdXQuZXU=",
+        "--calib-text",
+        "Neudzulab | Prod | 2025-08",
+        "--format",
+        "text",
+        "--out",
+        "-",
+    ]);
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Kalibrasyon Kimliği"));
+}
+
+#[test]
+fn coord_raw_out_dash_writes_expected_bytes() {
+    let report_out = NamedTempFile::new().expect("report out");
+    let report_path: PathBuf = report_out.path().into();
+
+    let mut cmd = cli_command();
+    cmd.args([
+        "calib",
+        "derive-coord",
+        "--password",
+        "correct horse battery staple",
+        "--org-salt",
+        "V2VBcmVLdXQuZXU=",
+        "--calib-text",
+        "Neudzulab | Prod | 2025-08",
+        "--kdf",
+        "low",
+        "--coord-raw-out",
+        "-",
+        "--out",
+        report_path.to_str().expect("path"),
+        "--format",
+        "json",
+    ]);
+
+    let assert = cmd.assert().success();
+    let stdout = assert.get_output().stdout.clone();
+    assert_eq!(stdout.len(), 32);
+
+    let org = STANDARD.decode("V2VBcmVLdXQuZXU=").expect("org salt");
+    let (calibration, _) =
+        calib_from_text(&org, "Neudzulab | Prod | 2025-08").expect("calibration");
+    let (password_salt, salts) = derive_salts(&org, calibration.id.as_str());
+    let (seed, _pdk, _info) = derive_seed64_and_pdk(
+        "correct horse battery staple",
+        password_salt.as_slice(),
+        salts.calibration(),
+        salts.chain(),
+        KdfProfile::preset(KdfPreset::Low),
+    )
+    .expect("seed");
+    let (_, expected_coord) = coord32_derive(seed.as_ref(), &calibration, &salts).expect("coord");
+
+    assert_eq!(stdout, expected_coord);
+}

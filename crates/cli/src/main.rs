@@ -5,6 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error as _;
 use std::fs;
+use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -1266,18 +1267,32 @@ fn handle_encrypt(args: EncryptArgs, strict: bool) -> CliResult<()> {
 
     let transcript = packet.transcript_hash(&aad)?;
     let encoded = packet.to_base64()?;
-    fs::write(&out, encoded.as_bytes())?;
+    let writing_to_stdout = is_stdout_path(&out);
+    write_bytes(&out, encoded.as_bytes())?;
 
-    println!(
-        "şifreleme tamamlandı: çıktı={} | calib_id={} | profile={} | aead={} | strict={} | kem={} | transcript={}",
-        out.display(),
-        calibration.id.as_str(),
-        kdf,
-        aead,
-        strict,
-        kem_fields.as_ref().map_or("none", |k| k.kem_name.as_str()),
-        transcript,
-    );
+    if writing_to_stdout {
+        eprintln!(
+            "şifreleme tamamlandı: çıktı={} | calib_id={} | profile={} | aead={} | strict={} | kem={} | transcript={}",
+            out.display(),
+            calibration.id.as_str(),
+            kdf,
+            aead,
+            strict,
+            kem_fields.as_ref().map_or("none", |k| k.kem_name.as_str()),
+            transcript,
+        );
+    } else {
+        println!(
+            "şifreleme tamamlandı: çıktı={} | calib_id={} | profile={} | aead={} | strict={} | kem={} | transcript={}",
+            out.display(),
+            calibration.id.as_str(),
+            kdf,
+            aead,
+            strict,
+            kem_fields.as_ref().map_or("none", |k| k.kem_name.as_str()),
+            transcript,
+        );
+    }
     Ok(())
 }
 
@@ -1318,7 +1333,8 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
     };
     let decrypted = decrypt_one_shot(&params)?;
 
-    fs::write(&out, &decrypted.plaintext)?;
+    let output_to_stdout = is_stdout_path(&out);
+    write_bytes(&out, &decrypted.plaintext)?;
 
     if let Some(path) = metadata_out.as_deref() {
         write_metadata_file(path, &decrypted.metadata)?;
@@ -1328,18 +1344,33 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
         .as_ref()
         .map(|path| format!(" | metadata={}", path.display()))
         .unwrap_or_default();
+    let metadata_to_stdout = metadata_out.as_deref().is_some_and(is_stdout_path);
 
-    println!(
-        "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{} | transcript={}",
-        out.display(),
-        decrypted.header.calib_id,
-        decrypted.coord_id,
-        decrypted.header.aead.alg,
-        strict,
-        decrypted.plaintext.len(),
-        metadata_note,
-        decrypted.transcript,
-    );
+    if output_to_stdout || metadata_to_stdout {
+        eprintln!(
+            "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{} | transcript={}",
+            out.display(),
+            decrypted.header.calib_id,
+            decrypted.coord_id,
+            decrypted.header.aead.alg,
+            strict,
+            decrypted.plaintext.len(),
+            metadata_note,
+            decrypted.transcript,
+        );
+    } else {
+        println!(
+            "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{} | transcript={}",
+            out.display(),
+            decrypted.header.calib_id,
+            decrypted.coord_id,
+            decrypted.header.aead.alg,
+            strict,
+            decrypted.plaintext.len(),
+            metadata_note,
+            decrypted.transcript,
+        );
+    }
     Ok(())
 }
 
@@ -1367,18 +1398,30 @@ fn handle_session_encrypt(args: &SessionEncryptArgs, strict: bool) -> CliResult<
     let (packet, outcome) = encrypt_session(params)?;
     let transcript = packet.transcript_hash(&aad)?;
     let encoded = packet.to_base64()?;
-    fs::write(&args.out, encoded.as_bytes())?;
+    let output_to_stdout = is_stdout_path(&args.out);
+    write_bytes(&args.out, encoded.as_bytes())?;
 
     save_ratchet_state(&args.state, &ratchet)?;
 
-    println!(
-        "oturum şifreleme tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | transcript={}",
-        args.out.display(),
-        STANDARD.encode(outcome.session_id),
-        outcome.message_no,
-        ratchet.is_strict(),
-        transcript,
-    );
+    if output_to_stdout {
+        eprintln!(
+            "oturum şifreleme tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | transcript={}",
+            args.out.display(),
+            STANDARD.encode(outcome.session_id),
+            outcome.message_no,
+            ratchet.is_strict(),
+            transcript,
+        );
+    } else {
+        println!(
+            "oturum şifreleme tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | transcript={}",
+            args.out.display(),
+            STANDARD.encode(outcome.session_id),
+            outcome.message_no,
+            ratchet.is_strict(),
+            transcript,
+        );
+    }
     Ok(())
 }
 
@@ -1411,21 +1454,36 @@ fn handle_session_decrypt(args: &SessionDecryptArgs, strict: bool) -> CliResult<
         packet: packet_b64.trim(),
     };
     let (decrypted, outcome) = decrypt_session(params)?;
-    fs::write(&args.out, &decrypted.plaintext)?;
+    let output_to_stdout = is_stdout_path(&args.out);
+    write_bytes(&args.out, &decrypted.plaintext)?;
 
     replay_store.seen.insert(outcome.message_no);
+    let store_to_stdout = is_stdout_path(&args.store);
     save_replay_store(&args.store, &replay_store)?;
+    let state_to_stdout = is_stdout_path(&args.state);
     save_ratchet_state(&args.state, &ratchet)?;
 
-    println!(
-        "oturum deşifre tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | replay_seen={} | transcript={}",
-        args.out.display(),
-        session_id_b64,
-        outcome.message_no,
-        ratchet.is_strict(),
-        replay_store.seen.len(),
-        decrypted.transcript,
-    );
+    if output_to_stdout || store_to_stdout || state_to_stdout {
+        eprintln!(
+            "oturum deşifre tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | replay_seen={} | transcript={}",
+            args.out.display(),
+            session_id_b64,
+            outcome.message_no,
+            ratchet.is_strict(),
+            replay_store.seen.len(),
+            decrypted.transcript,
+        );
+    } else {
+        println!(
+            "oturum deşifre tamamlandı: çıktı={} | session_id={} | msg_no={} | strict={} | replay_seen={} | transcript={}",
+            args.out.display(),
+            session_id_b64,
+            outcome.message_no,
+            ratchet.is_strict(),
+            replay_store.seen.len(),
+            decrypted.transcript,
+        );
+    }
     Ok(())
 }
 
@@ -1481,19 +1539,18 @@ fn handle_calib_fingerprint(args: &CalibFingerprintArgs) -> CliResult<()> {
     emit_calibration_fingerprint_report(&report, args.format, args.out.as_deref())
 }
 
-fn write_coord_raw(path: Option<&Path>, coord: &[u8; 32]) -> CliResult<()> {
-    if let Some(path) = path {
-        fs::write(path, coord)?;
-    }
-    Ok(())
-}
-
 fn emit_json_pretty<T>(value: &T, out: Option<&Path>) -> CliResult<()>
 where
     T: Serialize,
 {
     if let Some(path) = out {
-        write_json_pretty(path, value)
+        if is_stdout_path(path) {
+            let json = serde_json::to_string_pretty(value)?;
+            println!("{json}");
+            Ok(())
+        } else {
+            write_json_pretty(path, value)
+        }
     } else {
         let json = serde_json::to_string_pretty(value)?;
         println!("{json}");
@@ -1503,13 +1560,39 @@ where
 
 fn emit_text(value: &str, out: Option<&Path>) -> CliResult<()> {
     if let Some(path) = out {
-        let mut owned = value.to_owned();
-        owned.push('\n');
-        fs::write(path, owned)?;
+        if is_stdout_path(path) {
+            println!("{value}");
+        } else {
+            let mut owned = value.to_owned();
+            owned.push('\n');
+            fs::write(path, owned)?;
+        }
     } else {
         println!("{value}");
     }
     Ok(())
+}
+
+fn write_coord_raw(path: Option<&Path>, coord: &[u8; 32]) -> CliResult<()> {
+    if let Some(path) = path {
+        write_bytes(path, coord)?;
+    }
+    Ok(())
+}
+
+fn write_bytes(path: &Path, data: &[u8]) -> CliResult<()> {
+    if is_stdout_path(path) {
+        let mut stdout = io::stdout().lock();
+        stdout.write_all(data)?;
+        stdout.flush()?;
+    } else {
+        fs::write(path, data)?;
+    }
+    Ok(())
+}
+
+fn is_stdout_path(path: &Path) -> bool {
+    path == Path::new("-")
 }
 
 fn emit_calibration_report(
@@ -1732,19 +1815,38 @@ fn handle_jwt_keygen(args: &JwtKeygenArgs) -> CliResult<()> {
         };
         write_json_pretty(path, &jwks)?;
     }
-    println!(
-        "jwt anahtarı üretildi: kid={} | secret={}{}{}",
-        key.kid(),
-        args.out.display(),
-        args.public_out
-            .as_ref()
-            .map(|p| format!(" | public={}", p.display()))
-            .unwrap_or_default(),
-        args.jwks_out
-            .as_ref()
-            .map(|p| format!(" | jwks={}", p.display()))
-            .unwrap_or_default()
-    );
+    let log_to_stderr = is_stdout_path(&args.out)
+        || args.public_out.as_deref().is_some_and(is_stdout_path)
+        || args.jwks_out.as_deref().is_some_and(is_stdout_path);
+    if log_to_stderr {
+        eprintln!(
+            "jwt anahtarı üretildi: kid={} | secret={}{}{}",
+            key.kid(),
+            args.out.display(),
+            args.public_out
+                .as_ref()
+                .map(|p| format!(" | public={}", p.display()))
+                .unwrap_or_default(),
+            args.jwks_out
+                .as_ref()
+                .map(|p| format!(" | jwks={}", p.display()))
+                .unwrap_or_default()
+        );
+    } else {
+        println!(
+            "jwt anahtarı üretildi: kid={} | secret={}{}{}",
+            key.kid(),
+            args.out.display(),
+            args.public_out
+                .as_ref()
+                .map(|p| format!(" | public={}", p.display()))
+                .unwrap_or_default(),
+            args.jwks_out
+                .as_ref()
+                .map(|p| format!(" | jwks={}", p.display()))
+                .unwrap_or_default()
+        );
+    }
     Ok(())
 }
 
@@ -1794,15 +1896,27 @@ fn handle_jwt_sign(args: &JwtSignArgs) -> CliResult<()> {
     } else {
         return Err(CliError::MissingJwtMaterial);
     };
-    fs::write(&args.out, token.as_bytes())?;
-    println!(
-        "jwt imzalandı: kid={} | jti={} | out={} | exp={:?}{}",
-        kid,
-        claims.jwt_id.as_deref().unwrap_or("<none>"),
-        args.out.display(),
-        claims.expiration,
-        extra_info.unwrap_or_default(),
-    );
+    let output_to_stdout = is_stdout_path(&args.out);
+    write_bytes(&args.out, token.as_bytes())?;
+    if output_to_stdout {
+        eprintln!(
+            "jwt imzalandı: kid={} | jti={} | out={} | exp={:?}{}",
+            kid,
+            claims.jwt_id.as_deref().unwrap_or("<none>"),
+            args.out.display(),
+            claims.expiration,
+            extra_info.unwrap_or_default(),
+        );
+    } else {
+        println!(
+            "jwt imzalandı: kid={} | jti={} | out={} | exp={:?}{}",
+            kid,
+            claims.jwt_id.as_deref().unwrap_or("<none>"),
+            args.out.display(),
+            claims.expiration,
+            extra_info.unwrap_or_default(),
+        );
+    }
     Ok(())
 }
 
@@ -1830,13 +1944,23 @@ fn handle_jwt_verify(args: &JwtVerifyArgs) -> CliResult<()> {
     };
     let claims = verifier.verify(token, &options)?;
     if let Some(out) = args.claims_out.as_deref() {
+        let claims_to_stdout = is_stdout_path(out);
         write_json_pretty(out, &claims)?;
-        println!(
-            "jwt doğrulandı: token={} | jti={} | claims={}",
-            args.token.display(),
-            claims.jwt_id.as_deref().unwrap_or("<none>"),
-            out.display(),
-        );
+        if claims_to_stdout {
+            eprintln!(
+                "jwt doğrulandı: token={} | jti={} | claims={}",
+                args.token.display(),
+                claims.jwt_id.as_deref().unwrap_or("<none>"),
+                out.display(),
+            );
+        } else {
+            println!(
+                "jwt doğrulandı: token={} | jti={} | claims={}",
+                args.token.display(),
+                claims.jwt_id.as_deref().unwrap_or("<none>"),
+                out.display(),
+            );
+        }
     } else {
         let json = serde_json::to_string_pretty(&claims)?;
         println!("{json}");
@@ -1860,12 +1984,21 @@ fn handle_jwt_export_jwks(args: &JwtExportJwksArgs) -> CliResult<()> {
     let jwks = Jwks {
         keys: jwk_map.into_values().collect(),
     };
+    let output_to_stdout = is_stdout_path(&args.out);
     write_json_pretty(&args.out, &jwks)?;
-    println!(
-        "jwks üretildi: anahtar_sayısı={} | çıktı={}",
-        jwks.keys.len(),
-        args.out.display(),
-    );
+    if output_to_stdout {
+        eprintln!(
+            "jwks üretildi: anahtar_sayısı={} | çıktı={}",
+            jwks.keys.len(),
+            args.out.display(),
+        );
+    } else {
+        println!(
+            "jwks üretildi: anahtar_sayısı={} | çıktı={}",
+            jwks.keys.len(),
+            args.out.display(),
+        );
+    }
     Ok(())
 }
 
@@ -1893,16 +2026,30 @@ fn handle_x509_self_signed(args: &X509SelfSignedArgs) -> CliResult<()> {
     let cert = generate_self_signed_cert(&params)?;
     write_text_file(&args.cert_out, &cert.certificate_pem)?;
     write_text_file(&args.key_out, &cert.private_key_pem)?;
-    println!(
-        "x509 sertifikası üretildi: cn={} | calib_id={} | validity={} gün | cert={} | key={} | cps={} | policies={}",
-        args.common_name,
-        cert.calibration_id,
-        validity_days,
-        args.cert_out.display(),
-        args.key_out.display(),
-        args.cps.len(),
-        args.policy_oids.len(),
-    );
+    let log_to_stderr = is_stdout_path(&args.cert_out) || is_stdout_path(&args.key_out);
+    if log_to_stderr {
+        eprintln!(
+            "x509 sertifikası üretildi: cn={} | calib_id={} | validity={} gün | cert={} | key={} | cps={} | policies={}",
+            args.common_name,
+            cert.calibration_id,
+            validity_days,
+            args.cert_out.display(),
+            args.key_out.display(),
+            args.cps.len(),
+            args.policy_oids.len(),
+        );
+    } else {
+        println!(
+            "x509 sertifikası üretildi: cn={} | calib_id={} | validity={} gün | cert={} | key={} | cps={} | policies={}",
+            args.common_name,
+            cert.calibration_id,
+            validity_days,
+            args.cert_out.display(),
+            args.key_out.display(),
+            args.cps.len(),
+            args.policy_oids.len(),
+        );
+    }
     Ok(())
 }
 
@@ -2040,6 +2187,11 @@ fn save_replay_store(path: &Path, store: &PersistedReplayStore) -> CliResult<()>
 }
 
 fn write_json_pretty<T: Serialize>(path: &Path, value: &T) -> CliResult<()> {
+    if is_stdout_path(path) {
+        let json = serde_json::to_string_pretty(value)?;
+        println!("{json}");
+        return Ok(());
+    }
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)?;
@@ -2051,6 +2203,10 @@ fn write_json_pretty<T: Serialize>(path: &Path, value: &T) -> CliResult<()> {
 }
 
 fn write_text_file(path: &Path, contents: &str) -> CliResult<()> {
+    if is_stdout_path(path) {
+        println!("{contents}");
+        return Ok(());
+    }
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)?;
