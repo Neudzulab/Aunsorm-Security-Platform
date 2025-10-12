@@ -14,6 +14,9 @@ use base64::{
 use hex::encode as hex_encode;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tokio::signal;
+#[cfg(unix)]
+use tokio::signal::unix::{signal as unix_signal, SignalKind};
 use tracing::{info, warn};
 
 use aunsorm_core::transparency::TransparencyRecord;
@@ -61,8 +64,42 @@ pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
             }
         }
     });
-    axum::serve(listener, router.into_make_service()).await?;
+    axum::serve(listener, router.into_make_service())
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
     Ok(())
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        match signal::ctrl_c().await {
+            Ok(()) => info!("SIGINT alındı, kapanış başlatılıyor"),
+            Err(err) => warn!(error = %err, "CTRL+C sinyali dinlenemedi"),
+        }
+    };
+
+    #[cfg(unix)]
+    {
+        let mut term_signal = match unix_signal(SignalKind::terminate()) {
+            Ok(signal) => signal,
+            Err(err) => {
+                warn!(error = %err, "SIGTERM dinleyicisi kurulamadı");
+                ctrl_c.await;
+                return;
+            }
+        };
+
+        tokio::select! {
+            () = ctrl_c => (),
+            () = async {
+                term_signal.recv().await;
+                info!("SIGTERM alındı, kapanış başlatılıyor");
+            } => (),
+        }
+    }
+
+    #[cfg(not(unix))]
+    ctrl_c.await;
 }
 
 #[derive(Debug, Deserialize)]
