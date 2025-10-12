@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   resolveAunsormBaseUrl,
@@ -21,6 +21,40 @@ describe('resolveAunsormBaseUrl', () => {
     } satisfies NodeJS.ProcessEnv;
 
     expect(resolveAunsormBaseUrl(env)).toBe('');
+  });
+
+  it('prefers file-based overrides when present', () => {
+    const env = {
+      AUNSORM_BASE_URL_FILE: '/secrets/base-url',
+      AUNSORM_BASE_URL: 'https://example.invalid/should-not-be-used',
+    } satisfies NodeJS.ProcessEnv;
+
+    const stub = vi.fn(() => 'https://file.example.invalid/from-file');
+
+    expect(resolveAunsormBaseUrl(env, stub)).toBe('https://file.example.invalid/from-file');
+    expect(stub).toHaveBeenCalledWith('/secrets/base-url');
+  });
+
+  it('treats blank file paths as empty overrides', () => {
+    const env = {
+      AUNSORM_BASE_URL_FILE: '   ',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env, () => 'ignored')).toBe('');
+  });
+
+  it('propagates file read errors with helpful context', () => {
+    const env = {
+      AUNSORM_BASE_URL_FILE: '/missing/file',
+    } satisfies NodeJS.ProcessEnv;
+
+    const failingStub = vi.fn(() => {
+      throw new Error('ENOENT: no such file or directory');
+    });
+
+    expect(() => resolveAunsormBaseUrl(env, failingStub)).toThrowError(
+      /Failed to read AUNSORM_BASE_URL_FILE \(\/missing\/file\): ENOENT: no such file or directory/,
+    );
   });
 
   it('builds the url from domain and path overrides', () => {
@@ -184,6 +218,25 @@ describe('resolveAunsormBaseUrlDetails', () => {
       source: {
         kind: 'direct',
         key: 'AUNSORM_BASE_URL',
+      },
+    });
+  });
+
+  it('reports file-based overrides including the file path', () => {
+    const env = {
+      NEXT_PUBLIC_AUNSORM_BASE_URL_FILE: '/etc/aunsorm/base-url',
+    } satisfies NodeJS.ProcessEnv;
+
+    const stub = vi.fn(() => 'https://file.example.invalid/custom');
+
+    expect(resolveAunsormBaseUrlDetails(env, stub)).toEqual({
+      baseUrl: 'https://file.example.invalid/custom',
+      origin: 'https://file.example.invalid',
+      path: '/custom',
+      source: {
+        kind: 'direct-file',
+        key: 'NEXT_PUBLIC_AUNSORM_BASE_URL_FILE',
+        filePath: '/etc/aunsorm/base-url',
       },
     });
   });
