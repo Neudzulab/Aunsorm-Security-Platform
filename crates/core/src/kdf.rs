@@ -9,8 +9,16 @@ use sysinfo::{System, SystemExt};
 use zeroize::Zeroizing;
 
 /// Zeroize garantisi sağlayan byte vektörü sargısı.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SensitiveVec(Zeroizing<Vec<u8>>);
+
+impl fmt::Debug for SensitiveVec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SensitiveVec")
+            .field("len", &self.0.len())
+            .finish_non_exhaustive()
+    }
+}
 
 impl PartialEq for SensitiveVec {
     fn eq(&self, other: &Self) -> bool {
@@ -364,5 +372,16 @@ mod tests {
 
         b.as_mut_slice()[2] ^= 0x01;
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn sensitive_vec_debug_is_redacted() {
+        let secret = SensitiveVec::new(vec![0x41, 0x42, 0x43, 0x44]);
+        let formatted = format!("{secret:?}");
+
+        assert!(formatted.contains("SensitiveVec"));
+        assert!(formatted.contains("len: 4"));
+        assert!(!formatted.contains("0x41"));
+        assert!(!formatted.contains("0x42"));
     }
 }
