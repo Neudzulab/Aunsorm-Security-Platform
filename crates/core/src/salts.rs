@@ -1,9 +1,12 @@
 use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::error::CoreError;
 
 /// KDF ve koordinat türetiminde kullanılan salt seti.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Zeroize, ZeroizeOnDrop,
+)]
 pub struct Salts {
     calibration: Vec<u8>,
     chain: Vec<u8>,
@@ -66,6 +69,7 @@ impl Salts {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use zeroize::Zeroize;
 
     #[test]
     fn rejects_short_salts() {
@@ -82,5 +86,14 @@ mod tests {
             salts_a.digest_for_coord("id"),
             salts_b.digest_for_coord("id")
         );
+    }
+
+    #[test]
+    fn zeroize_wipes_memory() {
+        let mut salts = Salts::new(vec![1; 8], vec![2; 8], vec![3; 8]).unwrap();
+        salts.zeroize();
+        assert!(salts.calibration().iter().all(|&byte| byte == 0));
+        assert!(salts.chain().iter().all(|&byte| byte == 0));
+        assert!(salts.coord().iter().all(|&byte| byte == 0));
     }
 }
