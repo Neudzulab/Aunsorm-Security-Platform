@@ -135,6 +135,7 @@ fn parse_oid(value: &str) -> Result<Vec<u64>, X509Error> {
 struct CalibrationMetadata<'a> {
     calibration_id: &'a str,
     fingerprint_b64: String,
+    fingerprint_hex: String,
     note_sha256: String,
     cps_uris: &'a [String],
     policy_oids: &'a [String],
@@ -152,6 +153,7 @@ fn build_calibration_extension(
     let metadata = CalibrationMetadata {
         calibration_id: calibration.id.as_str(),
         fingerprint_b64: calibration.fingerprint_b64(),
+        fingerprint_hex: calibration.fingerprint_hex(),
         note_sha256: hex::encode(note_hash),
         cps_uris: params.cps_uris,
         policy_oids: params.policy_oids,
@@ -177,6 +179,8 @@ mod tests {
             policy_oids: &policies,
             validity_days: 365,
         };
+        let (calibration, _) =
+            calib_from_text(params.org_salt, params.calibration_text).expect("calibration");
         let cert = generate_self_signed(&params).expect("certificate");
         assert!(cert.certificate_pem.contains("BEGIN CERTIFICATE"));
         let der = pem::parse(cert.certificate_pem)
@@ -186,6 +190,10 @@ mod tests {
         assert!(der
             .windows(cert.calibration_id.len())
             .any(|window| window == cert.calibration_id.as_bytes()));
+        let expected_fp_hex = calibration.fingerprint_hex();
+        assert!(der
+            .windows(expected_fp_hex.len())
+            .any(|window| window == expected_fp_hex.as_bytes()));
         let expected_hash = hex::encode(Sha256::digest(params.calibration_text.as_bytes()));
         assert!(der
             .windows(expected_hash.len())
