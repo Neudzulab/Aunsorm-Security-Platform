@@ -1574,6 +1574,7 @@ struct CalibrationRangeReport {
 #[derive(Serialize)]
 struct CalibrationReport {
     calibration_id: String,
+    note_text: String,
     alpha_long: u16,
     alpha_short: u16,
     beta_long: u16,
@@ -1601,6 +1602,7 @@ fn build_calibration_report(calibration: &Calibration) -> CalibrationReport {
     });
     CalibrationReport {
         calibration_id: calibration.id.as_str().to_string(),
+        note_text: calibration.note_text().to_string(),
         alpha_long: calibration.alpha_long,
         alpha_short: calibration.alpha_short,
         beta_long: calibration.beta_long,
@@ -1624,6 +1626,7 @@ fn build_calibration_fingerprint_report(calibration: &Calibration) -> Calibratio
 fn render_calibration_report_text(report: &CalibrationReport) -> String {
     let mut lines = Vec::new();
     lines.push(format!("Kalibrasyon Kimliği : {}", report.calibration_id));
+    lines.push(format!("Normalize Metin     : {}", report.note_text));
     lines.push(format!(
         "Alpha (L/S)          : {}/{}",
         report.alpha_long, report.alpha_short
@@ -2397,6 +2400,7 @@ mod tests {
         let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
         let report = build_calibration_report(&calibration);
         assert_eq!(report.calibration_id, calibration.id.as_str());
+        assert_eq!(report.note_text, calibration.note_text());
         assert_eq!(report.alpha_long, calibration.alpha_long);
         assert_eq!(report.ranges[0].start, calibration.ranges[0].start);
         assert_eq!(report.fingerprint, calibration.fingerprint_b64());
@@ -2409,6 +2413,7 @@ mod tests {
         let rendered = render_calibration_report_text(&report);
         assert!(rendered.contains("Kalibrasyon Kimliği"));
         assert!(rendered.contains(calibration.id.as_str()));
+        assert!(rendered.contains(calibration.note_text()));
         assert!(rendered.contains("Aralıklar:"));
     }
 

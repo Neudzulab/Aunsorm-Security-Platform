@@ -71,6 +71,7 @@ pub struct Calibration {
     pub beta_short: u16,
     pub tau: u16,
     pub ranges: [CalibrationRange; 5],
+    note_text: String,
     fingerprint: [u8; 32],
 }
 
@@ -113,6 +114,7 @@ impl Calibration {
             beta_short,
             tau,
             ranges,
+            note_text: note_text.to_owned(),
             fingerprint,
         }
     }
@@ -127,6 +129,12 @@ impl Calibration {
     #[must_use]
     pub fn fingerprint_b64(&self) -> String {
         URL_SAFE_NO_PAD.encode(self.fingerprint)
+    }
+
+    /// Normalize edilmiş kalibrasyon metnini döndürür.
+    #[must_use]
+    pub fn note_text(&self) -> &str {
+        &self.note_text
     }
 }
 
@@ -152,11 +160,26 @@ pub fn calib_from_text(
     org_salt: &[u8],
     note_text: &str,
 ) -> Result<(Calibration, String), CoreError> {
-    let normalized_note = normalize_note_text(note_text);
-    validate_calibration_inputs(org_salt, note_text, &normalized_note)?;
+    validate_org_salt(org_salt)?;
+    let normalized_note = normalize_calibration_text(note_text)?;
     let calibration = Calibration::new(org_salt, &normalized_note);
     let id = calibration.id.as_str().to_owned();
     Ok((calibration, id))
+}
+
+/// Kalibrasyon metnini normalize ederek doğrular.
+///
+/// Girdi metni NFC formuna dönüştürülür, fazladan boşluklar tek boşluğa indirgenir
+/// ve kontrol karakterleri reddedilir.
+///
+/// # Errors
+/// Metin boş, çok uzun veya yasaklı kontrol karakterleri içeriyorsa `CoreError`
+/// döner.
+#[allow(clippy::missing_panics_doc)]
+pub fn normalize_calibration_text(note_text: &str) -> Result<String, CoreError> {
+    let normalized_note = normalize_note_text(note_text);
+    validate_note_text(note_text, &normalized_note)?;
+    Ok(normalized_note)
 }
 
 /// Kalibrasyon ve salt girdilerinden deterministik koordinat üretir.
@@ -221,15 +244,15 @@ pub fn coord32_derive(
     Ok((coord_id, coord))
 }
 
-fn validate_calibration_inputs(
-    org_salt: &[u8],
-    raw_note_text: &str,
-    normalized_note_text: &str,
-) -> Result<(), CoreError> {
+const fn validate_org_salt(org_salt: &[u8]) -> Result<(), CoreError> {
     if org_salt.len() < MIN_ORG_SALT_LEN {
         return Err(CoreError::salt_too_short("org salt must be >= 8 bytes"));
     }
 
+    Ok(())
+}
+
+fn validate_note_text(raw_note_text: &str, normalized_note_text: &str) -> Result<(), CoreError> {
     if normalized_note_text.len() > MAX_NOTE_LEN {
         return Err(CoreError::invalid_input(
             "calibration text must be <= 2048 bytes",
@@ -265,6 +288,7 @@ mod tests {
         let (cal_b, id_b) = calib_from_text(b"org-salt", "note").expect("calibration");
         assert_eq!(cal_a, cal_b);
         assert_eq!(id_a, id_b);
+        assert_eq!(cal_a.note_text(), cal_b.note_text());
     }
 
     #[test]
@@ -343,6 +367,9 @@ mod tests {
         assert_eq!(cal_a, cal_b);
         assert_eq!(id_a, id_b);
         assert_eq!(id_c, id_d);
+        let normalized = normalize_calibration_text(baseline).expect("normalize");
+        assert_eq!(cal_a.note_text(), normalized);
+        assert_eq!(cal_b.note_text(), normalized);
     }
 
     #[test]
@@ -351,5 +378,17 @@ mod tests {
         let expected = URL_SAFE_NO_PAD.encode(calibration.fingerprint());
         assert_eq!(calibration.fingerprint_b64(), expected);
         assert!(!calibration.fingerprint_b64().contains(['+', '/', '=']));
+    }
+
+    #[test]
+    fn normalize_calibration_text_collapses_whitespace() {
+        let normalized = normalize_calibration_text("  Aunsorm\nProd\t2025  ").expect("normalize");
+        assert_eq!(normalized, "Aunsorm Prod 2025");
+    }
+
+    #[test]
+    fn normalize_calibration_text_rejects_invalid_chars() {
+        let err = normalize_calibration_text("Valid\u{07}Invalid").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
     }
 }

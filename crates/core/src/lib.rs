@@ -13,7 +13,8 @@ pub mod session;
 pub mod transparency;
 
 pub use calibration::{
-    calib_from_text, coord32_derive, Calibration, CalibrationId, CalibrationRange,
+    calib_from_text, coord32_derive, normalize_calibration_text, Calibration, CalibrationId,
+    CalibrationRange,
 };
 pub use error::CoreError;
 pub use kdf::{derive_seed64_and_pdk, KdfInfo, KdfPreset, KdfProfile, SensitiveVec};
