@@ -130,6 +130,28 @@ fn ciphertext_truncation_is_detected() {
 }
 
 #[test]
+fn forged_aad_digest_is_rejected() {
+    let (encoded, salts, calibration, profile) = build_safe_packet();
+
+    // Saldırgan farklı bir AAD bağlamı kullanarak başlık özetini tutarsız hale getiriyor.
+    let result = decrypt_one_shot(&DecryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &calibration,
+        salts: &salts,
+        profile,
+        aad: b"different aad context",
+        strict: false,
+        packet: &encoded,
+    });
+
+    assert!(matches!(
+        result,
+        Err(PacketError::Invalid(message)) if message == "aad mismatch"
+    ));
+}
+
+#[test]
 fn strict_mode_rejects_packets_without_kem_material() {
     let (encoded, salts, calibration, profile) = build_safe_packet();
 
