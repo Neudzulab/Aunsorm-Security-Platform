@@ -130,9 +130,10 @@ function ensureProtocol(origin: string, fallbackScheme: 'http' | 'https'): strin
   }
 
   const scheme = fallbackScheme === 'https' ? 'https://' : 'http://';
-  const colonCount = (origin.match(/:/g) ?? []).length;
-  const needsIpv6Brackets = colonCount > 1 && !origin.startsWith('[');
-  const normalisedOrigin = needsIpv6Brackets ? `[${origin}]` : origin;
+  const stripped = origin.startsWith('//') ? origin.replace(/^\/+/, '') : origin;
+  const colonCount = (stripped.match(/:/g) ?? []).length;
+  const needsIpv6Brackets = colonCount > 1 && !stripped.startsWith('[');
+  const normalisedOrigin = needsIpv6Brackets ? `[${stripped}]` : stripped;
 
   return `${scheme}${normalisedOrigin}`;
 }
@@ -199,9 +200,17 @@ function extractHostname(value: string | undefined): string | undefined {
     return undefined;
   }
 
-  const colonCount = (trimmed.match(/:/g) ?? []).length;
-  const maybeIpv6 = colonCount > 1 && !/^\w+:\/\//i.test(trimmed);
-  const bracketed = maybeIpv6 && !trimmed.startsWith('[') ? `[${trimmed}]` : trimmed;
+  const withoutProtocolPrefix =
+    trimmed.startsWith('//') && !/^https?:\/\//i.test(trimmed)
+      ? trimmed.replace(/^\/+/, '')
+      : trimmed;
+
+  const colonCount = (withoutProtocolPrefix.match(/:/g) ?? []).length;
+  const maybeIpv6 = colonCount > 1 && !/^\w+:\/\//i.test(withoutProtocolPrefix);
+  const bracketed =
+    maybeIpv6 && !withoutProtocolPrefix.startsWith('[')
+      ? `[${withoutProtocolPrefix}]`
+      : withoutProtocolPrefix;
   const candidate = /^\w+:\/\//i.test(bracketed) ? bracketed : `http://${bracketed}`;
 
   try {
@@ -265,7 +274,12 @@ export function resolveAunsormBaseUrl(
   env: NodeJS.ProcessEnv = process.env,
   readFile: FileReader = defaultReadFile,
 ): string {
-  return resolveAunsormBaseUrlDetails(env, readFile).baseUrl;
+  const details = resolveAunsormBaseUrlDetails(env, readFile);
+  if (!details.origin) {
+    return details.baseUrl;
+  }
+
+  return joinUrl(details.origin, details.path);
 }
 
 export type AunsormBaseUrlSource =

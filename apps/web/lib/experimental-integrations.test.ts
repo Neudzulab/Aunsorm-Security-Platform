@@ -35,6 +35,24 @@ describe('resolveAunsormBaseUrl', () => {
     expect(stub).toHaveBeenCalledWith('/secrets/base-url');
   });
 
+  it('normalises protocol-relative direct overrides using the fallback scheme', () => {
+    const env = {
+      AUNSORM_BASE_URL: '//example.invalid/custom',
+      NODE_ENV: 'production',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('https://example.invalid/custom');
+  });
+
+  it('detects loopback hosts in protocol-relative direct overrides', () => {
+    const env = {
+      AUNSORM_BASE_URL: '//localhost:3100/callback',
+      NODE_ENV: 'production',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://localhost:3100/callback');
+  });
+
   it('treats blank file paths as empty overrides', () => {
     const env = {
       AUNSORM_BASE_URL_FILE: '   ',
@@ -141,6 +159,25 @@ describe('resolveAunsormBaseUrl', () => {
     } satisfies NodeJS.ProcessEnv;
 
     expect(resolveAunsormBaseUrl(env)).toBe('https://aunsorm.dev/bridge');
+  });
+
+  it('applies scheme heuristics to protocol-relative domain overrides', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: '//gateway.aunsorm.dev',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('https://gateway.aunsorm.dev/aunsorm');
+  });
+
+  it('treats protocol-relative IPv6 loopback domain overrides as http', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: '//[::1]:4100',
+      AUNSORM_INTEGRATIONS_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://[::1]:4100/bridge');
   });
 
   it('recognises deployment provider domain aliases such as Vercel', () => {
