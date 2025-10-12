@@ -49,6 +49,23 @@ fn find_invisible_format_char(text: &str) -> Option<char> {
     })
 }
 
+fn find_private_use_or_noncharacter(text: &str) -> Option<char> {
+    text.chars()
+        .find(|&ch| is_private_use(ch) || is_noncharacter(ch))
+}
+
+const fn is_private_use(ch: char) -> bool {
+    let code = ch as u32;
+    (code >= 0xE000 && code <= 0xF8FF)
+        || (code >= 0x0F_0000 && code <= 0x0F_FFFD)
+        || (code >= 0x10_0000 && code <= 0x10_FFFD)
+}
+
+const fn is_noncharacter(ch: char) -> bool {
+    let code = ch as u32;
+    (code >= 0xFDD0 && code <= 0xFDEF) || (code & 0xFFFF == 0xFFFE) || (code & 0xFFFF == 0xFFFF)
+}
+
 /// Kalibrasyon aralığı.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CalibrationRange {
@@ -314,6 +331,15 @@ fn validate_note_text(raw_note_text: &str, normalized_note_text: &str) -> Result
         ));
     }
 
+    if find_private_use_or_noncharacter(raw_note_text)
+        .or_else(|| find_private_use_or_noncharacter(normalized_note_text))
+        .is_some()
+    {
+        return Err(CoreError::invalid_input(
+            "calibration text contains private-use or noncharacter code points",
+        ));
+    }
+
     Ok(())
 }
 
@@ -400,6 +426,18 @@ mod tests {
         assert!(matches!(err, CoreError::InvalidInput(_)));
 
         let err = normalize_calibration_text("Prod\u{E0100}2025").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn rejects_private_use_and_noncharacters() {
+        let err = calib_from_text(b"org-salt", "Prod\u{E000}2025").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+
+        let err = normalize_calibration_text("Prod\u{FDD0}2025").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+
+        let err = calib_from_text(b"org-salt", "Prod\u{10FFFF}2025").unwrap_err();
         assert!(matches!(err, CoreError::InvalidInput(_)));
     }
 
