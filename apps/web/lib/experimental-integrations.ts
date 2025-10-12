@@ -21,6 +21,11 @@ const DOMAIN_KEYS = [
   'AUNSORM_BASE_DOMAIN',
   'NEXT_PUBLIC_AUNSORM_INTEGRATIONS_DOMAIN',
   'AUNSORM_INTEGRATIONS_DOMAIN',
+  // Common deployment provider aliases so hosted previews Just Work.
+  'NEXT_PUBLIC_VERCEL_URL',
+  'VERCEL_URL',
+  'NEXT_PUBLIC_DEPLOYMENT_URL',
+  'DEPLOYMENT_URL',
 ];
 
 const PATH_KEYS = [
