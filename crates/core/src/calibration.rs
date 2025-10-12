@@ -24,6 +24,28 @@ fn normalize_note_text(note_text: &str) -> String {
     normalized
 }
 
+fn find_invisible_format_char(text: &str) -> Option<char> {
+    text.chars().find(|&ch| {
+        matches!(
+            ch,
+            // Zero-width spacing and joiner characters (Cf)
+            '\u{200B}'..='\u{200F}'
+                | '\u{202A}'..='\u{202E}'
+                | '\u{2060}'..='\u{2064}'
+                | '\u{2066}'..='\u{206F}'
+                | '\u{FEFF}'
+                | '\u{180E}'
+                | '\u{061C}'
+                | '\u{00AD}'
+                | '\u{034F}'
+                | '\u{1BCA0}'..='\u{1BCA3}'
+                | '\u{1D173}'..='\u{1D17A}'
+                | '\u{E0001}'
+                | '\u{E0020}'..='\u{E007F}'
+        )
+    })
+}
+
 /// Kalibrasyon aralığı.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CalibrationRange {
@@ -175,8 +197,8 @@ pub fn calib_from_text(
 
 /// Kalibrasyon metnini normalize ederek doğrular.
 ///
-/// Girdi metni NFC formuna dönüştürülür, fazladan boşluklar tek boşluğa indirgenir
-/// ve kontrol karakterleri reddedilir.
+/// Girdi metni NFC formuna dönüştürülür, fazladan boşluklar tek boşluğa indirgenir,
+/// kontrol karakterleri ve görünmez biçimlendirme işaretleri reddedilir.
 ///
 /// # Errors
 /// Metin boş, çok uzun veya yasaklı kontrol karakterleri içeriyorsa `CoreError`
@@ -280,6 +302,15 @@ fn validate_note_text(raw_note_text: &str, normalized_note_text: &str) -> Result
         ));
     }
 
+    if find_invisible_format_char(raw_note_text)
+        .or_else(|| find_invisible_format_char(normalized_note_text))
+        .is_some()
+    {
+        return Err(CoreError::invalid_input(
+            "calibration text contains invisible formatting characters",
+        ));
+    }
+
     Ok(())
 }
 
@@ -348,6 +379,15 @@ mod tests {
     #[test]
     fn rejects_control_characters() {
         let err = calib_from_text(b"org-salt", "ok\u{07}bad").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn rejects_invisible_format_characters() {
+        let err = calib_from_text(b"org-salt", "Prod\u{200B}2025").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+
+        let err = normalize_calibration_text("Prod\u{202E}2025").unwrap_err();
         assert!(matches!(err, CoreError::InvalidInput(_)));
     }
 
