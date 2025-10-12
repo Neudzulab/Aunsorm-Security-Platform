@@ -1,10 +1,10 @@
+#![cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
+
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
 use std::sync::Arc;
 use std::sync::{Mutex, OnceLock};
-#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
 use std::thread;
 
 use aunsorm_kms::{BackendKind, BackendLocator, KeyDescriptor, KmsClient, KmsConfig};
@@ -14,7 +14,6 @@ use ed25519_dalek::{Signature, Signer as _, SigningKey, VerifyingKey};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-#[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
 use tiny_http::{Header, Method, Response, Server};
 
 #[allow(dead_code)]
