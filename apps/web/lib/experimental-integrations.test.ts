@@ -118,6 +118,22 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(env)).toBe('https://preview-aunsorm.vercel.app/aunsorm');
   });
 
+  it('recognises additional Vercel deployment aliases', () => {
+    const envBranch = {
+      NODE_ENV: 'production',
+      VERCEL_BRANCH_URL: 'branch-aunsorm.vercel.app',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(envBranch)).toBe('https://branch-aunsorm.vercel.app/aunsorm');
+
+    const envProject = {
+      NODE_ENV: 'production',
+      VERCEL_PROJECT_PRODUCTION_URL: 'prod-aunsorm.vercel.app',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(envProject)).toBe('https://prod-aunsorm.vercel.app/aunsorm');
+  });
+
   it('removes trailing slash when the path override is empty', () => {
     const env = {
       NODE_ENV: 'production',
@@ -220,6 +236,40 @@ describe('resolveAunsormBaseUrlDetails', () => {
       source: {
         kind: 'domain-path',
         domainKey: 'VERCEL_URL',
+        pathKey: undefined,
+      },
+    });
+  });
+
+  it('reports additional Vercel alias keys when present', () => {
+    const envBranch = {
+      NODE_ENV: 'production',
+      VERCEL_BRANCH_URL: 'branch-aunsorm.vercel.app',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(envBranch)).toEqual({
+      baseUrl: 'https://branch-aunsorm.vercel.app/aunsorm',
+      origin: 'https://branch-aunsorm.vercel.app',
+      path: '/aunsorm',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'VERCEL_BRANCH_URL',
+        pathKey: undefined,
+      },
+    });
+
+    const envProject = {
+      NODE_ENV: 'production',
+      VERCEL_PROJECT_PRODUCTION_URL: 'prod-aunsorm.vercel.app',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(envProject)).toEqual({
+      baseUrl: 'https://prod-aunsorm.vercel.app/aunsorm',
+      origin: 'https://prod-aunsorm.vercel.app',
+      path: '/aunsorm',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'VERCEL_PROJECT_PRODUCTION_URL',
         pathKey: undefined,
       },
     });
