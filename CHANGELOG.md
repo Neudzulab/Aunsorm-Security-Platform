@@ -56,6 +56,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-core` calibration metni artık NFC normalizasyonu ve boşluk daraltması
   uygulayarak aynı anlamlı içeriğe sahip girdiler için farklı kimliklerin
   üretilmesini engeller.
+- Calibration binding text rejects Unicode private-use and noncharacter code
+  points to avoid hidden or environment-specific glyphs leaking into the
+  deterministic identifier.
 ### Planned
 
 ## [0.1.0] - 2025-10-07
