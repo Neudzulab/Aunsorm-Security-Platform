@@ -44,6 +44,15 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(env)).toBe('https://example.invalid/custom');
   });
 
+  it('normalises IPv4-mapped IPv6 direct overrides with inline ports', () => {
+    const env = {
+      AUNSORM_BASE_URL: '::ffff:127.0.0.1:4100/custom',
+      NODE_ENV: 'production',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://[::ffff:7f00:1]:4100/custom');
+  });
+
   it('detects loopback hosts in protocol-relative direct overrides', () => {
     const env = {
       AUNSORM_BASE_URL: '//localhost:3100/callback',
@@ -178,6 +187,16 @@ describe('resolveAunsormBaseUrl', () => {
     } satisfies NodeJS.ProcessEnv;
 
     expect(resolveAunsormBaseUrl(env)).toBe('http://[::1]:4100/bridge');
+  });
+
+  it('normalises IPv4-mapped IPv6 domains with inline ports', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: '::ffff:127.0.0.1:4100',
+      AUNSORM_BASE_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://[::ffff:127.0.0.1]:4100/bridge');
   });
 
   it('recognises deployment provider domain aliases such as Vercel', () => {
@@ -361,6 +380,41 @@ describe('resolveAunsormBaseUrlDetails', () => {
         kind: 'domain-path',
         domainKey: 'VERCEL_PROJECT_PRODUCTION_URL',
         pathKey: undefined,
+      },
+    });
+  });
+
+  it('reports IPv4-mapped IPv6 overrides with inline ports', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: '::ffff:127.0.0.1:4100',
+      AUNSORM_BASE_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'http://[::ffff:127.0.0.1]:4100/bridge',
+      origin: 'http://[::ffff:127.0.0.1]:4100',
+      path: '/bridge',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'AUNSORM_BASE_DOMAIN',
+        pathKey: 'AUNSORM_BASE_PATH',
+      },
+    });
+  });
+
+  it('reports direct overrides for IPv4-mapped IPv6 addresses with inline ports', () => {
+    const env = {
+      AUNSORM_BASE_URL: '::ffff:127.0.0.1:4100/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: '::ffff:127.0.0.1:4100/custom',
+      origin: 'http://[::ffff:7f00:1]:4100',
+      path: '/custom',
+      source: {
+        kind: 'direct',
+        key: 'AUNSORM_BASE_URL',
       },
     });
   });
