@@ -112,6 +112,9 @@ impl Packet {
         if pmac_bytes.len() != 16 {
             return Err(PacketError::Invalid("pmac must be 16 bytes"));
         }
+        if wire.header.sizes.ciphertext != ciphertext.len() {
+            return Err(PacketError::Integrity("ciphertext size mismatch"));
+        }
         pmac.copy_from_slice(&pmac_bytes);
         Ok(Self {
             header: wire.header,
