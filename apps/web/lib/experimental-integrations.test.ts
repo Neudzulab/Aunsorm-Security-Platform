@@ -109,6 +109,15 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(env)).toBe('https://aunsorm.dev/bridge');
   });
 
+  it('recognises deployment provider domain aliases such as Vercel', () => {
+    const env = {
+      NODE_ENV: 'production',
+      VERCEL_URL: 'preview-aunsorm.vercel.app',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('https://preview-aunsorm.vercel.app/aunsorm');
+  });
+
   it('removes trailing slash when the path override is empty', () => {
     const env = {
       NODE_ENV: 'production',
@@ -194,6 +203,24 @@ describe('resolveAunsormBaseUrlDetails', () => {
         kind: 'domain-path',
         domainKey: 'NEXT_PUBLIC_AUNSORM_INTEGRATIONS_DOMAIN',
         pathKey: 'NEXT_PUBLIC_AUNSORM_INTEGRATIONS_PATH',
+      },
+    });
+  });
+
+  it('reports deployment alias keys when used as a domain override', () => {
+    const env = {
+      NODE_ENV: 'production',
+      VERCEL_URL: 'preview-aunsorm.vercel.app',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'https://preview-aunsorm.vercel.app/aunsorm',
+      origin: 'https://preview-aunsorm.vercel.app',
+      path: '/aunsorm',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'VERCEL_URL',
+        pathKey: undefined,
       },
     });
   });
