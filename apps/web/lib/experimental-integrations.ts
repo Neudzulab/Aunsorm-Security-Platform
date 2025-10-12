@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 const DEFAULTS = {
   local: {
     origin: 'http://localhost:50047',
@@ -14,6 +16,13 @@ const DIRECT_BASE_URL_KEYS = [
   'AUNSORM_BASE_URL',
   'NEXT_PUBLIC_AUNSORM_INTEGRATIONS_BASE_URL',
   'AUNSORM_INTEGRATIONS_BASE_URL',
+];
+
+const DIRECT_BASE_URL_FILE_KEYS = [
+  'NEXT_PUBLIC_AUNSORM_BASE_URL_FILE',
+  'AUNSORM_BASE_URL_FILE',
+  'NEXT_PUBLIC_AUNSORM_INTEGRATIONS_BASE_URL_FILE',
+  'AUNSORM_INTEGRATIONS_BASE_URL_FILE',
 ];
 
 const DOMAIN_KEYS = [
@@ -39,10 +48,15 @@ const PATH_KEYS = [
   'AUNSORM_INTEGRATIONS_PATH',
 ];
 
+type FileReader = (filePath: string) => string;
+
+const defaultReadFile: FileReader = (filePath) => readFileSync(filePath, 'utf8');
+
 interface ReadResult {
   found: boolean;
   value?: string;
   key?: string;
+  filePath?: string;
 }
 
 interface DirectBaseComponents {
@@ -64,6 +78,42 @@ function readEnvValue(keys: string[], env: NodeJS.ProcessEnv): ReadResult {
       }
 
       return { found: true, value: trimmed, key };
+    }
+  }
+
+  return { found: false };
+}
+
+function readEnvFileValue(
+  keys: string[],
+  env: NodeJS.ProcessEnv,
+  readFile: FileReader,
+): ReadResult {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(env, key)) {
+      const rawPath = env[key];
+      if (rawPath === undefined || rawPath === null) {
+        return { found: true, value: '', key };
+      }
+
+      const trimmedPath = rawPath.trim();
+      if (trimmedPath.length === 0) {
+        return { found: true, value: '', key };
+      }
+
+      try {
+        const contents = readFile(trimmedPath);
+        const value = contents.trim();
+        return {
+          found: true,
+          value,
+          key,
+          filePath: trimmedPath,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Failed to read ${key} (${trimmedPath}): ${message}`);
+      }
     }
   }
 
@@ -211,14 +261,22 @@ function isLoopbackHost(value: string | undefined): boolean {
   return false;
 }
 
-export function resolveAunsormBaseUrl(env: NodeJS.ProcessEnv = process.env): string {
-  return resolveAunsormBaseUrlDetails(env).baseUrl;
+export function resolveAunsormBaseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+  readFile: FileReader = defaultReadFile,
+): string {
+  return resolveAunsormBaseUrlDetails(env, readFile).baseUrl;
 }
 
 export type AunsormBaseUrlSource =
   | {
       kind: 'direct';
       key?: string;
+    }
+  | {
+      kind: 'direct-file';
+      key?: string;
+      filePath?: string;
     }
   | {
       kind: 'domain-path';
@@ -239,7 +297,24 @@ export interface AunsormBaseUrlDetails {
 
 export function resolveAunsormBaseUrlDetails(
   env: NodeJS.ProcessEnv = process.env,
+  readFile: FileReader = defaultReadFile,
 ): AunsormBaseUrlDetails {
+  const directFromFile = readEnvFileValue(DIRECT_BASE_URL_FILE_KEYS, env, readFile);
+  if (directFromFile.found) {
+    const directFileValue = directFromFile.value ?? '';
+    const components = deriveDirectBaseComponents(directFileValue);
+    return {
+      baseUrl: directFileValue,
+      origin: components.origin,
+      path: components.path,
+      source: {
+        kind: 'direct-file',
+        key: directFromFile.key,
+        filePath: directFromFile.filePath,
+      },
+    };
+  }
+
   const direct = readEnvValue(DIRECT_BASE_URL_KEYS, env);
   if (direct.found) {
     const directValue = direct.value ?? '';
