@@ -125,7 +125,7 @@ fn ciphertext_truncation_is_detected() {
 
     assert!(matches!(
         result,
-        Err(PacketError::Integrity(message)) if message == "body pmac mismatch"
+        Err(PacketError::Integrity(message)) if message == "ciphertext size mismatch"
     ));
 }
 
