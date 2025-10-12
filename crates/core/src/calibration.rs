@@ -42,6 +42,9 @@ fn find_invisible_format_char(text: &str) -> Option<char> {
                 | '\u{1D173}'..='\u{1D17A}'
                 | '\u{E0001}'
                 | '\u{E0020}'..='\u{E007F}'
+                // Variation selectors (emoji/text modifiers)
+                | '\u{FE00}'..='\u{FE0F}'
+                | '\u{E0100}'..='\u{E01EF}'
         )
     })
 }
@@ -388,6 +391,15 @@ mod tests {
         assert!(matches!(err, CoreError::InvalidInput(_)));
 
         let err = normalize_calibration_text("Prod\u{202E}2025").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn rejects_variation_selectors() {
+        let err = calib_from_text(b"org-salt", "Prod\u{FE0F}2025").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+
+        let err = normalize_calibration_text("Prod\u{E0100}2025").unwrap_err();
         assert!(matches!(err, CoreError::InvalidInput(_)));
     }
 
