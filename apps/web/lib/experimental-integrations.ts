@@ -59,6 +59,15 @@ interface HostPortParts {
   rest: string;
 }
 
+function stripTrailingDots(host: string): string {
+  if (host.length === 0) {
+    return host;
+  }
+
+  const withoutDots = host.replace(/\.+$/, '');
+  return withoutDots.length > 0 ? withoutDots : host;
+}
+
 function splitHostPort(value: string): HostPortParts {
   const trimmed = value.trim();
 
@@ -73,7 +82,7 @@ function splitHostPort(value: string): HostPortParts {
   if (hostPort.startsWith('[')) {
     const closing = hostPort.indexOf(']');
     if (closing !== -1) {
-      const host = hostPort.slice(1, closing);
+      const host = stripTrailingDots(hostPort.slice(1, closing));
       const rest = hostPort.slice(closing + 1);
       if (rest.startsWith(':')) {
         const portCandidate = rest.slice(1);
@@ -87,7 +96,11 @@ function splitHostPort(value: string): HostPortParts {
         }
       }
 
-      return { host, hadBrackets: true, rest: hostPortEnd === -1 ? '' : trimmed.slice(hostPortEnd) };
+      return {
+        host,
+        hadBrackets: true,
+        rest: hostPortEnd === -1 ? '' : trimmed.slice(hostPortEnd),
+      };
     }
   }
 
@@ -95,7 +108,7 @@ function splitHostPort(value: string): HostPortParts {
   if (lastColon > 0) {
     const maybePort = hostPort.slice(lastColon + 1);
     if (/^\d+$/.test(maybePort)) {
-      const hostCandidate = hostPort.slice(0, lastColon);
+      const hostCandidate = stripTrailingDots(hostPort.slice(0, lastColon));
       const isIpv4OrHostname = !hostCandidate.includes(':');
       const isIpv4MappedIpv6 = hostCandidate.includes(':') && hostCandidate.includes('.');
 
@@ -110,7 +123,7 @@ function splitHostPort(value: string): HostPortParts {
     }
   }
 
-  return { host: hostPort, hadBrackets: false, rest };
+  return { host: stripTrailingDots(hostPort), hadBrackets: false, rest };
 }
 
 interface ReadResult {
@@ -275,7 +288,8 @@ function extractHostname(value: string | undefined): string | undefined {
       const url = new URL(protocolRelative);
       const host = url.hostname;
       const normalised = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
-      return normalised.toLowerCase();
+      const canonical = stripTrailingDots(normalised);
+      return canonical.length > 0 ? canonical.toLowerCase() : undefined;
     } catch {
       return undefined;
     }
@@ -289,8 +303,9 @@ function extractHostname(value: string | undefined): string | undefined {
   }
 
   const normalised = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+  const canonical = stripTrailingDots(normalised);
 
-  return normalised.toLowerCase();
+  return canonical.length > 0 ? canonical.toLowerCase() : undefined;
 }
 
 function isLoopbackHost(value: string | undefined): boolean {

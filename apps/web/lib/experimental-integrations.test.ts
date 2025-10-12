@@ -121,6 +121,23 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(bareLoopback)).toBe('http://[::1]/aunsorm');
   });
 
+  it('normalises loopback domains with trailing dots', () => {
+    const localhostWithDot = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'localhost.',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(localhostWithDot)).toBe('http://localhost/aunsorm');
+
+    const subdomainWithDot = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'preview.localhost.',
+      AUNSORM_BASE_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(subdomainWithDot)).toBe('http://preview.localhost/bridge');
+  });
+
   it('treats unspecified IP addresses as loopback and forces http', () => {
     const ipv4Unspecified = {
       NODE_ENV: 'production',
@@ -399,6 +416,22 @@ describe('resolveAunsormBaseUrlDetails', () => {
         kind: 'domain-path',
         domainKey: 'AUNSORM_BASE_DOMAIN',
         pathKey: 'AUNSORM_BASE_PATH',
+      },
+    });
+  });
+
+  it('reports normalised origins for trailing-dot direct overrides', () => {
+    const env = {
+      AUNSORM_BASE_URL: 'localhost.:3100/callback',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'localhost.:3100/callback',
+      origin: 'http://localhost:3100',
+      path: '/callback',
+      source: {
+        kind: 'direct',
+        key: 'AUNSORM_BASE_URL',
       },
     });
   });
