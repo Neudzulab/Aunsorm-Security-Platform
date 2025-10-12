@@ -52,6 +52,67 @@ type FileReader = (filePath: string) => string;
 
 const defaultReadFile: FileReader = (filePath) => readFileSync(filePath, 'utf8');
 
+interface HostPortParts {
+  host: string;
+  port?: string;
+  hadBrackets: boolean;
+  rest: string;
+}
+
+function splitHostPort(value: string): HostPortParts {
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return { host: '', hadBrackets: false, rest: '' };
+  }
+
+  const hostPortEnd = trimmed.search(/[/?#]/);
+  const hostPort = hostPortEnd === -1 ? trimmed : trimmed.slice(0, hostPortEnd);
+  const rest = hostPortEnd === -1 ? '' : trimmed.slice(hostPortEnd);
+
+  if (hostPort.startsWith('[')) {
+    const closing = hostPort.indexOf(']');
+    if (closing !== -1) {
+      const host = hostPort.slice(1, closing);
+      const rest = hostPort.slice(closing + 1);
+      if (rest.startsWith(':')) {
+        const portCandidate = rest.slice(1);
+        if (/^\d+$/.test(portCandidate)) {
+          return {
+            host,
+            port: portCandidate,
+            hadBrackets: true,
+            rest: hostPortEnd === -1 ? '' : trimmed.slice(hostPortEnd),
+          };
+        }
+      }
+
+      return { host, hadBrackets: true, rest: hostPortEnd === -1 ? '' : trimmed.slice(hostPortEnd) };
+    }
+  }
+
+  const lastColon = hostPort.lastIndexOf(':');
+  if (lastColon > 0) {
+    const maybePort = hostPort.slice(lastColon + 1);
+    if (/^\d+$/.test(maybePort)) {
+      const hostCandidate = hostPort.slice(0, lastColon);
+      const isIpv4OrHostname = !hostCandidate.includes(':');
+      const isIpv4MappedIpv6 = hostCandidate.includes(':') && hostCandidate.includes('.');
+
+      if (isIpv4OrHostname || isIpv4MappedIpv6) {
+        return {
+          host: hostCandidate,
+          port: maybePort,
+          hadBrackets: false,
+          rest,
+        };
+      }
+    }
+  }
+
+  return { host: hostPort, hadBrackets: false, rest };
+}
+
 interface ReadResult {
   found: boolean;
   value?: string;
@@ -130,12 +191,18 @@ function ensureProtocol(origin: string, fallbackScheme: 'http' | 'https'): strin
   }
 
   const scheme = fallbackScheme === 'https' ? 'https://' : 'http://';
-  const stripped = origin.startsWith('//') ? origin.replace(/^\/+/, '') : origin;
-  const colonCount = (stripped.match(/:/g) ?? []).length;
-  const needsIpv6Brackets = colonCount > 1 && !stripped.startsWith('[');
-  const normalisedOrigin = needsIpv6Brackets ? `[${stripped}]` : stripped;
+  const withoutSlashes = origin.startsWith('//') ? origin.replace(/^\/+/, '') : origin;
+  const { host, port, hadBrackets, rest } = splitHostPort(withoutSlashes);
 
-  return `${scheme}${normalisedOrigin}`;
+  if (host.length === 0) {
+    return scheme;
+  }
+
+  const shouldBracket = host.includes(':');
+  const bracketedHost = hadBrackets || shouldBracket ? `[${host}]` : host;
+  const portSuffix = port ? `:${port}` : '';
+
+  return `${scheme}${bracketedHost}${portSuffix}${rest}`;
 }
 
 function collapseSlashes(input: string): string {
@@ -200,29 +267,30 @@ function extractHostname(value: string | undefined): string | undefined {
     return undefined;
   }
 
-  const withoutProtocolPrefix =
-    trimmed.startsWith('//') && !/^https?:\/\//i.test(trimmed)
-      ? trimmed.replace(/^\/+/, '')
-      : trimmed;
+  const protocolRelative =
+    trimmed.startsWith('//') && !/^https?:\/\//i.test(trimmed) ? `http:${trimmed}` : trimmed;
 
-  const colonCount = (withoutProtocolPrefix.match(/:/g) ?? []).length;
-  const maybeIpv6 = colonCount > 1 && !/^\w+:\/\//i.test(withoutProtocolPrefix);
-  const bracketed =
-    maybeIpv6 && !withoutProtocolPrefix.startsWith('[')
-      ? `[${withoutProtocolPrefix}]`
-      : withoutProtocolPrefix;
-  const candidate = /^\w+:\/\//i.test(bracketed) ? bracketed : `http://${bracketed}`;
-
-  try {
-    const url = new URL(candidate);
-    let host = url.hostname;
-    if (host.startsWith('[') && host.endsWith(']')) {
-      host = host.slice(1, -1);
+  if (/^\w+:\/\//i.test(protocolRelative)) {
+    try {
+      const url = new URL(protocolRelative);
+      const host = url.hostname;
+      const normalised = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+      return normalised.toLowerCase();
+    } catch {
+      return undefined;
     }
-    return host.toLowerCase();
-  } catch {
+  }
+
+  const withoutSlashes = trimmed.startsWith('//') ? trimmed.replace(/^\/+/, '') : trimmed;
+  const { host } = splitHostPort(withoutSlashes);
+
+  if (host.length === 0) {
     return undefined;
   }
+
+  const normalised = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+
+  return normalised.toLowerCase();
 }
 
 function isLoopbackHost(value: string | undefined): boolean {
