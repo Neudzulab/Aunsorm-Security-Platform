@@ -1512,16 +1512,6 @@ fn emit_text(value: &str, out: Option<&Path>) -> CliResult<()> {
     Ok(())
 }
 
-fn encode_hex_lower(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for &byte in bytes {
-        output.push(char::from(HEX[(byte >> 4) as usize]));
-        output.push(char::from(HEX[(byte & 0x0F) as usize]));
-    }
-    output
-}
-
 fn emit_calibration_report(
     report: &CalibrationReport,
     format: ReportFormat,
@@ -1581,6 +1571,7 @@ struct CalibrationReport {
     beta_short: u16,
     tau: u16,
     fingerprint: String,
+    fingerprint_hex: String,
     ranges: [CalibrationRangeReport; 5],
 }
 
@@ -1609,13 +1600,14 @@ fn build_calibration_report(calibration: &Calibration) -> CalibrationReport {
         beta_short: calibration.beta_short,
         tau: calibration.tau,
         fingerprint: calibration.fingerprint_b64(),
+        fingerprint_hex: calibration.fingerprint_hex(),
         ranges,
     }
 }
 
 fn build_calibration_fingerprint_report(calibration: &Calibration) -> CalibrationFingerprintReport {
     let fingerprint_b64 = calibration.fingerprint_b64();
-    let fingerprint_hex = encode_hex_lower(calibration.fingerprint());
+    let fingerprint_hex = calibration.fingerprint_hex();
     CalibrationFingerprintReport {
         calibration_id: calibration.id.as_str().to_string(),
         fingerprint_b64,
@@ -1637,6 +1629,7 @@ fn render_calibration_report_text(report: &CalibrationReport) -> String {
     ));
     lines.push(format!("Tau                  : {}", report.tau));
     lines.push(format!("Parmak izi (B64)     : {}", report.fingerprint));
+    lines.push(format!("Parmak izi (Hex)     : {}", report.fingerprint_hex));
     lines.push("Aralıklar:".to_string());
     for (idx, range) in report.ranges.iter().enumerate() {
         lines.push(format!(
@@ -2404,6 +2397,7 @@ mod tests {
         assert_eq!(report.alpha_long, calibration.alpha_long);
         assert_eq!(report.ranges[0].start, calibration.ranges[0].start);
         assert_eq!(report.fingerprint, calibration.fingerprint_b64());
+        assert_eq!(report.fingerprint_hex, calibration.fingerprint_hex());
     }
 
     #[test]
@@ -2415,6 +2409,8 @@ mod tests {
         assert!(rendered.contains(calibration.id.as_str()));
         assert!(rendered.contains(calibration.note_text()));
         assert!(rendered.contains("Aralıklar:"));
+        assert!(rendered.contains(report.fingerprint.as_str()));
+        assert!(rendered.contains(report.fingerprint_hex.as_str()));
     }
 
     #[test]
@@ -2423,10 +2419,7 @@ mod tests {
         let report = build_calibration_fingerprint_report(&calibration);
         assert_eq!(report.calibration_id, calibration.id.as_str());
         assert_eq!(report.fingerprint_b64, calibration.fingerprint_b64());
-        assert_eq!(
-            report.fingerprint_hex,
-            encode_hex_lower(calibration.fingerprint())
-        );
+        assert_eq!(report.fingerprint_hex, calibration.fingerprint_hex());
     }
 
     #[test]

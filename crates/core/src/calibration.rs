@@ -131,6 +131,12 @@ impl Calibration {
         URL_SAFE_NO_PAD.encode(self.fingerprint)
     }
 
+    /// Kalibrasyon parmak izini hex (küçük harf) olarak döndürür.
+    #[must_use]
+    pub fn fingerprint_hex(&self) -> String {
+        hex::encode(self.fingerprint)
+    }
+
     /// Normalize edilmiş kalibrasyon metnini döndürür.
     #[must_use]
     pub fn note_text(&self) -> &str {
@@ -378,6 +384,17 @@ mod tests {
         let expected = URL_SAFE_NO_PAD.encode(calibration.fingerprint());
         assert_eq!(calibration.fingerprint_b64(), expected);
         assert!(!calibration.fingerprint_b64().contains(['+', '/', '=']));
+    }
+
+    #[test]
+    fn fingerprint_hex_matches_bytes() {
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
+        let expected = hex::encode(calibration.fingerprint());
+        assert_eq!(calibration.fingerprint_hex(), expected);
+        assert!(calibration
+            .fingerprint_hex()
+            .chars()
+            .all(|ch| ch.is_ascii_hexdigit() && !ch.is_ascii_uppercase()));
     }
 
     #[test]
