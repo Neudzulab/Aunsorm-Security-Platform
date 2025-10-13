@@ -338,3 +338,113 @@ pub fn decrypt_session(
         },
     ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::header::{
+        AeadAlgorithm, Header, HeaderAead, HeaderKem, HeaderProfile, HeaderSalts, HeaderSizes,
+    };
+
+    fn sample_header() -> Header {
+        Header {
+            version: "Aunsorm v1.01".to_string(),
+            profile: HeaderProfile {
+                t: 3,
+                m_kib: 32,
+                p: 1,
+            },
+            calib_id: "calib-id".to_string(),
+            coord_digest: "coord-digest".to_string(),
+            salts: HeaderSalts {
+                password: "pw-digest".to_string(),
+                calibration: "calib-digest".to_string(),
+                chain: "chain-digest".to_string(),
+                coord: "coord-digest".to_string(),
+            },
+            kem: HeaderKem {
+                kem: "ml-kem-768".to_string(),
+                pk: Some("pk".to_string()),
+                ctkem: None,
+                rbkem: None,
+                ss: None,
+            },
+            aead: HeaderAead {
+                alg: AeadAlgorithm::AesGcm,
+                nonce: "nonce".to_string(),
+                aad_digest: "aad".to_string(),
+            },
+            session: None,
+            sizes: HeaderSizes {
+                plaintext: 128,
+                ciphertext: 256,
+            },
+            hdrmac: "hdrmac".to_string(),
+        }
+    }
+
+    #[test]
+    fn metadata_matches_header_exactly() {
+        let header = sample_header();
+        let metadata = SessionMetadata::from_header(&header);
+        assert!(metadata.ensure_matches(&header).is_ok());
+    }
+
+    #[test]
+    fn metadata_detects_mismatch() {
+        let mut header = sample_header();
+        let metadata = SessionMetadata::from_header(&header);
+        header.coord_digest = "different".to_string();
+        let err = metadata.ensure_matches(&header).unwrap_err();
+        assert!(matches!(err, PacketError::Invalid(_)));
+    }
+
+    #[test]
+    fn strict_policy_requires_kem_material() {
+        let header = sample_header();
+        let mut metadata = SessionMetadata::from_header(&header);
+        metadata.kem = HeaderKem::none();
+        let err = metadata.ensure_strict(true).unwrap_err();
+        assert!(matches!(err, PacketError::Strict(_)));
+        assert!(metadata.ensure_strict(false).is_ok());
+    }
+
+    #[test]
+    fn session_store_detects_replay() {
+        let mut store = SessionStore::new();
+        let session_id = [7_u8; 16];
+        assert!(store.register(session_id, 1));
+        assert!(!store.register(session_id, 1));
+        assert!(store.register(session_id, 2));
+    }
+
+    #[test]
+    fn nonce_generation_is_identity_for_stream_aeads() {
+        let base_nonce = [0xAB_u8; 12];
+        let step_secret = [0x11_u8; 32];
+
+        let gcm = session_nonce_for_algorithm(AeadAlgorithm::AesGcm, &base_nonce, &step_secret)
+            .expect("gcm nonce");
+        assert_eq!(gcm, base_nonce);
+
+        let chacha =
+            session_nonce_for_algorithm(AeadAlgorithm::Chacha20Poly1305, &base_nonce, &step_secret)
+                .expect("chacha nonce");
+        assert_eq!(chacha, base_nonce);
+    }
+
+    #[cfg(feature = "aes-siv")]
+    #[test]
+    fn aes_siv_nonce_derivation_uses_step_secret() {
+        use crate::crypto::nonce_length;
+
+        let base_nonce = [0x42_u8; 12];
+        let step_secret = [0x99_u8; 32];
+
+        let derived = session_nonce_for_algorithm(AeadAlgorithm::AesSiv, &base_nonce, &step_secret)
+            .expect("siv nonce");
+
+        assert_eq!(derived.len(), nonce_length(AeadAlgorithm::AesSiv));
+        assert_ne!(derived, base_nonce);
+    }
+}
