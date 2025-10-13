@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::convert::TryInto;
 use std::fs;
 use std::path::Path;
 
@@ -142,17 +143,17 @@ impl LocalBackend {
                 })?;
                 let mut nonce_bytes = [0u8; 12];
                 OsRng.fill_bytes(&mut nonce_bytes);
-                let nonce = Nonce::from_slice(&nonce_bytes);
+                let nonce = Nonce::from(nonce_bytes);
                 let ciphertext = cipher
                     .encrypt(
-                        nonce,
+                        &nonce,
                         Payload {
                             msg: plaintext,
                             aad,
                         },
                     )
                     .map_err(|err| KmsError::Crypto(format!("wrap failed for {key_id}: {err}")))?;
-                let mut output = Vec::with_capacity(12 + ciphertext.len());
+                let mut output = Vec::with_capacity(nonce.len() + ciphertext.len());
                 output.extend_from_slice(&nonce_bytes);
                 output.extend_from_slice(&ciphertext);
                 Ok(output)
@@ -178,9 +179,12 @@ impl LocalBackend {
                     KmsError::Crypto(format!("invalid aes key for {key_id}: {err}"))
                 })?;
                 let (nonce_bytes, payload) = ciphertext.split_at(12);
-                let nonce = Nonce::from_slice(nonce_bytes);
+                let nonce_array: [u8; 12] = nonce_bytes
+                    .try_into()
+                    .map_err(|_| KmsError::Crypto("invalid nonce size".into()))?;
+                let nonce = Nonce::from(nonce_array);
                 cipher
-                    .decrypt(nonce, Payload { msg: payload, aad })
+                    .decrypt(&nonce, Payload { msg: payload, aad })
                     .map_err(|err| KmsError::Crypto(format!("unwrap failed for {key_id}: {err}")))
             }
             Some(LocalKey::Ed25519 { .. }) => Err(KmsError::Unsupported {
