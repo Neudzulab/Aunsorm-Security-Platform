@@ -15,6 +15,14 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(env)).toBe('https://example.invalid/custom');
   });
 
+  it('preserves direct overrides without adding a trailing slash when no path is provided', () => {
+    const env = {
+      AUNSORM_BASE_URL: 'https://example.invalid',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('https://example.invalid');
+  });
+
   it('treats blank direct values as empty strings', () => {
     const env = {
       NEXT_PUBLIC_AUNSORM_BASE_URL: '   ',
@@ -288,6 +296,22 @@ describe('resolveAunsormBaseUrlDetails', () => {
       baseUrl: 'https://example.invalid/custom',
       origin: 'https://example.invalid',
       path: '/custom',
+      source: {
+        kind: 'direct',
+        key: 'AUNSORM_BASE_URL',
+      },
+    });
+  });
+
+  it('reports empty paths for direct overrides that do not specify one', () => {
+    const env = {
+      AUNSORM_BASE_URL: 'https://example.invalid',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'https://example.invalid',
+      origin: 'https://example.invalid',
+      path: '',
       source: {
         kind: 'direct',
         key: 'AUNSORM_BASE_URL',

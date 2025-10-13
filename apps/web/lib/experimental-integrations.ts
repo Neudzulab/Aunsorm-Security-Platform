@@ -475,15 +475,21 @@ function deriveDirectBaseComponents(baseUrl: string): DirectBaseComponents {
     return { origin: '', path: '' };
   }
 
+  const trimmedInput = baseUrl.trim();
+  const hadExplicitTrailingSlash = trimmedInput.endsWith('/');
   const fallbackScheme: 'http' | 'https' = isLoopbackHost(baseUrl) ? 'http' : 'https';
   const candidate = ensureProtocol(baseUrl, fallbackScheme);
 
   try {
     const url = new URL(candidate);
     const pathWithQueryAndFragment = `${url.pathname}${url.search}${url.hash}`;
+    const path =
+      pathWithQueryAndFragment === '/' && !hadExplicitTrailingSlash
+        ? ''
+        : pathWithQueryAndFragment;
     return {
       origin: url.origin,
-      path: pathWithQueryAndFragment.length > 0 ? pathWithQueryAndFragment : '',
+      path,
     };
   } catch {
     return { origin: baseUrl, path: '' };
