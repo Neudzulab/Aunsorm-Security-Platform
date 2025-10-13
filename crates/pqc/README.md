@@ -17,12 +17,18 @@ senaryosu sunar.
 ```rust
 use aunsorm_pqc::{
     kem::{negotiate_kem, KemAlgorithm},
-    signature::{SignatureAlgorithm, SignatureKeyPair},
+    signature::{negotiate_signature, SignatureAlgorithm, SignatureKeyPair},
     strict::StrictMode,
 };
 
 let selection = negotiate_kem(&[KemAlgorithm::MlKem768], StrictMode::Strict)?;
 println!("Seçilen algoritma: {}", selection.algorithm.name());
+
+let signature = negotiate_signature(&[SignatureAlgorithm::MlDsa65], StrictMode::Relaxed)?;
+match signature.algorithm {
+    Some(alg) => println!("İmza algoritması: {}", alg.name()),
+    None => println!("PQC imzası yok, klasik moda dönülüyor"),
+}
 
 let checklist = SignatureAlgorithm::MlDsa65.checklist();
 println!("ML-DSA NIST kategorisi: {}", checklist.nist_category());
