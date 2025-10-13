@@ -152,6 +152,68 @@ fn forged_aad_digest_is_rejected() {
 }
 
 #[test]
+fn tampered_header_mac_is_detected() {
+    let (encoded, salts, calibration, profile) = build_safe_packet();
+
+    let mut tampered = Packet::from_base64(&encoded).expect("original packet decodes");
+    let replacement = if tampered.header.hdrmac.as_bytes().first().copied() == Some(b'A') {
+        'B'
+    } else {
+        'A'
+    };
+    tampered
+        .header
+        .hdrmac
+        .replace_range(0..1, &replacement.to_string());
+    let tampered_encoded = tampered
+        .to_base64()
+        .expect("tampered packet still encodes as base64");
+
+    let result = decrypt_one_shot(&DecryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &calibration,
+        salts: &salts,
+        profile,
+        aad: b"classified aad",
+        strict: false,
+        packet: &tampered_encoded,
+    });
+
+    assert!(matches!(
+        result,
+        Err(PacketError::Integrity(message)) if message == "header mac mismatch"
+    ));
+}
+
+#[test]
+fn tampered_body_pmac_is_detected() {
+    let (encoded, salts, calibration, profile) = build_safe_packet();
+
+    let mut tampered = Packet::from_base64(&encoded).expect("original packet decodes");
+    tampered.body_pmac[0] ^= 0x01;
+    let tampered_encoded = tampered
+        .to_base64()
+        .expect("tampered packet still encodes as base64");
+
+    let result = decrypt_one_shot(&DecryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &calibration,
+        salts: &salts,
+        profile,
+        aad: b"classified aad",
+        strict: false,
+        packet: &tampered_encoded,
+    });
+
+    assert!(matches!(
+        result,
+        Err(PacketError::Integrity(message)) if message == "body pmac mismatch"
+    ));
+}
+
+#[test]
 fn strict_mode_rejects_packets_without_kem_material() {
     let (encoded, salts, calibration, profile) = build_safe_packet();
 
