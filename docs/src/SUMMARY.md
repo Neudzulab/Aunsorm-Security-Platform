@@ -3,6 +3,7 @@
 - [Giriş](introduction.md)
 - [Mimari Genel Bakış](architecture/overview.md)
 - [Katmanlar ve Bileşenler](architecture/components.md)
+- [Post-Kuantum Hazırlık Durumu](architecture/postquantum.md)
 - [Kilitli Bellek ve Güvenli Donanım](architecture/trusted_compute.md)
 - [Operasyonel Testler](operations/testing.md)
 - [KMS/HSM Conformance Raporu](operations/kms-conformance.md)
