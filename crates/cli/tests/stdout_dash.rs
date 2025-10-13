@@ -1,9 +1,11 @@
+use std::fs;
 use std::path::PathBuf;
 
 use assert_cmd::Command;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use hkdf::Hkdf;
 use predicates::prelude::*;
+use serde_json::Value;
 use sha2::Sha256;
 use tempfile::NamedTempFile;
 
@@ -121,6 +123,75 @@ fn coord_raw_out_dash_writes_expected_bytes() {
     let (_, expected_coord) = coord32_derive(seed.as_ref(), &calibration, &salts).expect("coord");
 
     assert_eq!(stdout, expected_coord);
+}
+
+#[test]
+fn decrypt_metadata_out_dash_streams_stdout() {
+    let plaintext = NamedTempFile::new().expect("plaintext");
+    fs::write(plaintext.path(), b"sensitive-bytes").expect("write plaintext");
+
+    let packet = NamedTempFile::new().expect("packet");
+    let mut encrypt = cli_command();
+    encrypt.args([
+        "encrypt",
+        "--password",
+        "correct horse battery staple",
+        "--in",
+        plaintext.path().to_str().expect("plaintext path"),
+        "--out",
+        packet.path().to_str().expect("packet path"),
+        "--org-salt",
+        "V2VBcmVLdXQuZXU=",
+        "--calib-text",
+        "Neudzulab | Prod | 2025-08",
+        "--kdf",
+        "low",
+    ]);
+    encrypt.assert().success();
+
+    let decrypted = NamedTempFile::new().expect("decrypted");
+    let mut decrypt = cli_command();
+    decrypt.args([
+        "decrypt",
+        "--password",
+        "correct horse battery staple",
+        "--in",
+        packet.path().to_str().expect("packet path"),
+        "--out",
+        decrypted.path().to_str().expect("decrypted path"),
+        "--org-salt",
+        "V2VBcmVLdXQuZXU=",
+        "--calib-text",
+        "Neudzulab | Prod | 2025-08",
+        "--kdf",
+        "low",
+        "--metadata-out",
+        "-",
+    ]);
+
+    let assert = decrypt
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"metadata\""));
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).expect("stdout utf8");
+    let json: Value = serde_json::from_str(&stdout).expect("metadata json");
+    let metadata = json
+        .get("metadata")
+        .and_then(Value::as_object)
+        .expect("metadata object");
+
+    let org = STANDARD
+        .decode("V2VBcmVLdXQuZXU=")
+        .expect("org salt decode");
+    let (calibration, _) =
+        calib_from_text(&org, "Neudzulab | Prod | 2025-08").expect("calibration");
+    assert_eq!(
+        metadata.get("calib_id").and_then(Value::as_str),
+        Some(calibration.id.as_str()),
+    );
+
+    let decrypted_bytes = fs::read(decrypted.path()).expect("decrypted bytes");
+    assert_eq!(decrypted_bytes, b"sensitive-bytes");
 }
 
 #[test]
