@@ -222,6 +222,48 @@ function collapseSlashes(input: string): string {
   return input.replace(/\/{2,}/g, '/');
 }
 
+function removeDotSegments(pathValue: string): string {
+  if (pathValue === '') {
+    return '';
+  }
+
+  const leadingSlash = pathValue.startsWith('/');
+  const trailingSlash = pathValue.endsWith('/');
+  const segments = pathValue.split('/');
+  const output: string[] = [];
+
+  for (const segment of segments) {
+    if (segment === '' || segment === '.') {
+      continue;
+    }
+
+    if (segment === '..') {
+      if (output.length > 0) {
+        output.pop();
+      }
+      continue;
+    }
+
+    output.push(segment);
+  }
+
+  let normalised = output.join('/');
+
+  if (leadingSlash) {
+    normalised = `/${normalised}`;
+  }
+
+  if (normalised === '' && leadingSlash) {
+    return '/';
+  }
+
+  if (trailingSlash && normalised !== '' && !normalised.endsWith('/')) {
+    return `${normalised}/`;
+  }
+
+  return normalised;
+}
+
 function normalisePath(pathValue: string | undefined, defaultPath: string): string {
   if (pathValue === undefined) {
     return defaultPath;
@@ -234,16 +276,17 @@ function normalisePath(pathValue: string | undefined, defaultPath: string): stri
   const hasTrailingSlash = pathValue.endsWith('/');
   const withLeadingSlash = pathValue.startsWith('/') ? pathValue : `/${pathValue}`;
   const collapsed = collapseSlashes(withLeadingSlash);
+  const dotFree = removeDotSegments(collapsed);
 
-  if (collapsed === '/') {
+  if (dotFree === '' || dotFree === '/') {
     return '/';
   }
 
   if (hasTrailingSlash) {
-    return collapsed.endsWith('/') ? collapsed : `${collapsed}/`;
+    return dotFree.endsWith('/') ? dotFree : `${dotFree}/`;
   }
 
-  return collapsed.endsWith('/') ? collapsed.replace(/\/+$/, '') : collapsed;
+  return dotFree.endsWith('/') ? dotFree.replace(/\/+$/, '') : dotFree;
 }
 
 function joinUrl(origin: string, path: string): string {
