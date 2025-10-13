@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-cli calib fingerprint` komutu EXTERNAL kalibrasyon bağlamı
   için Base64/hex parmak izi raporu üretir ve otomasyon entegrasyonlarına
   uygun JSON çıktısı sağlar.
+- `aunsorm-cli calib verify` komutu, beklenen kalibrasyon kimliği ve
+  parmak izi değerlerini doğrulayıp uyumsuzluk durumunda hata kodu
+  döndürür.
 - CI pipeline now builds the mdBook documentation and publishes it as an artifact
 - Hacker regression test now verifies that tampering with the coordinate digest is caught
   alongside rustdoc output, ensuring architectural docs remain up to date.
