@@ -162,6 +162,29 @@ impl TransparencyRecord {
     }
 }
 
+/// Zincir durumunun özetini tutan kontrol noktası bilgisi.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransparencyCheckpoint {
+    /// En son kaydın sıra numarası.
+    pub sequence: u64,
+    /// En son kaydın zaman damgası.
+    pub timestamp: u64,
+    /// Güncel Merkle-benzeri ağaç başı karması.
+    pub tree_hash: [u8; 32],
+}
+
+impl TransparencyCheckpoint {
+    /// Yeni bir kontrol noktası oluşturur.
+    #[must_use]
+    pub const fn new(sequence: u64, timestamp: u64, tree_hash: [u8; 32]) -> Self {
+        Self {
+            sequence,
+            timestamp,
+            tree_hash,
+        }
+    }
+}
+
 fn hash_with_length(hasher: &mut Sha256, value: &[u8]) {
     let len = value.len() as u64;
     hasher.update(len.to_be_bytes());
@@ -282,6 +305,14 @@ impl KeyTransparencyLog {
         &self.domain
     }
 
+    /// En son kaydı temsil eden kontrol noktasını döndürür.
+    #[must_use]
+    pub fn checkpoint(&self) -> Option<TransparencyCheckpoint> {
+        self.records.last().map(|record| {
+            TransparencyCheckpoint::new(record.sequence, record.timestamp, record.tree_hash)
+        })
+    }
+
     /// Zincirin bütünlüğünü doğrular.
     ///
     /// # Errors
@@ -347,6 +378,23 @@ impl KeyTransparencyLog {
         }
         Ok(hasher.finalize().into())
     }
+
+    /// Kayıt dizisinden kontrol noktası üretir.
+    ///
+    /// # Errors
+    /// Alan adı uyuşmazlığı veya zincirde bozulma tespit edilirse hata döner.
+    pub fn checkpoint_from_records(
+        domain: &str,
+        records: &[TransparencyRecord],
+    ) -> Result<Option<TransparencyCheckpoint>, TransparencyError> {
+        if records.is_empty() {
+            return Ok(None);
+        }
+        Self::verify_chain(domain, records)?;
+        Ok(records.last().map(|record| {
+            TransparencyCheckpoint::new(record.sequence, record.timestamp, record.tree_hash)
+        }))
+    }
 }
 
 /// UNIX zaman damgasını saniye cinsinden döndürür.
@@ -374,7 +422,9 @@ impl fmt::Display for TransparencyRecord {
 
 #[cfg(test)]
 mod tests {
-    use super::{KeyTransparencyLog, TransparencyEvent, TransparencyEventKind};
+    use super::{
+        KeyTransparencyLog, TransparencyCheckpoint, TransparencyEvent, TransparencyEventKind,
+    };
 
     #[test]
     fn transcript_hash_is_deterministic() {
@@ -433,5 +483,47 @@ mod tests {
         assert_eq!(event.public_key, vec![0xAA; 16]);
         assert_eq!(event.timestamp, 9);
         assert!(event.note.is_none());
+    }
+
+    #[test]
+    fn checkpoint_matches_latest_record() {
+        let mut log = KeyTransparencyLog::new("aunsorm-demo");
+        assert!(log.checkpoint().is_none());
+        let record = log
+            .append(TransparencyEvent::publish(
+                "key-1",
+                [0x01_u8; 4],
+                10,
+                Some("initial".into()),
+            ))
+            .expect("record");
+        let checkpoint = log.checkpoint().expect("checkpoint");
+        assert_eq!(
+            checkpoint,
+            TransparencyCheckpoint::new(record.sequence, record.timestamp, record.tree_hash)
+        );
+        assert_eq!(checkpoint.tree_hash, log.tree_head());
+    }
+
+    #[test]
+    fn checkpoint_from_records_validates_chain() {
+        let mut log = KeyTransparencyLog::new("aunsorm-demo");
+        log.append(TransparencyEvent::publish("key-1", [0xAA_u8; 8], 1, None))
+            .expect("record");
+        log.append(TransparencyEvent::rotate("key-1", [0xBB_u8; 8], 2, None))
+            .expect("record");
+
+        let records = log.records().to_vec();
+        let checkpoint = KeyTransparencyLog::checkpoint_from_records("aunsorm-demo", &records)
+            .expect("checkpoint")
+            .expect("non-empty");
+        assert_eq!(checkpoint.tree_hash, log.tree_head());
+        let last_sequence = records.last().map(|record| record.sequence).unwrap();
+        assert_eq!(checkpoint.sequence, last_sequence);
+
+        let mut tampered = records;
+        tampered[1].tree_hash[0] ^= 0xFF;
+        let result = KeyTransparencyLog::checkpoint_from_records("aunsorm-demo", &tampered);
+        assert!(result.is_err());
     }
 }

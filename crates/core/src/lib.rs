@@ -21,6 +21,6 @@ pub use kdf::{derive_seed64_and_pdk, KdfInfo, KdfPreset, KdfProfile, SensitiveVe
 pub use salts::Salts;
 pub use session::{SessionRatchet, SessionRatchetState, StepSecret};
 pub use transparency::{
-    unix_timestamp, KeyTransparencyLog, TransparencyError, TransparencyEvent,
-    TransparencyEventKind, TransparencyRecord,
+    unix_timestamp, KeyTransparencyLog, TransparencyCheckpoint, TransparencyError,
+    TransparencyEvent, TransparencyEventKind, TransparencyRecord,
 };
