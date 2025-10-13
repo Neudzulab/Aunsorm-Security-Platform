@@ -152,6 +152,31 @@ fn forged_aad_digest_is_rejected() {
 }
 
 #[test]
+fn decrypt_rejects_wrong_org_salt_even_if_note_matches() {
+    let (encoded, salts, _calibration, profile) = build_safe_packet();
+
+    // Aynı kalibrasyon metnini korurken kuruluş tuzunu değiştiren saldırgan senaryosu.
+    let (wrong_calibration, _) =
+        calib_from_text(b"white-hat-org-alt", "penetration-test").expect("calibration");
+
+    let result = decrypt_one_shot(&DecryptParams {
+        password: "penetration-password",
+        password_salt: b"penetration-salt",
+        calibration: &wrong_calibration,
+        salts: &salts,
+        profile,
+        aad: b"classified aad",
+        strict: false,
+        packet: &encoded,
+    });
+
+    assert!(matches!(
+        result,
+        Err(PacketError::Integrity(message)) if message == "calibration id mismatch"
+    ));
+}
+
+#[test]
 fn tampered_header_mac_is_detected() {
     let (encoded, salts, calibration, profile) = build_safe_packet();
 
