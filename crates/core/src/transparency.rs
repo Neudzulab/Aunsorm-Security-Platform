@@ -423,7 +423,8 @@ impl fmt::Display for TransparencyRecord {
 #[cfg(test)]
 mod tests {
     use super::{
-        KeyTransparencyLog, TransparencyCheckpoint, TransparencyEvent, TransparencyEventKind,
+        KeyTransparencyLog, TransparencyCheckpoint, TransparencyError, TransparencyEvent,
+        TransparencyEventKind,
     };
 
     #[test]
@@ -503,6 +504,29 @@ mod tests {
             TransparencyCheckpoint::new(record.sequence, record.timestamp, record.tree_hash)
         );
         assert_eq!(checkpoint.tree_hash, log.tree_head());
+    }
+
+    #[test]
+    fn witness_roundtrip_and_chain_integrity() {
+        let mut log = KeyTransparencyLog::new("aunsorm-demo");
+        let record = log
+            .append(
+                TransparencyEvent::publish("key-1", [0x11_u8; 4], 3, None)
+                    .with_witness(Some(vec![0xAA, 0xBB, 0xCC])),
+            )
+            .expect("record");
+
+        let records = vec![record];
+        assert_eq!(
+            records[0].event.witness.as_deref().expect("witness"),
+            &[0xAA, 0xBB, 0xCC]
+        );
+        KeyTransparencyLog::verify_chain("aunsorm-demo", &records).expect("valid chain");
+
+        let mut tampered = records;
+        tampered[0].event.witness = Some(vec![0xAA, 0xCC, 0xBB]);
+        let result = KeyTransparencyLog::verify_chain("aunsorm-demo", &tampered);
+        assert!(matches!(result, Err(TransparencyError::ChainBroken(0))));
     }
 
     #[test]
