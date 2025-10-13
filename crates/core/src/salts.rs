@@ -37,6 +37,31 @@ impl Salts {
         })
     }
 
+    /// Dilimleri kopyalayarak yeni bir salt seti oluşturur.
+    ///
+    /// Bu yardımcı fonksiyon, güvenilir referanslardan elde edilen tuzların
+    /// kolayca `Salts` tipine dönüştürülmesini sağlar.
+    ///
+    /// # Errors
+    /// Dilim uzunlukları 8 bayttan kısa olduğunda `CoreError::SaltTooShort`
+    /// döner.
+    ///
+    /// # Örnek
+    /// ```
+    /// use aunsorm_core::Salts;
+    ///
+    /// # fn main() -> Result<(), aunsorm_core::CoreError> {
+    /// let salts = Salts::from_slices(b"calib-salt", b"chain-salt", b"coord-salt")?;
+    /// assert_eq!(salts.calibration(), b"calib-salt");
+    /// assert_eq!(salts.chain(), b"chain-salt");
+    /// assert_eq!(salts.coord(), b"coord-salt");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn from_slices(calibration: &[u8], chain: &[u8], coord: &[u8]) -> Result<Self, CoreError> {
+        Self::new(calibration.to_vec(), chain.to_vec(), coord.to_vec())
+    }
+
     /// Kalibrasyon tuzu.
     #[must_use]
     pub fn calibration(&self) -> &[u8] {
@@ -76,6 +101,17 @@ mod tests {
         assert!(Salts::new(vec![0; 7], vec![0; 8], vec![0; 8]).is_err());
         assert!(Salts::new(vec![0; 8], vec![0; 7], vec![0; 8]).is_err());
         assert!(Salts::new(vec![0; 8], vec![0; 8], vec![0; 7]).is_err());
+    }
+
+    #[test]
+    fn from_slices_copies_inputs() {
+        let source_calibration = b"12345678";
+        let source_chain = b"abcdefgh";
+        let source_coord = b"ABCDEFGH";
+        let salts = Salts::from_slices(source_calibration, source_chain, source_coord).unwrap();
+        assert_eq!(salts.calibration(), source_calibration);
+        assert_eq!(salts.chain(), source_chain);
+        assert_eq!(salts.coord(), source_coord);
     }
 
     #[test]
