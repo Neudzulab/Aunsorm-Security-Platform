@@ -122,3 +122,59 @@ fn coord_raw_out_dash_writes_expected_bytes() {
 
     assert_eq!(stdout, expected_coord);
 }
+
+#[test]
+fn calib_verify_succeeds_with_matching_expectations() {
+    let org = STANDARD
+        .decode("V2VBcmVLdXQuZXU=")
+        .expect("org salt decode");
+    let (calibration, _) =
+        calib_from_text(&org, "Neudzulab | Prod | 2025-08").expect("calibration");
+    let expected_id = calibration.id.as_str().to_string();
+    let expected_b64 = calibration.fingerprint_b64();
+    let expected_hex = calibration.fingerprint_hex();
+
+    let mut cmd = cli_command();
+    cmd.arg("calib")
+        .arg("verify")
+        .arg("--org-salt")
+        .arg("V2VBcmVLdXQuZXU=")
+        .arg("--calib-text")
+        .arg("Neudzulab | Prod | 2025-08")
+        .arg("--expect-id")
+        .arg(&expected_id)
+        .arg("--expect-fingerprint-b64")
+        .arg(&expected_b64)
+        .arg("--expect-fingerprint-hex")
+        .arg(&expected_hex)
+        .arg("--format")
+        .arg("text");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Kimlik Doğrulaması       : OK"))
+        .stdout(predicate::str::contains("Base64 Doğrulaması       : OK"))
+        .stdout(predicate::str::contains("Hex Doğrulaması          : OK"));
+}
+
+#[test]
+fn calib_verify_reports_failure_when_expectations_do_not_match() {
+    let mut cmd = cli_command();
+    cmd.arg("calib")
+        .arg("verify")
+        .arg("--org-salt")
+        .arg("V2VBcmVLdXQuZXU=")
+        .arg("--calib-text")
+        .arg("Neudzulab | Prod | 2025-08")
+        .arg("--expect-id")
+        .arg("AAAAAAAAAAAAAAAA")
+        .arg("--format")
+        .arg("text");
+
+    cmd.assert()
+        .failure()
+        .stdout(predicate::str::contains("Kimlik Doğrulaması       : HATA"))
+        .stderr(predicate::str::contains(
+            "kalibrasyon doğrulaması başarısız",
+        ));
+}

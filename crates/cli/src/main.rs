@@ -10,7 +10,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine as _,
+};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use hkdf::Hkdf;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -98,6 +101,8 @@ enum CalibCommands {
     DeriveCoord(CalibCoordArgs),
     /// Kalibrasyon parmak izini raporla
     Fingerprint(CalibFingerprintArgs),
+    /// Kalibrasyon kimliğini ve parmak izini doğrula
+    Verify(CalibVerifyArgs),
 }
 
 #[derive(Subcommand)]
@@ -372,6 +377,43 @@ struct CalibFingerprintArgs {
         required_unless_present = "calib_text"
     )]
     calib_file: Option<PathBuf>,
+    /// Çıktı formatı (text veya json)
+    #[arg(long, value_enum, default_value_t = ReportFormat::Json)]
+    format: ReportFormat,
+    /// Çıktıyı dosyaya yaz
+    #[arg(long, value_name = "PATH")]
+    out: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct CalibVerifyArgs {
+    /// Organizasyon tuzu (Base64)
+    #[arg(long, value_name = "B64")]
+    org_salt: String,
+    /// Kalibrasyon metni
+    #[arg(
+        long,
+        conflicts_with = "calib_file",
+        required_unless_present = "calib_file"
+    )]
+    calib_text: Option<String>,
+    /// Kalibrasyon metnini dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "calib_text",
+        required_unless_present = "calib_text"
+    )]
+    calib_file: Option<PathBuf>,
+    /// Beklenen kalibrasyon kimliği
+    #[arg(long, value_name = "ID")]
+    expect_id: Option<String>,
+    /// Beklenen parmak izi (Base64, URL-safe, padding'siz)
+    #[arg(long, value_name = "B64")]
+    expect_fingerprint_b64: Option<String>,
+    /// Beklenen parmak izi (hex, küçük harf)
+    #[arg(long, value_name = "HEX")]
+    expect_fingerprint_hex: Option<String>,
     /// Çıktı formatı (text veya json)
     #[arg(long, value_enum, default_value_t = ReportFormat::Json)]
     format: ReportFormat,
@@ -748,6 +790,8 @@ enum CliError {
     Io(#[from] std::io::Error),
     #[error("base64 decode error: {0}")]
     Base64(#[from] base64::DecodeError),
+    #[error("hex decode error: {0}")]
+    Hex(#[from] hex::FromHexError),
     #[error("core error: {0}")]
     Core(#[from] aunsorm_core::CoreError),
     #[error("packet error: {0}")]
@@ -794,6 +838,8 @@ enum CliError {
     X509(#[from] aunsorm_x509::X509Error),
     #[error("geçerlilik süresi en az 1 gün olmalıdır")]
     InvalidValidityDays,
+    #[error("kalibrasyon doğrulaması başarısız")]
+    ExpectationFailed,
 }
 
 type CliResult<T> = Result<T, CliError>;
@@ -1500,6 +1546,7 @@ fn handle_calib(command: CalibCommands) -> CliResult<()> {
         CalibCommands::Inspect(args) => handle_calib_inspect(&args),
         CalibCommands::DeriveCoord(args) => handle_calib_coord(&args),
         CalibCommands::Fingerprint(args) => handle_calib_fingerprint(&args),
+        CalibCommands::Verify(args) => handle_calib_verify(&args),
     }
 }
 
@@ -1537,6 +1584,61 @@ fn handle_calib_fingerprint(args: &CalibFingerprintArgs) -> CliResult<()> {
     let (calibration, _) = calib_from_text(&org_salt, &calib_text)?;
     let report = build_calibration_fingerprint_report(&calibration);
     emit_calibration_fingerprint_report(&report, args.format, args.out.as_deref())
+}
+
+fn handle_calib_verify(args: &CalibVerifyArgs) -> CliResult<()> {
+    if args.expect_id.is_none()
+        && args.expect_fingerprint_b64.is_none()
+        && args.expect_fingerprint_hex.is_none()
+    {
+        return Err(CliError::MissingParam("expect-id/expect-fingerprint"));
+    }
+
+    let org_salt = decode_org_salt(&args.org_salt)?;
+    let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
+    let (calibration, _) = calib_from_text(&org_salt, &calib_text)?;
+    let actual_fingerprint = calibration.fingerprint();
+
+    let id_match = args
+        .expect_id
+        .as_ref()
+        .map(|expected| expected == calibration.id.as_str());
+
+    let fingerprint_b64_match = if let Some(expected) = args.expect_fingerprint_b64.as_ref() {
+        let decoded = URL_SAFE_NO_PAD.decode(expected)?;
+        Some(decoded.as_slice() == actual_fingerprint.as_ref())
+    } else {
+        None
+    };
+
+    let fingerprint_hex_match = if let Some(expected) = args.expect_fingerprint_hex.as_ref() {
+        let decoded = hex::decode(expected)?;
+        Some(decoded.as_slice() == actual_fingerprint.as_ref())
+    } else {
+        None
+    };
+
+    let report = build_calibration_verify_report(
+        &calibration,
+        args.expect_id.clone(),
+        args.expect_fingerprint_b64.clone(),
+        args.expect_fingerprint_hex.clone(),
+        id_match,
+        fingerprint_b64_match,
+        fingerprint_hex_match,
+    );
+
+    emit_calibration_verify_report(&report, args.format, args.out.as_deref())?;
+
+    if report
+        .results
+        .iter()
+        .any(|status| matches!(status, Some(false)))
+    {
+        Err(CliError::ExpectationFailed)
+    } else {
+        Ok(())
+    }
 }
 
 fn emit_json_pretty<T>(value: &T, out: Option<&Path>) -> CliResult<()>
@@ -1623,6 +1725,20 @@ fn emit_calibration_fingerprint_report(
     }
 }
 
+fn emit_calibration_verify_report(
+    report: &CalibrationVerifyReport,
+    format: ReportFormat,
+    out: Option<&Path>,
+) -> CliResult<()> {
+    match format {
+        ReportFormat::Json => emit_json_pretty(report, out),
+        ReportFormat::Text => {
+            let rendered = render_calibration_verify_report_text(report);
+            emit_text(&rendered, out)
+        }
+    }
+}
+
 fn emit_coordinate_report(
     report: &CoordinateReport,
     format: ReportFormat,
@@ -1665,6 +1781,29 @@ struct CalibrationFingerprintReport {
     fingerprint_hex: String,
 }
 
+#[derive(Serialize)]
+struct CalibrationVerifyReport {
+    calibration_id: String,
+    fingerprint_b64: String,
+    fingerprint_hex: String,
+    expectations: CalibrationVerifyExpectations,
+    results: CalibrationVerifyResults,
+}
+
+#[derive(Serialize)]
+struct CalibrationVerifyExpectations {
+    id: Option<String>,
+    fingerprint_b64: Option<String>,
+    fingerprint_hex: Option<String>,
+}
+
+#[derive(Serialize)]
+struct CalibrationVerifyResults {
+    id: Option<bool>,
+    fingerprint_b64: Option<bool>,
+    fingerprint_hex: Option<bool>,
+}
+
 fn build_calibration_report(calibration: &Calibration) -> CalibrationReport {
     let ranges = std::array::from_fn(|idx| {
         let range = calibration.ranges[idx];
@@ -1695,6 +1834,32 @@ fn build_calibration_fingerprint_report(calibration: &Calibration) -> Calibratio
         calibration_id: calibration.id.as_str().to_string(),
         fingerprint_b64,
         fingerprint_hex,
+    }
+}
+
+fn build_calibration_verify_report(
+    calibration: &Calibration,
+    expected_id: Option<String>,
+    expected_fingerprint_b64: Option<String>,
+    expected_fingerprint_hex: Option<String>,
+    id_match: Option<bool>,
+    fingerprint_b64_match: Option<bool>,
+    fingerprint_hex_match: Option<bool>,
+) -> CalibrationVerifyReport {
+    CalibrationVerifyReport {
+        calibration_id: calibration.id.as_str().to_string(),
+        fingerprint_b64: calibration.fingerprint_b64(),
+        fingerprint_hex: calibration.fingerprint_hex(),
+        expectations: CalibrationVerifyExpectations {
+            id: expected_id,
+            fingerprint_b64: expected_fingerprint_b64,
+            fingerprint_hex: expected_fingerprint_hex,
+        },
+        results: CalibrationVerifyResults {
+            id: id_match,
+            fingerprint_b64: fingerprint_b64_match,
+            fingerprint_hex: fingerprint_hex_match,
+        },
     }
 }
 
@@ -1741,6 +1906,69 @@ fn render_calibration_fingerprint_report_text(report: &CalibrationFingerprintRep
         report.fingerprint_hex
     ));
     lines.join("\n")
+}
+
+fn render_calibration_verify_report_text(report: &CalibrationVerifyReport) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!(
+        "Kalibrasyon Kimliği      : {}",
+        report.calibration_id
+    ));
+    lines.push(format!(
+        "Parmak izi (Base64)      : {}",
+        report.fingerprint_b64
+    ));
+    lines.push(format!(
+        "Parmak izi (hex)         : {}",
+        report.fingerprint_hex
+    ));
+    lines.push(format!(
+        "Beklenen Kimlik          : {}",
+        report.expectations.id.as_deref().unwrap_or("-")
+    ));
+    lines.push(format!(
+        "Kimlik Doğrulaması       : {}",
+        status_text(report.results.id)
+    ));
+    lines.push(format!(
+        "Beklenen Parmak izi (B64): {}",
+        report
+            .expectations
+            .fingerprint_b64
+            .as_deref()
+            .unwrap_or("-")
+    ));
+    lines.push(format!(
+        "Base64 Doğrulaması       : {}",
+        status_text(report.results.fingerprint_b64)
+    ));
+    lines.push(format!(
+        "Beklenen Parmak izi (hex): {}",
+        report
+            .expectations
+            .fingerprint_hex
+            .as_deref()
+            .unwrap_or("-")
+    ));
+    lines.push(format!(
+        "Hex Doğrulaması          : {}",
+        status_text(report.results.fingerprint_hex)
+    ));
+    lines.join("\n")
+}
+
+const fn status_text(status: Option<bool>) -> &'static str {
+    match status {
+        Some(true) => "OK",
+        Some(false) => "HATA",
+        None => "Atlanıyor",
+    }
+}
+
+impl CalibrationVerifyResults {
+    fn iter(&self) -> impl Iterator<Item = Option<bool>> + '_ {
+        [self.id, self.fingerprint_b64, self.fingerprint_hex].into_iter()
+    }
 }
 
 #[derive(Serialize)]
