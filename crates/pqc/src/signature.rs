@@ -3,6 +3,7 @@ use zeroize::Zeroizing;
 use pqcrypto_traits::sign::{DetachedSignature as _, PublicKey as _, SecretKey as _};
 
 use crate::error::{PqcError, Result};
+use crate::strict::StrictMode;
 
 #[cfg(feature = "sig-mldsa-65")]
 const ML_DSA_65_PUBLIC_KEY_BYTES: usize = pqcrypto_dilithium::dilithium5::public_key_bytes();
@@ -236,6 +237,56 @@ impl SignatureAlgorithm {
                 ],
             },
         }
+    }
+}
+
+/// İmza algoritması müzakeresi sonucu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SignatureSelection {
+    /// Seçilen algoritma; `None` klasik imza fallback'ini temsil eder.
+    pub algorithm: Option<SignatureAlgorithm>,
+    /// Strict kip durumunu taşır.
+    pub strict: StrictMode,
+}
+
+impl SignatureSelection {
+    /// Fallback'e izin verilip verilmediğini döndürür.
+    #[must_use]
+    pub const fn allows_fallback(self) -> bool {
+        !self.strict.is_strict()
+    }
+
+    /// PQC algoritması seçilip seçilmediğini belirtir.
+    #[must_use]
+    pub const fn is_pqc(self) -> bool {
+        self.algorithm.is_some()
+    }
+}
+
+/// İstenen PQC imza algoritmaları arasından seçim yapar.
+///
+/// # Errors
+/// Strict kip etkin ve hiçbir aday algoritma desteklenmiyorsa `PqcError::StrictRequired` döner.
+pub fn negotiate_signature(
+    preferred: &[SignatureAlgorithm],
+    strict: StrictMode,
+) -> Result<SignatureSelection> {
+    for &algorithm in preferred {
+        if algorithm.is_available() {
+            return Ok(SignatureSelection {
+                algorithm: Some(algorithm),
+                strict,
+            });
+        }
+    }
+
+    if strict.is_strict() {
+        Err(PqcError::StrictRequired)
+    } else {
+        Ok(SignatureSelection {
+            algorithm: None,
+            strict,
+        })
     }
 }
 
@@ -688,6 +739,40 @@ mod tests {
     use super::*;
 
     const MESSAGE: &[u8] = b"Aunsorm PQC test vector";
+
+    #[test]
+    fn negotiation_selects_first_available_algorithm() {
+        let selection =
+            negotiate_signature(&[SignatureAlgorithm::MlDsa65], StrictMode::Relaxed).unwrap();
+        assert!(selection.is_pqc());
+        assert_eq!(selection.algorithm, Some(SignatureAlgorithm::MlDsa65));
+        assert!(selection.allows_fallback());
+    }
+
+    #[test]
+    fn negotiation_allows_fallback_when_relaxed() {
+        let selection =
+            negotiate_signature(&[SignatureAlgorithm::Falcon512], StrictMode::Relaxed).unwrap();
+        if SignatureAlgorithm::Falcon512.is_available() {
+            assert_eq!(selection.algorithm, Some(SignatureAlgorithm::Falcon512));
+            assert!(selection.is_pqc());
+        } else {
+            assert_eq!(selection.algorithm, None);
+            assert!(!selection.is_pqc());
+        }
+    }
+
+    #[test]
+    fn negotiation_errors_when_strict_without_pqc() {
+        let result = negotiate_signature(&[SignatureAlgorithm::Falcon512], StrictMode::Strict);
+        if SignatureAlgorithm::Falcon512.is_available() {
+            let selection = result.expect("falcon must negotiate when available");
+            assert_eq!(selection.algorithm, Some(SignatureAlgorithm::Falcon512));
+        } else {
+            let err = result.expect_err("strict negotiation should fail without PQ signatures");
+            assert!(matches!(err, PqcError::StrictRequired));
+        }
+    }
 
     #[test]
     fn sign_verify_ml_dsa() {
