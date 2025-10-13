@@ -146,6 +146,27 @@ fn sqlite_store_roundtrip() {
         .expect("purge");
 }
 
+#[cfg(feature = "sqlite")]
+#[test]
+fn sqlite_store_creates_parent_directories() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let nested = dir.path().join("nested").join("levels");
+    let path = nested.join("jti.db");
+
+    assert!(
+        !nested.exists(),
+        "parent directory should not exist before open"
+    );
+
+    {
+        let store = SqliteJtiStore::open(&path).expect("store");
+        drop(store);
+    }
+
+    assert!(nested.exists(), "parent directory must be created");
+    assert!(path.exists(), "database file should be created");
+}
+
 #[cfg(feature = "kms")]
 #[test]
 fn kms_signer_roundtrip() {

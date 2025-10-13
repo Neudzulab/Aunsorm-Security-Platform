@@ -81,8 +81,15 @@ impl SqliteJtiStore {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         use rusqlite::{Connection, OpenFlags};
 
+        let path_buf = path.as_ref().to_path_buf();
+        if let Some(parent) = path_buf.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)?;
+            }
+        }
+
         let conn = Connection::open_with_flags(
-            path,
+            &path_buf,
             OpenFlags::SQLITE_OPEN_CREATE
                 | OpenFlags::SQLITE_OPEN_READ_WRITE
                 | OpenFlags::SQLITE_OPEN_FULL_MUTEX,
