@@ -314,6 +314,8 @@ mod tests {
     use aunsorm_core::session::SessionRatchet;
     use aunsorm_core::{calibration::calib_from_text, salts::Salts, KdfPreset, KdfProfile};
 
+    use crate::crypto::{compute_header_mac, derive_keys};
+    use crate::header::HeaderSalts;
     use crate::{
         decrypt_session, encrypt_session, peek_header, SessionDecryptParams, SessionEncryptParams,
         SessionStore,
@@ -466,6 +468,68 @@ mod tests {
         assert!(matches!(
             err,
             PacketError::Integrity(message) if message == "calibration id mismatch"
+        ));
+    }
+
+    #[test]
+    fn salt_digest_tampering_triggers_mismatch() {
+        let profile = KdfProfile::preset(KdfPreset::Low);
+        let salts = test_salts();
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
+        let password_salt = b"password-salt-888";
+        let packet = encrypt_one_shot(EncryptParams {
+            password: PASSWORD,
+            password_salt,
+            calibration: &calibration,
+            salts: &salts,
+            plaintext: b"super secret",
+            aad: b"meta",
+            profile,
+            algorithm: AeadAlgorithm::AesGcm,
+            strict: false,
+            kem: None,
+        })
+        .expect("encrypt");
+        let encoded = packet.to_base64().expect("encode");
+
+        let mut tampered = Packet::from_base64(&encoded).expect("decode");
+        let fake_password_salt = b"rogue-password-salt";
+        let fake_salts = Salts::new(
+            b"rogue-calib-salt-1".to_vec(),
+            b"rogue-chain-salt-2".to_vec(),
+            b"rogue-coord-salt-3".to_vec(),
+        )
+        .expect("fake salts");
+        tampered.header.salts = HeaderSalts::from_bytes(fake_password_salt, &fake_salts);
+
+        let (_seed, pdk, _) = derive_seed64_and_pdk(
+            PASSWORD,
+            password_salt,
+            salts.calibration(),
+            salts.chain(),
+            profile,
+        )
+        .expect("derive seed and keys");
+        let keys = derive_keys(pdk.as_ref(), calibration.id.as_str()).expect("derive keys");
+        tampered.header.hdrmac =
+            compute_header_mac(&tampered.header, &keys.header_mac).expect("recompute header mac");
+
+        let tampered_encoded = tampered.to_base64().expect("encode tampered");
+        let params = DecryptParams {
+            password: PASSWORD,
+            password_salt,
+            calibration: &calibration,
+            salts: &salts,
+            profile,
+            aad: b"meta",
+            strict: false,
+            packet: &tampered_encoded,
+        };
+        let err = decrypt_one_shot(&params).expect_err("salt tampering should fail");
+
+        assert!(matches!(
+            err,
+            PacketError::Invalid(message) if message == "salt mismatch"
         ));
     }
 
