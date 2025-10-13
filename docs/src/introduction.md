@@ -2,7 +2,7 @@
 
 Aunsorm güvenlik araç seti; kriptografik çekirdek, paketleme, kimlik ve platform
 katmanlarının ortak bir koordinat sistemi altında bütünleştiği bir mimari sunar.
-Bu kitap, sürüm 0.1.0 çerçevesinde oluşan bileşenlerin nasıl etkileştiğini,
+Bu kitap, sürüm 0.4.0 çerçevesinde oluşan bileşenlerin nasıl etkileştiğini,
 küresel güvenlik varsayımlarını ve sprint planına bağlı olarak yürütülen sertleştirme
 çalışmalarını belgeler.
 
