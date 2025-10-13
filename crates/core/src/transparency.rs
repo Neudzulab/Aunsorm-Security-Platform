@@ -422,9 +422,11 @@ impl fmt::Display for TransparencyRecord {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, SystemTime};
+
     use super::{
-        KeyTransparencyLog, TransparencyCheckpoint, TransparencyError, TransparencyEvent,
-        TransparencyEventKind,
+        unix_timestamp, KeyTransparencyLog, TransparencyCheckpoint, TransparencyError,
+        TransparencyEvent, TransparencyEventKind,
     };
 
     #[test]
@@ -549,5 +551,26 @@ mod tests {
         tampered[1].tree_hash[0] ^= 0xFF;
         let result = KeyTransparencyLog::checkpoint_from_records("aunsorm-demo", &tampered);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn transcript_hash_empty_returns_zero() {
+        let hash = KeyTransparencyLog::transcript_hash("aunsorm-demo", &[])
+            .expect("empty transcript succeeds");
+        assert_eq!(hash, [0_u8; 32]);
+    }
+
+    #[test]
+    fn unix_timestamp_handles_epoch_boundaries() {
+        let epoch_plus = SystemTime::UNIX_EPOCH + Duration::from_secs(42);
+        let epoch_minus = SystemTime::UNIX_EPOCH
+            .checked_sub(Duration::from_secs(1))
+            .expect("pre-epoch time");
+
+        let ts = unix_timestamp(epoch_plus).expect("epoch forward");
+        assert_eq!(ts, 42);
+
+        let err = unix_timestamp(epoch_minus).expect_err("pre-epoch should fail");
+        assert!(matches!(err, TransparencyError::TimestampUnderflow));
     }
 }
