@@ -284,6 +284,24 @@ describe('resolveAunsormBaseUrl', () => {
 
     expect(resolveAunsormBaseUrl(envRoot)).toBe('https://gateway.aunsorm.dev/');
   });
+
+  it('normalises dot segments in path overrides to prevent directory traversal', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'gateway.aunsorm.dev',
+      AUNSORM_BASE_PATH: './bridge/../v1/./next/',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('https://gateway.aunsorm.dev/v1/next/');
+
+    const envAscending = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'gateway.aunsorm.dev',
+      AUNSORM_BASE_PATH: '../../',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(envAscending)).toBe('https://gateway.aunsorm.dev/');
+  });
 });
 
 describe('resolveAunsormBaseUrlDetails', () => {
@@ -488,6 +506,25 @@ describe('resolveAunsormBaseUrlDetails', () => {
       source: {
         kind: 'default',
         nodeEnv: 'production',
+      },
+    });
+  });
+
+  it('reports normalised dot-segment paths for domain overrides', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'gateway.aunsorm.dev',
+      AUNSORM_BASE_PATH: './bridge/../v1/./next/',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'https://gateway.aunsorm.dev/v1/next/',
+      origin: 'https://gateway.aunsorm.dev',
+      path: '/v1/next/',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'AUNSORM_BASE_DOMAIN',
+        pathKey: 'AUNSORM_BASE_PATH',
       },
     });
   });
