@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256, Sha512};
 use subtle::ConstantTimeEq;
 
 #[cfg(feature = "aes-siv")]
-use aes_siv::{aead::generic_array::GenericArray, Aes128SivAead};
+use aes_siv::Aes128SivAead;
 
 use crate::error::PacketError;
 use crate::header::{AeadAlgorithm, Header};
@@ -105,7 +105,7 @@ pub fn encrypt_aead(
             let cipher =
                 Aes128SivAead::new_from_slice(key).map_err(|_| PacketError::Aead("invalid key"))?;
             cipher
-                .encrypt(GenericArray::from_slice(nonce), payload)
+                .encrypt(nonce.into(), payload)
                 .map_err(|_| PacketError::Aead("encryption failure"))
         }
     }
@@ -160,7 +160,7 @@ pub fn decrypt_aead(
             let cipher =
                 Aes128SivAead::new_from_slice(key).map_err(|_| PacketError::Aead("invalid key"))?;
             cipher
-                .decrypt(GenericArray::from_slice(nonce), payload)
+                .decrypt(nonce.into(), payload)
                 .map_err(|_| PacketError::Aead("decryption failure"))
         }
     }
