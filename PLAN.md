@@ -289,3 +289,9 @@ Key transparency ve transcript hash (gelecek sürüm).
 Teslim: Yukarıdaki yapıyı tamamlanmış kod olarak oluştur, testleri yeşile al, CI dosyalarını dahil et, dokümantasyonu doldur. “Placeholders/TODO” bırakma.
 
 Her iş için alanda uzman bir agent görevlendir. Yapılan işleri birbirleri ile conflict olmadan ilerletebilsinler. "devam" komutu geldiğinde plana göre ilgili agent bir sonraki adımı tamamlasın. Readme üzerinde yapılanlar ve yapılacaklar [ ] tik işareti ile gösterilsin. Yapıldıkça tik atılsın. İkilik istenmiyor kodlar revize olsun. Buna göre AGENST.mdyi ve RREADME'yi oluştur.
+
+18) Yan ürün & MDM altyapısı
+
+* [ ] Head bilgisine bağlı, çakışmasız benzersiz ID jeneratörü (projeler arası paylaşım için API).
+* [ ] MDM (Mobile Device Management) temel altyapısı: kayıt, politika deposu ve sertifika dağıtım planı.
+* [x] Lokal HTTPS geliştirme ortamı için SAN destekli öz-imzalı sertifika otomasyonu (`x509 local-dev`, CLI + kütüphane).
