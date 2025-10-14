@@ -54,6 +54,11 @@ fn find_private_use_or_noncharacter(text: &str) -> Option<char> {
         .find(|&ch| is_private_use(ch) || is_noncharacter(ch))
 }
 
+fn find_line_or_paragraph_separator(text: &str) -> Option<char> {
+    text.chars()
+        .find(|&ch| matches!(ch, '\u{2028}' | '\u{2029}'))
+}
+
 const fn is_private_use(ch: char) -> bool {
     let code = ch as u32;
     (code >= 0xE000 && code <= 0xF8FF)
@@ -340,6 +345,15 @@ fn validate_note_text(raw_note_text: &str, normalized_note_text: &str) -> Result
         ));
     }
 
+    if find_line_or_paragraph_separator(raw_note_text)
+        .or_else(|| find_line_or_paragraph_separator(normalized_note_text))
+        .is_some()
+    {
+        return Err(CoreError::invalid_input(
+            "calibration text contains Unicode line or paragraph separators",
+        ));
+    }
+
     Ok(())
 }
 
@@ -426,6 +440,15 @@ mod tests {
         assert!(matches!(err, CoreError::InvalidInput(_)));
 
         let err = normalize_calibration_text("Prod\u{E0100}2025").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn rejects_line_and_paragraph_separators() {
+        let err = calib_from_text(b"org-salt", "Prod\u{2028}2025").unwrap_err();
+        assert!(matches!(err, CoreError::InvalidInput(_)));
+
+        let err = normalize_calibration_text("Prod\u{2029}2025").unwrap_err();
         assert!(matches!(err, CoreError::InvalidInput(_)));
     }
 
