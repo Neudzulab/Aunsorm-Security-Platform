@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2025-10-20
+### Changed
+- Synchronized all workspace crate manifests and npm metadata to publish the 0.4.1 maintenance release.
+
+### Documentation
+- Updated the mdBook introduction to reference the 0.4.1 architecture baseline.
+
 ## [0.4.0] - 2025-10-13
 ### Added
 - `aunsorm-cli calib fingerprint` komutu EXTERNAL kalibrasyon bağlamı
