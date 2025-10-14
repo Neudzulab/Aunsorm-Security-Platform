@@ -85,6 +85,21 @@ impl TransparencyEvent {
         }
     }
 
+    /// Yayınlama olayını [`SystemTime`] ile oluşturur.
+    ///
+    /// # Errors
+    /// Unix epoch öncesine işaret eden zaman damgası verildiğinde
+    /// [`TransparencyError::TimestampUnderflow`] döner.
+    pub fn publish_at(
+        key_id: impl Into<String>,
+        public_key: impl AsRef<[u8]>,
+        time: SystemTime,
+        note: Option<String>,
+    ) -> Result<Self, TransparencyError> {
+        let timestamp = unix_timestamp(time)?;
+        Ok(Self::publish(key_id, public_key, timestamp, note))
+    }
+
     /// Anahtarın geri çekildiğini bildiren olay oluşturur.
     ///
     /// Public key alanı revokasyon kayıtlarında boş bırakılır; bu davranış zincir
@@ -108,6 +123,19 @@ impl TransparencyEvent {
             note,
             witness: None,
         }
+    }
+
+    /// Anahtar geri çekme olayını [`SystemTime`] ile üretir.
+    ///
+    /// # Errors
+    /// Unix epoch öncesi zaman damgası verilirse hata döner.
+    pub fn revoke_at(
+        key_id: impl Into<String>,
+        time: SystemTime,
+        note: Option<String>,
+    ) -> Result<Self, TransparencyError> {
+        let timestamp = unix_timestamp(time)?;
+        Ok(Self::revoke(key_id, timestamp, note))
     }
 
     /// Anahtar döndürmesini bildiren olay oluşturur.
@@ -135,6 +163,20 @@ impl TransparencyEvent {
             note,
             witness: None,
         }
+    }
+
+    /// Döndürme olayını [`SystemTime`] üzerinden oluşturur.
+    ///
+    /// # Errors
+    /// Unix epoch öncesine işaret eden zaman verildiğinde hata döner.
+    pub fn rotate_at(
+        key_id: impl Into<String>,
+        public_key: impl AsRef<[u8]>,
+        time: SystemTime,
+        note: Option<String>,
+    ) -> Result<Self, TransparencyError> {
+        let timestamp = unix_timestamp(time)?;
+        Ok(Self::rotate(key_id, public_key, timestamp, note))
     }
 
     /// Şeffaflık olayına transcript kanıtı ekler.
@@ -486,6 +528,26 @@ mod tests {
         assert_eq!(event.public_key, vec![0xAA; 16]);
         assert_eq!(event.timestamp, 9);
         assert!(event.note.is_none());
+    }
+
+    #[test]
+    fn publish_at_uses_system_time() {
+        let time = SystemTime::UNIX_EPOCH + Duration::from_secs(1337);
+        let event =
+            TransparencyEvent::publish_at("key-3", [0xAB_u8; 4], time, None).expect("event");
+        assert_eq!(event.timestamp, 1337);
+        assert_eq!(event.public_key, vec![0xAB; 4]);
+        assert_eq!(event.action, TransparencyEventKind::Publish);
+    }
+
+    #[test]
+    fn rotate_at_rejects_pre_epoch() {
+        let pre_epoch = SystemTime::UNIX_EPOCH
+            .checked_sub(Duration::from_secs(1))
+            .expect("pre epoch");
+        let err = TransparencyEvent::rotate_at("key-4", [0xCD_u8; 8], pre_epoch, None)
+            .expect_err("should fail");
+        assert!(matches!(err, TransparencyError::TimestampUnderflow));
     }
 
     #[test]
