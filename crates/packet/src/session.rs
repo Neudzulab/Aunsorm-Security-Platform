@@ -322,6 +322,7 @@ pub fn decrypt_session(
 
     let metadata = params.metadata.clone();
     let transcript = packet.transcript_hash(params.aad)?;
+    let packet_id = packet.packet_id()?;
 
     Ok((
         DecryptOk {
@@ -331,6 +332,7 @@ pub fn decrypt_session(
             coord,
             metadata,
             transcript,
+            packet_id,
         },
         SessionStepOutcome {
             session_id: params.ratchet.session_id(),
