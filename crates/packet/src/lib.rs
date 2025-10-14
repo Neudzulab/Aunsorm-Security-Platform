@@ -21,7 +21,8 @@ pub use crate::header::{
     HeaderSizes,
 };
 pub use crate::packet::{
-    decrypt_one_shot, encrypt_one_shot, DecryptOk, DecryptParams, EncryptParams, KemPayload, Packet,
+    decrypt_one_shot, encrypt_one_shot, DecryptOk, DecryptParams, EncryptParams, KemPayload,
+    Packet, PacketId,
 };
 pub use crate::session::{
     decrypt_session, encrypt_session, SessionDecryptParams, SessionEncryptParams, SessionMetadata,

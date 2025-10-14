@@ -1392,30 +1392,23 @@ fn handle_decrypt(args: DecryptArgs, strict: bool) -> CliResult<()> {
         .unwrap_or_default();
     let metadata_to_stdout = metadata_out.as_deref().is_some_and(is_stdout_path);
 
+    let message = format!(
+        "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{} | packet_id={} | transcript={}",
+        out.display(),
+        decrypted.header.calib_id,
+        decrypted.coord_id,
+        decrypted.header.aead.alg,
+        strict,
+        decrypted.plaintext.len(),
+        metadata_note,
+        decrypted.packet_id,
+        decrypted.transcript,
+    );
+
     if output_to_stdout || metadata_to_stdout {
-        eprintln!(
-            "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{} | transcript={}",
-            out.display(),
-            decrypted.header.calib_id,
-            decrypted.coord_id,
-            decrypted.header.aead.alg,
-            strict,
-            decrypted.plaintext.len(),
-            metadata_note,
-            decrypted.transcript,
-        );
+        eprintln!("{message}");
     } else {
-        println!(
-            "deşifre başarılı: çıktı={} | calib_id={} | coord_id={} | aead={} | strict={} | msg_len={}B{} | transcript={}",
-            out.display(),
-            decrypted.header.calib_id,
-            decrypted.coord_id,
-            decrypted.header.aead.alg,
-            strict,
-            decrypted.plaintext.len(),
-            metadata_note,
-            decrypted.transcript,
-        );
+        println!("{message}");
     }
     Ok(())
 }

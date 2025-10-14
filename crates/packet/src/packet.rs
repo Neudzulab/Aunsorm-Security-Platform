@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 use aunsorm_core::{
@@ -14,6 +16,8 @@ use crate::header::{
 };
 use crate::session::SessionMetadata;
 use crate::transcript::{compute_transcript, TranscriptHash};
+use hex::encode as hex_encode;
+use sha2::{Digest, Sha256};
 
 /// Tek-atım şifreleme parametreleri.
 pub struct EncryptParams<'a> {
@@ -59,6 +63,37 @@ pub struct DecryptOk {
     pub coord: [u8; 32],
     pub metadata: SessionMetadata,
     pub transcript: TranscriptHash,
+    pub packet_id: PacketId,
+}
+
+/// Deterministik paket tanımlayıcısı.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PacketId([u8; 32]);
+
+impl PacketId {
+    /// Paket kimliğinin byte uzunluğu.
+    pub const LENGTH: usize = 32;
+
+    #[must_use]
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn to_hex(self) -> String {
+        hex_encode(self.0)
+    }
+}
+
+impl fmt::Display for PacketId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.to_hex())
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -82,11 +117,7 @@ pub struct Packet {
 }
 
 impl Packet {
-    /// Paket verisini Base64 olarak serileştirir.
-    ///
-    /// # Errors
-    /// Serileştirme sırasında JSON üretimi başarısız olursa `PacketError::Serialization` döner.
-    pub fn to_base64(&self) -> Result<String, PacketError> {
+    fn wire_json(&self) -> Result<Vec<u8>, PacketError> {
         let wire = WirePacket {
             header: self.header.clone(),
             body: WireBody {
@@ -94,7 +125,15 @@ impl Packet {
                 pmac: base64_encode(&self.body_pmac),
             },
         };
-        let json = serde_json::to_vec(&wire)?;
+        Ok(serde_json::to_vec(&wire)?)
+    }
+
+    /// Paket verisini Base64 olarak serileştirir.
+    ///
+    /// # Errors
+    /// Serileştirme sırasında JSON üretimi başarısız olursa `PacketError::Serialization` döner.
+    pub fn to_base64(&self) -> Result<String, PacketError> {
+        let json = self.wire_json()?;
         Ok(base64_encode(&json))
     }
 
@@ -129,6 +168,20 @@ impl Packet {
     /// JSON serileştirmesi başarısız olursa `PacketError::Serialization` döner.
     pub fn transcript_hash(&self, aad: &[u8]) -> Result<TranscriptHash, PacketError> {
         compute_transcript(&self.header, aad, &self.ciphertext, &self.body_pmac)
+    }
+
+    /// Paketin deterministik kimliğini hesaplar.
+    ///
+    /// # Errors
+    /// Serileştirme hatası durumunda `PacketError::Serialization` döner.
+    pub fn packet_id(&self) -> Result<PacketId, PacketError> {
+        let json = self.wire_json()?;
+        let mut hasher = Sha256::new();
+        hasher.update(json);
+        let digest = hasher.finalize();
+        let mut bytes = [0_u8; PacketId::LENGTH];
+        bytes.copy_from_slice(&digest);
+        Ok(PacketId::from_bytes(bytes))
     }
 }
 
@@ -297,6 +350,7 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
 
     let metadata = SessionMetadata::from_header(&packet.header).with_coord(coord_id.clone(), coord);
     let transcript = packet.transcript_hash(params.aad)?;
+    let packet_id = packet.packet_id()?;
 
     Ok(DecryptOk {
         plaintext,
@@ -305,6 +359,7 @@ pub fn decrypt_one_shot(params: &DecryptParams<'_>) -> Result<DecryptOk, PacketE
         coord,
         metadata,
         transcript,
+        packet_id,
     })
 }
 
@@ -353,6 +408,7 @@ mod tests {
         .expect("encrypt");
 
         let encoded = packet.to_base64().expect("encode");
+        let expected_id = packet.packet_id().expect("packet id");
         let decrypt_params = DecryptParams {
             password: PASSWORD,
             password_salt,
@@ -368,9 +424,39 @@ mod tests {
         assert_eq!(decrypted.plaintext, b"super secret");
         assert!(decrypted.metadata.coord_id.is_some());
         assert!(decrypted.metadata.coord.is_some());
+        assert_eq!(decrypted.packet_id, expected_id);
 
         let header = peek_header(&encoded).expect("peek");
         assert_eq!(header.calib_id, decrypted.header.calib_id);
+    }
+
+    #[test]
+    fn packet_id_stable_across_serialization() {
+        let profile = KdfProfile::preset(KdfPreset::Low);
+        let salts = test_salts();
+        let (calibration, _) = calib_from_text(b"org-salt", "note").expect("calibration");
+        let packet = encrypt_one_shot(EncryptParams {
+            password: PASSWORD,
+            password_salt: b"password-salt-777",
+            calibration: &calibration,
+            salts: &salts,
+            plaintext: b"deterministic",
+            aad: b"aad",
+            profile,
+            algorithm: AeadAlgorithm::Chacha20Poly1305,
+            strict: false,
+            kem: None,
+        })
+        .expect("encrypt");
+
+        let first = packet.packet_id().expect("packet id");
+        let encoded = packet.to_base64().expect("encode");
+        let decoded = Packet::from_base64(&encoded).expect("decode");
+        let second = decoded.packet_id().expect("packet id");
+
+        assert_eq!(first, second);
+        assert_eq!(first.to_hex().len(), PacketId::LENGTH * 2);
+        assert_eq!(first.as_bytes().len(), PacketId::LENGTH);
     }
 
     #[test]

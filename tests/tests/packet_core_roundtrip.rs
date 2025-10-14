@@ -91,6 +91,7 @@ proptest! {
             .to_base64()
             .map_err(|err| to_test_error(err, "encode"))?;
         let expected_header = packet.header.clone();
+        let expected_packet_id = packet.packet_id().map_err(|err| to_test_error(err, "packet id"))?;
         let decrypted = decrypt_one_shot(&DecryptParams {
             password: &password,
             password_salt: password_salt.as_slice(),
@@ -131,6 +132,7 @@ proptest! {
         );
         prop_assert_eq!(decrypted.metadata.coord.as_ref(), Some(&expected_coord));
         prop_assert_eq!(decrypted.metadata.coord_digest, expected_digest);
+        prop_assert_eq!(decrypted.packet_id, expected_packet_id);
     }
 }
 
