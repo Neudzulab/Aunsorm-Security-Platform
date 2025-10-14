@@ -19,6 +19,9 @@ pub enum TransparencyError {
     /// Zaman damgası geriye gitti.
     #[error("timestamp regression at sequence {sequence}")]
     TimestampRegression { sequence: u64 },
+    /// Sıra numarası beklenen değerle uyuşmuyor.
+    #[error("transparency sequence mismatch: expected {expected}, found {found}")]
+    SequenceMismatch { expected: u64, found: u64 },
     /// Desteklenen kayıt sınırı aşıldı.
     #[error("transparency log sequence overflow")]
     SequenceOverflow,
@@ -365,7 +368,14 @@ impl KeyTransparencyLog {
     ) -> Result<(), TransparencyError> {
         let mut head = [0_u8; 32];
         let mut last_timestamp = 0_u64;
+        let mut expected_sequence = 0_u64;
         for record in records {
+            if record.sequence != expected_sequence {
+                return Err(TransparencyError::SequenceMismatch {
+                    expected: expected_sequence,
+                    found: record.sequence,
+                });
+            }
             if record.timestamp < last_timestamp {
                 return Err(TransparencyError::TimestampRegression {
                     sequence: record.sequence,
@@ -390,6 +400,9 @@ impl KeyTransparencyLog {
             }
             head = record.tree_hash;
             last_timestamp = record.timestamp;
+            expected_sequence = expected_sequence
+                .checked_add(1)
+                .ok_or(TransparencyError::SequenceOverflow)?;
         }
         Ok(())
     }
@@ -613,6 +626,47 @@ mod tests {
         tampered[1].tree_hash[0] ^= 0xFF;
         let result = KeyTransparencyLog::checkpoint_from_records("aunsorm-demo", &tampered);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn verify_chain_rejects_sequence_gaps() {
+        let mut log = KeyTransparencyLog::new("aunsorm-demo");
+        let record_a = log
+            .append(TransparencyEvent::publish(
+                "key-1",
+                [0xAA_u8; 4],
+                1,
+                Some("initial".into()),
+            ))
+            .expect("record");
+        let mut forged = log
+            .append(TransparencyEvent::publish(
+                "key-2",
+                [0xBB_u8; 4],
+                2,
+                Some("second".into()),
+            ))
+            .expect("record");
+        forged.sequence = 3;
+        forged.previous_hash = record_a.tree_hash;
+        forged.tree_hash = super::hash_record(
+            "aunsorm-demo",
+            forged.sequence,
+            forged.timestamp,
+            forged.previous_hash,
+            forged.event_hash,
+        );
+
+        let tampered = vec![record_a, forged];
+        let err = KeyTransparencyLog::verify_chain("aunsorm-demo", &tampered)
+            .expect_err("sequence gap should be rejected");
+        assert!(matches!(
+            err,
+            TransparencyError::SequenceMismatch {
+                expected: 1,
+                found: 3,
+            }
+        ));
     }
 
     #[test]
