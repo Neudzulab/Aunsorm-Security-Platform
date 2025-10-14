@@ -198,7 +198,7 @@ enum X509Commands {
     /// Ed25519 öz-imzalı sertifika üret
     #[command(name = "self-signed")]
     SelfSigned(X509SelfSignedArgs),
-    /// Yerel HTTPS geliştirme sertifikası üret
+    /// Yerel HTTPS geliştirme sertifikası üret (SAN uzantıları dahil)
     #[command(name = "local-dev")]
     LocalDev(X509LocalDevArgs),
 }
@@ -693,7 +693,7 @@ struct X509SelfSignedArgs {
 
 #[derive(Args)]
 struct X509LocalDevArgs {
-    /// Sertifika ortak adı ve varsayılan DNS SAN girdisi
+    /// Sertifika ortak adı ve varsayılan DNS SAN girdisi (Subject Alternative Name)
     #[arg(long, default_value = "localhost")]
     hostname: String,
     /// Kalibrasyon metni

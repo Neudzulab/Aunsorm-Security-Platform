@@ -182,6 +182,10 @@ fn build_calibration_extension(
 
 /// Yerel geliştirme ortamları için hostname ve localhost alternatif adlarını
 /// içeren öz-imzalı sertifika parametreleri.
+///
+/// SAN (Subject Alternative Name) uzantısını otomatik olarak doldurarak haricî
+/// araçlara gerek bırakmadan modern tarayıcıların beklediği yapılandırmayı
+/// sağlar.
 #[derive(Debug)]
 pub struct LocalHttpsCertParams<'a> {
     /// Ortak ad olarak kullanılacak ana hostname.
@@ -203,6 +207,7 @@ pub struct LocalHttpsCertParams<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Sertifikalarda Subject Alternative Name (SAN) girdilerini temsil eder.
 pub enum SubjectAltName {
     /// DNS tabanlı Subject Alternative Name girdisi.
     Dns(String),
@@ -222,7 +227,7 @@ impl SubjectAltName {
     }
 }
 
-impl<'a> LocalHttpsCertParams<'a> {
+impl LocalHttpsCertParams<'_> {
     fn build_subject_alt_names(&self) -> Result<Vec<SubjectAltName>, X509Error> {
         if self.hostname.trim().is_empty() {
             return Err(X509Error::EmptyHostname);
@@ -377,7 +382,7 @@ mod tests {
                 .general_names
                 .iter()
                 .filter_map(|name| match name {
-                    GeneralName::DNSName(value) => Some(value.to_string()),
+                    GeneralName::DNSName(value) => Some((*value).to_owned()),
                     _ => None,
                 })
                 .collect();

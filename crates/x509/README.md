@@ -11,7 +11,17 @@ bağlamayı hedefler.
 - `AUNSORM_OID_BASE` ortam değişkenine bağlı özel kalibrasyon uzantısı.
 - CPS URL'leri ve politika OID'leri için meta veri desteği.
 - JSON tabanlı kalibrasyon uzantısı (kalibrasyon kimliği + fingerprint).
-- Yerel HTTPS geliştirme sertifikaları için otomatik Subject Alternative Name üretimi.
+- Yerel HTTPS geliştirme sertifikaları için otomatik Subject Alternative Name (SAN)
+  üretimi.
+
+## Subject Alternative Name (SAN) nedir?
+
+Modern tarayıcılar ve istemciler ortak ad (CN) alanını tek başına güvenilir
+bulmaz; HTTPS sertifikasının hangi alan adları ve IP adresleri için geçerli
+olduğunu Subject Alternative Name (SAN) uzantısından okurlar. `aunsorm-x509`
+yerel geliştirme sertifikalarında `localhost`, `127.0.0.1`, `::1` gibi varsayılan
+değerleri ve ihtiyaç duyulan ek DNS/IP girdilerini otomatik olarak ekleyerek
+`mkcert` benzeri haricî araçlara ihtiyaç duymadan aynı güvenilirliği sağlar.
 
 ## Kullanım
 
