@@ -80,6 +80,67 @@ fn calib_fingerprint_out_dash_text_streams_stdout() {
 }
 
 #[test]
+fn calib_verify_out_dash_text_reports_success() {
+    let org = STANDARD.decode("V2VBcmVLdXQuZXU=").expect("org salt");
+    let (calibration, _) =
+        calib_from_text(&org, "Neudzulab | Prod | 2025-08").expect("calibration");
+
+    let expected_id = calibration.id.as_str().to_owned();
+    let expected_b64 = calibration.fingerprint_b64();
+    let expected_hex = calibration.fingerprint_hex();
+
+    let mut cmd = cli_command();
+    cmd.arg("calib")
+        .arg("verify")
+        .arg("--org-salt")
+        .arg("V2VBcmVLdXQuZXU=")
+        .arg("--calib-text")
+        .arg("Neudzulab | Prod | 2025-08")
+        .arg("--expect-id")
+        .arg(&expected_id)
+        .arg("--expect-fingerprint-b64")
+        .arg(&expected_b64)
+        .arg("--expect-fingerprint-hex")
+        .arg(&expected_hex)
+        .arg("--format")
+        .arg("text")
+        .arg("--out")
+        .arg("-");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Kimlik Doğrulaması       : OK"))
+        .stdout(predicate::str::contains("Base64 Doğrulaması       : OK"))
+        .stdout(predicate::str::contains("Hex Doğrulaması          : OK"));
+}
+
+#[test]
+fn calib_verify_out_dash_json_failure_sets_exit_code() {
+    let mut cmd = cli_command();
+    cmd.args([
+        "calib",
+        "verify",
+        "--org-salt",
+        "V2VBcmVLdXQuZXU=",
+        "--calib-text",
+        "Neudzulab | Prod | 2025-08",
+        "--expect-id",
+        "wrong-id",
+        "--format",
+        "json",
+        "--out",
+        "-",
+    ]);
+
+    cmd.assert()
+        .failure()
+        .stdout(predicate::str::contains("\"id\": false"))
+        .stderr(predicate::str::contains(
+            "kalibrasyon doğrulaması başarısız",
+        ));
+}
+
+#[test]
 fn coord_raw_out_dash_writes_expected_bytes() {
     let report_out = NamedTempFile::new().expect("report out");
     let report_path: PathBuf = report_out.path().into();
