@@ -5,6 +5,8 @@
 
 //! Ed25519 tabanlı X.509 sertifika üretim yardımcıları.
 
+pub mod ca;
+
 use std::collections::BTreeSet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -20,8 +22,8 @@ use time::{Duration, OffsetDateTime};
 
 use aunsorm_core::{calib_from_text, Calibration};
 
-const DEFAULT_BASE_OID: &str = "1.3.6.1.4.1.61012.1";
-const CALIBRATION_EXTENSION_ARC: &[u64] = &[1, 1];
+pub(crate) const DEFAULT_BASE_OID: &str = "1.3.6.1.4.1.61012.1";
+pub(crate) const CALIBRATION_EXTENSION_ARC: &[u64] = &[1, 1];
 
 /// Hata türü.
 #[derive(Debug, Error)]
@@ -118,7 +120,7 @@ pub fn generate_self_signed(
     })
 }
 
-fn deterministic_serial(calibration: &Calibration) -> SerialNumber {
+pub(crate) fn deterministic_serial(calibration: &Calibration) -> SerialNumber {
     let mut hasher = Sha256::new();
     hasher.update(b"Aunsorm/1.01/x509/serial");
     hasher.update(calibration.fingerprint());
@@ -129,13 +131,13 @@ fn deterministic_serial(calibration: &Calibration) -> SerialNumber {
     SerialNumber::from(serial)
 }
 
-fn build_extension_oid(base: &str, arc: &[u64]) -> Result<Vec<u64>, X509Error> {
+pub(crate) fn build_extension_oid(base: &str, arc: &[u64]) -> Result<Vec<u64>, X509Error> {
     let mut values = parse_oid(base)?;
     values.extend_from_slice(arc);
     Ok(values)
 }
 
-fn parse_oid(value: &str) -> Result<Vec<u64>, X509Error> {
+pub(crate) fn parse_oid(value: &str) -> Result<Vec<u64>, X509Error> {
     if value.trim().is_empty() {
         return Err(X509Error::InvalidOid(value.to_owned()));
     }
@@ -158,13 +160,15 @@ struct CalibrationMetadata<'a> {
     policy_oids: &'a [String],
 }
 
-fn build_calibration_extension(
+pub(crate) fn calibration_extension_from_parts(
     oid: &[u64],
     calibration: &Calibration,
-    params: &SelfSignedCertParams<'_>,
+    calibration_text: &str,
+    cps_uris: &[String],
+    policy_oids: &[String],
 ) -> Result<CustomExtension, X509Error> {
     let mut note_hasher = Sha256::new();
-    note_hasher.update(params.calibration_text.as_bytes());
+    note_hasher.update(calibration_text.as_bytes());
     let note_hash = note_hasher.finalize();
 
     let metadata = CalibrationMetadata {
@@ -172,12 +176,26 @@ fn build_calibration_extension(
         fingerprint_b64: calibration.fingerprint_b64(),
         fingerprint_hex: calibration.fingerprint_hex(),
         note_sha256: hex::encode(note_hash),
-        cps_uris: params.cps_uris,
-        policy_oids: params.policy_oids,
+        cps_uris,
+        policy_oids,
     };
     let json =
         serde_json::to_vec(&metadata).map_err(|_| X509Error::InvalidOid("metadata".to_owned()))?;
     Ok(CustomExtension::from_oid_content(oid, json))
+}
+
+fn build_calibration_extension(
+    oid: &[u64],
+    calibration: &Calibration,
+    params: &SelfSignedCertParams<'_>,
+) -> Result<CustomExtension, X509Error> {
+    calibration_extension_from_parts(
+        oid,
+        calibration,
+        params.calibration_text,
+        params.cps_uris,
+        params.policy_oids,
+    )
 }
 
 /// Yerel geliştirme ortamları için hostname ve localhost alternatif adlarını

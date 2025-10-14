@@ -14,7 +14,7 @@ base64 = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
 aunsorm-core = { path = "../core" }
-rcgen = { version = "0.14", default-features = true }
+rcgen = { version = "0.14", default-features = true, features = ["x509-parser"] }
 time = { version = "0.3", features = ["formatting"] }
 
 [dev-dependencies]
