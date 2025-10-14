@@ -162,6 +162,16 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(ipv6Unspecified)).toBe('http://[::]:5500/aunsorm');
   });
 
+  it('treats hex-encoded IPv4-mapped loopback domains as http', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: '::ffff:7f00:1:4600',
+      AUNSORM_INTEGRATIONS_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://[::ffff:7f00:1]:4600/bridge');
+  });
+
   it('falls back to local defaults when nothing is set', () => {
     const env = {} satisfies NodeJS.ProcessEnv;
     expect(resolveAunsormBaseUrl(env)).toBe('http://localhost:50047/aunsorm');
@@ -302,6 +312,15 @@ describe('resolveAunsormBaseUrl', () => {
 
     expect(resolveAunsormBaseUrl(envAscending)).toBe('https://gateway.aunsorm.dev/');
   });
+
+  it('normalises direct overrides with hex-encoded IPv4-mapped loopback hosts', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_URL: '::ffff:7f00:1:4700/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://[::ffff:7f00:1]:4700/custom');
+  });
 });
 
 describe('resolveAunsormBaseUrlDetails', () => {
@@ -439,6 +458,25 @@ describe('resolveAunsormBaseUrlDetails', () => {
         kind: 'domain-path',
         domainKey: 'VERCEL_PROJECT_PRODUCTION_URL',
         pathKey: undefined,
+      },
+    });
+  });
+
+  it('reports hex-encoded IPv4-mapped loopback domains as http origins', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: '::ffff:7f00:1:4800',
+      AUNSORM_BASE_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'http://[::ffff:7f00:1]:4800/bridge',
+      origin: 'http://[::ffff:7f00:1]:4800',
+      path: '/bridge',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'AUNSORM_BASE_DOMAIN',
+        pathKey: 'AUNSORM_BASE_PATH',
       },
     });
   });
