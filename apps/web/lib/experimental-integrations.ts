@@ -111,8 +111,11 @@ function splitHostPort(value: string): HostPortParts {
       const hostCandidate = stripTrailingDots(hostPort.slice(0, lastColon));
       const isIpv4OrHostname = !hostCandidate.includes(':');
       const isIpv4MappedIpv6 = hostCandidate.includes(':') && hostCandidate.includes('.');
+      const isHexIpv4Mapped =
+        hostCandidate.startsWith('::ffff:') &&
+        decodeHexIpv4Mapped(hostCandidate.slice('::ffff:'.length)) !== undefined;
 
-      if (isIpv4OrHostname || isIpv4MappedIpv6) {
+      if (isIpv4OrHostname || isIpv4MappedIpv6 || isHexIpv4Mapped) {
         return {
           host: hostCandidate,
           port: maybePort,
@@ -124,6 +127,56 @@ function splitHostPort(value: string): HostPortParts {
   }
 
   return { host: stripTrailingDots(hostPort), hadBrackets: false, rest };
+}
+
+function isLoopbackIpv4Address(candidate: string): boolean {
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(candidate)) {
+    return false;
+  }
+
+  const segments = candidate.split('.');
+  if (segments.length !== 4) {
+    return false;
+  }
+
+  const numbers = segments.map((segment) => Number(segment));
+  if (numbers.some((segment) => Number.isNaN(segment) || segment < 0 || segment > 255)) {
+    return false;
+  }
+
+  if (numbers[0] === 127) {
+    return true;
+  }
+
+  return numbers.every((segment) => segment === 0);
+}
+
+function decodeHexIpv4Mapped(mapped: string): string | undefined {
+  const segments = mapped.split(':').filter((segment) => segment.length > 0);
+  if (segments.length !== 2) {
+    return undefined;
+  }
+
+  if (!segments.every((segment) => /^[0-9a-f]{1,4}$/i.test(segment))) {
+    return undefined;
+  }
+
+  const [highSegment, lowSegment] = segments;
+  const high = Number.parseInt(highSegment, 16);
+  const low = Number.parseInt(lowSegment, 16);
+
+  if (Number.isNaN(high) || Number.isNaN(low)) {
+    return undefined;
+  }
+
+  const bytes = [
+    (high >> 8) & 0xff,
+    high & 0xff,
+    (low >> 8) & 0xff,
+    low & 0xff,
+  ];
+
+  return bytes.join('.');
 }
 
 interface ReadResult {
@@ -375,22 +428,20 @@ function isLoopbackHost(value: string | undefined): boolean {
 
   if (hostname.startsWith('::ffff:')) {
     const mapped = hostname.slice('::ffff:'.length);
-    return (
-      mapped.startsWith('127.') ||
-      mapped === '127.0.0.1' ||
-      mapped === '0.0.0.0'
-    );
-  }
-
-  if (hostname === '0.0.0.0') {
-    return true;
-  }
-
-  if (hostname.startsWith('127.')) {
-    const parts = hostname.split('.');
-    if (parts.length === 4 && parts.every((part) => /^\d+$/.test(part) && Number(part) <= 255)) {
+    if (isLoopbackIpv4Address(mapped)) {
       return true;
     }
+
+    const decoded = decodeHexIpv4Mapped(mapped);
+    if (decoded) {
+      return isLoopbackIpv4Address(decoded);
+    }
+
+    return false;
+  }
+
+  if (isLoopbackIpv4Address(hostname)) {
+    return true;
   }
 
   return false;
