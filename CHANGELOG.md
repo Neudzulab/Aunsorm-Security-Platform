@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `aunsorm-id` crate providing head-anchored unique identifier generation with
+  namespace normalization and verifiable parsing helpers.
+
 ## [0.4.1] - 2025-10-20
 ### Changed
 - Synchronized all workspace crate manifests and npm metadata to publish the 0.4.1 maintenance release.
