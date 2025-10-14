@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error as _;
 use std::fs;
 use std::io::{self, Write as _};
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -46,7 +47,9 @@ use aunsorm_pqc::{
     strict::StrictMode,
 };
 use aunsorm_x509::{
-    generate_self_signed as generate_self_signed_cert, SelfSignedCertParams as X509SelfSignedParams,
+    generate_self_signed as generate_self_signed_cert, prepare_local_https_params,
+    LocalHttpsCertParams as X509LocalHttpsParams, SelfSignedCertParams as X509SelfSignedParams,
+    SubjectAltName as X509SubjectAltName,
 };
 
 #[derive(Parser)]
@@ -195,6 +198,9 @@ enum X509Commands {
     /// Ed25519 öz-imzalı sertifika üret
     #[command(name = "self-signed")]
     SelfSigned(X509SelfSignedArgs),
+    /// Yerel HTTPS geliştirme sertifikası üret
+    #[command(name = "local-dev")]
+    LocalDev(X509LocalDevArgs),
 }
 
 #[derive(Args)]
@@ -685,6 +691,52 @@ struct X509SelfSignedArgs {
     validity_days: u32,
 }
 
+#[derive(Args)]
+struct X509LocalDevArgs {
+    /// Sertifika ortak adı ve varsayılan DNS SAN girdisi
+    #[arg(long, default_value = "localhost")]
+    hostname: String,
+    /// Kalibrasyon metni
+    #[arg(
+        long,
+        conflicts_with = "calib_file",
+        required_unless_present = "calib_file"
+    )]
+    calib_text: Option<String>,
+    /// Kalibrasyon metnini dosyadan oku (satır sonu otomatik kırpılır)
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with = "calib_text",
+        required_unless_present = "calib_text"
+    )]
+    calib_file: Option<PathBuf>,
+    /// Organizasyon tuzu (Base64)
+    #[arg(long, value_name = "B64")]
+    org_salt: String,
+    /// Sertifika çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    cert_out: PathBuf,
+    /// Özel anahtar çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    key_out: PathBuf,
+    /// CPS URI değerleri
+    #[arg(long = "cps", value_name = "URI")]
+    cps: Vec<String>,
+    /// Politika OID değerleri
+    #[arg(long = "policy-oid", value_name = "OID")]
+    policy_oids: Vec<String>,
+    /// Ek DNS Subject Alternative Name girdileri
+    #[arg(long = "extra-dns", value_name = "DNS")]
+    extra_dns: Vec<String>,
+    /// Ek IP Subject Alternative Name girdileri
+    #[arg(long = "extra-ip", value_name = "IP")]
+    extra_ips: Vec<String>,
+    /// Geçerlilik süresi (gün)
+    #[arg(long, value_name = "DAYS", default_value_t = 365)]
+    validity_days: u32,
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum ProfileArg {
     Mobile,
@@ -840,6 +892,8 @@ enum CliError {
     InvalidValidityDays,
     #[error("kalibrasyon doğrulaması başarısız")]
     ExpectationFailed,
+    #[error("IP adresi parse edilemedi: {0}")]
+    InvalidIpAddress(String),
 }
 
 type CliResult<T> = Result<T, CliError>;
@@ -2226,6 +2280,7 @@ fn handle_jwt_export_jwks(args: &JwtExportJwksArgs) -> CliResult<()> {
 fn handle_x509(command: X509Commands) -> CliResult<()> {
     match command {
         X509Commands::SelfSigned(args) => handle_x509_self_signed(&args),
+        X509Commands::LocalDev(args) => handle_x509_local_dev(&args),
     }
 }
 
@@ -2243,6 +2298,7 @@ fn handle_x509_self_signed(args: &X509SelfSignedArgs) -> CliResult<()> {
         cps_uris: &args.cps,
         policy_oids: &args.policy_oids,
         validity_days,
+        subject_alt_names: Vec::new(),
     };
     let cert = generate_self_signed_cert(&params)?;
     write_text_file(&args.cert_out, &cert.certificate_pem)?;
@@ -2270,6 +2326,84 @@ fn handle_x509_self_signed(args: &X509SelfSignedArgs) -> CliResult<()> {
             args.cps.len(),
             args.policy_oids.len(),
         );
+    }
+    Ok(())
+}
+
+fn handle_x509_local_dev(args: &X509LocalDevArgs) -> CliResult<()> {
+    let validity_days = args.validity_days;
+    if validity_days == 0 {
+        return Err(CliError::InvalidValidityDays);
+    }
+    let hostname_trimmed = args.hostname.trim();
+    if hostname_trimmed.is_empty() {
+        return Err(CliError::MissingParam("hostname"));
+    }
+    let org_salt = decode_org_salt(&args.org_salt)?;
+    let calib_text = load_calibration_text(args.calib_text.as_deref(), args.calib_file.as_deref())?;
+    let sanitized_dns: Vec<String> = args
+        .extra_dns
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(std::borrow::ToOwned::to_owned)
+        .collect();
+    let extra_ips = parse_ip_addrs(&args.extra_ips)?;
+    let params = X509LocalHttpsParams {
+        hostname: hostname_trimmed,
+        org_salt: &org_salt,
+        calibration_text: &calib_text,
+        cps_uris: &args.cps,
+        policy_oids: &args.policy_oids,
+        validity_days,
+        extra_dns: &sanitized_dns,
+        extra_ips: &extra_ips,
+    };
+    let prepared = prepare_local_https_params(&params)?;
+    let cert = generate_self_signed_cert(&prepared)?;
+    write_text_file(&args.cert_out, &cert.certificate_pem)?;
+    write_text_file(&args.key_out, &cert.private_key_pem)?;
+
+    let mut dns_entries: Vec<String> = Vec::new();
+    dns_entries.push(hostname_trimmed.to_owned());
+    dns_entries.extend(
+        prepared
+            .subject_alt_names
+            .iter()
+            .filter_map(|san| match san {
+                X509SubjectAltName::Dns(name) => Some(name.clone()),
+                X509SubjectAltName::Ip(_) => None,
+            }),
+    );
+    let ip_entries: Vec<String> = prepared
+        .subject_alt_names
+        .iter()
+        .filter_map(|san| match san {
+            X509SubjectAltName::Ip(addr) => Some(addr.to_string()),
+            X509SubjectAltName::Dns(_) => None,
+        })
+        .collect();
+    let dns_list = dns_entries.join(",");
+    let ip_list = if ip_entries.is_empty() {
+        String::from("-")
+    } else {
+        ip_entries.join(",")
+    };
+    let log_to_stderr = is_stdout_path(&args.cert_out) || is_stdout_path(&args.key_out);
+    let message = format!(
+        "x509 local-dev sertifikası üretildi: hostname={} | calib_id={} | validity={} gün | cert={} | key={} | dns_san={} | ip_san={}",
+        hostname_trimmed,
+        cert.calibration_id,
+        validity_days,
+        args.cert_out.display(),
+        args.key_out.display(),
+        dns_list,
+        ip_list,
+    );
+    if log_to_stderr {
+        eprintln!("{message}");
+    } else {
+        println!("{message}");
     }
     Ok(())
 }
@@ -2522,6 +2656,21 @@ fn load_aad(aad_text: Option<&str>, aad_file: Option<&Path>) -> CliResult<Vec<u8
 
 fn decode_org_salt(value: &str) -> CliResult<Vec<u8>> {
     Ok(STANDARD.decode(value.trim())?)
+}
+
+fn parse_ip_addrs(values: &[String]) -> CliResult<Vec<IpAddr>> {
+    let mut result = Vec::new();
+    for value in values {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let addr: IpAddr = trimmed
+            .parse()
+            .map_err(|_| CliError::InvalidIpAddress(trimmed.to_owned()))?;
+        result.push(addr);
+    }
+    Ok(result)
 }
 
 struct KemFields {
