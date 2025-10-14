@@ -5,8 +5,13 @@
 
 //! Ed25519 tabanlı X.509 sertifika üretim yardımcıları.
 
+use std::collections::BTreeSet;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+use rcgen::string::Ia5String;
 use rcgen::{
-    CertificateParams, CustomExtension, DnType, IsCa, KeyPair, KeyUsagePurpose, SerialNumber,
+    CertificateParams, CustomExtension, DnType, ExtendedKeyUsagePurpose, IsCa, KeyPair,
+    KeyUsagePurpose, SanType, SerialNumber,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -24,6 +29,12 @@ pub enum X509Error {
     /// Taban OID değeri geçersiz.
     #[error("geçersiz OID: {0}")]
     InvalidOid(String),
+    /// Yerel HTTPS hostname değeri boş.
+    #[error("hostname boş olamaz")]
+    EmptyHostname,
+    /// Subject Alternative Name değeri geçersiz.
+    #[error("geçersiz Subject Alternative Name: {0}")]
+    InvalidSan(String),
     /// Sertifika parametreleri oluşturulamadı.
     #[error("sertifika üretimi başarısız: {0}")]
     Rcgen(#[from] rcgen::Error),
@@ -47,6 +58,8 @@ pub struct SelfSignedCertParams<'a> {
     pub policy_oids: &'a [String],
     /// Geçerlilik süresi (gün).
     pub validity_days: u32,
+    /// Subject Alternative Name girdileri.
+    pub subject_alt_names: Vec<SubjectAltName>,
 }
 
 /// Üretilen sertifika çıktıları.
@@ -78,6 +91,7 @@ pub fn generate_self_signed(
     let mut cert_params = CertificateParams::new(vec![params.common_name.to_owned()])?;
     cert_params.is_ca = IsCa::ExplicitNoCa;
     cert_params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+    cert_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
     cert_params
         .distinguished_name
         .push(DnType::CommonName, params.common_name);
@@ -85,6 +99,9 @@ pub fn generate_self_signed(
     cert_params.not_before = now - Duration::days(1);
     cert_params.not_after = now + Duration::days(i64::from(params.validity_days));
     cert_params.serial_number = Some(deterministic_serial(&calibration));
+    for san in &params.subject_alt_names {
+        cert_params.subject_alt_names.push(san.to_san_type()?);
+    }
 
     let calibration_extension = build_calibration_extension(&extension_oid, &calibration, params)?;
     cert_params.custom_extensions.push(calibration_extension);
@@ -163,9 +180,124 @@ fn build_calibration_extension(
     Ok(CustomExtension::from_oid_content(oid, json))
 }
 
+/// Yerel geliştirme ortamları için hostname ve localhost alternatif adlarını
+/// içeren öz-imzalı sertifika parametreleri.
+#[derive(Debug)]
+pub struct LocalHttpsCertParams<'a> {
+    /// Ortak ad olarak kullanılacak ana hostname.
+    pub hostname: &'a str,
+    /// Organizasyon tuzu.
+    pub org_salt: &'a [u8],
+    /// EXTERNAL kalibrasyon metni.
+    pub calibration_text: &'a str,
+    /// CPS URL listesi.
+    pub cps_uris: &'a [String],
+    /// Politika OID listesi.
+    pub policy_oids: &'a [String],
+    /// Geçerlilik süresi (gün).
+    pub validity_days: u32,
+    /// Ek DNS Subject Alternative Name girdileri.
+    pub extra_dns: &'a [String],
+    /// Ek IP Subject Alternative Name girdileri.
+    pub extra_ips: &'a [IpAddr],
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubjectAltName {
+    /// DNS tabanlı Subject Alternative Name girdisi.
+    Dns(String),
+    /// IP tabanlı Subject Alternative Name girdisi.
+    Ip(IpAddr),
+}
+
+impl SubjectAltName {
+    fn to_san_type(&self) -> Result<SanType, X509Error> {
+        match self {
+            Self::Dns(name) => Ok(SanType::DnsName(
+                Ia5String::try_from(name.clone())
+                    .map_err(|_| X509Error::InvalidSan(name.clone()))?,
+            )),
+            Self::Ip(addr) => Ok(SanType::IpAddress(*addr)),
+        }
+    }
+}
+
+impl<'a> LocalHttpsCertParams<'a> {
+    fn build_subject_alt_names(&self) -> Result<Vec<SubjectAltName>, X509Error> {
+        if self.hostname.trim().is_empty() {
+            return Err(X509Error::EmptyHostname);
+        }
+        let mut dns_names: BTreeSet<String> = BTreeSet::new();
+        dns_names.insert(self.hostname.trim().to_owned());
+        dns_names.insert("localhost".to_owned());
+        for value in self.extra_dns {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                dns_names.insert(trimmed.to_owned());
+            }
+        }
+        // CertificateParams::new ilk DNS girdisini otomatik olarak SAN listesine ekler.
+        dns_names.remove(self.hostname.trim());
+
+        let mut sans: Vec<SubjectAltName> =
+            dns_names.into_iter().map(SubjectAltName::Dns).collect();
+
+        let mut ip_addrs: BTreeSet<IpAddr> = BTreeSet::new();
+        ip_addrs.insert(IpAddr::V4(Ipv4Addr::LOCALHOST));
+        ip_addrs.insert(IpAddr::V6(Ipv6Addr::LOCALHOST));
+        for addr in self.extra_ips {
+            ip_addrs.insert(*addr);
+        }
+        sans.extend(ip_addrs.into_iter().map(SubjectAltName::Ip));
+        Ok(sans)
+    }
+}
+
+/// Yerel HTTPS geliştirme ortamları için uygun öz-imzalı sertifika parametreleri oluşturur.
+///
+/// Ortak ad olarak verilen hostname kullanılır ve `localhost`, `127.0.0.1`, `::1`
+/// varsayılan Subject Alternative Name girdileri eklenir.
+///
+/// # Errors
+///
+/// Hostname boşsa veya sertifika parametreleri oluşturulamazsa hata döner.
+pub fn prepare_local_https_params<'a>(
+    params: &'a LocalHttpsCertParams<'a>,
+) -> Result<SelfSignedCertParams<'a>, X509Error> {
+    let subject_alt_names = params.build_subject_alt_names()?;
+    Ok(SelfSignedCertParams {
+        common_name: params.hostname,
+        org_salt: params.org_salt,
+        calibration_text: params.calibration_text,
+        cps_uris: params.cps_uris,
+        policy_oids: params.policy_oids,
+        validity_days: params.validity_days,
+        subject_alt_names,
+    })
+}
+
+/// Yerel HTTPS geliştirme ortamları için öz-imzalı sertifika üretir.
+///
+/// # Errors
+///
+/// Hostname boşsa veya sertifika üretimi sırasında hata oluşursa `X509Error`
+/// döner.
+pub fn generate_local_https_cert(
+    params: &LocalHttpsCertParams<'_>,
+) -> Result<SelfSignedCert, X509Error> {
+    let derived = prepare_local_https_params(params)?;
+    generate_self_signed(&derived)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    use x509_parser::{
+        extensions::{GeneralName, ParsedExtension},
+        prelude::{FromDer, X509Certificate},
+    };
 
     #[test]
     fn certificate_contains_calibration_extension() {
@@ -178,6 +310,7 @@ mod tests {
             cps_uris: &cps,
             policy_oids: &policies,
             validity_days: 365,
+            subject_alt_names: Vec::new(),
         };
         let (calibration, _) =
             calib_from_text(params.org_salt, params.calibration_text).expect("calibration");
@@ -198,5 +331,82 @@ mod tests {
         assert!(der
             .windows(expected_hash.len())
             .any(|window| window == expected_hash.as_bytes()));
+    }
+
+    #[test]
+    fn local_https_certificate_includes_default_sans() {
+        let cps = vec![];
+        let policies = vec![];
+        let extra_dns = vec!["dev.aunsorm.test".to_string()];
+        let extra_ips = vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10))];
+        let params = LocalHttpsCertParams {
+            hostname: "localhost",
+            org_salt: b"org-salt",
+            calibration_text: "Calibration",
+            cps_uris: &cps,
+            policy_oids: &policies,
+            validity_days: 90,
+            extra_dns: &extra_dns,
+            extra_ips: &extra_ips,
+        };
+        let derived = prepare_local_https_params(&params).expect("params");
+        let cert = generate_self_signed(&derived).expect("certificate");
+        let der = pem::parse(cert.certificate_pem)
+            .expect("pem")
+            .contents()
+            .to_vec();
+        let (_, parsed) = X509Certificate::from_der(&der).expect("parse");
+        let san_ext = parsed
+            .extensions()
+            .iter()
+            .find(|ext| {
+                matches!(
+                    ext.parsed_extension(),
+                    ParsedExtension::SubjectAlternativeName(_)
+                )
+            })
+            .expect("san extension");
+        let eku_ext = parsed
+            .extensions()
+            .iter()
+            .find(|ext| matches!(ext.parsed_extension(), ParsedExtension::ExtendedKeyUsage(_)))
+            .expect("eku extension");
+
+        if let ParsedExtension::SubjectAlternativeName(san) = san_ext.parsed_extension() {
+            let dns_names: Vec<String> = san
+                .general_names
+                .iter()
+                .filter_map(|name| match name {
+                    GeneralName::DNSName(value) => Some(value.to_string()),
+                    _ => None,
+                })
+                .collect();
+            assert!(dns_names.contains(&"localhost".to_string()));
+            assert!(dns_names.contains(&"dev.aunsorm.test".to_string()));
+
+            let ip_names: Vec<String> = san
+                .general_names
+                .iter()
+                .filter_map(|name| match name {
+                    GeneralName::IPAddress(bytes) => Some(if bytes.len() == 4 {
+                        IpAddr::from(<[u8; 4]>::try_from(&bytes[..]).expect("ipv4")).to_string()
+                    } else {
+                        IpAddr::from(<[u8; 16]>::try_from(&bytes[..]).expect("ipv6")).to_string()
+                    }),
+                    _ => None,
+                })
+                .collect();
+            assert!(ip_names.contains(&"127.0.0.1".to_string()));
+            assert!(ip_names.contains(&"::1".to_string()));
+            assert!(ip_names.contains(&"192.168.1.10".to_string()));
+        } else {
+            panic!("SAN extension missing");
+        }
+
+        if let ParsedExtension::ExtendedKeyUsage(eku) = eku_ext.parsed_extension() {
+            assert!(eku.server_auth);
+        } else {
+            panic!("EKU extension missing");
+        }
     }
 }

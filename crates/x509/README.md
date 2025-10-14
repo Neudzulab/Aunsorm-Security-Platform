@@ -11,6 +11,7 @@ bağlamayı hedefler.
 - `AUNSORM_OID_BASE` ortam değişkenine bağlı özel kalibrasyon uzantısı.
 - CPS URL'leri ve politika OID'leri için meta veri desteği.
 - JSON tabanlı kalibrasyon uzantısı (kalibrasyon kimliği + fingerprint).
+- Yerel HTTPS geliştirme sertifikaları için otomatik Subject Alternative Name üretimi.
 
 ## Kullanım
 
@@ -18,12 +19,13 @@ bağlamayı hedefler.
 use aunsorm_x509::{generate_self_signed, SelfSignedCertParams};
 
 let params = SelfSignedCertParams {
-    common_name: "Example", 
-    org_salt: b"org-salt", 
-    calibration_text: "Demo calibration", 
+    common_name: "Example",
+    org_salt: b"org-salt",
+    calibration_text: "Demo calibration",
     cps_uris: &[],
     policy_oids: &[],
     validity_days: 365,
+    subject_alt_names: Vec::new(),
 };
 let cert = generate_self_signed(&params)?;
 println!("calibration id: {}", cert.calibration_id);
