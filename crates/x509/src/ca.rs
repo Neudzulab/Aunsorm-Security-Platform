@@ -57,6 +57,17 @@
 
 use std::net::IpAddr;
 
+use rcgen::{
+    BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
+    KeyUsagePurpose,
+};
+use time::{Duration, OffsetDateTime};
+
+use crate::{
+    build_extension_oid, calib_from_text, calibration_extension_from_parts, deterministic_serial,
+    SubjectAltName, X509Error, CALIBRATION_EXTENSION_ARC, DEFAULT_BASE_OID,
+};
+
 /// Parameters for Root CA generation.
 pub struct RootCaParams<'a> {
     /// Certificate common name (CN).
@@ -114,25 +125,47 @@ pub struct ServerCert {
 /// The generated certificate:
 /// - Is self-signed
 /// - Has `CA:TRUE` basic constraint
-/// - Can sign other certificates (KeyCertSign usage)
+/// - Can sign other certificates (`KeyCertSign` usage)
 /// - Contains Aunsorm calibration metadata
 ///
 /// # Errors
 ///
 /// Returns `X509Error` if certificate generation fails.
-pub fn generate_root_ca(
-    _params: &RootCaParams<'_>,
-) -> Result<RootCaCert, crate::X509Error> {
-    // TODO: Implement Root CA generation
-    // 1. Create calibration from org_salt + calibration_text
-    // 2. Setup CertificateParams with is_ca = IsCa::Ca
-    // 3. Set key_usages = [KeyCertSign, CRLSign]
-    // 4. Add Aunsorm calibration custom extension
-    // 5. Generate Ed25519 key pair
-    // 6. Self-sign certificate
-    // 7. Return RootCaCert with PEM outputs
-    
-    unimplemented!("Root CA generation not yet implemented")
+pub fn generate_root_ca(params: &RootCaParams<'_>) -> Result<RootCaCert, X509Error> {
+    let (calibration, calibration_id) = calib_from_text(params.org_salt, params.calibration_text)?;
+    let base_oid =
+        std::env::var("AUNSORM_OID_BASE").unwrap_or_else(|_| DEFAULT_BASE_OID.to_owned());
+    let extension_oid = build_extension_oid(&base_oid, CALIBRATION_EXTENSION_ARC)?;
+
+    let mut cert_params = CertificateParams::new(vec![params.common_name.to_owned()])?;
+    cert_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    cert_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+    cert_params
+        .distinguished_name
+        .push(DnType::CommonName, params.common_name);
+    let now = OffsetDateTime::now_utc();
+    cert_params.not_before = now - Duration::days(1);
+    cert_params.not_after = now + Duration::days(i64::from(params.validity_days));
+    cert_params.serial_number = Some(deterministic_serial(&calibration));
+
+    let empty: &[String] = &[];
+    let calibration_extension = calibration_extension_from_parts(
+        &extension_oid,
+        &calibration,
+        params.calibration_text,
+        empty,
+        empty,
+    )?;
+    cert_params.custom_extensions.push(calibration_extension);
+
+    let key_pair = KeyPair::generate_for(&rcgen::PKCS_ED25519)?;
+    let certificate = cert_params.self_signed(&key_pair)?;
+
+    Ok(RootCaCert {
+        certificate_pem: certificate.pem(),
+        private_key_pem: key_pair.serialize_pem(),
+        calibration_id,
+    })
 }
 
 /// Signs a server certificate with CA key.
@@ -140,67 +173,134 @@ pub fn generate_root_ca(
 /// The generated certificate:
 /// - Is signed by CA (not self-signed)
 /// - Has `CA:FALSE` basic constraint
-/// - Server authentication purpose (ExtendedKeyUsage)
+/// - Server authentication purpose (`ExtendedKeyUsage`)
 /// - Contains server-specific Aunsorm calibration
 /// - Includes Subject Alternative Names (DNS + IP)
 ///
 /// # Errors
 ///
 /// Returns `X509Error` if certificate signing fails.
-pub fn sign_server_cert(
-    _params: &ServerCertParams<'_>,
-) -> Result<ServerCert, crate::X509Error> {
-    // TODO: Implement server certificate signing
-    // 1. Load CA certificate and private key from PEM
-    // 2. Create server calibration (different from CA)
-    // 3. Setup CertificateParams with is_ca = IsCa::ExplicitNoCa
-    // 4. Set key_usages = [DigitalSignature, KeyEncipherment]
-    // 5. Set extended_key_usages = [ServerAuth]
-    // 6. Add Subject Alternative Names (hostname + extra_dns + extra_ips)
-    // 7. Add Aunsorm calibration custom extension (server-specific)
-    // 8. Generate Ed25519 key pair for server
-    // 9. Sign with CA key (NOT self-signed!)
-    // 10. Return ServerCert with PEM outputs
-    
-    unimplemented!("Server certificate signing not yet implemented")
+pub fn sign_server_cert(params: &ServerCertParams<'_>) -> Result<ServerCert, X509Error> {
+    if params.hostname.trim().is_empty() {
+        return Err(X509Error::EmptyHostname);
+    }
+
+    let (calibration, calibration_id) = calib_from_text(params.org_salt, params.calibration_text)?;
+    let base_oid =
+        std::env::var("AUNSORM_OID_BASE").unwrap_or_else(|_| DEFAULT_BASE_OID.to_owned());
+    let extension_oid = build_extension_oid(&base_oid, CALIBRATION_EXTENSION_ARC)?;
+
+    let mut cert_params = CertificateParams::new(vec![params.hostname.to_owned()])?;
+    cert_params.is_ca = IsCa::ExplicitNoCa;
+    cert_params.key_usages = vec![
+        KeyUsagePurpose::DigitalSignature,
+        KeyUsagePurpose::KeyEncipherment,
+    ];
+    cert_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    cert_params
+        .distinguished_name
+        .push(DnType::CommonName, params.hostname);
+    let now = OffsetDateTime::now_utc();
+    cert_params.not_before = now - Duration::days(1);
+    cert_params.not_after = now + Duration::days(i64::from(params.validity_days));
+    cert_params.serial_number = Some(deterministic_serial(&calibration));
+
+    for dns in params.extra_dns {
+        let trimmed = dns.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let san = SubjectAltName::Dns(trimmed.to_owned()).to_san_type()?;
+        cert_params.subject_alt_names.push(san);
+    }
+    for ip in params.extra_ips {
+        let san = SubjectAltName::Ip(*ip).to_san_type()?;
+        cert_params.subject_alt_names.push(san);
+    }
+
+    let empty: &[String] = &[];
+    let calibration_extension = calibration_extension_from_parts(
+        &extension_oid,
+        &calibration,
+        params.calibration_text,
+        empty,
+        empty,
+    )?;
+    cert_params.custom_extensions.push(calibration_extension);
+
+    let ca_key = KeyPair::from_pem(params.ca_key_pem)?;
+    let issuer = Issuer::from_ca_cert_pem(params.ca_cert_pem, ca_key)?;
+    let server_key = KeyPair::generate_for(&rcgen::PKCS_ED25519)?;
+    let certificate = cert_params.signed_by(&server_key, &issuer)?;
+
+    Ok(ServerCert {
+        certificate_pem: certificate.pem(),
+        private_key_pem: server_key.serialize_pem(),
+        calibration_id,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::calib_from_text;
+    use pem::parse;
+    use std::net::Ipv4Addr;
+    use x509_parser::{
+        extensions::{GeneralName, ParsedExtension},
+        prelude::{FromDer, X509Certificate},
+    };
 
     #[test]
-    #[ignore] // TODO: Remove when implemented
-    fn test_generate_root_ca() {
+    fn generate_root_ca_produces_calibration_extension() {
         let params = RootCaParams {
             common_name: "Test Root CA",
             org_salt: b"test-salt",
             calibration_text: "Test Calibration",
             validity_days: 3650,
         };
-        
-        let result = generate_root_ca(&params);
-        assert!(result.is_ok());
-        
-        let ca = result.unwrap();
+
+        let ca = generate_root_ca(&params).expect("generate root CA");
         assert!(ca.certificate_pem.contains("BEGIN CERTIFICATE"));
         assert!(ca.private_key_pem.contains("BEGIN PRIVATE KEY"));
-        assert!(!ca.calibration_id.is_empty());
+
+        let ca_der = parse(ca.certificate_pem.clone())
+            .expect("pem")
+            .contents()
+            .to_vec();
+        let (_, certificate) = X509Certificate::from_der(&ca_der).expect("parse CA");
+
+        assert_eq!(
+            certificate.tbs_certificate.subject,
+            certificate.tbs_certificate.issuer
+        );
+        let basic_constraints = certificate
+            .extensions()
+            .iter()
+            .find(|ext| matches!(ext.parsed_extension(), ParsedExtension::BasicConstraints(_)))
+            .expect("basic constraints");
+        if let ParsedExtension::BasicConstraints(bc) = basic_constraints.parsed_extension() {
+            assert!(bc.ca);
+        }
+
+        let (_, expected_id) = calib_from_text(params.org_salt, params.calibration_text)
+            .expect("expected calibration");
+        assert_eq!(ca.calibration_id, expected_id);
+        assert!(ca_der
+            .windows(ca.calibration_id.len())
+            .any(|window| window == ca.calibration_id.as_bytes()));
     }
 
     #[test]
-    #[ignore] // TODO: Remove when implemented
-    fn test_sign_server_cert() {
-        // First generate a CA
+    fn sign_server_cert_uses_ca_issuer() {
         let root_params = RootCaParams {
             common_name: "Test Root CA",
             org_salt: b"test-salt",
             calibration_text: "Test CA Calibration",
             validity_days: 3650,
         };
-        let ca = generate_root_ca(&root_params).unwrap();
-        
-        // Then sign a server certificate
+        let ca = generate_root_ca(&root_params).expect("generate CA");
+
         let server_params = ServerCertParams {
             hostname: "localhost",
             org_salt: b"test-salt",
@@ -209,15 +309,82 @@ mod tests {
             ca_key_pem: &ca.private_key_pem,
             validity_days: 365,
             extra_dns: &["*.localhost".to_owned()],
-            extra_ips: &["127.0.0.1".parse().unwrap()],
+            extra_ips: &["127.0.0.1".parse().expect("ip")],
         };
-        
-        let result = sign_server_cert(&server_params);
-        assert!(result.is_ok());
-        
-        let server = result.unwrap();
+
+        let server = sign_server_cert(&server_params).expect("sign server cert");
         assert!(server.certificate_pem.contains("BEGIN CERTIFICATE"));
         assert!(server.private_key_pem.contains("BEGIN PRIVATE KEY"));
+
+        let server_der = parse(server.certificate_pem.clone())
+            .expect("server pem")
+            .contents()
+            .to_vec();
+        let (_, server_cert) = X509Certificate::from_der(&server_der).expect("parse server");
+
+        let ca_der = parse(ca.certificate_pem.clone())
+            .expect("ca pem")
+            .contents()
+            .to_vec();
+        let (_, ca_cert) = X509Certificate::from_der(&ca_der).expect("parse ca");
+
+        assert_eq!(
+            server_cert.tbs_certificate.issuer,
+            ca_cert.tbs_certificate.subject
+        );
+        let eku_ext = server_cert
+            .extensions()
+            .iter()
+            .find(|ext| matches!(ext.parsed_extension(), ParsedExtension::ExtendedKeyUsage(_)))
+            .expect("eku extension");
+        if let ParsedExtension::ExtendedKeyUsage(eku) = eku_ext.parsed_extension() {
+            assert!(eku.server_auth);
+        }
+
+        let san_ext = server_cert
+            .extensions()
+            .iter()
+            .find(|ext| {
+                matches!(
+                    ext.parsed_extension(),
+                    ParsedExtension::SubjectAlternativeName(_)
+                )
+            })
+            .expect("san extension");
+        if let ParsedExtension::SubjectAlternativeName(san) = san_ext.parsed_extension() {
+            let mut has_localhost = false;
+            let mut has_wildcard_localhost = false;
+            let mut has_loopback_ipv4 = false;
+
+            for general_name in &san.general_names {
+                match general_name {
+                    GeneralName::DNSName(value) => {
+                        if *value == "localhost" {
+                            has_localhost = true;
+                        } else if *value == "*.localhost" {
+                            has_wildcard_localhost = true;
+                        }
+                    }
+                    GeneralName::IPAddress(bytes) => {
+                        if bytes.len() == 4 {
+                            let ipv4 = IpAddr::from(<[u8; 4]>::try_from(&bytes[..]).expect("ipv4"));
+                            if ipv4 == IpAddr::V4(Ipv4Addr::LOCALHOST) {
+                                has_loopback_ipv4 = true;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            assert!(has_localhost);
+            assert!(has_wildcard_localhost);
+            assert!(has_loopback_ipv4);
+        }
+
         assert!(!server.calibration_id.is_empty());
+        assert!(server_der
+            .windows(server.calibration_id.len())
+            .any(|window| window == server.calibration_id.as_bytes()));
     }
 }
