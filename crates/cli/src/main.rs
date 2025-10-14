@@ -2451,19 +2451,29 @@ fn decode_fixed<const N: usize>(value: &str, context: &'static str) -> CliResult
     Ok(out)
 }
 
+fn strip_utf8_bom_mut(text: &mut String) {
+    const UTF8_BOM: char = '\u{feff}';
+    if text.starts_with(UTF8_BOM) {
+        text.drain(..UTF8_BOM.len_utf8());
+    }
+}
+
 fn load_password(
     password: Option<&str>,
     password_file: Option<&Path>,
 ) -> CliResult<Zeroizing<String>> {
     match (password, password_file) {
         (Some(pw), None) => {
-            if pw.is_empty() {
+            let mut owned = pw.to_owned();
+            strip_utf8_bom_mut(&mut owned);
+            if owned.is_empty() {
                 return Err(CliError::EmptySecret("parola"));
             }
-            Ok(Zeroizing::new(pw.to_owned()))
+            Ok(Zeroizing::new(owned))
         }
         (None, Some(path)) => {
             let mut secret = Zeroizing::new(fs::read_to_string(path)?);
+            strip_utf8_bom_mut(&mut secret);
             while secret.ends_with('\n') || secret.ends_with('\r') {
                 secret.pop();
             }
@@ -2480,13 +2490,16 @@ fn load_password(
 fn load_calibration_text(calib_text: Option<&str>, calib_file: Option<&Path>) -> CliResult<String> {
     match (calib_text, calib_file) {
         (Some(text), None) => {
-            if text.trim().is_empty() {
+            let mut owned = text.to_owned();
+            strip_utf8_bom_mut(&mut owned);
+            if owned.trim().is_empty() {
                 return Err(CliError::EmptySecret("kalibrasyon metni"));
             }
-            Ok(text.to_owned())
+            Ok(owned)
         }
         (None, Some(path)) => {
-            let content = fs::read_to_string(path)?;
+            let mut content = fs::read_to_string(path)?;
+            strip_utf8_bom_mut(&mut content);
             let trimmed = content.trim_end_matches(['\n', '\r']);
             if trimmed.trim().is_empty() {
                 return Err(CliError::EmptySecret("kalibrasyon metni"));
@@ -2965,6 +2978,20 @@ mod tests {
     }
 
     #[test]
+    fn password_cli_strips_utf8_bom() {
+        let password = load_password(Some("\u{feff}sekret"), None).expect("password");
+        assert_eq!(&*password, "sekret");
+    }
+
+    #[test]
+    fn password_file_strips_utf8_bom() {
+        let file = NamedTempFile::new().expect("tmp");
+        fs::write(file.path(), "\u{feff}sekret\r\n").expect("write");
+        let password = load_password(None, Some(file.path())).expect("password");
+        assert_eq!(&*password, "sekret");
+    }
+
+    #[test]
     fn calibration_text_rejects_blank() {
         let err = load_calibration_text(Some("   \t"), None).unwrap_err();
         assert!(matches!(err, CliError::EmptySecret("kalibrasyon metni")));
@@ -2984,6 +3011,20 @@ mod tests {
         fs::write(file.path(), "\n").expect("write");
         let err = load_calibration_text(None, Some(file.path())).unwrap_err();
         assert!(matches!(err, CliError::EmptySecret("kalibrasyon metni")));
+    }
+
+    #[test]
+    fn calibration_cli_strips_utf8_bom() {
+        let text = load_calibration_text(Some("\u{feff}Context"), None).expect("calib");
+        assert_eq!(text, "Context");
+    }
+
+    #[test]
+    fn calibration_file_strips_utf8_bom() {
+        let file = NamedTempFile::new().expect("tmp");
+        fs::write(file.path(), "\u{feff}Context\r\n").expect("write");
+        let text = load_calibration_text(None, Some(file.path())).expect("calib");
+        assert_eq!(text, "Context");
     }
 
     #[test]
