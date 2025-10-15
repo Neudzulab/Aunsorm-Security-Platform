@@ -7,6 +7,7 @@ use axum::http::{Request, StatusCode};
 use tower::util::ServiceExt;
 
 use aunsorm_jwt::{Ed25519KeyPair, Jwk};
+use aunsorm_mdm::{DeviceCertificatePlan, DeviceRecord, PolicyDocument};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Deserialize;
 use serde_json::json;
@@ -149,6 +150,7 @@ async fn pkce_flow_succeeds() {
     let metrics_text = String::from_utf8(metrics_body.to_vec()).expect("metrics str");
     assert!(metrics_text.contains("aunsorm_active_tokens"));
     assert!(metrics_text.contains("aunsorm_sfu_contexts"));
+    assert!(metrics_text.contains("aunsorm_mdm_registered_devices"));
 
     let transparency_response = app
         .clone()
@@ -198,6 +200,256 @@ async fn pkce_flow_succeeds() {
         }
         TransparencyEventResponse::KeyPublished { .. } => panic!("unexpected event kind"),
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct DeviceEnrollmentEnvelope {
+    device: DeviceRecord,
+    policy: PolicyDocument,
+    certificate: DeviceCertificatePlan,
+}
+
+#[derive(Debug, Deserialize)]
+struct ErrorResponse {
+    error: String,
+    error_description: String,
+}
+
+#[tokio::test]
+async fn mdm_registration_flow() {
+    let state = setup_state();
+    let app = build_router(Arc::clone(&state));
+    let payload = json!({
+        "device_id": "mdm-device-1",
+        "owner": "alice",
+        "platform": "ios",
+        "display_name": "Alice's iPhone"
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/mdm/register")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let envelope: DeviceEnrollmentEnvelope = serde_json::from_slice(&body).expect("json");
+    assert_eq!(envelope.device.device_id, "mdm-device-1");
+    assert_eq!(envelope.device.owner, "alice");
+    assert_eq!(envelope.policy.version, "2025.10-ios");
+    assert_eq!(envelope.certificate.profile_name, "aunsorm-mdm-default");
+
+    let conflict = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/mdm/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "device_id": "mdm-device-1",
+                        "owner": "alice",
+                        "platform": "ios"
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(conflict.status(), StatusCode::BAD_REQUEST);
+
+    let policy = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/mdm/policy/ios")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("policy");
+    assert_eq!(policy.status(), StatusCode::OK);
+    let policy_body = to_bytes(policy.into_body(), usize::MAX)
+        .await
+        .expect("policy body");
+    let policy_doc: PolicyDocument = serde_json::from_slice(&policy_body).expect("policy json");
+    assert_eq!(policy_doc.rules.len(), 3);
+
+    let plan = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/mdm/cert-plan/mdm-device-1")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("plan");
+    assert_eq!(plan.status(), StatusCode::OK);
+    let plan_body = to_bytes(plan.into_body(), usize::MAX)
+        .await
+        .expect("plan body");
+    let plan_doc: DeviceCertificatePlan = serde_json::from_slice(&plan_body).expect("plan json");
+    assert_eq!(plan_doc.device_id, "mdm-device-1");
+
+    let missing_plan = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/mdm/cert-plan/unknown-device")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("missing");
+    assert_eq!(missing_plan.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn mdm_rejects_empty_identifiers() {
+    let state = setup_state();
+    let app = build_router(Arc::clone(&state));
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/mdm/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "device_id": "   ",
+                        "owner": "alice",
+                        "platform": "ios"
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
+    assert_eq!(error.error, "invalid_request");
+    assert!(
+        error.error_description.contains("device_id")
+            && (error.error_description.contains("geçersiz")
+                || error.error_description.contains("boş olamaz")),
+        "unexpected error message: {}",
+        error.error_description
+    );
+
+    let count = state.mdm_directory().device_count().expect("device count");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn mdm_rejects_control_characters_in_platform() {
+    let state = setup_state();
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/mdm/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "device_id": "valid-device",
+                        "owner": "alice",
+                        "platform": "ios\u{0007}",
+                        "display_name": "Alice test"
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
+    assert_eq!(error.error, "invalid_request");
+    assert!(
+        error.error_description.contains("platform değeri geçersiz"),
+        "unexpected error message: {}",
+        error.error_description
+    );
+}
+
+#[tokio::test]
+async fn mdm_policy_returns_not_found_for_unknown_platform() {
+    let state = setup_state();
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/mdm/policy/unknown-os")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
+    assert_eq!(error.error, "not_found");
+    assert!(
+        error.error_description.contains("Politika bulunamadı"),
+        "unexpected error message: {}",
+        error.error_description
+    );
+}
+
+#[tokio::test]
+async fn mdm_certificate_plan_rejects_blank_identifier() {
+    let state = setup_state();
+    let app = build_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/mdm/cert-plan/%20%20")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
+    assert_eq!(error.error, "invalid_request");
+    assert!(
+        error.error_description.contains("device_id boş olamaz"),
+        "unexpected error message: {}",
+        error.error_description
+    );
 }
 
 #[tokio::test]

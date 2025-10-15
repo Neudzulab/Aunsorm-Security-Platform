@@ -295,5 +295,5 @@ Her iş için alanda uzman bir agent görevlendir. Yapılan işleri birbirleri i
 18) Yan ürün & MDM altyapısı
 
 * [x] Head bilgisine bağlı, çakışmasız benzersiz ID jeneratörü (projeler arası paylaşım için API).
-* [ ] MDM (Mobile Device Management) temel altyapısı: kayıt, politika deposu ve sertifika dağıtım planı.
+* [x] MDM (Mobile Device Management) temel altyapısı: kayıt, politika deposu ve sertifika dağıtım planı.
 * [x] Lokal HTTPS geliştirme ortamı için SAN destekli öz-imzalı sertifika otomasyonu (`x509 local-dev`, CLI + kütüphane).

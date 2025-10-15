@@ -62,6 +62,13 @@ impl ErrorBody {
             error_description: message.into(),
         }
     }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self {
+            error: "not_found",
+            error_description: message.into(),
+        }
+    }
 }
 
 /// HTTP düzeyinde hata türü.
@@ -94,6 +101,10 @@ impl ApiError {
             StatusCode::INTERNAL_SERVER_ERROR,
             ErrorBody::server_error(message),
         )
+    }
+
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::NOT_FOUND, ErrorBody::not_found(message))
     }
 }
 

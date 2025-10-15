@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   eklendi.
 - `aunsorm-id` crate providing head-anchored unique identifier generation with
   namespace normalization and verifiable parsing helpers.
+- `aunsorm-mdm` crate delivering device enrollment, policy storage and
+  certificate distribution planning APIs alongside `/mdm/*` server
+  uçları ve Prometheus metriği.
 
 ### Documentation
 - Documented the Certificate Authority automation plan for `aunsorm-x509`,

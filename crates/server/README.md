@@ -13,6 +13,11 @@ EXTERNAL kalibrasyon bağlamını zorunlu kılan JWT üretimini ve JTI tabanlı 
 - `/metrics`: Temel metrikler (bekleyen yetkilendirme istekleri ve aktif belirteç sayısı).
 - `/sfu/context`: Zasian SFU gibi ortamlar için uçtan uca şifreleme hazır oturum bağlamı üretir.
 - `/sfu/context/step`: Mevcut SFU bağlamı için yeni ratchet anahtarını türetir.
+- `/mdm/register`: Cihaz kaydını tamamlar, platform politikasını ve sertifika
+  planını döndürür.
+- `/mdm/policy/{platform}`: Platforma göre MDM politika dokümanını sunar.
+- `/mdm/cert-plan/{device_id}`: Kayıtlı cihaz için sertifika dağıtım planını
+  hesaplar.
 
 ## Çalıştırma
 Sunucu yapılandırması ortam değişkenlerinden okunur. Minimum yapılandırma örneği:
