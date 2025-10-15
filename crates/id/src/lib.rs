@@ -325,6 +325,10 @@ pub fn parse_head_id(raw: &str) -> Result<HeadStampedId, IdError> {
     let Some(namespace) = parts.next() else {
         return Err(IdError::InvalidFormat);
     };
+    let normalized_namespace = normalize_namespace(namespace)?;
+    if normalized_namespace != namespace {
+        return Err(IdError::InvalidNamespace);
+    }
     let Some(head_prefix) = parts.next() else {
         return Err(IdError::InvalidFormat);
     };
@@ -550,6 +554,24 @@ mod tests {
             parse_head_id(&tampered),
             Err(IdError::InvalidPayload)
         ));
+    }
+
+    #[test]
+    fn parse_rejects_non_canonical_namespace() {
+        let generator = HeadIdGenerator::new(HEAD).expect("generator");
+        let id = generator.next_id().expect("id");
+        let payload = id
+            .as_str()
+            .rsplit_once('.')
+            .map(|(_, payload)| payload.to_owned())
+            .expect("payload");
+        let head_prefix = generator.head_prefix().to_owned();
+
+        for ns in ["Inventory", "-inventory", "inventory--west", ""] {
+            let tampered = format!("aid.{ns}.{head_prefix}.{payload}");
+            let err = parse_head_id(&tampered).expect_err("namespace should be rejected");
+            assert_eq!(err, IdError::InvalidNamespace);
+        }
     }
 
     #[test]
