@@ -7,6 +7,8 @@ description = "ACME protocol primitives for the Aunsorm security suite"
 readme = "README.md"
 
 [dependencies]
+base64 = { workspace = true }
+http = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
