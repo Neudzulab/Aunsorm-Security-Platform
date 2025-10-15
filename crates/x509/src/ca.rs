@@ -61,9 +61,10 @@ use std::net::IpAddr;
 
 use rcgen::{
     BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
-    KeyUsagePurpose,
+    KeyUsagePurpose, SignatureAlgorithm, SigningKey,
 };
 use time::{Duration, OffsetDateTime};
+use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::{
     build_extension_oid, calib_from_text, calibration_extension_from_parts, deterministic_serial,
@@ -124,6 +125,77 @@ pub struct IntermediateCaCert {
     pub private_key_pem: String,
     /// Calibration ID.
     pub calibration_id: String,
+}
+
+/// Signing backend abstraction for CA operations.
+pub trait CaSigningBackend {
+    /// Returns PEM encoded issuer certificate.
+    fn certificate_pem(&self) -> &str;
+    /// Returns underlying signature algorithm.
+    fn signature_algorithm(&self) -> &'static SignatureAlgorithm;
+    /// Returns raw public key bytes (without algorithm wrapping).
+    fn public_key_raw(&self) -> &[u8];
+    /// Produces signature over provided message.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`X509Error`] when signing fails.
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, X509Error>;
+}
+
+/// File-based signing backend backed by PEM encoded issuer key pair.
+pub struct FileCaBackend<'a> {
+    certificate_pem: &'a str,
+    key_pair: KeyPair,
+    public_key_raw: Vec<u8>,
+}
+
+impl<'a> FileCaBackend<'a> {
+    /// Constructs backend from issuer certificate and key PEM.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`X509Error`] when issuer material cannot be parsed or validated.
+    pub fn new(certificate_pem: &'a str, key_pem: &'a str) -> Result<Self, X509Error> {
+        let key_pair = KeyPair::from_pem(key_pem)?;
+        let parsed_certificate = pem::parse(certificate_pem)
+            .map_err(|err| X509Error::IssuerCertificate(err.to_string()))?;
+        let (_, certificate) = X509Certificate::from_der(parsed_certificate.contents())
+            .map_err(|err| X509Error::IssuerCertificate(err.to_string()))?;
+        let subject_pki = &certificate.tbs_certificate.subject_pki;
+        if subject_pki.subject_public_key.unused_bits != 0 {
+            return Err(X509Error::IssuerPublicKey(
+                "public key contains unused bits".to_owned(),
+            ));
+        }
+        let public_key_raw = subject_pki.subject_public_key.data.to_vec();
+        if public_key_raw.is_empty() {
+            return Err(X509Error::IssuerPublicKey("public key is empty".to_owned()));
+        }
+        Ok(Self {
+            certificate_pem,
+            key_pair,
+            public_key_raw,
+        })
+    }
+}
+
+impl CaSigningBackend for FileCaBackend<'_> {
+    fn certificate_pem(&self) -> &str {
+        self.certificate_pem
+    }
+
+    fn signature_algorithm(&self) -> &'static SignatureAlgorithm {
+        self.key_pair.algorithm()
+    }
+
+    fn public_key_raw(&self) -> &[u8] {
+        &self.public_key_raw
+    }
+
+    fn sign(&self, message: &[u8]) -> Result<Vec<u8>, X509Error> {
+        Ok(self.key_pair.sign(message)?)
+    }
 }
 
 /// Parameters for server certificate signing.
@@ -211,6 +283,19 @@ pub fn generate_root_ca(params: &RootCaParams<'_>) -> Result<RootCaCert, X509Err
 pub fn issue_intermediate_ca(
     params: &IntermediateCaParams<'_>,
 ) -> Result<IntermediateCaCert, X509Error> {
+    let backend = FileCaBackend::new(params.issuer_cert_pem, params.issuer_key_pem)?;
+    issue_intermediate_ca_with_backend(params, &backend)
+}
+
+/// Issues an intermediate CA certificate using the provided signing backend.
+///
+/// # Errors
+///
+/// Returns `X509Error` if certificate signing fails.
+pub fn issue_intermediate_ca_with_backend(
+    params: &IntermediateCaParams<'_>,
+    backend: &impl CaSigningBackend,
+) -> Result<IntermediateCaCert, X509Error> {
     let (calibration, calibration_id) = calib_from_text(params.org_salt, params.calibration_text)?;
     let base_oid =
         std::env::var("AUNSORM_OID_BASE").unwrap_or_else(|_| DEFAULT_BASE_OID.to_owned());
@@ -236,8 +321,8 @@ pub fn issue_intermediate_ca(
     )?;
     cert_params.custom_extensions.push(calibration_extension);
 
-    let issuer_key = KeyPair::from_pem(params.issuer_key_pem)?;
-    let issuer = Issuer::from_ca_cert_pem(params.issuer_cert_pem, issuer_key)?;
+    let issuer_key = BackendSigningKey::new(backend);
+    let issuer = Issuer::from_ca_cert_pem(backend.certificate_pem(), issuer_key)?;
     let intermediate_key = KeyPair::generate_for(&rcgen::PKCS_ED25519)?;
     let certificate = cert_params.signed_by(&intermediate_key, &issuer)?;
 
@@ -318,6 +403,40 @@ pub fn sign_server_cert(params: &ServerCertParams<'_>) -> Result<ServerCert, X50
         private_key_pem: server_key.serialize_pem(),
         calibration_id,
     })
+}
+
+struct BackendSigningKey<'a, B: CaSigningBackend + ?Sized> {
+    backend: &'a B,
+    algorithm: &'static SignatureAlgorithm,
+    public_key_raw: &'a [u8],
+}
+
+impl<'a, B: CaSigningBackend + ?Sized> BackendSigningKey<'a, B> {
+    fn new(backend: &'a B) -> Self {
+        Self {
+            backend,
+            algorithm: backend.signature_algorithm(),
+            public_key_raw: backend.public_key_raw(),
+        }
+    }
+}
+
+impl<B: CaSigningBackend + ?Sized> rcgen::PublicKeyData for BackendSigningKey<'_, B> {
+    fn der_bytes(&self) -> &[u8] {
+        self.public_key_raw
+    }
+
+    fn algorithm(&self) -> &'static SignatureAlgorithm {
+        self.algorithm
+    }
+}
+
+impl<B: CaSigningBackend + ?Sized> rcgen::SigningKey for BackendSigningKey<'_, B> {
+    fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, rcgen::Error> {
+        self.backend
+            .sign(msg)
+            .map_err(|_| rcgen::Error::RemoteKeyError)
+    }
 }
 
 #[cfg(test)]
@@ -527,4 +646,36 @@ mod tests {
             .windows(issuing.calibration_id.len())
             .any(|window| window == issuing.calibration_id.as_bytes()));
     }
+
+    #[test]
+    fn file_backend_signs_intermediate() {
+        let root_params = RootCaParams {
+            common_name: "Demo Root",
+            org_salt: b"demo-salt",
+            calibration_text: "Demo Root Calibration",
+            validity_days: 3650,
+            cps_uris: &[],
+            policy_oids: &[],
+        };
+        let root = generate_root_ca(&root_params).expect("root");
+        let backend =
+            FileCaBackend::new(&root.certificate_pem, &root.private_key_pem).expect("backend");
+
+        let issuing_params = IntermediateCaParams {
+            common_name: "Demo Issuing",
+            org_salt: b"demo-salt",
+            calibration_text: "Demo Issuing Calibration",
+            validity_days: 730,
+            cps_uris: &[],
+            policy_oids: &[],
+            issuer_cert_pem: &root.certificate_pem,
+            issuer_key_pem: &root.private_key_pem,
+        };
+
+        let issuing = issue_intermediate_ca_with_backend(&issuing_params, &backend).expect("issue");
+        assert!(!issuing.certificate_pem.is_empty());
+        assert!(!issuing.private_key_pem.is_empty());
+        assert!(!issuing.calibration_id.is_empty());
+    }
 }
+

@@ -59,6 +59,12 @@ pub enum X509Error {
     /// Kalibrasyon girdileri geçersiz.
     #[error("kalibrasyon hatası: {0}")]
     Core(#[from] aunsorm_core::CoreError),
+    /// Issuer sertifikası ayrıştırılamadı.
+    #[error("issuer sertifikası çözümlenemedi: {0}")]
+    IssuerCertificate(String),
+    /// Issuer public anahtar bilgisi geçersiz.
+    #[error("issuer public anahtarı geçersiz: {0}")]
+    IssuerPublicKey(String),
 }
 
 /// Öz-imzalı sertifika üretimi için parametreler.
