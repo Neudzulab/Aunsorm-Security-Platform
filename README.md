@@ -10,9 +10,10 @@ Aunsorm, end-to-end encryption (E2EE), post-quantum cryptography (PQC), JWT toke
 
 #### 🔐 X.509 Certificate Authority (CA)
 - **Self-Hosted CA:** Kendi sertifika otoritenizi kurun
-- **Ed25519 Sertifikalar:** Modern, hızlı ve güvenli algoritmalar
+- **Ed25519 & RSA Sertifikalar:** Modern, hızlı ve güvenli algoritmalar
 - **Root CA ve Intermediate CA:** Tam certificate chain management
 - **Server Certificate Signing:** Domain sertifikaları oluşturma
+- **RFC 5280 Compliant:** Tam Distinguished Name fields (CN, O, OU, C, ST, L)
 - **Aunsorm Calibration Extension:** Benzersiz sertifika metadata
 - **CLI Tools:** Komut satırından tam kontrol
 
@@ -22,11 +23,102 @@ aunsorm-cli x509 ca init --profile ca-profile.yaml \
   --cert-out root-ca.crt --key-out root-ca.key \
   --algorithm rsa4096
 
-# Server sertifikası imzala
+# Server sertifikası imzala (production)
 aunsorm-cli x509 ca sign-server \
   --ca-cert root-ca.crt --ca-key root-ca.key \
   --hostname example.com --cert-out server.crt --key-out server.key \
+  --algorithm rsa2048 \
+  --organization "Company Name" \
+  --organizational-unit "IT Security" \
+  --country US --state California --locality "San Francisco"
+```
+
+##### 🏠 Self-Signed Certificate for Local Development
+
+**Localhost HTTPS için self-signed sertifika oluşturma:**
+
+```bash
+# 1. Root CA profile oluştur (ca-profile.yaml)
+profile_id: localhost-dev-ca
+org_salt: 7Vrq0SWuzHfG1pCEvZFUEg==
+root:
+  common_name: Localhost Development Root CA
+  organization: MyCompany Development
+  organizational_unit: Security Services
+  country: US
+  state: California
+  locality: San Francisco
+  calibration_text: localhost-dev-root-ca-2025
+  validity_days: 3650  # 10 yıl
+
+# 2. Root CA oluştur
+aunsorm-cli x509 ca init --profile ca-profile.yaml \
+  --cert-out localhost-ca.crt --key-out localhost-ca.key \
   --algorithm rsa2048
+
+# 3. Server sertifikası oluştur (NGINX/Apache için RSA2048 önerilidir)
+aunsorm-cli x509 ca sign-server \
+  --ca-cert localhost-ca.crt --ca-key localhost-ca.key \
+  --hostname localhost \
+  --org-salt ed5aead125aecc77c6d69084bd915412 \
+  --calibration-text "localhost-server-2025" \
+  --cert-out localhost.crt --key-out localhost.key \
+  --algorithm rsa2048 \
+  --organization "MyCompany Development" \
+  --organizational-unit "Security Services" \
+  --country US --state California --locality "San Francisco"
+```
+
+**Browser'da "Güvenli" gösterimi için Root CA import:**
+
+⚠️ **ÖNEMLİ:** Self-signed sertifikalar browser'larda `NET::ERR_CERT_AUTHORITY_INVALID` uyarısı verir. Bu **NORMAL** bir durumdur ve araçtan (makecert, openssl, Aunsorm Crypt) bağımsızdır. Root CA'yı güvenilir listeye eklemek gerekir.
+
+**Windows (tüm browser'lar için):**
+```powershell
+# PowerShell (Admin)
+Import-Certificate -FilePath localhost-ca.crt -CertStoreLocation Cert:\CurrentUser\Root
+```
+
+**Manuel (GUI):**
+1. `localhost-ca.crt` dosyasına çift tıkla
+2. **Install Certificate** > **Current User**
+3. **Place all certificates in the following store** seç
+4. **Browse** > **Trusted Root Certification Authorities**
+5. **Next** > **Finish** > Güvenlik uyarısını kabul et
+6. Browser'ı yeniden başlat
+
+**Chrome/Edge (sadece browser için):**
+1. `chrome://settings/certificates` aç
+2. **Authorities** tab
+3. **Import** button
+4. `localhost-ca.crt` seç
+5. ✓ **Trust this certificate for identifying websites**
+6. **OK** > Browser'ı yeniden başlat
+
+**Firefox:**
+1. `about:preferences#privacy` aç
+2. **Certificates** > **View Certificates**
+3. **Authorities** tab > **Import**
+4. `localhost-ca.crt` seç
+5. ✓ **Trust this CA to identify websites**
+
+**Import sonrası:** `https://localhost` artık 🔒 **Güvenli** gösterecektir!
+
+**NGINX config örneği:**
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name localhost;
+    
+    ssl_certificate /etc/nginx/certs/localhost.crt;
+    ssl_certificate_key /etc/nginx/certs/localhost.key;
+    
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    
+    # ... diğer config
+}
 ```
 
 #### 🛡️ Post-Quantum Cryptography (PQC)
