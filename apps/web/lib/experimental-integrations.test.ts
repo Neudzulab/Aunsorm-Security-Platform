@@ -147,6 +147,24 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(bareLoopback)).toBe('http://[::1]/aunsorm');
   });
 
+  it('percent-encodes IPv6 zone identifiers in domain overrides', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: '::1%lo0:4100',
+      AUNSORM_INTEGRATIONS_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://[::1%25lo0]:4100/bridge');
+
+    const alreadyEncoded = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: '::1%25lo0:4100',
+      AUNSORM_INTEGRATIONS_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(alreadyEncoded)).toBe('http://[::1%25lo0]:4100/bridge');
+  });
+
   it('normalises loopback domains with trailing dots', () => {
     const localhostWithDot = {
       NODE_ENV: 'production',
@@ -348,6 +366,20 @@ describe('resolveAunsormBaseUrl', () => {
 
     expect(resolveAunsormBaseUrl(env)).toBe('http://localhost6:3200/custom');
   });
+
+  it('supports direct overrides with IPv6 zone identifiers', () => {
+    const env = {
+      AUNSORM_BASE_URL: '::1%lo0:4700/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://[::1%25lo0]:4700/custom');
+
+    const alreadyEncoded = {
+      AUNSORM_BASE_URL: '::1%25lo0:4700/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(alreadyEncoded)).toBe('http://[::1%25lo0]:4700/custom');
+  });
 });
 
 describe('resolveAunsormBaseUrlDetails', () => {
@@ -398,6 +430,41 @@ describe('resolveAunsormBaseUrlDetails', () => {
         kind: 'direct-file',
         key: 'NEXT_PUBLIC_AUNSORM_BASE_URL_FILE',
         filePath: '/etc/aunsorm/base-url',
+      },
+    });
+  });
+
+  it('reports encoded origins for domain overrides with IPv6 zone identifiers', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: '::1%lo0:4100',
+      AUNSORM_INTEGRATIONS_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'http://[::1%25lo0]:4100/bridge',
+      origin: 'http://[::1%25lo0]:4100',
+      path: '/bridge',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'AUNSORM_INTEGRATIONS_DOMAIN',
+        pathKey: 'AUNSORM_INTEGRATIONS_PATH',
+      },
+    });
+  });
+
+  it('reports encoded origins for direct overrides with IPv6 zone identifiers', () => {
+    const env = {
+      AUNSORM_BASE_URL: '::1%lo0:4700/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: '::1%lo0:4700/custom',
+      origin: 'http://[::1%25lo0]:4700',
+      path: '/custom',
+      source: {
+        kind: 'direct',
+        key: 'AUNSORM_BASE_URL',
       },
     });
   });
