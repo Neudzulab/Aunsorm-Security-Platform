@@ -28,7 +28,7 @@ use tiny_http::{Header, Method, Response, Server};
 fn empty_config() -> KmsConfig {
     KmsConfig {
         strict: false,
-        allow_fallback: true,
+        allow_fallback: false,
         local_store: None,
         #[cfg(feature = "kms-gcp")]
         gcp: None,
@@ -105,19 +105,29 @@ fn wrap_and_unwrap_roundtrip() {
 #[test]
 fn fallback_respects_strict_mode() {
     let store = write_local_store();
-    let config = KmsConfig::local_only(store.path()).expect("config");
-    let client = KmsClient::from_config(config.clone()).expect("client");
+    let base_config = KmsConfig::local_only(store.path()).expect("config");
     let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Gcp, "projects/demo"))
         .with_fallback(BackendLocator::new(BackendKind::Local, "jwt-sign"));
     let message = b"ratchet";
-    // fallback succeeds when strict kapalı ve fallback açık
-    let signature = client
+
+    // Varsayılan yapılandırmada fallback devre dışıdır.
+    let default_client = KmsClient::from_config(base_config.clone()).expect("client");
+    let err = default_client
+        .sign_ed25519(&descriptor, message)
+        .unwrap_err();
+    assert!(matches!(err, crate::KmsError::BackendNotConfigured { .. }));
+
+    // Fallback yalnızca açıkça etkinleştirildiğinde başarılı olur.
+    let fallback_config = base_config.with_fallback(true);
+    let fallback_client = KmsClient::from_config(fallback_config.clone()).expect("client");
+    let signature = fallback_client
         .sign_ed25519(&descriptor, message)
         .expect("fallback sign");
     assert_eq!(signature.len(), 64);
 
     // strict kip fallback'ı reddeder
-    let strict_client = KmsClient::from_config(config.clone().with_strict(true)).expect("strict");
+    let strict_client =
+        KmsClient::from_config(fallback_config.clone().with_strict(true)).expect("strict");
     let err = strict_client
         .sign_ed25519(&descriptor, message)
         .unwrap_err();
@@ -125,7 +135,7 @@ fn fallback_respects_strict_mode() {
 
     // fallback kapatıldığında ilk hata döner
     let no_fallback_client =
-        KmsClient::from_config(config.with_fallback(false)).expect("nofallback");
+        KmsClient::from_config(fallback_config.with_fallback(false)).expect("nofallback");
     let err = no_fallback_client
         .sign_ed25519(&descriptor, message)
         .unwrap_err();
@@ -135,7 +145,9 @@ fn fallback_respects_strict_mode() {
 #[test]
 fn fallback_when_primary_key_missing() {
     let store = write_local_store();
-    let config = KmsConfig::local_only(store.path()).expect("config");
+    let config = KmsConfig::local_only(store.path())
+        .expect("config")
+        .with_fallback(true);
     let client = KmsClient::from_config(config).expect("client");
     let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Local, "missing"))
         .with_fallback(BackendLocator::new(BackendKind::Local, "jwt-sign"));

@@ -209,7 +209,7 @@ impl KmsConfig {
     ///
     /// Desteklenen değişkenler:
     /// - `AUNSORM_STRICT`: `1` veya `true` ise strict kip aktif.
-    /// - `AUNSORM_KMS_FALLBACK`: `1` ise fallback denemelerine izin verilir.
+    /// - `AUNSORM_KMS_FALLBACK`: `1` ise fallback denemelerine izin verilir (varsayılan: devre dışı).
     /// - `AUNSORM_KMS_LOCAL_STORE`: Yerel store JSON dosya yolu.
     ///
     /// # Errors
@@ -218,7 +218,7 @@ impl KmsConfig {
     pub fn from_env() -> Result<Self> {
         let strict = parse_bool(env::var("AUNSORM_STRICT").ok().as_deref()).unwrap_or(false);
         let allow_fallback =
-            parse_bool(env::var("AUNSORM_KMS_FALLBACK").ok().as_deref()).unwrap_or(true);
+            parse_bool(env::var("AUNSORM_KMS_FALLBACK").ok().as_deref()).unwrap_or(false);
         let local_store = match env::var("AUNSORM_KMS_LOCAL_STORE").ok() {
             Some(path) if !path.trim().is_empty() => {
                 Some(LocalStoreConfig::new(PathBuf::from(path)))
@@ -256,6 +256,9 @@ impl KmsConfig {
 
     /// Sadece yerel store kullanacak şekilde konfigürasyon üretir.
     ///
+    /// Varsayılan olarak fallback denemeleri kapalıdır; gerekirse
+    /// `with_fallback(true)` çağrısı ile etkinleştirilmelidir.
+    ///
     /// # Errors
     ///
     /// `path` boş ise `KmsError::Config` döner.
@@ -266,7 +269,7 @@ impl KmsConfig {
         }
         Ok(Self {
             strict: false,
-            allow_fallback: true,
+            allow_fallback: false,
             local_store: Some(LocalStoreConfig::new(store_path.to_path_buf())),
             #[cfg(feature = "kms-gcp")]
             gcp: None,
