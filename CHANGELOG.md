@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Criterion benchmark'ları eklendi.
 - `aunsorm-acme` crate'i ACME directory uç noktalarını ayrıştırmak ve doğrulamak için
   tip güvenli veri modelleri sağlıyor.
+- `aunsorm-id` crate'i için opsiyonel `serde` seri/deserialize desteği ve JSON
+  yuvarlama testleri eklendi.
 
 ### Changed
 - CA otomasyon dokümantasyonu ve kimlik bileşeni açıklamaları RSA desteğini

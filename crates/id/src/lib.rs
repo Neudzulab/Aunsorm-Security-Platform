@@ -15,6 +15,9 @@ use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
 const DEFAULT_NAMESPACE: &str = "aunsorm";
 const HEAD_ENV_KEYS: &[&str] = &[
     "AUNSORM_HEAD",
@@ -326,6 +329,27 @@ impl FromStr for HeadStampedId {
     }
 }
 
+#[cfg(feature = "serde")]
+impl Serialize for HeadStampedId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for HeadStampedId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = String::deserialize(deserializer)?;
+        parse_head_id(&raw).map_err(serde::de::Error::custom)
+    }
+}
+
 /// Kimliği çözümleyip doğrulayan yardımcı fonksiyon.
 ///
 /// # Examples
@@ -489,7 +513,8 @@ fn unix_micros(time: SystemTime) -> Result<u64, IdError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_head_id, HeadIdGenerator, IdError, FINGERPRINT_PREFIX_BYTES, PROCESS_ENTROPY,
+        parse_head_id, HeadIdGenerator, HeadStampedId, IdError, FINGERPRINT_PREFIX_BYTES,
+        PROCESS_ENTROPY,
     };
     use base64::Engine;
     use sha2::{Digest, Sha256};
@@ -683,5 +708,25 @@ mod tests {
         let id = generator.next_id().expect("id");
         let err = id.matches_head("invalid").expect_err("invalid head");
         assert_eq!(err, IdError::HeadNotHex);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serde_roundtrip_preserves_id() {
+        let generator = HeadIdGenerator::new(HEAD).expect("generator");
+        let id = generator.next_id().expect("id");
+        let json = serde_json::to_string(&id).expect("serialize");
+        assert_eq!(json, format!("\"{}\"", id.as_str()));
+        let decoded: HeadStampedId = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(decoded, id);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serde_errors_wrap_parse_failures() {
+        let err =
+            serde_json::from_str::<HeadStampedId>("\"aid.invalid\"").expect_err("invalid payload");
+        let message = err.to_string();
+        assert!(message.contains("kimlik"), "unexpected error: {message}");
     }
 }

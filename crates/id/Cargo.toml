@@ -8,6 +8,10 @@ description = "Head-anchored unique identifier generator shared across Aunsorm p
 readme = "README.md"
 authors = ["Aunsorm Authors <security@aunsorm.dev>"]
 
+[features]
+default = []
+serde = ["dep:serde"]
+
 [dependencies]
 base64 = { workspace = true }
 hex = { workspace = true }
@@ -15,3 +19,7 @@ once_cell = "1"
 rand_core = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
