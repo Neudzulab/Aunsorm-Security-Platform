@@ -76,6 +76,29 @@ function stripTrailingDots(host: string): string {
   return withoutDots.length > 0 ? withoutDots : host;
 }
 
+function encodeZoneId(host: string): string {
+  if (!host.includes('%')) {
+    return host;
+  }
+
+  return host.replace(/%(?![0-9A-Fa-f]{2})/g, '%25');
+}
+
+function stripZoneId(host: string): string {
+  if (!host.includes('%')) {
+    return host;
+  }
+
+  const unescaped = host.replace(/%25/gi, '%');
+  const zoneIndex = unescaped.indexOf('%');
+
+  if (zoneIndex === -1) {
+    return host;
+  }
+
+  return unescaped.slice(0, zoneIndex);
+}
+
 function splitHostPort(value: string): HostPortParts {
   const trimmed = value.trim();
 
@@ -122,8 +145,9 @@ function splitHostPort(value: string): HostPortParts {
       const isHexIpv4Mapped =
         hostCandidate.startsWith('::ffff:') &&
         decodeHexIpv4Mapped(hostCandidate.slice('::ffff:'.length)) !== undefined;
+      const hasZoneId = hostCandidate.includes('%');
 
-      if (isIpv4OrHostname || isIpv4MappedIpv6 || isHexIpv4Mapped) {
+      if (isIpv4OrHostname || isIpv4MappedIpv6 || isHexIpv4Mapped || hasZoneId) {
         return {
           host: hostCandidate,
           port: maybePort,
@@ -272,8 +296,9 @@ function ensureProtocol(origin: string, fallbackScheme: 'http' | 'https'): strin
     return scheme;
   }
 
-  const shouldBracket = host.includes(':');
-  const bracketedHost = hadBrackets || shouldBracket ? `[${host}]` : host;
+  const safeHost = encodeZoneId(host);
+  const shouldBracket = safeHost.includes(':');
+  const bracketedHost = hadBrackets || shouldBracket ? `[${safeHost}]` : safeHost;
   const portSuffix = port ? `:${port}` : '';
 
   return `${scheme}${bracketedHost}${portSuffix}${rest}`;
@@ -392,7 +417,8 @@ function extractHostname(value: string | undefined): string | undefined {
       const url = new URL(protocolRelative);
       const host = url.hostname;
       const normalised = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
-      const canonical = stripTrailingDots(normalised);
+      const withoutZoneId = stripZoneId(normalised);
+      const canonical = stripTrailingDots(withoutZoneId);
       return canonical.length > 0 ? canonical.toLowerCase() : undefined;
     } catch {
       return undefined;
@@ -407,7 +433,8 @@ function extractHostname(value: string | undefined): string | undefined {
   }
 
   const normalised = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
-  const canonical = stripTrailingDots(normalised);
+  const withoutZoneId = stripZoneId(normalised);
+  const canonical = stripTrailingDots(withoutZoneId);
 
   return canonical.length > 0 ? canonical.toLowerCase() : undefined;
 }
@@ -598,6 +625,30 @@ function deriveDirectBaseComponents(baseUrl: string): DirectBaseComponents {
       path,
     };
   } catch {
+    const schemeMatch = candidate.match(/^(https?):\/\//i);
+    if (schemeMatch) {
+      const scheme = schemeMatch[1].toLowerCase();
+      const remainder = candidate.slice(schemeMatch[0].length);
+      const { host, port, hadBrackets, rest } = splitHostPort(remainder);
+
+      if (host) {
+        const safeHost = encodeZoneId(host);
+        const needsBrackets = hadBrackets || safeHost.includes(':');
+        const bracketedHost = needsBrackets ? `[${safeHost}]` : safeHost;
+        const portSuffix = port ? `:${port}` : '';
+        const origin = `${scheme}://${bracketedHost}${portSuffix}`;
+        const pathCandidate = rest || '';
+        const path =
+          pathCandidate === '' && !hadExplicitTrailingSlash
+            ? ''
+            : pathCandidate === '' && hadExplicitTrailingSlash
+              ? '/'
+              : pathCandidate;
+
+        return { origin, path };
+      }
+    }
+
     return { origin: baseUrl, path: '' };
   }
 }
