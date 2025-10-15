@@ -12,6 +12,8 @@ biçiminde URL dostu olarak üretilir.
 - Monotonik mikro saniye zaman damgası ve atomik sayaç ile çakışmasız üretim.
 - Ortak API ile ortam değişkenlerinden HEAD bilgisini çekme desteği.
 - Kimliklerin çözümlenmesi ve doğrulanması için `HeadStampedId::parse` yardımı.
+- Üretilen kimliklerin belirli bir HEAD karması ile eşleştiğini doğrulamak için
+  `HeadStampedId::matches_head` denetimi.
 
 ## Kullanım
 
