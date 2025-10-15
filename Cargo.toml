@@ -11,6 +11,7 @@ members = [
     "crates/server",
     "crates/wasm",
     "crates/pytests",
+    "crates/mdm",
     "tests",
 ]
 resolver = "2"

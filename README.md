@@ -83,6 +83,9 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] Kilitli bellek / SGX / SEV entegrasyon planı.
 - [x] Key transparency ve transcript hash (gelecek sürüm).
 
+## Yan Ürün & MDM Altyapısı
+- [x] MDM temel altyapısı: kayıt, politika deposu ve sertifika dağıtım planı.
+
 ## Test, Fuzz ve Benchmark Çalıştırma
 
 Aşağıdaki komutlar test/fuzz/bench altyapısını kullanıma hazır hale getirir:

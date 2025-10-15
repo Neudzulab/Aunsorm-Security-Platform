@@ -10,6 +10,10 @@ use aunsorm_core::{
     CoreError, SessionRatchet,
 };
 use aunsorm_jwt::{Jwks, JwtSigner, JwtVerifier};
+use aunsorm_mdm::{
+    CertificateDistributionPlan, DevicePlatform, EnrollmentMode, MdmDirectory, MdmError,
+    PolicyDocument, PolicyRule,
+};
 use rand_core::{OsRng, RngCore};
 use tokio::sync::{Mutex, RwLock};
 
@@ -459,6 +463,188 @@ fn unix_seconds(time: SystemTime) -> Result<i64, ServerError> {
         .map_err(|_| ServerError::Configuration("timestamp overflow".to_string()))
 }
 
+fn map_mdm_error(err: &MdmError) -> ServerError {
+    ServerError::Configuration(format!("MDM directory error: {err}"))
+}
+
+#[allow(clippy::too_many_lines)]
+fn default_mdm_directory() -> Result<MdmDirectory, ServerError> {
+    let directory = MdmDirectory::new(CertificateDistributionPlan {
+        profile_name: "aunsorm-mdm-default".to_owned(),
+        certificate_authority: "CN=Aunsorm Device CA,O=Aunsorm".to_owned(),
+        enrollment_mode: EnrollmentMode::Automated,
+        distribution_endpoints: vec![
+            "https://mdm.aunsorm.dev/scep".to_owned(),
+            "https://mdm.aunsorm.dev/acme/device".to_owned(),
+        ],
+        renewal_window_days: 45,
+        grace_period_hours: 96,
+        bootstrap_package: "https://downloads.aunsorm.dev/mdm/bootstrap.pkg".to_owned(),
+    });
+    let now = SystemTime::now();
+    directory
+        .upsert_policy(
+            DevicePlatform::Ios,
+            PolicyDocument {
+                version: "2025.10-ios".to_owned(),
+                description: "iOS cihazları için temel güvenlik gereksinimleri".to_owned(),
+                published_at: now,
+                rules: vec![
+                    PolicyRule {
+                        id: "screen-lock".to_owned(),
+                        statement: "Cihazlar 60 saniye içinde otomatik kilitlenmelidir".to_owned(),
+                        mandatory: true,
+                        remediation: Some("MDM profilini yeniden dağıt".to_owned()),
+                    },
+                    PolicyRule {
+                        id: "os-version".to_owned(),
+                        statement: "Minimum iOS sürümü 18.0".to_owned(),
+                        mandatory: true,
+                        remediation: Some(
+                            "Güncelleme tamamlanana kadar erişimi kısıtla".to_owned(),
+                        ),
+                    },
+                    PolicyRule {
+                        id: "calibration-binding".to_owned(),
+                        statement: "Aunsorm ajanı EXTERNAL kalibrasyon kimliğini doğrulamalıdır"
+                            .to_owned(),
+                        mandatory: true,
+                        remediation: Some("Ajan yapılandırmasını yeniden uygula".to_owned()),
+                    },
+                ],
+            },
+        )
+        .map_err(|err| map_mdm_error(&err))?;
+    directory
+        .upsert_policy(
+            DevicePlatform::Android,
+            PolicyDocument {
+                version: "2025.10-android".to_owned(),
+                description: "Android cihazları için temel güvenlik gereksinimleri".to_owned(),
+                published_at: now,
+                rules: vec![
+                    PolicyRule {
+                        id: "play-protect".to_owned(),
+                        statement: "Play Protect ve zararlı yazılım taraması aktif olmalıdır"
+                            .to_owned(),
+                        mandatory: true,
+                        remediation: Some("Uzak komut ile taramayı etkinleştir".to_owned()),
+                    },
+                    PolicyRule {
+                        id: "os-version".to_owned(),
+                        statement: "Minimum Android sürümü 15".to_owned(),
+                        mandatory: true,
+                        remediation: Some("OTA güncellemesini zorunlu tut".to_owned()),
+                    },
+                    PolicyRule {
+                        id: "storage-encryption".to_owned(),
+                        statement: "Tam disk şifreleme devre dışı bırakılamaz".to_owned(),
+                        mandatory: true,
+                        remediation: Some(
+                            "Cihazı yeniden başlatıp şifrelemeyi zorunlu kıl".to_owned(),
+                        ),
+                    },
+                ],
+            },
+        )
+        .map_err(|err| map_mdm_error(&err))?;
+    directory
+        .upsert_policy(
+            DevicePlatform::Macos,
+            PolicyDocument {
+                version: "2025.10-macos".to_owned(),
+                description: "macOS cihazları için temel güvenlik gereksinimleri".to_owned(),
+                published_at: now,
+                rules: vec![
+                    PolicyRule {
+                        id: "filevault".to_owned(),
+                        statement: "FileVault tüm cihazlarda aktif olmalıdır".to_owned(),
+                        mandatory: true,
+                        remediation: Some("FileVault profilini yeniden uygula".to_owned()),
+                    },
+                    PolicyRule {
+                        id: "gatekeeper".to_owned(),
+                        statement: "Gatekeeper yalnızca imzalı uygulamalara izin vermelidir"
+                            .to_owned(),
+                        mandatory: true,
+                        remediation: Some("Yetkisiz uygulamaları kaldır".to_owned()),
+                    },
+                    PolicyRule {
+                        id: "agent-health".to_owned(),
+                        statement: "Aunsorm MDM ajanı 30 dakikadan uzun süre çevrimdışı kalamaz"
+                            .to_owned(),
+                        mandatory: true,
+                        remediation: Some("Ajan servislerini yeniden başlat".to_owned()),
+                    },
+                ],
+            },
+        )
+        .map_err(|err| map_mdm_error(&err))?;
+    directory
+        .upsert_policy(
+            DevicePlatform::Windows,
+            PolicyDocument {
+                version: "2025.10-windows".to_owned(),
+                description: "Windows cihazları için temel güvenlik gereksinimleri".to_owned(),
+                published_at: now,
+                rules: vec![
+                    PolicyRule {
+                        id: "bitlocker".to_owned(),
+                        statement: "BitLocker koruması devre dışı bırakılamaz".to_owned(),
+                        mandatory: true,
+                        remediation: Some("TPM kilidini uzaktan yeniden anahtarla".to_owned()),
+                    },
+                    PolicyRule {
+                        id: "secure-boot".to_owned(),
+                        statement: "Secure Boot her zaman aktif olmalıdır".to_owned(),
+                        mandatory: true,
+                        remediation: Some("BIOS yapılandırmasını doğrula".to_owned()),
+                    },
+                    PolicyRule {
+                        id: "defender".to_owned(),
+                        statement: "Microsoft Defender gerçek zamanlı koruması açık kalmalıdır"
+                            .to_owned(),
+                        mandatory: true,
+                        remediation: Some("Koruma politikalarını yeniden uygula".to_owned()),
+                    },
+                ],
+            },
+        )
+        .map_err(|err| map_mdm_error(&err))?;
+    directory
+        .upsert_policy(
+            DevicePlatform::Linux,
+            PolicyDocument {
+                version: "2025.10-linux".to_owned(),
+                description: "Linux cihazları için temel güvenlik gereksinimleri".to_owned(),
+                published_at: now,
+                rules: vec![
+                    PolicyRule {
+                        id: "disk-encryption".to_owned(),
+                        statement: "LUKS tam disk şifrelemesi zorunludur".to_owned(),
+                        mandatory: true,
+                        remediation: Some("Initramfs politikasını yeniden oluştur".to_owned()),
+                    },
+                    PolicyRule {
+                        id: "secure-boot".to_owned(),
+                        statement: "Secure Boot devre dışı bırakılamaz".to_owned(),
+                        mandatory: true,
+                        remediation: Some("EFI imza paketini yenile".to_owned()),
+                    },
+                    PolicyRule {
+                        id: "agent-service".to_owned(),
+                        statement: "Aunsorm ajan servisi systemd üzerinden etkin olmalıdır"
+                            .to_owned(),
+                        mandatory: true,
+                        remediation: Some("systemctl ile servisi yeniden başlat".to_owned()),
+                    },
+                ],
+            },
+        )
+        .map_err(|err| map_mdm_error(&err))?;
+    Ok(directory)
+}
+
 pub struct ServerState {
     issuer: String,
     audience: String,
@@ -472,6 +658,7 @@ pub struct ServerState {
     sfu_store: SfuStore,
     transparency_tree: RwLock<KeyTransparencyLog>,
     transparency_ledger: TransparencyLedger,
+    mdm: MdmDirectory,
 }
 
 impl ServerState {
@@ -512,6 +699,7 @@ impl ServerState {
             transparency_backend,
             vec![LedgerTransparencyEvent::key_published(public_jwk)],
         )?;
+        let mdm = default_mdm_directory()?;
         Ok(Self {
             issuer,
             audience,
@@ -525,6 +713,7 @@ impl ServerState {
             sfu_store: SfuStore::new(),
             transparency_tree: RwLock::new(transparency_tree),
             transparency_ledger,
+            mdm,
         })
     }
 
@@ -554,6 +743,20 @@ impl ServerState {
 
     pub const fn strict(&self) -> bool {
         self.strict
+    }
+
+    pub const fn mdm_directory(&self) -> &MdmDirectory {
+        &self.mdm
+    }
+
+    /// Returns the number of devices registered in the in-memory MDM directory.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`ServerError::Configuration`] when the underlying directory
+    /// locks are poisoned.
+    pub fn registered_device_count(&self) -> Result<usize, ServerError> {
+        self.mdm.device_count().map_err(|err| map_mdm_error(&err))
     }
 
     pub async fn register_auth_request(

@@ -1,8 +1,9 @@
 use std::borrow::ToOwned;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::{get, post};
@@ -21,6 +22,10 @@ use tracing::{info, warn};
 
 use aunsorm_core::transparency::TransparencyRecord;
 use aunsorm_jwt::{Audience, Claims, JwtError, VerificationOptions};
+use aunsorm_mdm::{
+    DeviceCertificatePlan, DevicePlatform, DeviceRecord, EnrollmentRequest, MdmError,
+    PolicyDocument,
+};
 
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
@@ -39,6 +44,9 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/metrics", get(metrics))
         .route("/sfu/context", post(create_sfu_context))
         .route("/sfu/context/step", post(next_sfu_step))
+        .route("/mdm/register", post(register_device))
+        .route("/mdm/policy/:platform", get(fetch_policy))
+        .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
         .route("/transparency/tree", get(transparency_tree))
         .with_state(state)
 }
@@ -468,8 +476,11 @@ async fn metrics(State(state): State<Arc<ServerState>>) -> Result<Response, ApiE
         .await
         .map_err(|err| ApiError::server_error(format!("Metrik hesaplanamadı: {err}")))?;
     let sfu_contexts = state.sfu_context_count(now).await;
+    let mdm_devices = state
+        .registered_device_count()
+        .map_err(|err| ApiError::server_error(format!("Metrik hesaplanamadı: {err}")))?;
     let body = format!(
-        "# HELP aunsorm_pending_auth_requests Bekleyen PKCE yetkilendirme istekleri\n# TYPE aunsorm_pending_auth_requests gauge\naunsorm_pending_auth_requests {pending}\n# HELP aunsorm_active_tokens Aktif erişim belirteci sayısı\n# TYPE aunsorm_active_tokens gauge\naunsorm_active_tokens {active}\n# HELP aunsorm_sfu_contexts Aktif SFU oturum bağlamı sayısı\n# TYPE aunsorm_sfu_contexts gauge\naunsorm_sfu_contexts {sfu_contexts}\n"
+        "# HELP aunsorm_pending_auth_requests Bekleyen PKCE yetkilendirme istekleri\n# TYPE aunsorm_pending_auth_requests gauge\naunsorm_pending_auth_requests {pending}\n# HELP aunsorm_active_tokens Aktif erişim belirteci sayısı\n# TYPE aunsorm_active_tokens gauge\naunsorm_active_tokens {active}\n# HELP aunsorm_sfu_contexts Aktif SFU oturum bağlamı sayısı\n# TYPE aunsorm_sfu_contexts gauge\naunsorm_sfu_contexts {sfu_contexts}\n# HELP aunsorm_mdm_registered_devices Kayıtlı MDM cihazı sayısı\n# TYPE aunsorm_mdm_registered_devices gauge\naunsorm_mdm_registered_devices {mdm_devices}\n"
     );
     let mut response = Response::new(body.into());
     *response.status_mut() = StatusCode::OK;
@@ -478,6 +489,99 @@ async fn metrics(State(state): State<Arc<ServerState>>) -> Result<Response, ApiE
         HeaderValue::from_static("text/plain; version=0.0.4"),
     );
     Ok(response)
+}
+
+#[derive(Debug, Deserialize)]
+struct RegisterDeviceRequest {
+    device_id: String,
+    owner: String,
+    platform: String,
+    #[serde(default)]
+    display_name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct DeviceEnrollmentResponse {
+    device: DeviceRecord,
+    policy: PolicyDocument,
+    certificate: DeviceCertificatePlan,
+}
+
+async fn register_device(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<RegisterDeviceRequest>,
+) -> Result<Json<DeviceEnrollmentResponse>, ApiError> {
+    if payload.device_id.trim().is_empty() {
+        return Err(ApiError::invalid_request("device_id boş olamaz"));
+    }
+    if payload.owner.trim().is_empty() {
+        return Err(ApiError::invalid_request("owner boş olamaz"));
+    }
+    let platform = DevicePlatform::from_str(&payload.platform)
+        .map_err(|err| ApiError::invalid_request(format!("platform değeri geçersiz: {err}")))?;
+    let enrollment = EnrollmentRequest {
+        device_id: payload.device_id,
+        owner: payload.owner,
+        display_name: payload.display_name,
+        platform: platform.clone(),
+    };
+    let device = state
+        .mdm_directory()
+        .register_device(enrollment)
+        .map_err(|err| match err {
+            MdmError::AlreadyRegistered(id) => {
+                ApiError::invalid_request(format!("cihaz zaten kayıtlı: {id}"))
+            }
+            MdmError::InvalidIdentifier(field) => {
+                ApiError::invalid_request(format!("{field} değeri geçersiz"))
+            }
+            other => ApiError::server_error(format!("MDM kaydı tamamlanamadı: {other}")),
+        })?;
+    let policy = state
+        .mdm_directory()
+        .policy(&platform)
+        .map_err(|err| ApiError::server_error(format!("MDM politikası okunamadı: {err}")))?
+        .ok_or_else(|| ApiError::server_error("İlgili platform için politika bulunamadı"))?;
+    let certificate = state
+        .mdm_directory()
+        .device_certificate_plan(&device.device_id)
+        .map_err(|err| ApiError::server_error(format!("Sertifika planı hesaplanamadı: {err}")))?
+        .ok_or_else(|| ApiError::server_error("Sertifika planı hesaplanamadı"))?;
+    Ok(Json(DeviceEnrollmentResponse {
+        device,
+        policy,
+        certificate,
+    }))
+}
+
+async fn fetch_policy(
+    Path(platform): Path<String>,
+    State(state): State<Arc<ServerState>>,
+) -> Result<Json<PolicyDocument>, ApiError> {
+    let platform = DevicePlatform::from_str(&platform)
+        .map_err(|err| ApiError::invalid_request(format!("platform değeri geçersiz: {err}")))?;
+    let policy = state
+        .mdm_directory()
+        .policy(&platform)
+        .map_err(|err| ApiError::server_error(format!("MDM politikası okunamadı: {err}")))?
+        .ok_or_else(|| ApiError::not_found("Politika bulunamadı"))?;
+    Ok(Json(policy))
+}
+
+async fn fetch_certificate_plan(
+    Path(device_id): Path<String>,
+    State(state): State<Arc<ServerState>>,
+) -> Result<Json<DeviceCertificatePlan>, ApiError> {
+    let trimmed = device_id.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::invalid_request("device_id boş olamaz"));
+    }
+    let plan = state
+        .mdm_directory()
+        .device_certificate_plan(trimmed)
+        .map_err(|err| ApiError::server_error(format!("Sertifika planı hesaplanamadı: {err}")))?
+        .ok_or_else(|| ApiError::not_found("Cihaz kaydı bulunamadı"))?;
+    Ok(Json(plan))
 }
 
 #[derive(Debug, Deserialize)]

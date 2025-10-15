@@ -1,0 +1,15 @@
+[package]
+name = "aunsorm-mdm"
+version = "0.4.1"
+edition = "2021"
+rust-version = "1.76"
+license = "Apache-2.0"
+description = "Mobile Device Management foundation for the Aunsorm security toolkit."
+readme = "README.md"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
