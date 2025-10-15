@@ -159,6 +159,8 @@ Ed25519 self-signed cert; KeyUsage: digital_signature=true, content_commitment=t
 
 Calib OID (AUNSORM_OID_BASE .1), Policy OID (.2.1), CPS URI’leri filtreleme ve isteğe bağlı HTTP erişilebilirlik kontrolü.
 
+Revize: Identity Agent, `aunsorm-x509` Certificate Authority (CA) kök/ara sertifika imzalama otomasyonunu planlayıp teslim etmelidir (bkz. README.md Sprint 2 revizyon maddesi).
+
 Opsiyonel PQ işareti: pq_jws_sign(der) -> Option<PqMark> (liboqs varsa).
 
 9) CLI (cli)
