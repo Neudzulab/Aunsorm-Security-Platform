@@ -48,6 +48,14 @@ const PATH_KEYS = [
   'AUNSORM_INTEGRATIONS_PATH',
 ];
 
+const LOOPBACK_HOST_ALIASES = new Set([
+  'localhost.localdomain',
+  'localhost6',
+  'localhost6.localdomain6',
+  'ip6-localhost',
+  'ip6-loopback',
+]);
+
 type FileReader = (filePath: string) => string;
 
 const defaultReadFile: FileReader = (filePath) => readFileSync(filePath, 'utf8');
@@ -408,6 +416,10 @@ function isLoopbackHost(value: string | undefined): boolean {
   const hostname = extractHostname(value);
   if (!hostname) {
     return false;
+  }
+
+  if (LOOPBACK_HOST_ALIASES.has(hostname)) {
+    return true;
   }
 
   if (hostname === 'localhost' || hostname.endsWith('.localhost')) {
