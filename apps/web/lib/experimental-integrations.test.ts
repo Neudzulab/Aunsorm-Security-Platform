@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   resolveAunsormBaseUrl,
   resolveAunsormBaseUrlDetails,
+  resolveAunsormBaseUrlDiagnostics,
 } from './experimental-integrations.js';
 
 describe('resolveAunsormBaseUrl', () => {
@@ -693,5 +694,85 @@ describe('resolveAunsormBaseUrlDetails', () => {
         pathKey: 'AUNSORM_BASE_PATH',
       },
     });
+  });
+});
+
+describe('resolveAunsormBaseUrlDiagnostics', () => {
+  it('returns diagnostics without warnings when a single override is used', () => {
+    const env = {
+      AUNSORM_BASE_URL: 'https://example.invalid/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    const diagnostics = resolveAunsormBaseUrlDiagnostics(env);
+    expect(diagnostics.baseUrl).toBe('https://example.invalid/custom');
+    expect(diagnostics.origin).toBe('https://example.invalid');
+    expect(diagnostics.path).toBe('/custom');
+    expect(diagnostics.warnings).toEqual([]);
+  });
+
+  it('warns when domain/path overrides are ignored in favour of direct overrides', () => {
+    const env = {
+      AUNSORM_BASE_URL: 'https://example.invalid/custom',
+      AUNSORM_BASE_DOMAIN: 'api.aunsorm.dev',
+      AUNSORM_BASE_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    const diagnostics = resolveAunsormBaseUrlDiagnostics(env);
+    expect(diagnostics.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message:
+            'Ignored domain/path base URL environment variables because a direct base URL override is configured.',
+          keys: expect.arrayContaining(['AUNSORM_BASE_DOMAIN', 'AUNSORM_BASE_PATH']),
+        }),
+      ]),
+    );
+  });
+
+  it('warns when file-based overrides shadow direct values', () => {
+    const env = {
+      AUNSORM_BASE_URL_FILE: '/secrets/base-url',
+      AUNSORM_BASE_URL: 'https://ignored.invalid/should-not-apply',
+      AUNSORM_BASE_DOMAIN: 'api.aunsorm.dev',
+    } satisfies NodeJS.ProcessEnv;
+
+    const readStub = vi.fn(() => 'https://file.example.invalid/custom');
+    const diagnostics = resolveAunsormBaseUrlDiagnostics(env, readStub);
+
+    expect(diagnostics.baseUrl).toBe('https://file.example.invalid/custom');
+    expect(diagnostics.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message:
+            'Ignored direct base URL environment variables because a base URL file override is configured.',
+          keys: ['AUNSORM_BASE_URL'],
+        }),
+        expect.objectContaining({
+          message:
+            'Ignored domain/path base URL environment variables because a base URL file override is configured.',
+          keys: ['AUNSORM_BASE_DOMAIN'],
+        }),
+      ]),
+    );
+  });
+
+  it('warns about conflicting domain overrides', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'api.aunsorm.dev',
+      VERCEL_URL: 'preview-aunsorm.vercel.app',
+    } satisfies NodeJS.ProcessEnv;
+
+    const diagnostics = resolveAunsormBaseUrlDiagnostics(env);
+
+    expect(diagnostics.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message:
+            'Conflicting domain override environment variables detected; ensure only one is set.',
+          keys: ['AUNSORM_BASE_DOMAIN', 'VERCEL_URL'],
+        }),
+      ]),
+    );
   });
 });
