@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/acme",
     "crates/cli",
     "crates/core",
     "crates/packet",
@@ -53,3 +54,6 @@ sysinfo = "0.29"
 aes-siv = { version = "0.7", default-features = false, features = ["alloc"] }
 hpke = { version = "0.11", default-features = false, features = ["alloc", "std", "x25519"] }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
+ring = "0.17"
+rsa = "0.9.8"
+url = "2.5"

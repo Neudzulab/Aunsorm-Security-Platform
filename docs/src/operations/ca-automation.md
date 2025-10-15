@@ -64,8 +64,9 @@ Kitaplık tarafında `aunsorm-x509`:
 1. **Profil Tanımı:** YAML/JSON profil dosyası mdBook'taki örnek ile uyumlu
    olacak. CLI `ca init` komutu bu profili doğrular.
 2. **Anahtar Hazırlığı:**
-   - Kök: Çevrimdışı ortamda üretilir, `zeroize` ile bellek temizliği
-     sağlanır, imza sadece onaylı oturumlarda yapılır.
+   - Kök: Çevrimdışı ortamda (Ed25519 varsayılan, RSA 2048/4096 opsiyonlu)
+     üretilir, `zeroize` ile bellek temizliği sağlanır, imza sadece onaylı
+     oturumlarda yapılır.
    - Ara: Seçilen KMS sağlayıcısında `Ed25519` anahtar çifti oluşturulur;
      `aunsorm-kms` API'leri ile kimlik doğrulaması yapılır.
 3. **CSR Oluşturma:** `aunsorm-x509` `CaAutomationProfile` kullanarak CSR

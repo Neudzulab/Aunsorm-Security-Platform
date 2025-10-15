@@ -7,10 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned for v0.4.3 (Q4 2025)
-- RSA 2048/4096 key generation support with `ring` crate integration
-- Full `--algorithm` parameter support in CLI (ed25519, rsa2048, rsa4096)
-- Windows and legacy system compatibility improvements
+### Added
+- RSA 2048/4096 anahtar üretimi `ring` entegrasyonu ile birlikte etkinleştirildi.
+- `aunsorm-cli x509` komutları için `--algorithm` seçeneği (ed25519, rsa2048, rsa4096)
+  tam destekle sunuldu.
+- `aunsorm-x509` için RSA zincir doğrulama testleri ve Ed25519/RSA kıyaslaması yapan
+  Criterion benchmark'ları eklendi.
+- `aunsorm-acme` crate'i ACME directory uç noktalarını ayrıştırmak ve doğrulamak için
+  tip güvenli veri modelleri sağlıyor.
+
+### Changed
+- CA otomasyon dokümantasyonu ve kimlik bileşeni açıklamaları RSA desteğini
+  yansıtacak şekilde güncellendi.
 
 ### Planned for v0.5.0 (Q1 2026)
 - ACME v2 protocol client implementation (Let's Encrypt integration)

@@ -19,12 +19,14 @@ Aunsorm, end-to-end encryption (E2EE), post-quantum cryptography (PQC), JWT toke
 ```bash
 # Root CA oluştur
 aunsorm-cli x509 ca init --profile ca-profile.yaml \
-  --cert-out root-ca.crt --key-out root-ca.key
+  --cert-out root-ca.crt --key-out root-ca.key \
+  --algorithm rsa4096
 
 # Server sertifikası imzala
 aunsorm-cli x509 ca sign-server \
   --ca-cert root-ca.crt --ca-key root-ca.key \
-  --hostname example.com --cert-out server.crt --key-out server.key
+  --hostname example.com --cert-out server.crt --key-out server.key \
+  --algorithm rsa2048
 ```
 
 #### 🛡️ Post-Quantum Cryptography (PQC)
@@ -260,11 +262,13 @@ Internal servisler için kendi CA'nızı kurun:
 ```bash
 # Root CA oluştur
 aunsorm-cli x509 ca init --profile internal-ca.yaml \
-  --cert-out /etc/pki/root-ca.crt --key-out /etc/pki/root-ca.key
+  --cert-out /etc/pki/root-ca.crt --key-out /etc/pki/root-ca.key \
+  --algorithm rsa4096
 
 # Microservice sertifikaları
 aunsorm-cli x509 ca sign-server --ca-cert /etc/pki/root-ca.crt \
-  --hostname api.internal --cert-out api.crt --key-out api.key
+  --hostname api.internal --cert-out api.crt --key-out api.key \
+  --algorithm rsa2048
 ```
 
 ### 2. Let's Encrypt Automation (v0.5.0)

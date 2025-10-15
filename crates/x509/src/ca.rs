@@ -59,10 +59,14 @@
 
 use std::net::IpAddr;
 
+use pem::Pem;
+use rand_core::OsRng;
 use rcgen::{
     BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
     KeyUsagePurpose, SignatureAlgorithm, SigningKey,
 };
+use rsa::pkcs8::EncodePrivateKey;
+use rsa::RsaPrivateKey;
 use time::{Duration, OffsetDateTime};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
@@ -94,18 +98,23 @@ impl KeyAlgorithm {
         match self {
             Self::Ed25519 => KeyPair::generate_for(&rcgen::PKCS_ED25519)
                 .map_err(|e| X509Error::KeyGeneration(e.to_string())),
-            Self::Rsa2048 => KeyPair::generate_for(&rcgen::PKCS_RSA_SHA256)
-                .map_err(|e| X509Error::KeyGeneration(e.to_string())),
-            Self::Rsa4096 => {
-                // rcgen uses default 2048 for RSA, we need to generate 4096 manually
-                use rcgen::KeyPair;
-                let alg = &rcgen::PKCS_RSA_SHA256;
-                // Note: rcgen 0.13 doesn't expose bit length, using 2048 for now
-                // TODO: Upgrade to rcgen 0.14+ for 4096-bit support
-                KeyPair::generate_for(alg).map_err(|e| X509Error::KeyGeneration(e.to_string()))
-            }
+            Self::Rsa2048 => generate_rsa_keypair(2048),
+            Self::Rsa4096 => generate_rsa_keypair(4096),
         }
     }
+}
+
+fn generate_rsa_keypair(bits: usize) -> Result<KeyPair, X509Error> {
+    let mut rng = OsRng;
+    let private_key = RsaPrivateKey::new(&mut rng, bits)
+        .map_err(|err| X509Error::KeyGeneration(err.to_string()))?;
+    let pkcs8 = private_key
+        .to_pkcs8_der()
+        .map_err(|err| X509Error::KeyGeneration(err.to_string()))?;
+    let pem = Pem::new("PRIVATE KEY", pkcs8.as_bytes());
+    let pem_encoded = pem::encode(&pem);
+    KeyPair::from_pkcs8_pem_and_sign_algo(&pem_encoded, &rcgen::PKCS_RSA_SHA256)
+        .map_err(|err| X509Error::KeyGeneration(err.to_string()))
 }
 
 /// Parameters for Root CA generation.
@@ -491,6 +500,9 @@ mod tests {
     use super::*;
     use crate::calib_from_text;
     use pem::parse;
+    use rsa::pkcs1::DecodeRsaPublicKey;
+    use rsa::traits::PublicKeyParts;
+    use rsa::RsaPublicKey;
     use std::net::Ipv4Addr;
     use x509_parser::{
         extensions::{GeneralName, ParsedExtension},
@@ -639,6 +651,71 @@ mod tests {
         assert!(server_der
             .windows(server.calibration_id.len())
             .any(|window| window == server.calibration_id.as_bytes()));
+    }
+
+    fn assert_rsa_certificate_chain(key_algorithm: KeyAlgorithm, expected_bits: usize) {
+        let root_calibration = format!("RSA Root Calibration {expected_bits}");
+        let server_calibration = format!("RSA Server Calibration {expected_bits}");
+        let root_params = RootCaParams {
+            common_name: "RSA Root CA",
+            org_salt: b"rsa-root-salt",
+            calibration_text: root_calibration.as_str(),
+            validity_days: 3650,
+            cps_uris: &[],
+            policy_oids: &[],
+            key_algorithm: Some(key_algorithm),
+        };
+        let root = generate_root_ca(&root_params).expect("generate RSA root");
+        let server_params = ServerCertParams {
+            hostname: "rsa.example.com",
+            org_salt: b"rsa-server-salt",
+            calibration_text: server_calibration.as_str(),
+            ca_cert_pem: &root.certificate_pem,
+            ca_key_pem: &root.private_key_pem,
+            validity_days: 825,
+            extra_dns: &[],
+            extra_ips: &[],
+            key_algorithm: Some(key_algorithm),
+        };
+        let server = sign_server_cert(&server_params).expect("sign RSA server");
+
+        let root_der = parse(root.certificate_pem.clone())
+            .expect("root pem")
+            .contents()
+            .to_vec();
+        let server_der = parse(server.certificate_pem.clone())
+            .expect("server pem")
+            .contents()
+            .to_vec();
+        let (_, root_cert) = X509Certificate::from_der(&root_der).expect("root der");
+        let (_, server_cert) = X509Certificate::from_der(&server_der).expect("server der");
+
+        root_cert.verify_signature(None).expect("root self-signed");
+        server_cert
+            .verify_signature(Some(root_cert.public_key()))
+            .expect("server signature");
+
+        let root_public =
+            RsaPublicKey::from_pkcs1_der(root_cert.public_key().subject_public_key.data.as_ref())
+                .expect("root public");
+        assert_eq!(root_public.n().bits(), expected_bits);
+
+        let server_public =
+            RsaPublicKey::from_pkcs1_der(server_cert.public_key().subject_public_key.data.as_ref())
+                .expect("server public");
+        assert_eq!(server_public.n().bits(), expected_bits);
+
+        assert!(!root.calibration_id.is_empty());
+        assert!(!server.calibration_id.is_empty());
+        assert!(server.private_key_pem.contains("BEGIN PRIVATE KEY"));
+    }
+
+    #[test]
+    fn rsa_certificate_chains_validate() {
+        assert_rsa_certificate_chain(KeyAlgorithm::Rsa2048, 2048);
+        if std::env::var_os("AUNSORM_TEST_RSA4096").is_some() {
+            assert_rsa_certificate_chain(KeyAlgorithm::Rsa4096, 4096);
+        }
     }
 
     #[test]

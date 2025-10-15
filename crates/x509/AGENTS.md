@@ -1,7 +1,8 @@
 # aunsorm-x509 Ajanı Rehberi
 
-- Tüm sertifikalar Ed25519 (EdDSA) ile imzalanmalı ve deterministik
-  seri numarası üretimi sağlanmalıdır.
+- Sertifikalar varsayılan olarak Ed25519 (EdDSA) ile üretilmeli; legacy
+  uyumluluk için RSA 2048/4096 anahtarları desteklenmelidir. Her iki
+  algoritma için deterministik seri numarası üretimi korunmalıdır.
 - EXTERNAL kalibrasyon bağlamı sertifika uzantılarında JSON olarak
   raporlanmalı; verinin içerisinde kalibrasyon kimliği ve fingerprint'i
   bulunmalıdır.

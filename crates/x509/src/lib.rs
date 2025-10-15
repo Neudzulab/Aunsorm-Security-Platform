@@ -3,7 +3,7 @@
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 #![allow(clippy::module_name_repetitions)]
 
-//! Ed25519 tabanlı X.509 sertifika üretim yardımcıları.
+//! Ed25519 ve RSA tabanlı X.509 sertifika üretim yardımcıları.
 
 pub mod automation;
 pub mod ca;
@@ -221,7 +221,8 @@ pub(crate) fn calibration_extension_from_parts(
     Ok(CustomExtension::from_oid_content(oid, json))
 }
 
-/// Ed25519 özel anahtar PEM içeriğinden anahtar kimliği (SHA-256) üretir.
+/// PEM kodlu özel anahtardan (Ed25519 veya RSA) anahtar kimliği (SHA-256)
+/// üretir.
 ///
 /// # Errors
 ///

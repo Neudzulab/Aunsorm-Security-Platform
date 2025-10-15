@@ -767,6 +767,9 @@ struct X509CaInitArgs {
     /// Kök CA özel anahtar çıktısı (PEM)
     #[arg(long, value_name = "PATH")]
     key_out: PathBuf,
+    /// Anahtar algoritması (ed25519, rsa2048, rsa4096)
+    #[arg(long, value_enum, default_value = "ed25519")]
+    algorithm: KeyAlgorithmArg,
     /// JSON özet çıktısı (stdout için `-` kullanın)
     #[arg(long, value_name = "PATH")]
     summary_out: Option<PathBuf>,
@@ -885,6 +888,16 @@ impl KeyAlgorithmArg {
 impl Default for KeyAlgorithmArg {
     fn default() -> Self {
         Self::Ed25519
+    }
+}
+
+impl std::fmt::Display for KeyAlgorithmArg {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Ed25519 => "ed25519",
+            Self::Rsa2048 => "rsa2048",
+            Self::Rsa4096 => "rsa4096",
+        })
     }
 }
 
@@ -2586,7 +2599,7 @@ fn handle_x509_ca_init(args: &X509CaInitArgs) -> CliResult<()> {
         validity_days: root_section.validity_days,
         cps_uris: &root_section.cps_uris,
         policy_oids: &root_section.policy_oids,
-        key_algorithm: None, // Use default (Ed25519)
+        key_algorithm: Some(args.algorithm.to_key_algorithm()),
     };
     let cert = generate_root_ca(&params)?;
     write_text_file(&args.cert_out, &cert.certificate_pem)?;
@@ -2637,9 +2650,10 @@ fn handle_x509_ca_init(args: &X509CaInitArgs) -> CliResult<()> {
         .map(|path| format!(" | bundle={}", path.display()))
         .unwrap_or_default();
     let message = format!(
-        "x509 ca init: profile={} | cn={} | calib_id={} | serial={} | key_id={} | cert={} | key={}{}",
+        "x509 ca init: profile={} | cn={} | algorithm={} | calib_id={} | serial={} | key_id={} | cert={} | key={}{}",
         args.profile.display(),
         root_section.common_name,
+        args.algorithm,
         cert.calibration_id,
         report.serial_hex,
         report.key_id,
@@ -2818,12 +2832,13 @@ fn handle_x509_ca_sign_server(args: &X509CaSignServerArgs) -> CliResult<()> {
         )
     };
     let message = format!(
-        "x509 ca sign-server: hostname={} | ca={} | cert={} | key={} | validity_days={} | calib_id={}{}{}",
+        "x509 ca sign-server: hostname={} | ca={} | cert={} | key={} | validity_days={} | algorithm={} | calib_id={}{}{}",
         args.hostname,
         args.ca_cert.display(),
         args.cert_out.display(),
         args.key_out.display(),
         args.validity_days,
+        args.algorithm,
         cert.calibration_id,
         dns_fragment,
         ip_fragment,
@@ -3644,6 +3659,7 @@ intermediates:
             profile: profile_path.clone(),
             cert_out: root_cert.clone(),
             key_out: root_key.clone(),
+            algorithm: KeyAlgorithmArg::Ed25519,
             summary_out: Some(init_summary.clone()),
             bundle_out: Some(bundle_path.clone()),
         };
