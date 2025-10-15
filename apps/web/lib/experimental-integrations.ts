@@ -60,6 +60,86 @@ type FileReader = (filePath: string) => string;
 
 const defaultReadFile: FileReader = (filePath) => readFileSync(filePath, 'utf8');
 
+interface EnvEntry {
+  key: string;
+  raw: string | undefined;
+  trimmed: string | undefined;
+  hasValue: boolean;
+}
+
+interface WarningCandidate {
+  message: string;
+  keys: string[];
+}
+
+function snapshotGroup(keys: readonly string[], env: NodeJS.ProcessEnv): EnvEntry[] {
+  return keys.map((key) => {
+    const raw = env[key];
+
+    if (raw === undefined || raw === null) {
+      return { key, raw: undefined, trimmed: undefined, hasValue: false };
+    }
+
+    const trimmed = raw.trim();
+    return {
+      key,
+      raw,
+      trimmed,
+      hasValue: trimmed.length > 0,
+    };
+  });
+}
+
+function sortKeys(keys: string[]): string[] {
+  return Array.from(new Set(keys)).sort();
+}
+
+function conflictingValuesWarning(
+  description: string,
+  entries: EnvEntry[],
+): WarningCandidate | undefined {
+  const active = entries.filter((entry) => entry.hasValue);
+
+  if (active.length < 2) {
+    return undefined;
+  }
+
+  const byValue = new Map<string, string[]>();
+
+  for (const entry of active) {
+    const trimmed = entry.trimmed ?? '';
+    const bucket = byValue.get(trimmed);
+    if (bucket) {
+      bucket.push(entry.key);
+    } else {
+      byValue.set(trimmed, [entry.key]);
+    }
+  }
+
+  if (byValue.size <= 1) {
+    return undefined;
+  }
+
+  return {
+    message: `Conflicting ${description} detected; ensure only one is set.`,
+    keys: sortKeys(active.map((entry) => entry.key)),
+  };
+}
+
+function ignoredKeysWarning(
+  message: string,
+  keys: string[],
+): WarningCandidate | undefined {
+  if (keys.length === 0) {
+    return undefined;
+  }
+
+  return {
+    message,
+    keys: sortKeys(keys),
+  };
+}
+
 interface HostPortParts {
   host: string;
   port?: string;
@@ -525,6 +605,15 @@ export interface AunsormBaseUrlDetails {
   source: AunsormBaseUrlSource;
 }
 
+export interface AunsormBaseUrlWarning {
+  message: string;
+  keys: string[];
+}
+
+export interface AunsormBaseUrlDiagnostics extends AunsormBaseUrlDetails {
+  warnings: AunsormBaseUrlWarning[];
+}
+
 export function resolveAunsormBaseUrlDetails(
   env: NodeJS.ProcessEnv = process.env,
   readFile: FileReader = defaultReadFile,
@@ -600,6 +689,126 @@ export function resolveAunsormBaseUrlDetails(
       kind: 'default',
       nodeEnv,
     },
+  };
+}
+
+export function resolveAunsormBaseUrlDiagnostics(
+  env: NodeJS.ProcessEnv = process.env,
+  readFile: FileReader = defaultReadFile,
+): AunsormBaseUrlDiagnostics {
+  const details = resolveAunsormBaseUrlDetails(env, readFile);
+
+  const directFileEntries = snapshotGroup(DIRECT_BASE_URL_FILE_KEYS, env);
+  const directEntries = snapshotGroup(DIRECT_BASE_URL_KEYS, env);
+  const domainEntries = snapshotGroup(DOMAIN_KEYS, env);
+  const pathEntries = snapshotGroup(PATH_KEYS, env);
+
+  const warnings: WarningCandidate[] = [];
+
+  const directFileConflict = conflictingValuesWarning(
+    'base URL file overrides',
+    directFileEntries,
+  );
+  if (directFileConflict) {
+    warnings.push(directFileConflict);
+  }
+
+  const directConflict = conflictingValuesWarning(
+    'direct base URL environment variables',
+    directEntries,
+  );
+  if (directConflict) {
+    warnings.push(directConflict);
+  }
+
+  const domainConflict = conflictingValuesWarning(
+    'domain override environment variables',
+    domainEntries,
+  );
+  if (domainConflict) {
+    warnings.push(domainConflict);
+  }
+
+  const pathConflict = conflictingValuesWarning(
+    'path override environment variables',
+    pathEntries,
+  );
+  if (pathConflict) {
+    warnings.push(pathConflict);
+  }
+
+  const setDirectFileKeys = directFileEntries
+    .filter((entry) => entry.raw !== undefined && entry.raw !== null)
+    .map((entry) => entry.key);
+  const setDirectKeys = directEntries
+    .filter((entry) => entry.raw !== undefined && entry.raw !== null)
+    .map((entry) => entry.key);
+  const setDomainKeys = domainEntries
+    .filter((entry) => entry.raw !== undefined && entry.raw !== null)
+    .map((entry) => entry.key);
+  const setPathKeys = pathEntries
+    .filter((entry) => entry.raw !== undefined && entry.raw !== null)
+    .map((entry) => entry.key);
+
+  if (details.source.kind === 'direct-file') {
+    const ignoredDirect = ignoredKeysWarning(
+      'Ignored direct base URL environment variables because a base URL file override is configured.',
+      setDirectKeys,
+    );
+    if (ignoredDirect) {
+      warnings.push(ignoredDirect);
+    }
+
+    const ignoredDomainPath = ignoredKeysWarning(
+      'Ignored domain/path base URL environment variables because a base URL file override is configured.',
+      [...setDomainKeys, ...setPathKeys],
+    );
+    if (ignoredDomainPath) {
+      warnings.push(ignoredDomainPath);
+    }
+  } else if (details.source.kind === 'direct') {
+    const ignoredDomainPath = ignoredKeysWarning(
+      'Ignored domain/path base URL environment variables because a direct base URL override is configured.',
+      [...setDomainKeys, ...setPathKeys],
+    );
+    if (ignoredDomainPath) {
+      warnings.push(ignoredDomainPath);
+    }
+  } else if (details.source.kind === 'domain-path') {
+    const ignoredDirectFile = ignoredKeysWarning(
+      'Ignored base URL file overrides because domain/path environment variables are in use.',
+      setDirectFileKeys,
+    );
+    if (ignoredDirectFile) {
+      warnings.push(ignoredDirectFile);
+    }
+
+    const ignoredDirect = ignoredKeysWarning(
+      'Ignored direct base URL environment variables because domain/path environment variables are in use.',
+      setDirectKeys,
+    );
+    if (ignoredDirect) {
+      warnings.push(ignoredDirect);
+    }
+  }
+
+  const uniqueWarnings = new Map<string, WarningCandidate>();
+
+  for (const warning of warnings) {
+    const key = `${warning.message}::${warning.keys.join('|')}`;
+    if (!uniqueWarnings.has(key)) {
+      uniqueWarnings.set(key, warning);
+    }
+  }
+
+  const finalWarnings: AunsormBaseUrlWarning[] = Array.from(uniqueWarnings.values()).map((warning) => ({
+    message: warning.message,
+    keys: warning.keys,
+  }));
+
+  return {
+    ...details,
+    warnings: finalWarnings,
   };
 }
 
