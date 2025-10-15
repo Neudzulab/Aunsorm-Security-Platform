@@ -3,7 +3,7 @@ name = "aunsorm-x509"
 version = "0.4.1"
 edition = "2021"
 license = "Apache-2.0"
-description = "Ed25519 X.509 utilities with calibration bindings for Aunsorm"
+description = "Ed25519 and RSA X.509 utilities with calibration bindings for Aunsorm"
 rust-version = "1.76"
 
 [dependencies]
@@ -17,7 +17,10 @@ hex = { workspace = true }
 aunsorm-core = { path = "../core" }
 rcgen = { version = "0.14", default-features = true, features = ["x509-parser"] }
 time = { version = "0.3", features = ["formatting"] }
-x509-parser = "0.16"
+x509-parser = { version = "0.16", features = ["verify"] }
 pem = "3"
+ring = { workspace = true }
+rsa = { workspace = true }
+rand_core = { workspace = true }
 
 [dev-dependencies]

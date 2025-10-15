@@ -9,10 +9,15 @@ Aunsorm bileşenleri dört ana katmana ayrılır:
    - El sıkışma, oturum paketleri ve JTI/Replay engelleyiciler.
    - `SessionStore` üzerinden yeniden kullanım tespitleri.
 3. **Kimlik (`aunsorm-kms`, `aunsorm-jwt`, `aunsorm-x509`):**
-   - Çok sağlayıcılı KMS istemcisi, Ed25519 JWT/X.509 üretimi ve doğrulaması.
+   - Çok sağlayıcılı KMS istemcisi, Ed25519 (varsayılan) ve RSA (opsiyonel)
+     JWT/X.509 üretimi ve doğrulaması.
    - Strict kipte fallback stratejileri ve kid hesaplamaları.
 4. **Platform (`aunsorm-cli`, `aunsorm-server`, `aunsorm-wasm`):**
    - CLI iş akışları, HTTP uçları ve tarayıcı bağlayıcıları.
+5. **ACME (`aunsorm-acme`):**
+   - ACME directory uç noktalarını ayrıştıran veri modelleri ve doğrulama
+     katmanı; gelecekteki nonce, hesap ve domain doğrulama iş akışlarına
+     temel oluşturur.
 
 Bu katmanlar `PLAN.md` ve sprint checklist'leriyle hizalıdır.
 
@@ -37,3 +42,5 @@ Parola -> Argon2id -> KDF Profili -> Anahtar Matrisi
 - Yeni KMS conformance testleri, sağlayıcı yapılandırma hatalarını erken yakalar.
 - Fuzz hedefi `session_store_roundtrip` ile oturum mağazası ve ratchet akışı
   aynı orkestrasyon altında zorlanır.
+- ACME directory ayrıştırıcısı zorunlu uç noktaların eksiksiz olduğunu
+  doğrular ve hatalı meta alanlarını kullanıcı dostu mesajlarla raporlar.

@@ -22,8 +22,9 @@
 - `KmsClient` yapılandırması strict kipte fallback kararlarını açık biçimde uygular.
 - Yeni testler; Azure ve GCP konfigürasyonlarında boş/tekrarlı `key_id` değerlerini
   yakalar ve anlamlı `KmsError::Config` mesajları üretildiğini doğrular.
-- Yerel store senaryoları için soak testi, Ed25519 imzalarının doğruluğunu
-  ve AES-256 anahtar sarma/dalma adımlarını binlerce kez tekrarlar.
+- Yerel store senaryoları için soak testi, Ed25519 ve RSA imzalarının
+  doğruluğunu ve AES-256 anahtar sarma/dalma adımlarını binlerce kez
+  tekrarlar.
 
 ## Platform
 
@@ -33,6 +34,15 @@
 - `aunsorm-server` başlangıçta yayınladığı JWKS anahtarını şeffaflık defterine
   işler ve `/transparency/tree` uç noktası üzerinden Merkle benzeri ağaç
   başlığını JSON olarak sunar.
+
+## ACME
+
+- `aunsorm-acme` crate'i ACME directory uç noktalarını ayrıştırıp doğrulamak
+  için tip güvenli veri modelleri sunar.
+- Zorunlu uç noktalar (newNonce, newAccount, newOrder, revokeCert, keyChange)
+  eksiksiz doğrulanır; opsiyonel alanlar deterministik sırada raporlanır.
+- Meta alanlarındaki Terms of Service ve CAA identity listeleri sonraki
+  hesap oluşturma ve domain doğrulama iş akışlarında yeniden kullanılır.
 
 ## Dokümantasyon ve Gözlemlenebilirlik
 

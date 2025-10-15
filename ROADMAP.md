@@ -39,12 +39,12 @@
 **Amaç:** Windows ve legacy sistemler için tam uyumluluk
 
 **Yapılacaklar:**
-- [ ] `ring` crate dependency ekleme
-- [ ] RSA 2048/4096 key generation implementation
-- [ ] RSA keypair serialization (PEM format)
-- [ ] Test suite: RSA certificate chain validation
-- [ ] Performance benchmarks (Ed25519 vs RSA)
-- [ ] CLI: `--algorithm` parametresi tam çalışır hale getirme
+- [x] `ring` crate dependency ekleme
+- [x] RSA 2048/4096 key generation implementation
+- [x] RSA keypair serialization (PEM format)
+- [x] Test suite: RSA certificate chain validation
+- [x] Performance benchmarks (Ed25519 vs RSA)
+- [x] CLI: `--algorithm` parametresi tam çalışır hale getirme
 
 **Sorumlu Agent:** Cryptography Agent  
 **Tahmini Süre:** 4-6 saat  
@@ -111,7 +111,7 @@
 
 **Yapılacaklar:**
 - [ ] ACME v2 protocol implementation
-  - [ ] Directory endpoint parsing
+  - [x] Directory endpoint parsing
   - [ ] Nonce management
   - [ ] JWS (JSON Web Signature) signing
   - [ ] Account key generation (RSA/ECDSA)
