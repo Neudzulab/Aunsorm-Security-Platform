@@ -16,6 +16,8 @@
 //!     org_salt: b"base64-decoded-salt",
 //!     calibration_text: "MyeOffice Root CA 2025",
 //!     validity_days: 3650,
+//!     cps_uris: &[],
+//!     policy_oids: &[],
 //! };
 //! let root_ca = generate_root_ca(&root_params)?;
 //!
@@ -78,10 +80,44 @@ pub struct RootCaParams<'a> {
     pub calibration_text: &'a str,
     /// Validity period in days.
     pub validity_days: u32,
+    /// CPS URIs.
+    pub cps_uris: &'a [String],
+    /// Policy OIDs.
+    pub policy_oids: &'a [String],
 }
 
 /// Generated Root CA certificate.
 pub struct RootCaCert {
+    /// Certificate PEM.
+    pub certificate_pem: String,
+    /// Private key PEM.
+    pub private_key_pem: String,
+    /// Calibration ID.
+    pub calibration_id: String,
+}
+
+/// Parameters for intermediate CA issuance.
+pub struct IntermediateCaParams<'a> {
+    /// Intermediate common name (CN).
+    pub common_name: &'a str,
+    /// Organization salt for calibration.
+    pub org_salt: &'a [u8],
+    /// Calibration text.
+    pub calibration_text: &'a str,
+    /// Validity period in days.
+    pub validity_days: u32,
+    /// CPS URIs.
+    pub cps_uris: &'a [String],
+    /// Policy OIDs.
+    pub policy_oids: &'a [String],
+    /// Issuer certificate PEM.
+    pub issuer_cert_pem: &'a str,
+    /// Issuer private key PEM.
+    pub issuer_key_pem: &'a str,
+}
+
+/// Issued intermediate CA certificate.
+pub struct IntermediateCaCert {
     /// Certificate PEM.
     pub certificate_pem: String,
     /// Private key PEM.
@@ -148,13 +184,12 @@ pub fn generate_root_ca(params: &RootCaParams<'_>) -> Result<RootCaCert, X509Err
     cert_params.not_after = now + Duration::days(i64::from(params.validity_days));
     cert_params.serial_number = Some(deterministic_serial(&calibration));
 
-    let empty: &[String] = &[];
     let calibration_extension = calibration_extension_from_parts(
         &extension_oid,
         &calibration,
         params.calibration_text,
-        empty,
-        empty,
+        params.cps_uris,
+        params.policy_oids,
     )?;
     cert_params.custom_extensions.push(calibration_extension);
 
@@ -164,6 +199,51 @@ pub fn generate_root_ca(params: &RootCaParams<'_>) -> Result<RootCaCert, X509Err
     Ok(RootCaCert {
         certificate_pem: certificate.pem(),
         private_key_pem: key_pair.serialize_pem(),
+        calibration_id,
+    })
+}
+
+/// Issues an intermediate CA certificate signed by an existing issuer.
+///
+/// # Errors
+///
+/// Returns `X509Error` if certificate signing fails.
+pub fn issue_intermediate_ca(
+    params: &IntermediateCaParams<'_>,
+) -> Result<IntermediateCaCert, X509Error> {
+    let (calibration, calibration_id) = calib_from_text(params.org_salt, params.calibration_text)?;
+    let base_oid =
+        std::env::var("AUNSORM_OID_BASE").unwrap_or_else(|_| DEFAULT_BASE_OID.to_owned());
+    let extension_oid = build_extension_oid(&base_oid, CALIBRATION_EXTENSION_ARC)?;
+
+    let mut cert_params = CertificateParams::new(vec![params.common_name.to_owned()])?;
+    cert_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    cert_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+    cert_params
+        .distinguished_name
+        .push(DnType::CommonName, params.common_name);
+    let now = OffsetDateTime::now_utc();
+    cert_params.not_before = now - Duration::days(1);
+    cert_params.not_after = now + Duration::days(i64::from(params.validity_days));
+    cert_params.serial_number = Some(deterministic_serial(&calibration));
+
+    let calibration_extension = calibration_extension_from_parts(
+        &extension_oid,
+        &calibration,
+        params.calibration_text,
+        params.cps_uris,
+        params.policy_oids,
+    )?;
+    cert_params.custom_extensions.push(calibration_extension);
+
+    let issuer_key = KeyPair::from_pem(params.issuer_key_pem)?;
+    let issuer = Issuer::from_ca_cert_pem(params.issuer_cert_pem, issuer_key)?;
+    let intermediate_key = KeyPair::generate_for(&rcgen::PKCS_ED25519)?;
+    let certificate = cert_params.signed_by(&intermediate_key, &issuer)?;
+
+    Ok(IntermediateCaCert {
+        certificate_pem: certificate.pem(),
+        private_key_pem: intermediate_key.serialize_pem(),
         calibration_id,
     })
 }
@@ -258,6 +338,8 @@ mod tests {
             org_salt: b"test-salt",
             calibration_text: "Test Calibration",
             validity_days: 3650,
+            cps_uris: &[],
+            policy_oids: &[],
         };
 
         let ca = generate_root_ca(&params).expect("generate root CA");
@@ -298,6 +380,8 @@ mod tests {
             org_salt: b"test-salt",
             calibration_text: "Test CA Calibration",
             validity_days: 3650,
+            cps_uris: &[],
+            policy_oids: &[],
         };
         let ca = generate_root_ca(&root_params).expect("generate CA");
 
@@ -386,5 +470,61 @@ mod tests {
         assert!(server_der
             .windows(server.calibration_id.len())
             .any(|window| window == server.calibration_id.as_bytes()));
+    }
+
+    #[test]
+    fn issue_intermediate_ca_produces_valid_chain() {
+        let root_params = RootCaParams {
+            common_name: "Test Root CA",
+            org_salt: b"test-salt",
+            calibration_text: "Root Calibration",
+            validity_days: 3650,
+            cps_uris: &[],
+            policy_oids: &[],
+        };
+        let root = generate_root_ca(&root_params).expect("generate root");
+
+        let issuing_params = IntermediateCaParams {
+            common_name: "Test Issuing CA",
+            org_salt: b"test-salt",
+            calibration_text: "Issuing Calibration",
+            validity_days: 1825,
+            cps_uris: &[],
+            policy_oids: &[],
+            issuer_cert_pem: &root.certificate_pem,
+            issuer_key_pem: &root.private_key_pem,
+        };
+
+        let issuing = issue_intermediate_ca(&issuing_params).expect("issue intermediate");
+        assert!(issuing.certificate_pem.contains("BEGIN CERTIFICATE"));
+        assert!(issuing.private_key_pem.contains("BEGIN PRIVATE KEY"));
+
+        let issuing_der = parse(issuing.certificate_pem.clone())
+            .expect("issuing pem")
+            .contents()
+            .to_vec();
+        let (_, issuing_cert) = X509Certificate::from_der(&issuing_der).expect("issuing");
+        let root_der = parse(root.certificate_pem.clone())
+            .expect("root pem")
+            .contents()
+            .to_vec();
+        let (_, root_cert) = X509Certificate::from_der(&root_der).expect("root");
+
+        assert_eq!(
+            issuing_cert.tbs_certificate.issuer,
+            root_cert.tbs_certificate.subject
+        );
+        let basic_constraints = issuing_cert
+            .extensions()
+            .iter()
+            .find(|ext| matches!(ext.parsed_extension(), ParsedExtension::BasicConstraints(_)))
+            .expect("basic constraints");
+        if let ParsedExtension::BasicConstraints(bc) = basic_constraints.parsed_extension() {
+            assert!(bc.ca);
+        }
+        assert!(!issuing.calibration_id.is_empty());
+        assert!(issuing_der
+            .windows(issuing.calibration_id.len())
+            .any(|window| window == issuing.calibration_id.as_bytes()));
     }
 }

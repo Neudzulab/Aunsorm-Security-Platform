@@ -47,6 +47,12 @@ use aunsorm_pqc::{
     strict::StrictMode,
 };
 use aunsorm_x509::{
+    automation::{CaAutomationProfile, CaBundle, CaBundleEntry},
+    ca::{
+        generate_root_ca, issue_intermediate_ca, IntermediateCaParams as X509IntermediateCaParams,
+        RootCaParams as X509RootCaParams,
+    },
+    compute_key_identifier, deterministic_serial_hex,
     generate_self_signed as generate_self_signed_cert, prepare_local_https_params,
     LocalHttpsCertParams as X509LocalHttpsParams, SelfSignedCertParams as X509SelfSignedParams,
     SubjectAltName as X509SubjectAltName,
@@ -201,6 +207,9 @@ enum X509Commands {
     /// Yerel HTTPS geliştirme sertifikası üret (SAN uzantıları dahil)
     #[command(name = "local-dev")]
     LocalDev(X509LocalDevArgs),
+    /// CA otomasyon komutları
+    #[command(subcommand)]
+    Ca(X509CaCommands),
 }
 
 #[derive(Args)]
@@ -737,6 +746,82 @@ struct X509LocalDevArgs {
     validity_days: u32,
 }
 
+#[derive(Subcommand)]
+enum X509CaCommands {
+    /// Kök CA profilini doğrula ve sertifika üret
+    Init(X509CaInitArgs),
+    /// Ara CA sertifikası üret
+    Issue(X509CaIssueArgs),
+}
+
+#[derive(Args)]
+struct X509CaInitArgs {
+    /// Otomasyon profili dosyası (YAML/JSON)
+    #[arg(long, value_name = "PATH")]
+    profile: PathBuf,
+    /// Kök CA sertifika çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    cert_out: PathBuf,
+    /// Kök CA özel anahtar çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    key_out: PathBuf,
+    /// JSON özet çıktısı (stdout için `-` kullanın)
+    #[arg(long, value_name = "PATH")]
+    summary_out: Option<PathBuf>,
+    /// Güncellenecek CA paketi dosyası (JSON)
+    #[arg(long, value_name = "PATH")]
+    bundle_out: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct X509CaIssueArgs {
+    /// Otomasyon profili dosyası (YAML/JSON)
+    #[arg(long, value_name = "PATH")]
+    profile: PathBuf,
+    /// Üretilecek ara profil adı
+    #[arg(long, value_name = "NAME")]
+    intermediate: String,
+    /// İssuer sertifikası (PEM)
+    #[arg(long, value_name = "PATH")]
+    issuer_cert: PathBuf,
+    /// İssuer özel anahtarı (PEM)
+    #[arg(long, value_name = "PATH")]
+    issuer_key: PathBuf,
+    /// Ara CA sertifika çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    cert_out: PathBuf,
+    /// Ara CA özel anahtar çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    key_out: PathBuf,
+    /// JSON özet çıktısı (stdout için `-` kullanın)
+    #[arg(long, value_name = "PATH")]
+    summary_out: Option<PathBuf>,
+    /// Güncellenecek CA paketi dosyası (JSON)
+    #[arg(long, value_name = "PATH")]
+    bundle_out: Option<PathBuf>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CaInitReport {
+    profile_id: String,
+    root_common_name: String,
+    calibration_id: String,
+    serial_hex: String,
+    key_id: String,
+    bundle_path: Option<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CaIssueReport {
+    profile_id: String,
+    intermediate: String,
+    calibration_id: String,
+    serial_hex: String,
+    key_id: String,
+    issuer_cert: String,
+    bundle_path: Option<String>,
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 enum ProfileArg {
     Mobile,
@@ -894,6 +979,12 @@ enum CliError {
     ExpectationFailed,
     #[error("IP adresi parse edilemedi: {0}")]
     InvalidIpAddress(String),
+    #[error("CA bundle güncellemesi için dosya yolu gerekli")]
+    BundleRequiresFile,
+    #[error("CA bundle dosyası bulunamadı: {0}")]
+    MissingBundle(PathBuf),
+    #[error("CA bundle profili uyuşmuyor: bundle={expected} | profil={actual}")]
+    BundleProfileMismatch { expected: String, actual: String },
 }
 
 type CliResult<T> = Result<T, CliError>;
@@ -2281,6 +2372,7 @@ fn handle_x509(command: X509Commands) -> CliResult<()> {
     match command {
         X509Commands::SelfSigned(args) => handle_x509_self_signed(&args),
         X509Commands::LocalDev(args) => handle_x509_local_dev(&args),
+        X509Commands::Ca(command) => handle_x509_ca(command),
     }
 }
 
@@ -2405,6 +2497,194 @@ fn handle_x509_local_dev(args: &X509LocalDevArgs) -> CliResult<()> {
     } else {
         println!("{message}");
     }
+    Ok(())
+}
+
+fn handle_x509_ca(command: X509CaCommands) -> CliResult<()> {
+    match command {
+        X509CaCommands::Init(args) => handle_x509_ca_init(&args),
+        X509CaCommands::Issue(args) => handle_x509_ca_issue(&args),
+    }
+}
+
+fn handle_x509_ca_init(args: &X509CaInitArgs) -> CliResult<()> {
+    let profile = CaAutomationProfile::from_path(&args.profile)?;
+    let org_salt = profile.decode_org_salt()?;
+    let root_section = &profile.root;
+
+    let params = X509RootCaParams {
+        common_name: &root_section.common_name,
+        org_salt: &org_salt,
+        calibration_text: &root_section.calibration_text,
+        validity_days: root_section.validity_days,
+        cps_uris: &root_section.cps_uris,
+        policy_oids: &root_section.policy_oids,
+    };
+    let cert = generate_root_ca(&params)?;
+    write_text_file(&args.cert_out, &cert.certificate_pem)?;
+    write_text_file(&args.key_out, &cert.private_key_pem)?;
+
+    let (calibration, _) = calib_from_text(&org_salt, &root_section.calibration_text)?;
+    let serial_hex = deterministic_serial_hex(&calibration);
+    let key_id = compute_key_identifier(&cert.private_key_pem)?;
+
+    let report = CaInitReport {
+        profile_id: profile.profile_id.clone(),
+        root_common_name: root_section.common_name.clone(),
+        calibration_id: cert.calibration_id.clone(),
+        serial_hex,
+        key_id,
+        bundle_path: args
+            .bundle_out
+            .as_ref()
+            .map(|path| path.display().to_string()),
+    };
+
+    let summary_path = args
+        .summary_out
+        .as_deref()
+        .unwrap_or_else(|| Path::new("-"));
+    write_json_pretty(summary_path, &report)?;
+
+    if let Some(path) = args.bundle_out.as_deref() {
+        let bundle = CaBundle::new(
+            profile.profile_id.clone(),
+            CaBundleEntry {
+                certificate_pem: cert.certificate_pem.clone(),
+                calibration_id: cert.calibration_id.clone(),
+            },
+        );
+        write_json_pretty(path, &bundle)?;
+    }
+
+    let summary_to_stdout = is_stdout_path(summary_path);
+    let bundle_to_stdout = args.bundle_out.as_deref().is_some_and(is_stdout_path);
+    let log_to_stderr = is_stdout_path(&args.cert_out)
+        || is_stdout_path(&args.key_out)
+        || summary_to_stdout
+        || bundle_to_stdout;
+    let bundle_fragment = args
+        .bundle_out
+        .as_ref()
+        .map(|path| format!(" | bundle={}", path.display()))
+        .unwrap_or_default();
+    let message = format!(
+        "x509 ca init: profile={} | cn={} | calib_id={} | serial={} | key_id={} | cert={} | key={}{}",
+        args.profile.display(),
+        root_section.common_name,
+        cert.calibration_id,
+        report.serial_hex,
+        report.key_id,
+        args.cert_out.display(),
+        args.key_out.display(),
+        bundle_fragment,
+    );
+    if log_to_stderr {
+        eprintln!("{message}");
+    } else {
+        println!("{message}");
+    }
+
+    Ok(())
+}
+
+fn handle_x509_ca_issue(args: &X509CaIssueArgs) -> CliResult<()> {
+    let profile = CaAutomationProfile::from_path(&args.profile)?;
+    let org_salt = profile.decode_org_salt()?;
+    let section = profile.intermediate(&args.intermediate)?;
+    let issuer_cert = fs::read_to_string(&args.issuer_cert)?;
+    let issuer_key = fs::read_to_string(&args.issuer_key)?;
+
+    let params = X509IntermediateCaParams {
+        common_name: &section.common_name,
+        org_salt: &org_salt,
+        calibration_text: &section.calibration_text,
+        validity_days: section.validity_days,
+        cps_uris: &section.cps_uris,
+        policy_oids: &section.policy_oids,
+        issuer_cert_pem: &issuer_cert,
+        issuer_key_pem: &issuer_key,
+    };
+    let cert = issue_intermediate_ca(&params)?;
+    write_text_file(&args.cert_out, &cert.certificate_pem)?;
+    write_text_file(&args.key_out, &cert.private_key_pem)?;
+
+    let (calibration, _) = calib_from_text(&org_salt, &section.calibration_text)?;
+    let serial_hex = deterministic_serial_hex(&calibration);
+    let key_id = compute_key_identifier(&cert.private_key_pem)?;
+
+    let report = CaIssueReport {
+        profile_id: profile.profile_id.clone(),
+        intermediate: args.intermediate.clone(),
+        calibration_id: cert.calibration_id.clone(),
+        serial_hex,
+        key_id,
+        issuer_cert: args.issuer_cert.display().to_string(),
+        bundle_path: args
+            .bundle_out
+            .as_ref()
+            .map(|path| path.display().to_string()),
+    };
+
+    let summary_path = args
+        .summary_out
+        .as_deref()
+        .unwrap_or_else(|| Path::new("-"));
+    write_json_pretty(summary_path, &report)?;
+
+    if let Some(path) = args.bundle_out.as_deref() {
+        if is_stdout_path(path) {
+            return Err(CliError::BundleRequiresFile);
+        }
+        if !path.exists() {
+            return Err(CliError::MissingBundle(path.to_path_buf()));
+        }
+        let mut bundle: CaBundle = read_json_file(path)?;
+        if bundle.profile_id != profile.profile_id {
+            return Err(CliError::BundleProfileMismatch {
+                expected: bundle.profile_id,
+                actual: profile.profile_id,
+            });
+        }
+        bundle.upsert_intermediate(
+            &args.intermediate,
+            CaBundleEntry {
+                certificate_pem: cert.certificate_pem.clone(),
+                calibration_id: cert.calibration_id.clone(),
+            },
+        );
+        write_json_pretty(path, &bundle)?;
+    }
+
+    let summary_to_stdout = is_stdout_path(summary_path);
+    let bundle_to_stdout = args.bundle_out.as_deref().is_some_and(is_stdout_path);
+    let log_to_stderr = is_stdout_path(&args.cert_out)
+        || is_stdout_path(&args.key_out)
+        || summary_to_stdout
+        || bundle_to_stdout;
+    let bundle_fragment = args
+        .bundle_out
+        .as_ref()
+        .map(|path| format!(" | bundle={}", path.display()))
+        .unwrap_or_default();
+    let message = format!(
+        "x509 ca issue: profile={} | intermediate={} | calib_id={} | serial={} | key_id={} | issuer={} | cert={} | key={}{}",
+        args.profile.display(),
+        args.intermediate,
+        cert.calibration_id,
+        report.serial_hex,
+        report.key_id,
+        args.issuer_cert.display(),
+        args.cert_out.display(),
+        args.key_out.display(),
+        bundle_fragment,
+    );
+    if log_to_stderr {
+        eprintln!("{message}");
+    } else {
+        println!("{message}");
+    }
+
     Ok(())
 }
 
@@ -2654,8 +2934,19 @@ fn load_aad(aad_text: Option<&str>, aad_file: Option<&Path>) -> CliResult<Vec<u8
     }
 }
 
+const MIN_ORG_SALT_LEN: usize = 8;
+
 fn decode_org_salt(value: &str) -> CliResult<Vec<u8>> {
-    Ok(STANDARD.decode(value.trim())?)
+    let trimmed = value.trim();
+    let decoded = STANDARD.decode(trimmed)?;
+    if decoded.len() < MIN_ORG_SALT_LEN {
+        return Err(CliError::InvalidLength {
+            context: "org-salt",
+            expected: MIN_ORG_SALT_LEN,
+            actual: decoded.len(),
+        });
+    }
+    Ok(decoded)
 }
 
 fn parse_ip_addrs(values: &[String]) -> CliResult<Vec<IpAddr>> {
@@ -2850,7 +3141,7 @@ mod tests {
     use super::*;
     use aunsorm_packet::{AeadAlgorithm, HeaderKem, HeaderProfile, HeaderSalts};
     use serde_json::json;
-    use tempfile::NamedTempFile;
+    use tempfile::{tempdir, NamedTempFile};
 
     #[test]
     fn pq_status_marks_default_algorithms_available() {
@@ -3177,6 +3468,89 @@ mod tests {
     }
 
     #[test]
+    fn ca_init_and_issue_commands_produce_artifacts() {
+        let dir = tempdir().expect("tempdir");
+        let profile_yaml = r"
+profile_id: demo
+org_salt: ZGVtb3NhbHQ=
+root:
+  common_name: Demo Root
+  calibration_text: Demo Root Calibration
+  validity_days: 365
+intermediates:
+  issuing:
+    common_name: Demo Issuing
+    calibration_text: Demo Issuing Calibration
+    validity_days: 120
+";
+        let profile_path = dir.path().join("profile.yaml");
+        fs::write(&profile_path, profile_yaml).expect("write profile");
+
+        let root_cert = dir.path().join("root.pem");
+        let root_key = dir.path().join("root.key");
+        let init_summary = dir.path().join("init.json");
+        let bundle_path = dir.path().join("bundle.json");
+
+        let init_args = X509CaInitArgs {
+            profile: profile_path.clone(),
+            cert_out: root_cert.clone(),
+            key_out: root_key.clone(),
+            summary_out: Some(init_summary.clone()),
+            bundle_out: Some(bundle_path.clone()),
+        };
+
+        handle_x509_ca_init(&init_args).expect("ca init");
+        assert!(root_cert.exists());
+        assert!(root_key.exists());
+        assert!(init_summary.exists());
+        assert!(bundle_path.exists());
+
+        let init_report: CaInitReport = read_json_file(&init_summary).expect("init report");
+        assert_eq!(init_report.profile_id, "demo");
+        assert_eq!(init_report.root_common_name, "Demo Root");
+        assert!(init_report.serial_hex.len() >= 10);
+        assert!(init_report.key_id.len() >= 10);
+        assert_eq!(
+            init_report.bundle_path,
+            Some(bundle_path.display().to_string())
+        );
+
+        let issue_cert = dir.path().join("issuing.pem");
+        let issue_key = dir.path().join("issuing.key");
+        let issue_summary = dir.path().join("issue.json");
+
+        let issue_args = X509CaIssueArgs {
+            profile: profile_path,
+            intermediate: "issuing".to_owned(),
+            issuer_cert: root_cert,
+            issuer_key: root_key,
+            cert_out: issue_cert.clone(),
+            key_out: issue_key.clone(),
+            summary_out: Some(issue_summary.clone()),
+            bundle_out: Some(bundle_path.clone()),
+        };
+
+        handle_x509_ca_issue(&issue_args).expect("ca issue");
+        assert!(issue_cert.exists());
+        assert!(issue_key.exists());
+        assert!(issue_summary.exists());
+
+        let issue_report: CaIssueReport = read_json_file(&issue_summary).expect("issue report");
+        assert_eq!(issue_report.profile_id, "demo");
+        assert_eq!(issue_report.intermediate, "issuing");
+        assert!(issue_report.serial_hex.len() >= 10);
+        assert!(issue_report.key_id.len() >= 10);
+        assert_eq!(
+            issue_report.bundle_path,
+            Some(bundle_path.display().to_string())
+        );
+
+        let bundle: CaBundle = read_json_file(&bundle_path).expect("bundle");
+        assert_eq!(bundle.profile_id, "demo");
+        assert!(bundle.intermediates.contains_key("issuing"));
+    }
+
+    #[test]
     fn metadata_roundtrip() {
         let metadata = SessionMetadata {
             version: "1.01".to_string(),
@@ -3218,6 +3592,23 @@ mod tests {
     fn decode_fixed_detects_length() {
         let err = decode_fixed::<4>("AA==", "test").unwrap_err();
         assert!(matches!(err, CliError::InvalidLength { .. }));
+    }
+
+    #[test]
+    fn decode_org_salt_rejects_short_values() {
+        let err = decode_org_salt("YQ==").unwrap_err();
+        if let CliError::InvalidLength {
+            context,
+            expected,
+            actual,
+        } = err
+        {
+            assert_eq!(context, "org-salt");
+            assert_eq!(expected, MIN_ORG_SALT_LEN);
+            assert_eq!(actual, 1);
+        } else {
+            panic!("beklenen InvalidLength hatası");
+        }
     }
 
     #[test]

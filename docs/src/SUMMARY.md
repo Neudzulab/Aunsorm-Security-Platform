@@ -7,6 +7,7 @@
 - [Kilitli Bellek ve Güvenli Donanım](architecture/trusted_compute.md)
 - [Operasyonel Testler](operations/testing.md)
 - [KMS/HSM Conformance Raporu](operations/kms-conformance.md)
+- [CA İmzalama Otomasyon Planı](operations/ca-automation.md)
 - [Pazar İstihbaratı ve Gelecek Vizyonu Çalıştayı](operations/market-intelligence.md)
 - [KMS Conformance ve Sertifikasyon Raporları](operations/kms-certification.md)
 - [Gelecek Yol Haritası](appendix/roadmap.md)

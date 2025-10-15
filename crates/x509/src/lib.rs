@@ -5,6 +5,7 @@
 
 //! Ed25519 tabanlı X.509 sertifika üretim yardımcıları.
 
+pub mod automation;
 pub mod ca;
 
 use std::collections::BTreeSet;
@@ -31,6 +32,21 @@ pub enum X509Error {
     /// Taban OID değeri geçersiz.
     #[error("geçersiz OID: {0}")]
     InvalidOid(String),
+    /// Profil dosyası okunamadı.
+    #[error("profil dosyası okunamadı: {0}")]
+    ProfileIo(#[from] std::io::Error),
+    /// Profil ayrıştırması başarısız.
+    #[error("profil ayrıştırılamadı: {0}")]
+    ProfileParse(#[from] serde_yaml::Error),
+    /// Profil doğrulaması başarısız.
+    #[error("profil doğrulaması başarısız: {0}")]
+    ProfileValidation(String),
+    /// `org_salt` Base64 kodu geçersiz.
+    #[error("geçersiz org_salt: {0}")]
+    InvalidOrgSalt(String),
+    /// İstenen ara profil bulunamadı.
+    #[error("ara profil bulunamadı: {0}")]
+    UnknownIntermediate(String),
     /// Yerel HTTPS hostname değeri boş.
     #[error("hostname boş olamaz")]
     EmptyHostname,
@@ -120,15 +136,27 @@ pub fn generate_self_signed(
     })
 }
 
-pub(crate) fn deterministic_serial(calibration: &Calibration) -> SerialNumber {
+/// Deterministik seri numarası baytlarını üretir.
+#[must_use]
+pub fn deterministic_serial_bytes(calibration: &Calibration) -> [u8; 20] {
     let mut hasher = Sha256::new();
     hasher.update(b"Aunsorm/1.01/x509/serial");
     hasher.update(calibration.fingerprint());
     hasher.update(calibration.id.as_str().as_bytes());
     let digest = hasher.finalize();
-    let mut serial = vec![0_u8; 20];
+    let mut serial = [0_u8; 20];
     serial.copy_from_slice(&digest[..20]);
-    SerialNumber::from(serial)
+    serial
+}
+
+/// Deterministik seri numarasını hex olarak döndürür.
+#[must_use]
+pub fn deterministic_serial_hex(calibration: &Calibration) -> String {
+    hex::encode(deterministic_serial_bytes(calibration))
+}
+
+pub(crate) fn deterministic_serial(calibration: &Calibration) -> SerialNumber {
+    SerialNumber::from(deterministic_serial_bytes(calibration).to_vec())
 }
 
 pub(crate) fn build_extension_oid(base: &str, arc: &[u64]) -> Result<Vec<u64>, X509Error> {
@@ -182,6 +210,18 @@ pub(crate) fn calibration_extension_from_parts(
     let json =
         serde_json::to_vec(&metadata).map_err(|_| X509Error::InvalidOid("metadata".to_owned()))?;
     Ok(CustomExtension::from_oid_content(oid, json))
+}
+
+/// Ed25519 özel anahtar PEM içeriğinden anahtar kimliği (SHA-256) üretir.
+///
+/// # Errors
+///
+/// PEM içeriği geçersizse veya anahtar yüklenemezse `X509Error` döner.
+pub fn compute_key_identifier(private_key_pem: &str) -> Result<String, X509Error> {
+    let key_pair = KeyPair::from_pem(private_key_pem)?;
+    let mut hasher = Sha256::new();
+    hasher.update(key_pair.public_key_raw());
+    Ok(hex::encode(hasher.finalize()))
 }
 
 fn build_calibration_extension(
