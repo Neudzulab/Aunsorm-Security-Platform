@@ -8,8 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `aunsorm-cli x509 ca init` ve `aunsorm-cli x509 ca issue` komutları CA
+  otomasyon profillerini kullanarak deterministik kök/ara sertifika üretimi,
+  JSON özet raporları ve CA paketlerini güncelleme desteği sağlıyor.
+- `aunsorm-x509` içerisine `CaAutomationProfile`, `CaBundle`, ara CA
+  imzalama yardımcıları ve anahtar kimliği/seri numarası hesaplayıcıları
+  eklendi.
 - `aunsorm-id` crate providing head-anchored unique identifier generation with
   namespace normalization and verifiable parsing helpers.
+
+### Documentation
+- Documented the Certificate Authority automation plan for `aunsorm-x509`,
+  covering CLI/kitaplık genişletmeleri, KMS entegrasyonu ve test stratejisi
+  (`docs/src/operations/ca-automation.md`).
 
 ## [0.4.1] - 2025-10-20
 ### Changed

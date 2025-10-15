@@ -67,7 +67,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] `aunsorm-kms` için GCP, Azure ve PKCS#11 imzacılarını uygulamaya al.
 - [x] `aunsorm-jwt` üzerinde Ed25519 JWT/JWKS akışlarını ve JTI mağazasını gerçekleştir.
 - [x] `aunsorm-x509` için calib/policy OID, CPS kontrolleri ve opsiyonel PQ işaretlerini ekle.
-- [ ] Revize: `aunsorm-x509` Certificate Authority (CA) kök/ara sertifika imzalama otomasyonunu planla (bkz. kilitli Sprint 2 maddesi).
+- [x] Revize: `aunsorm-x509` Certificate Authority (CA) kök/ara sertifika imzalama otomasyonunu planla (bkz. kilitli Sprint 2 maddesi). Plan ayrıntıları için bkz. [CA İmzalama Otomasyon Planı](docs/src/operations/ca-automation.md).
 - [x] CLI oturum/jwt/x509 komutlarını üretim seviyesinde tamamla.
 - [x] Sunucu bileşeni için OAuth benzeri uçları, sağlık ve metrikleri çıkar.
 

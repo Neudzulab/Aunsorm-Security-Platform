@@ -13,7 +13,7 @@
 - [x] ML-DSA için üretim düzeyi sertleştirme ve istemci tarafı denetim listelerini genişlet. (Bkz. docs/src/appendix/roadmap.md.)
 - [x] `cargo fuzz cmin` tabanlı uzun süreli fuzz korpusu minimizasyonunu nightly pipeline'a entegre et. (Bkz. docs/src/appendix/roadmap.md.)
 - [x] Harici KMS/HSM sağlayıcıları için ek conformance fixture'ları ve sertifikasyon raporlarını üret. (Bkz. docs/src/appendix/roadmap.md.)
-- [ ] Revize: `aunsorm-x509` Certificate Authority (CA) kök/ara sertifika imzalama otomasyonunu planla (README.md Sprint 2 revizyon maddesine bağlı).
+- [x] Revize: `aunsorm-x509` Certificate Authority (CA) kök/ara sertifika imzalama otomasyonunu planla (README.md Sprint 2 revizyon maddesine bağlı). Plan detayları `docs/src/operations/ca-automation.md` içinde yayımlandı.
 
 ## Dokümantasyon ve İzleme
 - [x] Yol haritasındaki mdBook otomasyon maddesini (artık tamamlandı) güncel durumu yansıtacak şekilde revize et. (Bkz. docs/src/appendix/roadmap.md ile CHANGELOG.md.)
