@@ -90,7 +90,7 @@ impl Default for KeyAlgorithm {
 
 impl KeyAlgorithm {
     /// Generate keypair for this algorithm.
-    fn generate_keypair(&self) -> Result<KeyPair, X509Error> {
+    fn generate_keypair(self) -> Result<KeyPair, X509Error> {
         match self {
             Self::Ed25519 => KeyPair::generate_for(&rcgen::PKCS_ED25519)
                 .map_err(|e| X509Error::KeyGeneration(e.to_string())),
@@ -102,8 +102,7 @@ impl KeyAlgorithm {
                 let alg = &rcgen::PKCS_RSA_SHA256;
                 // Note: rcgen 0.13 doesn't expose bit length, using 2048 for now
                 // TODO: Upgrade to rcgen 0.14+ for 4096-bit support
-                KeyPair::generate_for(alg)
-                    .map_err(|e| X509Error::KeyGeneration(e.to_string()))
+                KeyPair::generate_for(alg).map_err(|e| X509Error::KeyGeneration(e.to_string()))
             }
         }
     }
@@ -507,6 +506,7 @@ mod tests {
             validity_days: 3650,
             cps_uris: &[],
             policy_oids: &[],
+            key_algorithm: None,
         };
 
         let ca = generate_root_ca(&params).expect("generate root CA");
@@ -549,6 +549,7 @@ mod tests {
             validity_days: 3650,
             cps_uris: &[],
             policy_oids: &[],
+            key_algorithm: None,
         };
         let ca = generate_root_ca(&root_params).expect("generate CA");
 
@@ -561,6 +562,7 @@ mod tests {
             validity_days: 365,
             extra_dns: &["*.localhost".to_owned()],
             extra_ips: &["127.0.0.1".parse().expect("ip")],
+            key_algorithm: None,
         };
 
         let server = sign_server_cert(&server_params).expect("sign server cert");
@@ -648,6 +650,7 @@ mod tests {
             validity_days: 3650,
             cps_uris: &[],
             policy_oids: &[],
+            key_algorithm: None,
         };
         let root = generate_root_ca(&root_params).expect("generate root");
 
@@ -704,6 +707,7 @@ mod tests {
             validity_days: 3650,
             cps_uris: &[],
             policy_oids: &[],
+            key_algorithm: None,
         };
         let root = generate_root_ca(&root_params).expect("root");
         let backend =
@@ -726,4 +730,3 @@ mod tests {
         assert!(!issuing.calibration_id.is_empty());
     }
 }
-

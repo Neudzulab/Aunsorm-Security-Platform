@@ -80,6 +80,11 @@ impl Salts {
         &self.coord
     }
 
+    /// Koordinat türetimi için HKDF tuz karmasını hesaplar.
+    ///
+    /// Kalibrasyon kimliği, tuz bileşenleri ile birlikte karmaya dahil edilir;
+    /// böylece aynı tuzlar kullanılsa bile farklı kimlikler farklı sonuçlar
+    /// üretir. Bu davranış koordinat türetiminin domain ayracını korur.
     pub(crate) fn digest_for_coord(&self, calibration_id: &str) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(b"Aunsorm/1.01/coord-salt");
@@ -122,6 +127,14 @@ mod tests {
             salts_a.digest_for_coord("id"),
             salts_b.digest_for_coord("id")
         );
+    }
+
+    #[test]
+    fn digest_changes_with_calibration_id() {
+        let salts = Salts::new(vec![1; 8], vec![2; 8], vec![3; 8]).unwrap();
+        let digest_a = salts.digest_for_coord("alpha");
+        let digest_b = salts.digest_for_coord("beta");
+        assert_ne!(digest_a, digest_b);
     }
 
     #[test]

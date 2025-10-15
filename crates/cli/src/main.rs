@@ -872,7 +872,7 @@ enum KeyAlgorithmArg {
 }
 
 impl KeyAlgorithmArg {
-    fn to_key_algorithm(self) -> aunsorm_x509::ca::KeyAlgorithm {
+    const fn to_key_algorithm(self) -> aunsorm_x509::ca::KeyAlgorithm {
         use aunsorm_x509::ca::KeyAlgorithm;
         match self {
             Self::Ed25519 => KeyAlgorithm::Ed25519,
@@ -2808,7 +2808,14 @@ fn handle_x509_ca_sign_server(args: &X509CaSignServerArgs) -> CliResult<()> {
     let ip_fragment = if extra_ips.is_empty() {
         String::new()
     } else {
-        format!(" | ips={}", extra_ips.iter().map(|ip| ip.to_string()).collect::<Vec<_>>().join(","))
+        format!(
+            " | ips={}",
+            extra_ips
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        )
     };
     let message = format!(
         "x509 ca sign-server: hostname={} | ca={} | cert={} | key={} | validity_days={} | calib_id={}{}{}",
