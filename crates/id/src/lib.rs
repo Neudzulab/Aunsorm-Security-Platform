@@ -261,6 +261,38 @@ impl HeadStampedId {
         hex::encode(self.head_fingerprint)
     }
 
+    /// Verilen HEAD karmasının bu kimlik ile uyumlu olup olmadığını kontrol eder.
+    ///
+    /// HEAD değeri normalize edilerek parmak izi yeniden hesaplanır ve kimlikteki
+    /// fingerprint ile karşılaştırılır.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aunsorm_id::{HeadIdGenerator, IdError};
+    ///
+    /// let generator = HeadIdGenerator::new(
+    ///     "0123456789abcdef0123456789abcdef01234567",
+    /// )?;
+    /// let id = generator.next_id()?;
+    /// assert!(id.matches_head(
+    ///     "0123456789abcdef0123456789abcdef01234567",
+    /// )?);
+    /// assert!(!id.matches_head(
+    ///     "fedcba9876543210fedcba9876543210fedcba98",
+    /// )?);
+    /// # Ok::<(), IdError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// HEAD değeri yeterince uzun değilse veya hex dışı karakter içeriyorsa
+    /// [`IdError`] döner.
+    pub fn matches_head(&self, head: impl AsRef<str>) -> Result<bool, IdError> {
+        let normalized = normalize_head(head.as_ref())?;
+        Ok(fingerprint_from_head(&normalized) == self.head_fingerprint)
+    }
+
     /// Mikro saniye cinsinden zaman damgasını döner.
     #[must_use]
     pub const fn timestamp_micros(&self) -> u64 {
@@ -633,5 +665,23 @@ mod tests {
     #[test]
     fn process_entropy_is_non_zero() {
         assert!(PROCESS_ENTROPY.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn matches_head_validates_expected_head() {
+        let generator = HeadIdGenerator::new(HEAD).expect("generator");
+        let id = generator.next_id().expect("id");
+        assert!(id.matches_head(HEAD).expect("match"));
+
+        let other_head = "fedcba9876543210fedcba9876543210fedcba98";
+        assert!(!id.matches_head(other_head).expect("should not match"));
+    }
+
+    #[test]
+    fn matches_head_propagates_head_errors() {
+        let generator = HeadIdGenerator::new(HEAD).expect("generator");
+        let id = generator.next_id().expect("id");
+        let err = id.matches_head("invalid").expect_err("invalid head");
+        assert_eq!(err, IdError::HeadNotHex);
     }
 }
