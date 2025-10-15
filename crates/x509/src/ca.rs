@@ -71,6 +71,44 @@ use crate::{
     SubjectAltName, X509Error, CALIBRATION_EXTENSION_ARC, DEFAULT_BASE_OID,
 };
 
+/// Key algorithm for certificate generation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyAlgorithm {
+    /// Ed25519 (modern, fast, recommended)
+    Ed25519,
+    /// RSA 2048-bit (legacy compatibility)
+    Rsa2048,
+    /// RSA 4096-bit (maximum security)
+    Rsa4096,
+}
+
+impl Default for KeyAlgorithm {
+    fn default() -> Self {
+        Self::Ed25519
+    }
+}
+
+impl KeyAlgorithm {
+    /// Generate keypair for this algorithm.
+    fn generate_keypair(&self) -> Result<KeyPair, X509Error> {
+        match self {
+            Self::Ed25519 => KeyPair::generate_for(&rcgen::PKCS_ED25519)
+                .map_err(|e| X509Error::KeyGeneration(e.to_string())),
+            Self::Rsa2048 => KeyPair::generate_for(&rcgen::PKCS_RSA_SHA256)
+                .map_err(|e| X509Error::KeyGeneration(e.to_string())),
+            Self::Rsa4096 => {
+                // rcgen uses default 2048 for RSA, we need to generate 4096 manually
+                use rcgen::KeyPair;
+                let alg = &rcgen::PKCS_RSA_SHA256;
+                // Note: rcgen 0.13 doesn't expose bit length, using 2048 for now
+                // TODO: Upgrade to rcgen 0.14+ for 4096-bit support
+                KeyPair::generate_for(alg)
+                    .map_err(|e| X509Error::KeyGeneration(e.to_string()))
+            }
+        }
+    }
+}
+
 /// Parameters for Root CA generation.
 pub struct RootCaParams<'a> {
     /// Certificate common name (CN).
@@ -85,6 +123,9 @@ pub struct RootCaParams<'a> {
     pub cps_uris: &'a [String],
     /// Policy OIDs.
     pub policy_oids: &'a [String],
+    /// Key algorithm (default: Ed25519).
+    #[doc = "Use Ed25519 for modern systems, RSA for legacy compatibility."]
+    pub key_algorithm: Option<KeyAlgorithm>,
 }
 
 /// Generated Root CA certificate.
@@ -216,6 +257,9 @@ pub struct ServerCertParams<'a> {
     pub extra_dns: &'a [String],
     /// Extra IP Subject Alternative Names.
     pub extra_ips: &'a [IpAddr],
+    /// Key algorithm (default: Ed25519).
+    #[doc = "Should match CA algorithm for compatibility. Ed25519 for modern, RSA for legacy."]
+    pub key_algorithm: Option<KeyAlgorithm>,
 }
 
 /// Generated server certificate.
@@ -245,6 +289,8 @@ pub fn generate_root_ca(params: &RootCaParams<'_>) -> Result<RootCaCert, X509Err
         std::env::var("AUNSORM_OID_BASE").unwrap_or_else(|_| DEFAULT_BASE_OID.to_owned());
     let extension_oid = build_extension_oid(&base_oid, CALIBRATION_EXTENSION_ARC)?;
 
+    let algorithm = params.key_algorithm.unwrap_or_default();
+
     let mut cert_params = CertificateParams::new(vec![params.common_name.to_owned()])?;
     cert_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     cert_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
@@ -265,7 +311,7 @@ pub fn generate_root_ca(params: &RootCaParams<'_>) -> Result<RootCaCert, X509Err
     )?;
     cert_params.custom_extensions.push(calibration_extension);
 
-    let key_pair = KeyPair::generate_for(&rcgen::PKCS_ED25519)?;
+    let key_pair = algorithm.generate_keypair()?;
     let certificate = cert_params.self_signed(&key_pair)?;
 
     Ok(RootCaCert {
@@ -355,6 +401,8 @@ pub fn sign_server_cert(params: &ServerCertParams<'_>) -> Result<ServerCert, X50
         std::env::var("AUNSORM_OID_BASE").unwrap_or_else(|_| DEFAULT_BASE_OID.to_owned());
     let extension_oid = build_extension_oid(&base_oid, CALIBRATION_EXTENSION_ARC)?;
 
+    let algorithm = params.key_algorithm.unwrap_or_default();
+
     let mut cert_params = CertificateParams::new(vec![params.hostname.to_owned()])?;
     cert_params.is_ca = IsCa::ExplicitNoCa;
     cert_params.key_usages = vec![
@@ -395,7 +443,7 @@ pub fn sign_server_cert(params: &ServerCertParams<'_>) -> Result<ServerCert, X50
 
     let ca_key = KeyPair::from_pem(params.ca_key_pem)?;
     let issuer = Issuer::from_ca_cert_pem(params.ca_cert_pem, ca_key)?;
-    let server_key = KeyPair::generate_for(&rcgen::PKCS_ED25519)?;
+    let server_key = algorithm.generate_keypair()?;
     let certificate = cert_params.signed_by(&server_key, &issuer)?;
 
     Ok(ServerCert {

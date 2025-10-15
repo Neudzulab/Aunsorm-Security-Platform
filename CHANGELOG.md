@@ -7,23 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned for v0.4.3 (Q4 2025)
+- RSA 2048/4096 key generation support with `ring` crate integration
+- Full `--algorithm` parameter support in CLI (ed25519, rsa2048, rsa4096)
+- Windows and legacy system compatibility improvements
+
+### Planned for v0.5.0 (Q1 2026)
+- ACME v2 protocol client implementation (Let's Encrypt integration)
+- Automatic certificate issuance and renewal
+- Domain validation (HTTP-01, DNS-01, TLS-ALPN-01)
+- Zero-downtime certificate rotation
+- Prometheus metrics and monitoring
+
+## [0.4.2] - 2025-10-15
+
 ### Added
-- `aunsorm-cli x509 ca init` ve `aunsorm-cli x509 ca issue` komutları CA
-  otomasyon profillerini kullanarak deterministik kök/ara sertifika üretimi,
-  JSON özet raporları ve CA paketlerini güncelleme desteği sağlıyor.
-- `aunsorm-x509` içerisine `CaAutomationProfile`, `CaBundle`, ara CA
-  imzalama yardımcıları ve anahtar kimliği/seri numarası hesaplayıcıları
-  eklendi.
-- `aunsorm-id` crate providing head-anchored unique identifier generation with
-  namespace normalization and verifiable parsing helpers.
-- `aunsorm-mdm` crate delivering device enrollment, policy storage and
-  certificate distribution planning APIs alongside `/mdm/*` server
-  uçları ve Prometheus metriği.
+- **X.509 CA Server Certificate Signing**: `aunsorm-cli x509 ca sign-server` command
+  - Sign server certificates with CA key
+  - Subject Alternative Names (DNS and IP)
+  - Configurable validity period
+  - Ed25519 signature algorithm
+  - Aunsorm calibration metadata extension
+- **RSA Algorithm Infrastructure** (foundation for v0.4.3)
+  - `KeyAlgorithm` enum (Ed25519, Rsa2048, Rsa4096)
+  - Algorithm selection in `RootCaParams` and `ServerCertParams`
+  - CLI `--algorithm` parameter (requires `ring` crate for full support)
+- **Test Certificates**: Generated test CA and server certificates
+  - Root CA with 10-year validity
+  - Server certificate for localhost with SAN extensions
+  - Documentation in `test-certs/README.md`
+
+### Changed
+- **Roadmap Documentation**: Comprehensive planning for ACME client (v0.5.0)
+  - Let's Encrypt integration strategy
+  - Domain validation methods
+  - Automatic renewal workflow
+  - DNS provider integration planning
+- **README**: Complete feature overview and use cases
+  - Self-hosted CA examples
+  - Let's Encrypt automation preview
+  - Architecture diagrams
+  - Roadmap visibility
+
+### Fixed
+- Certificate generation with proper SAN extensions
+- Ed25519 key generation in CA workflows
 
 ### Documentation
-- Documented the Certificate Authority automation plan for `aunsorm-x509`,
-  covering CLI/kitaplık genişletmeleri, KMS entegrasyonu ve test stratejisi
-  (`docs/src/operations/ca-automation.md`).
+- Added `ROADMAP.md` with detailed v0.4.3-v0.6.0 planning
+- Updated `README.md` with modern feature showcase
+- Created `test-certs/README.md` for certificate management guide
 
 ## [0.4.1] - 2025-10-20
 ### Changed

@@ -65,6 +65,9 @@ pub enum X509Error {
     /// Issuer public anahtar bilgisi geçersiz.
     #[error("issuer public anahtarı geçersiz: {0}")]
     IssuerPublicKey(String),
+    /// Anahtar üretimi başarısız.
+    #[error("anahtar üretimi başarısız: {0}")]
+    KeyGeneration(String),
 }
 
 /// Öz-imzalı sertifika üretimi için parametreler.

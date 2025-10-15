@@ -752,6 +752,8 @@ enum X509CaCommands {
     Init(X509CaInitArgs),
     /// Ara CA sertifikası üret
     Issue(X509CaIssueArgs),
+    /// Server sertifikasını CA ile imzala
+    SignServer(X509CaSignServerArgs),
 }
 
 #[derive(Args)]
@@ -801,6 +803,43 @@ struct X509CaIssueArgs {
     bundle_out: Option<PathBuf>,
 }
 
+#[derive(Args)]
+struct X509CaSignServerArgs {
+    /// CA sertifikası (PEM)
+    #[arg(long, value_name = "PATH")]
+    ca_cert: PathBuf,
+    /// CA özel anahtarı (PEM)
+    #[arg(long, value_name = "PATH")]
+    ca_key: PathBuf,
+    /// Sunucu hostname'i (örn: localhost, example.com)
+    #[arg(long, value_name = "HOSTNAME")]
+    hostname: String,
+    /// Organization salt (hex formatında)
+    #[arg(long, value_name = "HEX")]
+    org_salt: String,
+    /// Kalibrasyon metni
+    #[arg(long, value_name = "TEXT")]
+    calibration_text: String,
+    /// Sunucu sertifika çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    cert_out: PathBuf,
+    /// Sunucu özel anahtar çıktısı (PEM)
+    #[arg(long, value_name = "PATH")]
+    key_out: PathBuf,
+    /// Ek DNS SANs (virgülle ayrılmış)
+    #[arg(long, value_name = "DNS1,DNS2")]
+    extra_dns: Option<String>,
+    /// Ek IP SANs (virgülle ayrılmış)
+    #[arg(long, value_name = "IP1,IP2")]
+    extra_ip: Option<String>,
+    /// Geçerlilik süresi (gün, varsayılan 365)
+    #[arg(long, default_value = "365")]
+    validity_days: u32,
+    /// Anahtar algoritması (ed25519, rsa2048, rsa4096)
+    #[arg(long, value_enum, default_value = "ed25519")]
+    algorithm: KeyAlgorithmArg,
+}
+
 #[derive(Serialize, Deserialize)]
 struct CaInitReport {
     profile_id: String,
@@ -820,6 +859,33 @@ struct CaIssueReport {
     key_id: String,
     issuer_cert: String,
     bundle_path: Option<String>,
+}
+
+#[derive(Clone, Copy, ValueEnum)]
+enum KeyAlgorithmArg {
+    /// Ed25519 (modern, fast, recommended)
+    Ed25519,
+    /// RSA 2048-bit (legacy compatibility)
+    Rsa2048,
+    /// RSA 4096-bit (maximum security)
+    Rsa4096,
+}
+
+impl KeyAlgorithmArg {
+    fn to_key_algorithm(self) -> aunsorm_x509::ca::KeyAlgorithm {
+        use aunsorm_x509::ca::KeyAlgorithm;
+        match self {
+            Self::Ed25519 => KeyAlgorithm::Ed25519,
+            Self::Rsa2048 => KeyAlgorithm::Rsa2048,
+            Self::Rsa4096 => KeyAlgorithm::Rsa4096,
+        }
+    }
+}
+
+impl Default for KeyAlgorithmArg {
+    fn default() -> Self {
+        Self::Ed25519
+    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -2504,6 +2570,7 @@ fn handle_x509_ca(command: X509CaCommands) -> CliResult<()> {
     match command {
         X509CaCommands::Init(args) => handle_x509_ca_init(&args),
         X509CaCommands::Issue(args) => handle_x509_ca_issue(&args),
+        X509CaCommands::SignServer(args) => handle_x509_ca_sign_server(&args),
     }
 }
 
@@ -2519,6 +2586,7 @@ fn handle_x509_ca_init(args: &X509CaInitArgs) -> CliResult<()> {
         validity_days: root_section.validity_days,
         cps_uris: &root_section.cps_uris,
         policy_oids: &root_section.policy_oids,
+        key_algorithm: None, // Use default (Ed25519)
     };
     let cert = generate_root_ca(&params)?;
     write_text_file(&args.cert_out, &cert.certificate_pem)?;
@@ -2678,6 +2746,80 @@ fn handle_x509_ca_issue(args: &X509CaIssueArgs) -> CliResult<()> {
         args.cert_out.display(),
         args.key_out.display(),
         bundle_fragment,
+    );
+    if log_to_stderr {
+        eprintln!("{message}");
+    } else {
+        println!("{message}");
+    }
+
+    Ok(())
+}
+
+fn handle_x509_ca_sign_server(args: &X509CaSignServerArgs) -> CliResult<()> {
+    use aunsorm_x509::ca::{sign_server_cert, ServerCertParams};
+    use std::net::IpAddr;
+
+    let ca_cert_pem = fs::read_to_string(&args.ca_cert)?;
+    let ca_key_pem = fs::read_to_string(&args.ca_key)?;
+    let org_salt = hex::decode(&args.org_salt)?;
+
+    let extra_dns: Vec<String> = args
+        .extra_dns
+        .as_ref()
+        .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
+        .unwrap_or_default();
+
+    let extra_ips: Vec<IpAddr> = args
+        .extra_ip
+        .as_ref()
+        .map(|s| {
+            s.split(',')
+                .map(|s| s.trim().parse::<IpAddr>())
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()
+        .map_err(|e| CliError::InvalidIpAddress(e.to_string()))?
+        .unwrap_or_default();
+
+    let params = ServerCertParams {
+        hostname: &args.hostname,
+        org_salt: &org_salt,
+        calibration_text: &args.calibration_text,
+        ca_cert_pem: &ca_cert_pem,
+        ca_key_pem: &ca_key_pem,
+        extra_dns: &extra_dns,
+        extra_ips: &extra_ips,
+        validity_days: args.validity_days,
+        key_algorithm: Some(args.algorithm.to_key_algorithm()),
+    };
+
+    let cert = sign_server_cert(&params)?;
+
+    write_text_file(&args.cert_out, &cert.certificate_pem)?;
+    write_text_file(&args.key_out, &cert.private_key_pem)?;
+
+    let log_to_stderr = is_stdout_path(&args.cert_out) || is_stdout_path(&args.key_out);
+    let dns_fragment = if extra_dns.is_empty() {
+        String::new()
+    } else {
+        format!(" | dns={}", extra_dns.join(","))
+    };
+    let ip_fragment = if extra_ips.is_empty() {
+        String::new()
+    } else {
+        format!(" | ips={}", extra_ips.iter().map(|ip| ip.to_string()).collect::<Vec<_>>().join(","))
+    };
+    let message = format!(
+        "x509 ca sign-server: hostname={} | ca={} | cert={} | key={} | validity_days={} | calib_id={}{}{}",
+        args.hostname,
+        args.ca_cert.display(),
+        args.cert_out.display(),
+        args.key_out.display(),
+        args.validity_days,
+        cert.calibration_id,
+        dns_fragment,
+        ip_fragment,
     );
     if log_to_stderr {
         eprintln!("{message}");

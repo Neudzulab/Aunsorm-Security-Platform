@@ -1,9 +1,18 @@
+﻿# Build artifacts
 target/
-**/*.rs.bk
 Cargo.lock
-fuzz/artifacts/
-fuzz/corpus/
+
+# Test certificates (generated)
+*.crt
+*.key
+*.pem
+test-certs/*.crt
+test-certs/*.key
+
+# IDE
+.vscode/
+.idea/
+
+# OS
 .DS_Store
-docs/book/
-node_modules/
-apps/web/node_modules/
+Thumbs.db

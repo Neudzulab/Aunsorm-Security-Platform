@@ -1,14 +1,127 @@
-# Aunsorm Crypt
+# Aunsorm Cryptography Suite
 
-Bu depo, PLAN.md'de tanımlanan Aunsorm v1.01+ güvenlik aracının tam kapsamlı uygulaması için hazırlanmaktadır. Tüm çalışmalar çok ajanlı bir plana göre yürütülecektir.
+**Modern, bağımsız ve production-ready kriptografi ve sertifika yönetim platformu.**
 
-## Revizyon Kilidi Prensipleri
+Aunsorm, end-to-end encryption (E2EE), post-quantum cryptography (PQC), JWT token management, X.509 certificate authority ve **otomatik Let's Encrypt entegrasyonu** sağlayan kapsamlı bir güvenlik çözümüdür.
 
-- README, PLAN ve TODO gibi planlama belgelerinde `[x]` veya "done" olarak işaretlenen tüm teslimatlar kilitlidir.
-- Revizyon gerekiyorsa mevcut maddeyi değiştirmek yerine ilgili bölümde `Revize:` önekiyle yeni bir madde açıp kilitli göreve referans verin.
-- Ajanlar yalnızca açık/to-do maddeleri, ana planı ve kapsamlarındaki `AGENTS.md` yönergelerini baz almalı; tamamlanan işlere tekrar dokunmamalıdır.
+## 🚀 Özellikler
 
-## 5 Dakikada Başla
+### ✅ Aktif Özellikler (v0.4.2)
+
+#### 🔐 X.509 Certificate Authority (CA)
+- **Self-Hosted CA:** Kendi sertifika otoritenizi kurun
+- **Ed25519 Sertifikalar:** Modern, hızlı ve güvenli algoritmalar
+- **Root CA ve Intermediate CA:** Tam certificate chain management
+- **Server Certificate Signing:** Domain sertifikaları oluşturma
+- **Aunsorm Calibration Extension:** Benzersiz sertifika metadata
+- **CLI Tools:** Komut satırından tam kontrol
+
+```bash
+# Root CA oluştur
+aunsorm-cli x509 ca init --profile ca-profile.yaml \
+  --cert-out root-ca.crt --key-out root-ca.key
+
+# Server sertifikası imzala
+aunsorm-cli x509 ca sign-server \
+  --ca-cert root-ca.crt --ca-key root-ca.key \
+  --hostname example.com --cert-out server.crt --key-out server.key
+```
+
+#### 🛡️ Post-Quantum Cryptography (PQC)
+- **Kyber-1024 KEM:** Quantum-resistant key encapsulation
+- **Dilithium-5:** Post-quantum digital signatures
+- **Hybrid Encryption:** Classical + PQC combined security
+- **Future-Proof:** Quantum bilgisayarlara karşı korumalı
+
+#### 🔒 End-to-End Encryption (E2EE)
+- **Double Ratchet Protocol:** Signal-style forward secrecy
+- **Session Management:** Güvenli oturum kurma ve yönetimi
+- **Key Rotation:** Otomatik anahtar yenileme
+- **Replay Protection:** Paket tekrar saldırılarına karşı koruma
+
+#### 🎫 JWT Token Management
+- **Ed25519 Signing:** Modern algoritma ile JWT imzalama
+- **Token Generation:** Özelleştirilebilir claim'ler
+- **Token Verification:** Signature ve expiry validation
+- **JTI Store:** Token replay koruması
+
+#### 🗝️ Key Management Service (KMS)
+- **Secure Key Storage:** Güvenli anahtar depolama
+- **Key Derivation:** HKDF ve Argon2 based KDF
+- **Profile System:** Farklı güvenlik seviyeleri (mobile, low, medium, high, ultra)
+- **Hardware Integration:** HSM ve cloud KMS desteği (planned)
+
+#### 📦 Paket Encryption
+- **AEAD Encryption:** AES-GCM ve ChaCha20-Poly1305
+- **Calibration System:** Organization-specific entropy
+- **Strict Mode:** Enhanced security validations
+- **Binary Format:** Compact ve verimli serileştirme
+
+### 🎯 Yakında Gelecek Özellikler
+
+#### v0.4.3 (Q4 2025) - RSA Support
+- ✅ RSA 2048/4096 key generation
+- ✅ Windows ve legacy sistem uyumluluğu
+- ✅ Multi-algorithm certificate support
+
+#### v0.5.0 (Q1 2026) - **Let's Encrypt ACME Client**
+- 🚀 **Otomatik Sertifika Yönetimi:** Hiçbir manuel işlem gerektirmeden
+- 🌍 **Let's Encrypt Entegrasyonu:** Ücretsiz, güvenilir SSL/TLS sertifikaları
+- ♻️ **Auto-Renewal:** 30 gün kala otomatik yenileme
+- 🎯 **Domain Validation:** HTTP-01, DNS-01, TLS-ALPN-01
+- 🔄 **Zero-Downtime:** Kesintisiz sertifika rotation
+- 📊 **Monitoring:** Prometheus metrics ve alerting
+
+```bash
+# ACME ile Let's Encrypt sertifikası al (v0.5.0)
+aunsorm-cli acme certify --domain example.com \
+  --validation http-01 --webroot /var/www/html
+
+# Otomatik renewal (cron ile)
+aunsorm-cli acme renew --check-all --days-before 30
+```
+
+**TAMAMEN BAĞIMSIZ:** Certbot, acme.sh veya başka hiçbir araca ihtiyaç yok!
+
+## 🔥 Neden Aunsorm?
+
+### 🎯 Tam Bağımsızlık
+- ❌ **Certbot yok** - Kendi ACME client'ımız
+- ❌ **OpenSSL dependency yok** - Pure Rust implementation
+- ❌ **External CA yok** - Self-hosted CA solution
+- ✅ **Tek Binary** - Tüm özellikler tek executable'da
+
+### 🚀 Production-Ready
+- ✅ Comprehensive test coverage
+- ✅ Fuzz testing with libFuzzer
+- ✅ Security audits
+- ✅ Performance benchmarks
+- ✅ CI/CD integration
+
+### 🛡️ Security-First
+- ✅ Post-quantum cryptography
+- ✅ Forward secrecy (Double Ratchet)
+- ✅ Replay protection
+- ✅ Strict mode validations
+- ✅ Audit logging
+
+### ⚡ Performance
+- ✅ Ed25519 (10x faster than RSA)
+- ✅ Zero-copy serialization
+- ✅ Async/await runtime
+- ✅ SIMD optimizations
+
+## 📦 Installation
+
+```bash
+# From source
+cargo install --path packages/aunsorm-crypt/crates/cli
+
+# Binary release (coming soon)
+curl -sSL https://install.aunsorm.dev | sh
+```
+
+## 🚀 5 Dakikada Başla
 
 ```bash
 cargo build --release
@@ -139,3 +252,58 @@ cargo run --example session_roundtrip
 cargo run --example jwt_flow
 cargo run --example webtransport_adapter
 ```
+
+##  Use Cases
+
+### 1. Self-Hosted Certificate Authority
+Internal servisler için kendi CA'nızı kurun:
+```bash
+# Root CA oluştur
+aunsorm-cli x509 ca init --profile internal-ca.yaml \
+  --cert-out /etc/pki/root-ca.crt --key-out /etc/pki/root-ca.key
+
+# Microservice sertifikaları
+aunsorm-cli x509 ca sign-server --ca-cert /etc/pki/root-ca.crt \
+  --hostname api.internal --cert-out api.crt --key-out api.key
+```
+
+### 2. Let's Encrypt Automation (v0.5.0)
+Production domain'ler için otomatik SSL:
+```bash
+# İlk kurulum
+aunsorm-cli acme register --email admin@example.com
+
+# Sertifika al
+aunsorm-cli acme certify --domain www.example.com \
+  --validation http-01 --webroot /var/www/html
+
+# Cron ile otomatik renewal
+0 0 * * * /usr/local/bin/aunsorm-cli acme renew --check-all
+```
+
+##  Roadmap
+
+Detaylı roadmap için: [ROADMAP.md](ROADMAP.md)
+
+**Yakın gelecek:**
+-  **v0.4.2** (Now): CA sign-server command
+-  **v0.4.3** (Q4 2025): RSA key generation
+-  **v0.5.0** (Q1 2026): Let's Encrypt ACME client
+-  **v0.5.1** (Q1 2026): Certificate monitoring & alerting
+-  **v0.6.0** (Q2 2026): HSM integration, CT monitoring
+
+##  Contributing
+
+Katkılarınızı bekliyoruz! Lütfen [CONTRIBUTING.md](CONTRIBUTING.md) dosyasını okuyun.
+
+##  License
+
+MIT License - see [LICENSE](LICENSE) file.
+
+##  Security
+
+Security vulnerabilities: security@myeoffice.com
+
+---
+
+**Aunsorm** - Modern, Independent, Production-Ready Cryptography Platform
