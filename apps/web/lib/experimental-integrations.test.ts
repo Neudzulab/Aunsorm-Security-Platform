@@ -112,6 +112,24 @@ describe('resolveAunsormBaseUrl', () => {
     expect(resolveAunsormBaseUrl(env)).toBe('http://localhost:3100/callback');
   });
 
+  it('forces http when the domain is a localhost alias hostname', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: 'localhost.localdomain',
+      AUNSORM_INTEGRATIONS_PATH: 'callback',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://localhost.localdomain/callback');
+
+    const ipv6Alias = {
+      NODE_ENV: 'production',
+      AUNSORM_INTEGRATIONS_DOMAIN: 'ip6-localhost:4100',
+      AUNSORM_INTEGRATIONS_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(ipv6Alias)).toBe('http://ip6-localhost:4100/bridge');
+  });
+
   it('forces http when the domain points at an IPv6 loopback host', () => {
     const env = {
       NODE_ENV: 'production',
@@ -321,6 +339,15 @@ describe('resolveAunsormBaseUrl', () => {
 
     expect(resolveAunsormBaseUrl(env)).toBe('http://[::ffff:7f00:1]:4700/custom');
   });
+
+  it('normalises direct overrides with localhost alias hostnames', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_URL: 'localhost6:3200/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrl(env)).toBe('http://localhost6:3200/custom');
+  });
 });
 
 describe('resolveAunsormBaseUrlDetails', () => {
@@ -496,6 +523,40 @@ describe('resolveAunsormBaseUrlDetails', () => {
         kind: 'domain-path',
         domainKey: 'AUNSORM_BASE_DOMAIN',
         pathKey: 'AUNSORM_BASE_PATH',
+      },
+    });
+  });
+
+  it('reports localhost alias hostnames as http origins', () => {
+    const domainAlias = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'localhost.localdomain',
+      AUNSORM_BASE_PATH: 'bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(domainAlias)).toEqual({
+      baseUrl: 'http://localhost.localdomain/bridge',
+      origin: 'http://localhost.localdomain',
+      path: '/bridge',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'AUNSORM_BASE_DOMAIN',
+        pathKey: 'AUNSORM_BASE_PATH',
+      },
+    });
+
+    const directAlias = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_URL: 'localhost6:3200/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(directAlias)).toEqual({
+      baseUrl: 'localhost6:3200/custom',
+      origin: 'http://localhost6:3200',
+      path: '/custom',
+      source: {
+        kind: 'direct',
+        key: 'AUNSORM_BASE_URL',
       },
     });
   });
