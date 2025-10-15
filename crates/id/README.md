@@ -14,6 +14,8 @@ biçiminde URL dostu olarak üretilir.
 - Kimliklerin çözümlenmesi ve doğrulanması için `HeadStampedId::parse` yardımı.
 - Üretilen kimliklerin belirli bir HEAD karması ile eşleştiğini doğrulamak için
   `HeadStampedId::matches_head` denetimi.
+- Opsiyonel `serde` özelliği ile kimlikleri JSON stringleri olarak serileştirip
+  tekrar çözümlenebilir hale getirme.
 
 ## Kullanım
 
@@ -23,6 +25,20 @@ use aunsorm_id::HeadIdGenerator;
 let generator = HeadIdGenerator::with_namespace("0123456789abcdef", "inventory").unwrap();
 let head_id = generator.next_id().unwrap();
 assert!(head_id.as_str().starts_with("aid.inventory."));
+```
+
+Serde desteğini aktifleştirmek için crate'i `serde` özelliği ile derleyebilir
+ve kimlikleri doğrudan metin olarak taşıyabilirsiniz:
+
+```rust
+use aunsorm_id::HeadStampedId;
+
+# fn demo(id: &HeadStampedId) -> Result<(), serde_json::Error> {
+let json = serde_json::to_string(id)?;
+let decoded: HeadStampedId = serde_json::from_str(&json)?;
+assert_eq!(&decoded, id);
+# Ok(())
+# }
 ```
 
 Daha fazla örnek için [rustdoc](https://docs.rs/aunsorm-id/latest) belgelerine
