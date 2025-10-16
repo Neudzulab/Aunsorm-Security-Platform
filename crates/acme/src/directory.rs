@@ -78,8 +78,53 @@ impl AcmeDirectory {
     /// geçersiz URL içerdiğinde `AcmeDirectoryError` döndürülür.
     pub fn from_json_slice(bytes: &[u8]) -> Result<Self, AcmeDirectoryError> {
         let value: Value = serde_json::from_slice(bytes)?;
-        let object = value.as_object().ok_or(AcmeDirectoryError::NotAnObject)?;
+        Self::from_json_value(value)
+    }
 
+    /// Serde JSON değerinden directory örneği oluşturur.
+    ///
+    /// # Errors
+    ///
+    /// JSON objesi beklenen şemayı karşılamadığında veya zorunlu alanlar
+    /// geçersiz URL içerdiğinde `AcmeDirectoryError` döndürülür.
+    pub fn from_json_value(value: Value) -> Result<Self, AcmeDirectoryError> {
+        match value {
+            Value::Object(map) => Self::from_object(&map),
+            _ => Err(AcmeDirectoryError::NotAnObject),
+        }
+    }
+
+    /// JSON metninden directory örneği oluşturur.
+    ///
+    /// # Errors
+    ///
+    /// JSON ayrıştırılamadığında veya beklenen şemayı sağlamadığında
+    /// `AcmeDirectoryError` döner.
+    pub fn from_json_str(text: &str) -> Result<Self, AcmeDirectoryError> {
+        let value: Value = serde_json::from_str(text)?;
+        Self::from_json_value(value)
+    }
+
+    #[must_use]
+    pub fn endpoint(&self, name: &str) -> Option<&Url> {
+        match name {
+            key if key == KnownEndpoint::NewNonce.as_key() => Some(&self.new_nonce),
+            key if key == KnownEndpoint::NewAccount.as_key() => Some(&self.new_account),
+            key if key == KnownEndpoint::NewOrder.as_key() => Some(&self.new_order),
+            key if key == KnownEndpoint::RevokeCert.as_key() => Some(&self.revoke_cert),
+            key if key == KnownEndpoint::KeyChange.as_key() => Some(&self.key_change),
+            key if key == KnownEndpoint::NewAuthz.as_key() => self.new_authz.as_ref(),
+            key if key == KnownEndpoint::RenewalInfo.as_key() => self.renewal_info.as_ref(),
+            _ => self.additional_endpoints.get(name),
+        }
+    }
+
+    #[must_use]
+    pub const fn additional_endpoints(&self) -> &BTreeMap<String, Url> {
+        &self.additional_endpoints
+    }
+
+    fn from_object(object: &Map<String, Value>) -> Result<Self, AcmeDirectoryError> {
         let new_nonce = parse_required_url(object, KnownEndpoint::NewNonce.as_key())?;
         let new_account = parse_required_url(object, KnownEndpoint::NewAccount.as_key())?;
         let new_order = parse_required_url(object, KnownEndpoint::NewOrder.as_key())?;
@@ -101,25 +146,6 @@ impl AcmeDirectory {
             meta,
             additional_endpoints,
         })
-    }
-
-    #[must_use]
-    pub fn endpoint(&self, name: &str) -> Option<&Url> {
-        match name {
-            key if key == KnownEndpoint::NewNonce.as_key() => Some(&self.new_nonce),
-            key if key == KnownEndpoint::NewAccount.as_key() => Some(&self.new_account),
-            key if key == KnownEndpoint::NewOrder.as_key() => Some(&self.new_order),
-            key if key == KnownEndpoint::RevokeCert.as_key() => Some(&self.revoke_cert),
-            key if key == KnownEndpoint::KeyChange.as_key() => Some(&self.key_change),
-            key if key == KnownEndpoint::NewAuthz.as_key() => self.new_authz.as_ref(),
-            key if key == KnownEndpoint::RenewalInfo.as_key() => self.renewal_info.as_ref(),
-            _ => self.additional_endpoints.get(name),
-        }
-    }
-
-    #[must_use]
-    pub const fn additional_endpoints(&self) -> &BTreeMap<String, Url> {
-        &self.additional_endpoints
     }
 }
 
@@ -340,5 +366,19 @@ mod tests {
             AcmeDirectoryError::InvalidMetaField { field } => assert_eq!(field, "caaIdentities"),
             other => panic!("beklenmeyen hata: {other:?}"),
         }
+    }
+
+    #[test]
+    fn from_json_str_matches_slice() {
+        let from_slice = AcmeDirectory::from_json_slice(SAMPLE_DIRECTORY.as_bytes()).unwrap();
+        let from_str = AcmeDirectory::from_json_str(SAMPLE_DIRECTORY).unwrap();
+        assert_eq!(from_slice, from_str);
+    }
+
+    #[test]
+    fn from_json_value_rejects_non_objects() {
+        let value = serde_json::json!(["not", "an", "object"]);
+        let err = AcmeDirectory::from_json_value(value).unwrap_err();
+        assert!(matches!(err, AcmeDirectoryError::NotAnObject));
     }
 }
