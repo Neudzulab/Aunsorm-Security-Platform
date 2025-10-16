@@ -6,4 +6,7 @@ mod directory;
 mod nonce;
 
 pub use directory::{AcmeDirectory, AcmeDirectoryError, AcmeDirectoryMeta, KnownEndpoint};
-pub use nonce::{NonceError, NoncePool, ReplayNonce, REPLAY_NONCE_HEADER};
+pub use nonce::{
+    NewNonceRequester, NonceError, NonceManager, NonceManagerError, NoncePool, NonceRequestError,
+    ReplayNonce, REPLAY_NONCE_HEADER,
+};

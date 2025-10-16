@@ -18,6 +18,8 @@ kullanılacaktır.
 - Hatalı URL veya meta alanlarında ayrıntılı hata mesajları üretir.
 - Replay-Nonce başlıklarını doğrular ve kapasite kontrollü FIFO havuzunda
   saklar.
+- `NonceManager`, ACME `newNonce` uç noktasını çağırıp taşınabilir bir
+  istemci soyutlamasıyla nonce havuzunu otomatik doldurur.
 
 ## Testler
 
