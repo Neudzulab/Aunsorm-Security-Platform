@@ -112,7 +112,7 @@
 **Yapılacaklar:**
 - [ ] ACME v2 protocol implementation
   - [x] Directory endpoint parsing
-  - [ ] Nonce management
+  - [x] Nonce management
   - [ ] JWS (JSON Web Signature) signing
   - [ ] Account key generation (RSA/ECDSA)
   

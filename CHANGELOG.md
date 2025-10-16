@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Criterion benchmark'ları eklendi.
 - `aunsorm-acme` crate'i ACME directory uç noktalarını ayrıştırmak ve doğrulamak için
   tip güvenli veri modelleri sağlıyor.
+- `aunsorm-acme` içinde `NonceManager`, `newNonce` uç noktasına yapılan çağrıları
+  test edilebilir istemci soyutlamasıyla yönetip Replay-Nonce havuzunu otomatik
+  doldurur.
 - `aunsorm-id` crate'i için opsiyonel `serde` seri/deserialize desteği ve JSON
   yuvarlama testleri eklendi.
 
