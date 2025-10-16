@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+TARGET="$REPO_ROOT/apps/web/node_modules/.bin/tsserver"
+if [ ! -x "$TARGET" ]; then
+  echo "tsserver binary not found at $TARGET" >&2
+  exit 127
+fi
+exec "$TARGET" "$@"
