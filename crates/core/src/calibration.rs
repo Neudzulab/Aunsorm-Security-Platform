@@ -72,6 +72,11 @@ const fn is_noncharacter(ch: char) -> bool {
 }
 
 /// Kalibrasyon aralığı.
+///
+/// `start` ve `end` değerleri uç noktalar dahil olacak şekilde kapsayıcıdır ve
+/// `step` aralığın hangi adımlarla örnekleneceğini belirtir. Yardımcı
+/// fonksiyonlar, değerlerin aralık içinde kalmasını ve adım ızgarasına bağlı
+/// kalmasını sağlar.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CalibrationRange {
     pub start: u16,
@@ -87,6 +92,74 @@ impl CalibrationRange {
             end,
             step: step.max(1),
         }
+    }
+
+    /// Verilen değerin aralık içerisinde kalıp kalmadığını kontrol eder.
+    ///
+    /// ```
+    /// use aunsorm_core::CalibrationRange;
+    ///
+    /// let range = CalibrationRange { start: 100, end: 120, step: 5 };
+    /// assert!(range.contains(115));
+    /// assert!(!range.contains(200));
+    /// ```
+    #[must_use]
+    pub const fn contains(&self, value: u16) -> bool {
+        value >= self.start && value <= self.end
+    }
+
+    /// Değeri aralık sınırları ve adım ızgarası ile uyumlu olacak şekilde
+    /// sıkıştırır.
+    ///
+    /// Aralığın dışındaki değerler en yakın uç noktaya projekte edilir; aralık
+    /// dahilinde olan değerler ise en yakın adım noktasına yuvarlanır. Eşit
+    /// uzaklıktaki iki adım bulunduğunda üst adım tercih edilir.
+    ///
+    /// ```
+    /// use aunsorm_core::CalibrationRange;
+    ///
+    /// let range = CalibrationRange { start: 128, end: 160, step: 4 };
+    /// assert_eq!(range.clamp(123), 128); // alt sınır
+    /// assert_eq!(range.clamp(166), 160); // üst sınır
+    /// assert_eq!(range.clamp(137), 136); // adım ızgarası
+    /// assert_eq!(range.clamp(142), 144); // eşit uzaklıkta üst adım
+    /// ```
+    #[must_use]
+    pub fn clamp(&self, value: u16) -> u16 {
+        if value <= self.start {
+            return self.start;
+        }
+        if value >= self.end {
+            return self.end;
+        }
+
+        let step = self.step.max(1);
+        let offset = value - self.start;
+        let remainder = offset % step;
+        if remainder == 0 {
+            return value;
+        }
+
+        let lower = value - remainder;
+        let upper_candidate = lower.saturating_add(step);
+        let upper = if upper_candidate > self.end {
+            None
+        } else {
+            Some(upper_candidate)
+        };
+
+        if let Some(upper_value) = upper {
+            let distance_to_lower = remainder;
+            let distance_to_upper = step - remainder;
+            if distance_to_upper < distance_to_lower {
+                return upper_value;
+            }
+            if distance_to_upper == distance_to_lower {
+                return upper_value;
+            }
+        }
+
+        lower
     }
 }
 
@@ -520,5 +593,35 @@ mod tests {
     fn normalize_calibration_text_rejects_invalid_chars() {
         let err = normalize_calibration_text("Valid\u{07}Invalid").unwrap_err();
         assert!(matches!(err, CoreError::InvalidInput(_)));
+    }
+
+    #[test]
+    fn calibration_range_contains_and_clamp_behaviour() {
+        let range = CalibrationRange {
+            start: 128,
+            end: 160,
+            step: 4,
+        };
+
+        assert!(range.contains(140));
+        assert!(!range.contains(200));
+        assert_eq!(range.clamp(100), 128);
+        assert_eq!(range.clamp(166), 160);
+        assert_eq!(range.clamp(137), 136);
+    }
+
+    #[test]
+    fn calibration_range_clamp_prefers_upper_on_ties() {
+        let range = CalibrationRange {
+            start: 100,
+            end: 137,
+            step: 8,
+        };
+
+        // 112 -> mesafe 4 aşağı, 4 yukarı -> üst adımı tercih eder.
+        assert_eq!(range.clamp(112), 116);
+
+        // Üst adım aralığı aştığında alt adım seçilir.
+        assert_eq!(range.clamp(135), 132);
     }
 }
