@@ -450,6 +450,111 @@ impl KeyTransparencyLog {
             TransparencyCheckpoint::new(record.sequence, record.timestamp, record.tree_hash)
         }))
     }
+
+    /// Verilen kontrol noktasından itibaren kayıtların zinciri genişletip
+    /// genişletmediğini doğrular.
+    ///
+    /// Fonksiyon, uzaktaki bir kayıt sağlayıcısından alınan artımlı güncellemeleri
+    /// doğrulamak için kullanılabilir. Kayıtlar boşsa `Ok(None)` döndürür; aksi
+    /// halde yeni kontrol noktasını üretir. Zincirde sıçrama, zaman gerilemesi
+    /// veya önceki karmayla uyuşmazlık tespit edilirse [`TransparencyError`]
+    /// döndürülür.
+    ///
+    /// # Errors
+    ///
+    /// Zincirin devamında sıra numarası atlanırsa, zaman gerilerse veya kayıt
+    /// karmaları domain ile uyuşmazsa [`TransparencyError`] döner.
+    ///
+    /// # Panics
+    ///
+    /// Bu fonksiyon panik oluşturmaz.
+    ///
+    /// # Örnek
+    ///
+    /// ```
+    /// use aunsorm_core::transparency::{
+    ///     KeyTransparencyLog, TransparencyCheckpoint, TransparencyEvent
+    /// };
+    ///
+    /// let mut log = KeyTransparencyLog::new("aunsorm-demo");
+    /// let first = log
+    ///     .append(TransparencyEvent::publish("key-1", [1_u8; 4], 10, None))
+    ///     .expect("record");
+    /// let checkpoint = TransparencyCheckpoint::new(first.sequence, first.timestamp, first.tree_hash);
+    /// let second = log
+    ///     .append(TransparencyEvent::publish("key-2", [2_u8; 4], 11, None))
+    ///     .expect("record");
+    /// let rest = vec![second.clone()];
+    /// let new_checkpoint = KeyTransparencyLog::verify_extension("aunsorm-demo", checkpoint, &rest)
+    ///     .expect("extension")
+    ///     .expect("checkpoint");
+    /// assert_eq!(new_checkpoint.sequence, second.sequence);
+    /// ```
+    pub fn verify_extension(
+        domain: &str,
+        checkpoint: TransparencyCheckpoint,
+        records: &[TransparencyRecord],
+    ) -> Result<Option<TransparencyCheckpoint>, TransparencyError> {
+        if records.is_empty() {
+            return Ok(None);
+        }
+
+        let mut head = checkpoint.tree_hash;
+        let mut last_timestamp = checkpoint.timestamp;
+        let mut expected_sequence = checkpoint
+            .sequence
+            .checked_add(1)
+            .ok_or(TransparencyError::SequenceOverflow)?;
+        let mut final_sequence = checkpoint.sequence;
+        let mut final_timestamp = checkpoint.timestamp;
+
+        for record in records {
+            if record.sequence != expected_sequence {
+                return Err(TransparencyError::SequenceMismatch {
+                    expected: expected_sequence,
+                    found: record.sequence,
+                });
+            }
+            if record.previous_hash != head {
+                return Err(TransparencyError::ChainBroken(record.sequence));
+            }
+            if record.timestamp < last_timestamp {
+                return Err(TransparencyError::TimestampRegression {
+                    sequence: record.sequence,
+                });
+            }
+
+            let event_hash = hash_event(domain, &record.event);
+            if event_hash != record.event_hash {
+                return Err(TransparencyError::ChainBroken(record.sequence));
+            }
+
+            let tree_hash = hash_record(
+                domain,
+                record.sequence,
+                record.timestamp,
+                head,
+                record.event_hash,
+            );
+            if tree_hash != record.tree_hash {
+                return Err(TransparencyError::ChainBroken(record.sequence));
+            }
+
+            head = record.tree_hash;
+            last_timestamp = record.timestamp;
+            final_sequence = record.sequence;
+            final_timestamp = record.timestamp;
+            expected_sequence = expected_sequence
+                .checked_add(1)
+                .ok_or(TransparencyError::SequenceOverflow)?;
+        }
+
+        Ok(Some(TransparencyCheckpoint::new(
+            final_sequence,
+            final_timestamp,
+            head,
+        )))
+    }
 }
 
 /// UNIX zaman damgasını saniye cinsinden döndürür.
@@ -477,6 +582,7 @@ impl fmt::Display for TransparencyRecord {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
     use std::time::{Duration, SystemTime};
 
     use super::{
@@ -626,6 +732,75 @@ mod tests {
         tampered[1].tree_hash[0] ^= 0xFF;
         let result = KeyTransparencyLog::checkpoint_from_records("aunsorm-demo", &tampered);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn verify_extension_accepts_valid_append() {
+        let mut log = KeyTransparencyLog::new("aunsorm-demo");
+        let first = log
+            .append(TransparencyEvent::publish("key-1", [0xAA_u8; 4], 5, None))
+            .expect("record");
+        log.append(TransparencyEvent::publish("key-2", [0xBB_u8; 4], 6, None))
+            .expect("record");
+        log.append(TransparencyEvent::rotate("key-2", [0xCC_u8; 4], 7, None))
+            .expect("record");
+
+        let checkpoint =
+            TransparencyCheckpoint::new(first.sequence, first.timestamp, first.tree_hash);
+        let records = log.records().to_vec();
+        let start = usize::try_from(checkpoint.sequence + 1).expect("sequence fits usize");
+        let extension = records[start..].to_vec();
+
+        let new_checkpoint =
+            KeyTransparencyLog::verify_extension("aunsorm-demo", checkpoint, &extension)
+                .expect("extension")
+                .expect("new checkpoint");
+        assert_eq!(
+            new_checkpoint.sequence,
+            log.records().last().expect("last").sequence
+        );
+        assert_eq!(new_checkpoint.tree_hash, log.tree_head());
+    }
+
+    #[test]
+    fn verify_extension_rejects_tampering() {
+        let mut log = KeyTransparencyLog::new("aunsorm-demo");
+        let first = log
+            .append(TransparencyEvent::publish("key-1", [0xAA_u8; 4], 10, None))
+            .expect("record");
+        log.append(TransparencyEvent::publish("key-2", [0xBB_u8; 4], 11, None))
+            .expect("record");
+
+        let checkpoint =
+            TransparencyCheckpoint::new(first.sequence, first.timestamp, first.tree_hash);
+        let mut extension = log.records()[1..].to_vec();
+        extension[0].previous_hash[0] ^= 0xFF;
+
+        let err = KeyTransparencyLog::verify_extension("aunsorm-demo", checkpoint, &extension)
+            .expect_err("tampering should be detected");
+        assert!(matches!(err, TransparencyError::ChainBroken(1)));
+    }
+
+    #[test]
+    fn verify_extension_rejects_timestamp_regression() {
+        let mut log = KeyTransparencyLog::new("aunsorm-demo");
+        let first = log
+            .append(TransparencyEvent::publish("key-1", [0xAA_u8; 4], 20, None))
+            .expect("record");
+        log.append(TransparencyEvent::rotate("key-1", [0xBB_u8; 4], 21, None))
+            .expect("record");
+
+        let checkpoint =
+            TransparencyCheckpoint::new(first.sequence, first.timestamp, first.tree_hash);
+        let mut extension = log.records()[1..].to_vec();
+        extension[0].timestamp = 19;
+
+        let err = KeyTransparencyLog::verify_extension("aunsorm-demo", checkpoint, &extension)
+            .expect_err("timestamp regression should fail");
+        assert!(matches!(
+            err,
+            TransparencyError::TimestampRegression { sequence: 1 }
+        ));
     }
 
     #[test]
