@@ -513,11 +513,13 @@ fn unix_micros(time: SystemTime) -> Result<u64, IdError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_head_id, HeadIdGenerator, HeadStampedId, IdError, FINGERPRINT_PREFIX_BYTES,
-        PROCESS_ENTROPY,
+        parse_head_id, HeadIdGenerator, IdError, FINGERPRINT_PREFIX_BYTES, PROCESS_ENTROPY,
     };
     use base64::Engine;
     use sha2::{Digest, Sha256};
+
+    #[cfg(feature = "serde")]
+    use super::HeadStampedId;
 
     const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
 
