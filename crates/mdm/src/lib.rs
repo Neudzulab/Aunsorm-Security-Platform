@@ -317,6 +317,44 @@ impl MdmDirectory {
         Ok(guard.get(id).cloned())
     }
 
+    /// Updates the `last_seen` timestamp and certificate metadata for a device.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`MdmError::InvalidIdentifier`] when the provided certificate
+    /// serial contains control characters, and [`MdmError::StatePoisoned`] if
+    /// the internal device store cannot be locked.
+    pub fn record_check_in(
+        &self,
+        id: &str,
+        certificate_serial: Option<&str>,
+    ) -> Result<Option<DeviceRecord>, MdmError> {
+        self.devices
+            .write()
+            .map_err(|_| MdmError::StatePoisoned)
+            .and_then(|mut guard| {
+                let Some(record) = guard.get_mut(id) else {
+                    return Ok(None);
+                };
+
+                record.last_seen = SystemTime::now();
+
+                if let Some(serial) = certificate_serial {
+                    let normalized = serial.trim();
+                    if normalized.is_empty() {
+                        record.certificate_serial = None;
+                    } else {
+                        if normalized.chars().any(char::is_control) {
+                            return Err(MdmError::InvalidIdentifier("certificate_serial"));
+                        }
+                        record.certificate_serial = Some(normalized.to_owned());
+                    }
+                }
+
+                Ok(Some(record.clone()))
+            })
+    }
+
     /// Produces a device-specific certificate distribution plan.
     ///
     /// # Errors
@@ -488,5 +526,53 @@ mod tests {
         };
         directory.register_device(request).expect("register");
         assert_eq!(directory.device_count().expect("count"), 1);
+    }
+
+    #[test]
+    fn record_check_in_updates_metadata() {
+        let directory = MdmDirectory::new(sample_plan());
+        let request = EnrollmentRequest {
+            device_id: "check-in-device".to_owned(),
+            owner: "carol".to_owned(),
+            display_name: None,
+            platform: DevicePlatform::Android,
+        };
+        let initial = directory.register_device(request).expect("register");
+        std::thread::sleep(Duration::from_millis(2));
+        let updated = directory
+            .record_check_in("check-in-device", Some("  SER-12345  "))
+            .expect("check-in")
+            .expect("exists");
+        assert!(updated.last_seen >= initial.last_seen);
+        assert_eq!(updated.certificate_serial.as_deref(), Some("SER-12345"));
+        let stored = directory
+            .device("check-in-device")
+            .expect("lookup")
+            .expect("present");
+        assert_eq!(stored, updated);
+    }
+
+    #[test]
+    fn record_check_in_handles_unknown_and_invalid_serials() {
+        let directory = MdmDirectory::new(sample_plan());
+        assert!(directory
+            .record_check_in("missing-device", None)
+            .expect("missing")
+            .is_none());
+
+        let request = EnrollmentRequest {
+            device_id: "serial-test".to_owned(),
+            owner: "dave".to_owned(),
+            display_name: None,
+            platform: DevicePlatform::Windows,
+        };
+        directory.register_device(request).expect("register");
+        let err = directory
+            .record_check_in("serial-test", Some("bad\nserial"))
+            .expect_err("invalid serial");
+        assert!(matches!(
+            err,
+            MdmError::InvalidIdentifier("certificate_serial")
+        ));
     }
 }
