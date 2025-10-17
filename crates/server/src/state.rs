@@ -15,6 +15,7 @@ use aunsorm_mdm::{
     PolicyDocument, PolicyRule,
 };
 use rand_core::{OsRng, RngCore};
+use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{LedgerBackend, ServerConfig};
@@ -659,6 +660,8 @@ pub struct ServerState {
     transparency_tree: RwLock<KeyTransparencyLog>,
     transparency_ledger: TransparencyLedger,
     mdm: MdmDirectory,
+    entropy_salt: [u8; 32],
+    entropy_counter: StdMutex<u64>,
 }
 
 impl ServerState {
@@ -700,6 +703,8 @@ impl ServerState {
             vec![LedgerTransparencyEvent::key_published(public_jwk)],
         )?;
         let mdm = default_mdm_directory()?;
+        let mut entropy_salt = [0_u8; 32];
+        OsRng.fill_bytes(&mut entropy_salt);
         Ok(Self {
             issuer,
             audience,
@@ -714,6 +719,8 @@ impl ServerState {
             transparency_tree: RwLock::new(transparency_tree),
             transparency_ledger,
             mdm,
+            entropy_salt,
+            entropy_counter: StdMutex::new(0),
         })
     }
 
@@ -828,6 +835,71 @@ impl ServerState {
     /// Depo sorgusu başarısız olursa `ServerError` döner.
     pub async fn active_token_count(&self, now: SystemTime) -> Result<usize, ServerError> {
         self.ledger.count_active(now).await
+    }
+
+    fn next_entropy_block(&self) -> [u8; 32] {
+        let mut os_entropy = [0_u8; 32];
+        OsRng.fill_bytes(&mut os_entropy);
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_else(|_| Duration::from_secs(0))
+            .as_nanos()
+            .to_le_bytes();
+        let mut counter_guard = self
+            .entropy_counter
+            .lock()
+            .expect("entropy counter poisoned");
+        let counter = *counter_guard;
+        *counter_guard = counter.wrapping_add(1);
+        drop(counter_guard);
+        let mut hasher = Sha256::new();
+        hasher.update(self.entropy_salt);
+        hasher.update(os_entropy);
+        hasher.update(counter.to_le_bytes());
+        hasher.update(timestamp);
+        let digest = hasher.finalize();
+        let mut block = [0_u8; 32];
+        block.copy_from_slice(&digest);
+        block
+    }
+
+    fn map_entropy_to_range(entropy: &[u8; 32], min: u64, max: u64) -> Option<u64> {
+        if min == max {
+            return Some(min);
+        }
+        let span = max.checked_sub(min)?;
+        let range = span
+            .checked_add(1)
+            .expect("range overflow when sampling randomness");
+        let threshold = u64::MAX - u64::MAX % range;
+        for chunk in entropy.chunks_exact(8) {
+            let mut buf = [0_u8; 8];
+            buf.copy_from_slice(chunk);
+            let candidate = u64::from_be_bytes(buf);
+            if candidate < threshold {
+                return Some(min + candidate % range);
+            }
+        }
+        None
+    }
+
+    /// Üretilen rastgele değeri ve kaynak entropisini döndürür.
+    ///
+    /// # Panics
+    ///
+    /// `min` değeri `max` değerinden büyükse paniğe neden olur.
+    pub fn random_value_with_proof(&self, min: u64, max: u64) -> (u64, [u8; 32]) {
+        assert!(min <= max, "min must not exceed max");
+        loop {
+            let entropy = self.next_entropy_block();
+            if let Some(value) = Self::map_entropy_to_range(&entropy, min, max) {
+                return (value, entropy);
+            }
+        }
+    }
+
+    pub fn random_inclusive(&self, min: u64, max: u64) -> u64 {
+        self.random_value_with_proof(min, max).0
     }
 
     /// Şeffaflık günlüğünün (token kayıtları) anlık görüntüsünü döndürür.
