@@ -1,6 +1,6 @@
 # Blockchain İnovasyon Programı
 
-*Revizyon: 2025-10-18*
+*Revizyon: 2025-10-22*
 
 ## Vizyon ve Stratejik Amaçlar
 - **Şeffaflık ve Denetlenebilirlik:** Aunsorm güven zincirini kamu veya özel blokzincirlere çapalayarak sertifika ve anahtar işlemlerinin denetlenebilirliğini artırmak.
@@ -23,7 +23,9 @@
 
 ### Orta Vadeli Entegrasyon (31 Ekim 2024)
 - [x] DID (Decentralized Identifier) doğrulama akışını Hyperledger Fabric PoC'leri ile entegre et; `apps/server` içinde REST katmanı taslağı çıkar (`POST /blockchain/fabric/did/verify`).
-- [ ] Quorum tabanlı audit trail senaryosu için tokenizasyon ve yetki devri politikalarını belgeleyerek `docs/src/operations/blockchain-integration.md` dosyasına ekle.
+- [x] Quorum tabanlı audit trail senaryosu için tokenizasyon ve yetki devri politikalarını belgeleyerek `docs/src/operations/blockchain-integration.md` dosyasına ekle.
+  - GoQuorum 23.x üzerinde Istanbul BFT konsensüsü, `AuditAsset` soulbound token modeli ve `TOKENIZE_AUDIT` yetkilendirme politikaları ayrıntılandırıldı.
+  - SOC 2/eIDAS raporlama gereksinimlerine yönelik mil taşları (2024-11-15 ila 2025-03-01) ve `AuditRelay` köprüleme servisi sorumlulukları tanımlandı.
 - [ ] Interop ekibi için zincirler arası test harness'ini `tests/blockchain/cross_network.rs` altında planla ve veri seti gereksinimlerini tanımla.
 
 ### Uzun Vadeli Sertifikasyon (31 Mart 2025)
