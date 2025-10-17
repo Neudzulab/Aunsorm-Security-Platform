@@ -63,6 +63,79 @@ EXTERNAL kalibrasyon bağlamını zorunlu kılan JWT üretimini ve JTI tabanlı 
       └─ AUNSORM_OTEL_ENDPOINT           → OTLP exporter endpoint
 ```
 
+## 🚀 Getting Started
+
+### Windows (PowerShell)
+
+**UTF-8 Encoding Fix** (Türkçe karakterler için gerekli):
+```powershell
+# Root dizinden çalıştır
+. .\scripts\set-utf8-encoding.ps1
+
+# Veya manuel:
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$env:RUST_LOG = "info"
+```
+
+**Sunucuyu Başlat:**
+```powershell
+# Geliştirme (debug build)
+cargo run -p aunsorm-server
+
+# Production (release build)
+cargo run --release -p aunsorm-server
+
+# HTTP/3 QUIC experimental
+cargo run --release --features http3-experimental -p aunsorm-server
+```
+
+### Linux/macOS
+
+**Environment Setup:**
+```bash
+export RUST_LOG=info
+export AUNSORM_JWT_SEED_B64="$(openssl rand -base64 32)"
+export AUNSORM_JWT_KID="dev-key-$(date +%Y%m%d)"
+export AUNSORM_ISSUER="https://auth.example.com"
+export AUNSORM_AUDIENCE="example-app"
+```
+
+**Run Server:**
+```bash
+cargo run --release -p aunsorm-server
+```
+
+### Docker
+
+**Quick Start:**
+```bash
+# Default (fast build, no PQC)
+docker build -t aunsorm-server .
+docker run -p 8080:8080 aunsorm-server
+
+# With PQC support
+docker build --build-arg ENABLE_PQC=true -t aunsorm-server:pqc .
+docker run -p 8080:8080 aunsorm-server:pqc
+
+# With OpenTelemetry
+docker build --build-arg ENABLE_OTEL=true -t aunsorm-server:otel .
+docker run -p 8080:8080 \
+  -e AUNSORM_OTEL_ENDPOINT=http://jaeger:4317 \
+  aunsorm-server:otel
+```
+
+**Expected Output:**
+```
+2025-10-17T23:47:06.469864Z  INFO aunsorm_server: telemetri başlatıldı otel=false
+2025-10-17T23:47:06.471155Z  INFO aunsorm_server::routes: aunsorm-server dinlemede address=127.0.0.1:8080
+```
+
+**Health Check:**
+```bash
+curl http://localhost:8080/health
+# Response: {"status":"healthy"}
+```
+
 ## 🎯 Temel Kullanım Senaryoları
 
 ### 1. OAuth Flow (Web/Mobile App Authentication)

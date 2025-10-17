@@ -562,14 +562,29 @@ aunsorm-server v0.4.5
 - ✅ **Production Ready:** Async/await, structured logging, OpenTelemetry
 
 **Hızlı Başlangıç:**
+
+**Windows (PowerShell) - UTF-8 Encoding Fix:**
+```powershell
+# Türkçe karakterler için UTF-8 encoding etkinleştir
+. .\scripts\set-utf8-encoding.ps1
+
+# Veya manuel:
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$env:RUST_LOG = "info"
+```
+
+**Linux/macOS:**
 ```bash
 # Environment variables
 export AUNSORM_JWT_SEED_B64="$(openssl rand -base64 32)"
 export AUNSORM_JWT_KID="prod-key-2025"
 export AUNSORM_ISSUER="https://auth.example.com"
 export AUNSORM_AUDIENCE="example-app"
+```
 
-# Sunucuyu başlat (HTTP/2)
+**Sunucuyu Başlat:**
+```bash
+# HTTP/2 (default)
 cargo run --release --bin aunsorm-server
 
 # HTTP/3 QUIC experimental desteği ile başlat
