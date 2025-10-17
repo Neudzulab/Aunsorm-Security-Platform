@@ -885,6 +885,8 @@ curl -sSL https://install.aunsorm.dev | sh
 
 ## 🚀 5 Dakikada Başla
 
+### ⚡ Normal Build
+
 ```bash
 cargo build --release
 cargo run -p aunsorm-cli -- encrypt --password P --in msg.bin --out pkt.b64 \
@@ -901,6 +903,37 @@ cargo run -p aunsorm-cli -- calib fingerprint \
   --calib-text "Neudzulab | Prod | 2025-08" --format text
 cargo run -p aunsorm-cli -- pq checklist --algorithm ml-dsa-65 --format text
 ```
+
+### ⚡ Build Süresini Azaltma İpuçları
+
+**Problem:** Post-quantum kriptografi crate'leri (pqcrypto-*) build süresini ~10x artırıyor.
+
+**Çözümler:**
+
+```bash
+# 1. Sadece ihtiyacınız olan workspace member'ı build edin
+cargo build --release -p aunsorm-cli    # Sadece CLI
+cargo build --release -p aunsorm-server # Sadece Server
+
+# 2. İnkremental build (dev build daha hızlı)
+cargo build  # Release yerine dev profil
+
+# 3. Paralel compilation (CPU core sayınıza göre)
+cargo build -j 8  # 8 paralel iş
+
+# 4. sccache kullanın (compilation cache)
+# https://github.com/mozilla/sccache
+export RUSTC_WRAPPER=sccache
+cargo build --release
+
+# 5. mold linker kullanın (Linux/macOS - 10x daha hızlı linking)
+# .cargo/config.toml:
+# [target.x86_64-unknown-linux-gnu]
+# linker = "clang"
+# rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+```
+
+**Not:** PQC özellikleri varsayılan olarak aktif. İleride ihtiyaç duyulursa feature flag sistemi eklenecek.
 
 Kalibrasyon değerini bir dosyada saklıyorsanız aynı komutlara
 `--calib-file calib.txt` seçeneğini ekleyebilir, dosya sonundaki satır
