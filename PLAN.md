@@ -303,3 +303,17 @@ Her iş için alanda uzman bir agent görevlendir. Yapılan işleri birbirleri i
 - [ ] Interop Agent: HTTP/3 + QUIC datagram değerlendirmesini `docs/src/architecture/http3-quic.md` içerisinde tanımlanan teslimat aşamalarına göre planlasın; `quinn`, `h3`, `quiche` kütüphane araştırmaları tamamlanıp raporlanacak.
 - [ ] Platform Agent: `apps/server` için `http3-experimental` bayrağıyla PoC dinleyici ve QUIC datagram telemetri entegrasyonunu geliştirsin; performans ölçümleri dokümante edilecek.
 - [ ] Security & Identity Agent: TLS 1.3 + HSM uyumu ve datagram güvenlik gereksinimlerini değerlendirsin; RFC 9000/9114 referanslı risk analizi çıktılarını operasyonel dokümana eklesin.
+20) Blockchain İnovasyon Programı
+
+- **Program Sahibi:** Blockchain inovasyon koordinasyon ekibi; yürütme desteği Crypto, Identity ve Interop ajanlarından sağlanacaktır.
+- **Kısa Vadeli PoC (31 Temmuz 2024):**
+  - `docs/innovation/blockchain.md` vizyon ve regülasyon rehberini tamamla.
+  - `tests/blockchain/` altında mock ledger arayüzü ve veri bütünlüğü kontrolü için test iskeletini tasarlayıp sorumlu ajana atamayı gerçekleştir.
+  - Interop ekibi için `.github/workflows/blockchain-poc.yml` CI job taslağı ve `tests/blockchain/config.example.toml` örnek yapılandırmasını hazırlama planını oluştur.
+- **Orta Vadeli Entegrasyon (31 Ekim 2024):** DID, denetim izi ve tokenizasyon akışlarını Hyperledger/Quorum PoC’leriyle entegre ederek uçtan uca demo hedefini belirle.
+- **Uzun Vadeli Sertifikasyon (31 Mart 2025):** eIDAS, SOC 2 ve FATF kapsamındaki uyumluluk paketlerinin hazırlanması, bağımsız denetçi raporları için dokümantasyon şablonlarının teslimi.
+- **Test İskeleti ve Kaynaklar (15 Ağustos 2024):**
+  - `tests/blockchain/mock_ledger.rs` dosyasında trait bazlı mock defter arayüzü, veri bütünlüğü senaryoları için fixture planı.
+  - `tests/blockchain/integrity_cases.rs` içindeki temel kontroller için veri seti üretim stratejisi.
+  - CI job’ı için ayrılmış runner kapasitesi, cache anahtarları ve başarısız PoC testleri için otomatik Slack uyarıları.
+  - PoC sonuçlarının belgelendiği `docs/innovation/blockchain.md` altındaki “Çıktılar ve Ölçümleme” bölümünü güncel tutma sorumluluğu.
