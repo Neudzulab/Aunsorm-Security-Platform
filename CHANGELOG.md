@@ -12,11 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Router test coverage ensuring the HTTP/3 capability payload advertises active status and datagram limits.
 - Optional `http3-poc` GitHub Actions job gated by `ENABLE_HTTP3_POC=true`, executing `aunsorm-server` and integration tests with `http3-experimental` enabled.
 - HTTP/3 canary integration test (`http3_poc_ci`) that asserts the QUIC listener binds to the expected port and produces telemetry datagrams.
+- Blockchain PoC mock ledger (`tests/blockchain/mock_ledger.rs`) and integrity regression tests (`blockchain_poc`) validating hash chain enforcement.
+- Optional `blockchain-poc.yml` workflow guarded by `BLOCKCHAIN_POC_ENABLED`/manual dispatch for running the PoC harness end-to-end.
 
 ### Documentation
 - README HTTP/3 service tree and discovery section updated with `GET /http3/capabilities` usage examples.
 - `crates/server/AGENTS.md` now requires README + CHANGELOG updates whenever a new HTTP endpoint is introduced.
 - HTTP/3 operations runbook extended with activation/rollback steps, observability checks, and incident feedback SLA’ları.
+- New blockchain innovation guide (`docs/src/innovation/blockchain.md`) and compliance checklist cross-referencing CI artefaktları ve regülasyon maddeleri.
 
 ### Planned for v0.5.0 (Q1 2026)
 - ACME v2 protocol client implementation (Let's Encrypt integration)
