@@ -45,6 +45,7 @@ const AACM_E: f64 = 1.35684;
 
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::error::ServerError;
+use crate::fabric::FabricDidRegistry;
 #[cfg(feature = "http3-experimental")]
 use crate::quic::datagram::{
     AuditEvent, AuditOutcome, DatagramPayload, OtelPayload, QuicDatagramV1, RatchetProbe,
@@ -694,6 +695,7 @@ pub struct ServerState {
     transparency_tree: RwLock<KeyTransparencyLog>,
     transparency_ledger: TransparencyLedger,
     mdm: MdmDirectory,
+    fabric: FabricDidRegistry,
     entropy_salt: [u8; 32],
     entropy_counter: StdMutex<u64>,
 }
@@ -737,6 +739,7 @@ impl ServerState {
             vec![LedgerTransparencyEvent::key_published(public_jwk)],
         )?;
         let mdm = default_mdm_directory()?;
+        let fabric = FabricDidRegistry::poc()?;
         let mut entropy_salt = [0_u8; 32];
         OsRng.fill_bytes(&mut entropy_salt);
         Ok(Self {
@@ -754,6 +757,7 @@ impl ServerState {
             transparency_tree: RwLock::new(transparency_tree),
             transparency_ledger,
             mdm,
+            fabric,
             entropy_salt,
             entropy_counter: StdMutex::new(0),
         })
@@ -793,6 +797,10 @@ impl ServerState {
 
     pub const fn mdm_directory(&self) -> &MdmDirectory {
         &self.mdm
+    }
+
+    pub const fn fabric_registry(&self) -> &FabricDidRegistry {
+        &self.fabric
     }
 
     /// Returns the number of devices registered in the in-memory MDM directory.

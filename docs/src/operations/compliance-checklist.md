@@ -22,7 +22,7 @@ Bu kontrol listesi, Aunsorm platformunun eIDAS, SOC 2 ve FATF gibi standartlarla
    - SOC 2 için gerekli denetim izleri `certifications/` altında toplanan şablonlarla eşleşiyor mu?
    - FATF Travel Rule gereksinimleri için zincir üstü izleme planı güncellendi mi?
 5. **DID ve Tokenizasyon Yol Haritası**
-   - Hyperledger Fabric/Quorum PoC’leri için kimlik ve yetkilendirme akışları belgelendi mi?
+   - Hyperledger Fabric/Quorum PoC’leri için kimlik ve yetkilendirme akışları belgelendi mi? (`POST /blockchain/fabric/did/verify` planı tamamlandı mı?)
    - `tests/blockchain/config.example.toml` dosyasında yer alan ağ parametreleri gerçek ortamla uyumlu mu?
 
 ## İnceleme Döngüsü

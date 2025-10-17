@@ -465,6 +465,12 @@ aunsorm-server v0.4.5
 │  ├─ GET    /mdm/policy/{platform}     → Platform politikası (ios/android/windows)
 │  └─ GET    /mdm/cert-plan/{device_id} → Sertifika dağıtım planı
 │
+├─ ⛓️ Blockchain DID Doğrulama (Hyperledger Fabric PoC)
+│  └─ POST   /blockchain/fabric/did/verify 🚧 → Fabric ağına çapalanmış DID kanıtını doğrula
+│                                             └─ Input: did, channel, proof{challenge(base64url), signature(base64url), block_hash(hex), transaction_id, timestamp_ms}
+│                                             └─ Output: ledger_anchor, verification_method, audit(clock_skew)
+│                                             └─ Saat sapması limiti: ≤ 30 saniye, Ed25519 imza doğrulaması
+│
 ├─ 🔍 Transparency & Audit
 │  └─ GET    /transparency/tree         → Merkle tree audit log
 │
@@ -1219,7 +1225,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] `docs/src/innovation/blockchain.md` vizyon, regülasyon rehberi ve teslimat yol haritasını yayımla.
 - [x] `tests/blockchain/` altında mock ledger + bütünlük senaryosu iskeletlerini hazırlayıp PoC testlerini ekle.
 - [x] Opsiyonel `.github/workflows/blockchain-poc.yml` işi ve `tests/blockchain/config.example.toml` yapılandırmasını oluştur.
-- [ ] Hyperledger Fabric için DID doğrulama PoC'unu REST katmanı planıyla birlikte sun.
+- [x] Hyperledger Fabric için DID doğrulama PoC'unu REST katmanı planıyla birlikte sun (bkz. [`POST /blockchain/fabric/did/verify`](docs/src/operations/blockchain-integration.md)).
 - [ ] Quorum tabanlı audit trail ve tokenizasyon gereksinimlerini `docs/src/operations/blockchain-integration.md` içinde belgeleyerek finalize et.
 - [ ] Zincirler arası test harness'ini `tests/blockchain/cross_network.rs` taslağıyla planla ve veri seti gereksinimlerini tanımla.
 - [ ] eIDAS/SOC 2 denetim raporu şablonlarını `certifications/` altında yayımla.

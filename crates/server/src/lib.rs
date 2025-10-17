@@ -20,6 +20,7 @@
 
 mod config;
 mod error;
+pub(crate) mod fabric;
 mod quic;
 mod routes;
 mod state;

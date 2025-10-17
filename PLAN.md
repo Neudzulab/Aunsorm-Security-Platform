@@ -311,6 +311,7 @@ Her iş için alanda uzman bir agent görevlendir. Yapılan işleri birbirleri i
   - `tests/blockchain/` altında mock ledger arayüzü ve veri bütünlüğü kontrolü için test iskeletini tasarlayıp sorumlu ajana atamayı gerçekleştir.
   - Interop ekibi için `.github/workflows/blockchain-poc.yml` CI job taslağı ve `tests/blockchain/config.example.toml` örnek yapılandırmasını hazırlama planını oluştur.
 - **Orta Vadeli Entegrasyon (31 Ekim 2024):** DID, denetim izi ve tokenizasyon akışlarını Hyperledger/Quorum PoC’leriyle entegre ederek uçtan uca demo hedefini belirle.
+  - [x] Hyperledger Fabric DID doğrulama PoC'u için REST katmanı (`POST /blockchain/fabric/did/verify`) ve operasyon planı yayınlandı.
 - **Uzun Vadeli Sertifikasyon (31 Mart 2025):** eIDAS, SOC 2 ve FATF kapsamındaki uyumluluk paketlerinin hazırlanması, bağımsız denetçi raporları için dokümantasyon şablonlarının teslimi.
 - **Test İskeleti ve Kaynaklar (15 Ağustos 2024):**
   - `tests/blockchain/mock_ledger.rs` dosyasında trait bazlı mock defter arayüzü, veri bütünlüğü senaryoları için fixture planı.

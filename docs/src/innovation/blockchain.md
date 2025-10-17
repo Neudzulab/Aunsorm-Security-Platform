@@ -22,7 +22,7 @@
 - [x] `.github/workflows/blockchain-poc.yml` CI iş akışı taslağı ve `tests/blockchain/config.example.toml` örnek yapılandırması oluşturuldu.
 
 ### Orta Vadeli Entegrasyon (31 Ekim 2024)
-- [ ] DID (Decentralized Identifier) doğrulama akışını Hyperledger Fabric PoC'leri ile entegre et; `apps/server` içinde REST katmanı taslağı çıkar.
+- [x] DID (Decentralized Identifier) doğrulama akışını Hyperledger Fabric PoC'leri ile entegre et; `apps/server` içinde REST katmanı taslağı çıkar (`POST /blockchain/fabric/did/verify`).
 - [ ] Quorum tabanlı audit trail senaryosu için tokenizasyon ve yetki devri politikalarını belgeleyerek `docs/src/operations/blockchain-integration.md` dosyasına ekle.
 - [ ] Interop ekibi için zincirler arası test harness'ini `tests/blockchain/cross_network.rs` altında planla ve veri seti gereksinimlerini tanımla.
 
