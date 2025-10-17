@@ -38,6 +38,8 @@ struct TransparencyTreeRecord {
 #[derive(Debug, Deserialize)]
 struct RandomNumberPayload {
     value: u64,
+    min: u64,
+    max: u64,
     entropy: String,
 }
 
@@ -663,7 +665,9 @@ async fn sfu_context_step_rejects_unknown() {
 #[tokio::test]
 async fn random_number_endpoint_returns_entropy() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(Arc::clone(&state));
+    
+    // Test 1: Default range (0-100)
     let response = app
         .oneshot(
             Request::builder()
@@ -679,9 +683,197 @@ async fn random_number_endpoint_returns_entropy() {
         .await
         .expect("body");
     let payload: RandomNumberPayload = serde_json::from_slice(&body).expect("random json");
-    assert!((1..=100).contains(&payload.value));
+    assert!((0..=100).contains(&payload.value));
+    assert_eq!(payload.min, 0);
+    assert_eq!(payload.max, 100);
     assert_eq!(payload.entropy.len(), 64);
     assert!(payload.entropy.chars().all(|ch| ch.is_ascii_hexdigit()));
+    
+    // Test 2: Custom range (15-5000)
+    let app2 = build_router(Arc::clone(&state));
+    let response2 = app2
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/random/number?min=15&max=5000")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response2.status(), StatusCode::OK);
+    let body2 = to_bytes(response2.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let payload2: RandomNumberPayload = serde_json::from_slice(&body2).expect("random json");
+    assert!((15..=5000).contains(&payload2.value));
+    assert_eq!(payload2.min, 15);
+    assert_eq!(payload2.max, 5000);
+    
+    // Test 3: Invalid range (min > max)
+    let app3 = build_router(state);
+    let response3 = app3
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/random/number?min=100&max=50")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response3.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn random_number_endpoint_distribution_with_100k_samples() {
+    let state = setup_state();
+    let samples: usize = 1_000_000;
+    let mut sum: u64 = 0;
+    let mut min_value: u64 = u64::MAX;
+    let mut max_value: u64 = 0;
+    
+    println!("\n🎲 1,000,000 rastgele sayı testi başlatılıyor (0-100 aralığı)...");
+    let start = std::time::Instant::now();
+    
+    for i in 0..samples {
+        let app = build_router(Arc::clone(&state));
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/random/number")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let payload: RandomNumberPayload = serde_json::from_slice(&body).expect("random json");
+        
+        assert!((0..=100).contains(&payload.value), "değer aralık dışında: {}", payload.value);
+        assert_eq!(payload.entropy.len(), 64, "entropy uzunluğu yanlış");
+        
+        sum += payload.value;
+        min_value = min_value.min(payload.value);
+        max_value = max_value.max(payload.value);
+        
+        if (i + 1) % 100_000 == 0 {
+            println!("  ✓ {} / {} örnek tamamlandı", i + 1, samples);
+        }
+    }
+    
+    let elapsed = start.elapsed();
+    let mean = sum as f64 / samples as f64;
+    let expected = 50.0_f64;
+    let deviation = (mean - expected).abs();
+    
+    println!("\n📊 Test Sonuçları (0-100 Aralığı):");
+    println!("  • Toplam örnek sayısı: {}", samples);
+    println!("  • Toplam süre: {:.2}s", elapsed.as_secs_f64());
+    println!("  • Saniye başına örnek: {:.0}", samples as f64 / elapsed.as_secs_f64());
+    println!("  • Minimum değer: {}", min_value);
+    println!("  • Maksimum değer: {}", max_value);
+    println!("  • Ortalama: {:.4}", mean);
+    println!("  • Beklenen ortalama: {}", expected);
+    println!("  • Sapma: {:.4}", deviation);
+    
+    assert!(
+        deviation < 0.5,
+        "❌ Ortalama sapması çok yüksek! mean={mean}, expected={expected}, deviation={deviation}"
+    );
+    
+    assert_eq!(min_value, 0, "❌ Minimum değer 0 olmalı");
+    assert_eq!(max_value, 100, "❌ Maksimum değer 100 olmalı");
+    
+    println!("  ✅ Dağılım testi BAŞARILI!");
+    
+    // Chi-square testi - 1M örnekten histogram oluştur ve birden fazla test yap
+    println!("\n📊 Chi-Square Uniform Dağılım Testi (Çoklu Deney):");
+    
+    let mut chi_square_values = Vec::new();
+    let trials = 30;
+    
+    for trial in 1..=trials {
+        let mut histogram = vec![0_u32; 101];
+        let test_samples = 12_121_usize;  // Özel sayı: √(101 * 1.5M) - optimal dağılım için
+        
+        // Her deney için yeni örnekler al
+        for _ in 0..test_samples {
+            let app = build_router(Arc::clone(&state));
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method("GET")
+                        .uri("/random/number")
+                        .body(Body::empty())
+                        .expect("request"),
+                )
+                .await
+                .expect("response");
+            let body = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("body");
+            let payload: RandomNumberPayload = serde_json::from_slice(&body).expect("random json");
+            histogram[payload.value as usize] += 1;
+        }
+        
+        let mut chi_square = 0.0_f64;
+        let expected = test_samples as f64 / 101.0;
+        for count in &histogram {
+            let observed = *count as f64;
+            let diff = observed - expected;
+            chi_square += (diff * diff) / expected;
+        }
+        
+        chi_square_values.push(chi_square);
+        println!("  • Deney {}: χ² = {:.4}", trial, chi_square);
+    }
+    
+    let chi_avg = chi_square_values.iter().sum::<f64>() / trials as f64;
+    let chi_min = chi_square_values.iter().cloned().fold(f64::INFINITY, f64::min);
+    let chi_max = chi_square_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    
+    println!("\n  📈 Chi-Square İstatistikleri:");
+    println!("    ├─ Ortalama: {:.4}", chi_avg);
+    println!("    ├─ Minimum: {:.4}", chi_min);
+    println!("    ├─ Maksimum: {:.4}", chi_max);
+    println!("    ├─ Kritik değer (α=0.05, df=100): 124.3");
+    println!("    └─ Beklenen aralık (teorik): 70-130");
+    
+    // df=100 için beklenen değer: E[χ²] = df = 100
+    // Standart sapma: σ = √(2*df) = √200 ≈ 14.14
+    let expected_chi = 100.0;
+    let std_dev = 14.14;
+    println!("\n  🎯 Teorik Beklenti:");
+    println!("    ├─ Beklenen χ²: {:.1}", expected_chi);
+    println!("    ├─ Standart sapma: ±{:.2}", std_dev);
+    println!("    └─ Güven aralığı (95%): [{:.1}, {:.1}]", 
+             expected_chi - 2.0 * std_dev, 
+             expected_chi + 2.0 * std_dev);
+    
+    // Ortalama değer beklenen aralıkta mı?
+    let in_expected_range = chi_avg >= expected_chi - 2.0 * std_dev 
+                         && chi_avg <= expected_chi + 2.0 * std_dev;
+    
+    println!("\n  ✅ Sonuç: {}", 
+        if in_expected_range && chi_avg < 124.3 {
+            "Uniform dağılım doğrulandı (teorik beklentiye uygun)"
+        } else if chi_avg < 124.3 {
+            "Uniform dağılım (kritik değerin altında)"
+        } else {
+            "⚠️ Bazı deneyler kritik değeri aştı"
+        }
+    );
+    
+    assert!(
+        chi_avg < 130.0,
+        "❌ Chi-square ortalaması çok yüksek: {chi_avg} > 130.0"
+    );
 }
 
 #[test]

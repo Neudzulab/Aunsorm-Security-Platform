@@ -268,18 +268,57 @@ async fn exchange_token(
     }))
 }
 
+#[derive(Debug, Deserialize)]
+struct RandomNumberQuery {
+    #[serde(default = "default_min")]
+    min: u64,
+    #[serde(default = "default_max")]
+    max: u64,
+}
+
+const fn default_min() -> u64 {
+    0
+}
+
+const fn default_max() -> u64 {
+    100
+}
+
 #[derive(Debug, Serialize)]
 struct RandomNumberResponse {
     value: u64,
+    min: u64,
+    max: u64,
     entropy: String,
 }
 
-async fn random_number(State(state): State<Arc<ServerState>>) -> Json<RandomNumberResponse> {
-    let (value, entropy) = state.random_value_with_proof(1, 100);
-    Json(RandomNumberResponse {
+async fn random_number(
+    State(state): State<Arc<ServerState>>,
+    axum::extract::Query(params): axum::extract::Query<RandomNumberQuery>,
+) -> Result<Json<RandomNumberResponse>, ApiError> {
+    let min = params.min;
+    let max = params.max;
+    
+    // Validation
+    if min > max {
+        return Err(ApiError::invalid_request(
+            "min değeri max değerinden büyük olamaz",
+        ));
+    }
+    
+    if max > u64::MAX / 2 {
+        return Err(ApiError::invalid_request(
+            "max değeri çok büyük (güvenlik limiti: u64::MAX/2)",
+        ));
+    }
+    
+    let (value, entropy) = state.random_value_with_proof(min, max);
+    Ok(Json(RandomNumberResponse {
         value,
+        min,
+        max,
         entropy: hex_encode(entropy),
-    })
+    }))
 }
 
 #[derive(Debug, Deserialize)]

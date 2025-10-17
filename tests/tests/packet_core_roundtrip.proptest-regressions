@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 534400f67781900506dcdc2cbc8918aaba063e54269e5186658f79fae18f0f8d # shrinks to password = " ", password_salt = [12, 72, 135, 239, 20, 5, 83, 230], org_salt = [241, 211, 75, 127, 7, 104, 32, 1, 30, 216], note_text = " ", tamper_suffix = "f;;", plaintext = [183, 212, 28, 34, 153, 152, 80, 127, 158, 151, 186, 112, 24, 216, 47, 156, 237, 145, 176, 86, 224, 87, 90, 156, 3, 13, 147, 91, 213, 135, 224, 24, 58, 208, 164, 201, 83, 51, 171, 169, 223, 127, 168, 62, 147, 47, 85, 68, 53, 197, 27, 205, 134, 93, 226, 71, 212, 89, 148, 80, 25, 202, 38, 128, 29, 146, 78, 241, 185, 247, 197, 13, 187, 152, 138, 84, 108, 24, 0, 179, 30, 113, 2, 102, 30, 122, 232, 69, 181, 109, 23, 157, 11, 147, 40, 139], aad = [84, 30, 224, 104, 227], profile = KdfProfile { t: 1, m_kib: 32768, p: 1 }, algorithm = AesGcm, salts = Salts { calibration: [181, 22, 122, 136, 111, 248, 246, 36, 188, 212, 164, 19, 48, 61, 56, 79, 253, 215, 245], chain: [220, 163, 79, 82, 68, 81, 146, 86, 248, 116, 1, 156, 163, 130, 137, 56, 135, 67, 11, 59, 137, 32, 2, 241, 196, 28], coord: [143, 180, 153, 79, 157, 183, 14, 205, 60, 97, 140, 32, 26, 180, 177, 111, 46, 167, 161, 250, 154] }
