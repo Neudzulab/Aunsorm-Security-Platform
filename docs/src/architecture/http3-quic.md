@@ -80,6 +80,13 @@ Bu kıyaslama sonucunda Interop Agent, **temel PoC** için `quinn` + `h3` ikilis
    - QUIC datagram akışlarında bütünlük ve kimlik doğrulama seçeneklerini değerlendir; gerektiğinde paket başına AEAD etiketi zorunluluğu tanımla.
    - RFC 9000, RFC 9114 ve IETF MASQUE önerilerine göre regülasyon ve uyumluluk etkilerini dokümante et.
 
+   **Tamamlanan teslimatlar:**
+
+   - `rustls` istemci sertifikası anahtarlarının HSM (PKCS#11) destekli `aunsorm-kms` imzacısı ile kullanımı doğrulandı; QUIC el
+     sıkışması için gerekli `sign` ve `decrement_traffic_keys` çağrıları modül uyumluluk matrisinde belgelenmiştir.【F:docs/src/operations/http3-quic-security.md†L39-L97】
+   - QUIC datagramları için `ChaCha20-Poly1305` AEAD katmanı ve kanal bazlı sequence numarası senkronizasyonu tanımlandı; `audit` ve `ratchet` kanalları için tekrar saldırısı koruması zorunlu hale getirildi.【F:docs/src/operations/http3-quic-security.md†L99-L151】
+   - Regülasyon iz düşümleri (RFC 9000/9114, ETSI TS 103 523-3) ve SOC 2 denetim maddeleri yeni güvenlik değerlendirme raporunda ilişkilendirildi.【F:docs/src/operations/http3-quic-security.md†L153-L214】
+
 4. **Ürünleştirme ve CI Entegrasyonu (Interop Agent)**
    - CI pipeline’ına `ENABLE_HTTP3_POC` değişkeni altında koşan entegrasyon testleri ekle.
    - Operasyon rehberinde (ops runbook) HTTP/3 aktif etme/geri alma prosedürlerini, gözlemlenebilirlik metriklerini ve hata ayıklama adımlarını güncelle.

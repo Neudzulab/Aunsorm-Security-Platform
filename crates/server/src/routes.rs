@@ -82,8 +82,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         ))
     };
 
-    router.with_state(state)
-        .route("/transparency/tree", get(transparency_tree))
+    router
         .route("/random/number", get(random_number))
         .with_state(state)
 }
