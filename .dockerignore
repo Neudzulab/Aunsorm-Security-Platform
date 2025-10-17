@@ -1,0 +1,43 @@
+# Git
+.git/
+.gitignore
+.gitmodules
+
+# Build artifacts
+target/
+**/target/
+*.so
+*.dylib
+*.dll
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+docs/
+examples/
+benches/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Development
+.env
+.env.*
+*.log
+tmp/
+temp/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
