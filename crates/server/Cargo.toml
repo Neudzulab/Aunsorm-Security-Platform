@@ -35,6 +35,7 @@ hkdf = { workspace = true }
 aunsorm-jwt = { path = "../jwt" }
 aunsorm-core = { path = "../core" }
 aunsorm-mdm = { path = "../mdm" }
+aunsorm-id = { path = "../id" }
 zeroize = { workspace = true }
 rand_core = { workspace = true }
 hex = { workspace = true }

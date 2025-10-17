@@ -1,4 +1,4 @@
-# Aunsorm Cryptography Suite
+﻿# Aunsorm Cryptography Suite
 
 **Modern, bağımsız ve production-ready kriptografi ve sertifika yönetim platformu.**
 
@@ -406,9 +406,9 @@ aunsorm-server v0.4.4
 │                                          └─ Performans: ~78,000 samples/second
 │
 ├─ 🆔 ID Generation (HEAD-Stamped Unique IDs)
-│  ├─ POST   /id/generate �            → [Planlandı v0.4.5] Git HEAD tabanlı benzersiz kimlik oluştur
-│  │                                       └─ `aunsorm-id` crate hazır (v0.1.0)
-│  │                                       └─ Server endpoint entegrasyonu bekliyor
+│  ├─ POST   /id/generate �            → Git HEAD tabanlı benzersiz kimlik oluştur
+│  │                                       └─ `aunsorm-id` crate (v0.4.1)
+│  │                                       └─ Environment: AUNSORM_HEAD, GITHUB_SHA, GIT_COMMIT
 │  │                                       └─ Format: aid.<namespace>.<head>.<payload>
 │  │                                       └─ Input: namespace (optional, default: "aunsorm")
 │  │                                       └─ Output: HeadStampedId (JSON)
