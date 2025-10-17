@@ -35,6 +35,12 @@ struct TransparencyTreeRecord {
     action: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct RandomNumberPayload {
+    value: u64,
+    entropy: String,
+}
+
 fn test_seed() -> [u8; 32] {
     [7_u8; 32]
 }
@@ -652,6 +658,51 @@ async fn sfu_context_step_rejects_unknown() {
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn random_number_endpoint_returns_entropy() {
+    let state = setup_state();
+    let app = build_router(state);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/random/number")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let payload: RandomNumberPayload = serde_json::from_slice(&body).expect("random json");
+    assert!((1..=100).contains(&payload.value));
+    assert_eq!(payload.entropy.len(), 64);
+    assert!(payload.entropy.chars().all(|ch| ch.is_ascii_hexdigit()));
+}
+
+#[test]
+fn random_distribution_mean_stays_near_center() {
+    let state = setup_state();
+    let samples: u64 = 100_000;
+    let mut sum: u64 = 0;
+    for _ in 0..samples {
+        let draw = state.random_inclusive(1, 100);
+        assert!((1..=100).contains(&draw));
+        sum += draw;
+    }
+    let sum_u32 = u32::try_from(sum).expect("sum within bounds");
+    let samples_u32 = u32::try_from(samples).expect("samples within bounds");
+    let mean = f64::from(sum_u32) / f64::from(samples_u32);
+    let expected = 50.5_f64;
+    let deviation = (mean - expected).abs();
+    assert!(
+        deviation < 0.5,
+        "sample mean {mean} deviates from {expected} by {deviation}"
+    );
 }
 
 #[allow(dead_code)]
