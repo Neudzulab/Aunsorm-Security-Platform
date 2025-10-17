@@ -775,11 +775,6 @@ impl ServerState {
         &self.jwks
     }
 
-    #[cfg(feature = "http3-experimental")]
-    pub const fn listen_port(&self) -> u16 {
-        self.listen_port
-    }
-
     pub const fn strict(&self) -> bool {
         self.strict
     }

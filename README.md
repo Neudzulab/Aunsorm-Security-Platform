@@ -6,7 +6,7 @@ Aunsorm, end-to-end encryption (E2EE), post-quantum cryptography (PQC), JWT toke
 
 ## 🚀 Özellikler
 
-### ✅ Aktif Özellikler (v0.4.2)
+### ✅ Aktif Özellikler (v0.4.4)
 
 #### 🔐 X.509 Certificate Authority (CA)
 - **Self-Hosted CA:** Kendi sertifika otoritenizi kurun
@@ -158,7 +158,7 @@ Aunsorm, CLI araçlarından production-ready HTTP API'ye kadar eksiksiz bir güv
 ##### 🔧 Aunsorm CLI - Komut Satırı Araçları
 
 ```
-aunsorm-cli v0.4.1
+aunsorm-cli v0.4.4
 │
 ├─ 🔐 Encryption & Decryption
 │  ├─ encrypt                          → EXTERNAL kalibrasyon ile AEAD şifreleme
@@ -390,7 +390,7 @@ aunsorm-cli v0.4.1
 ##### 🌐 Aunsorm Server - Production HTTP API
 
 ```
-aunsorm-server v0.4.1
+aunsorm-server v0.4.4
 │
 ├─ 🔐 OAuth 2.0 / OIDC Flow
 │  ├─ POST   /oauth/begin-auth          → PKCE S256 yetkilendirme başlat
@@ -406,9 +406,9 @@ aunsorm-server v0.4.1
 │                                          └─ Performans: ~78,000 samples/second
 │
 ├─ 🆔 ID Generation (HEAD-Stamped Unique IDs)
-│  ├─ POST   /id/generate 🚧            → Git HEAD tabanlı benzersiz kimlik oluştur
+│  ├─ POST   /id/generate �            → [Planlandı v0.4.5] Git HEAD tabanlı benzersiz kimlik oluştur
 │  │                                       └─ `aunsorm-id` crate hazır (v0.1.0)
-│  │                                       └─ [Devam Ediyor] Endpoint entegrasyonu bekleniyor
+│  │                                       └─ Server endpoint entegrasyonu bekliyor
 │  │                                       └─ Format: aid.<namespace>.<head>.<payload>
 │  │                                       └─ Input: namespace (optional, default: "aunsorm")
 │  │                                       └─ Output: HeadStampedId (JSON)
@@ -419,12 +419,12 @@ aunsorm-server v0.4.1
 │  │                                       │   ├─ timestamp_micros: u64
 │  │                                       │   └─ counter: u64
 │  │
-│  ├─ POST   /id/parse 🚧               → Kimlik doğrula ve çözümle
+│  ├─ POST   /id/parse �               → [Planlandı v0.4.5] Kimlik doğrula ve çözümle
 │  │                                       └─ Input: id (string)
 │  │                                       └─ Output: HeadStampedId (JSON) or error
 │  │                                       └─ Validation: format, fingerprint, namespace
 │  │
-│  └─ POST   /id/verify-head 🚧         → Kimliğin HEAD ile eşleştiğini doğrula
+│  └─ POST   /id/verify-head �         → [Planlandı v0.4.5] Kimliğin HEAD ile eşleştiğini doğrula
 │                                          └─ Input: id (string), head (git SHA)
 │                                          └─ Output: { "matches": boolean }
 │                                          └─ Use case: CI/CD artifact verification
@@ -448,7 +448,7 @@ aunsorm-server v0.4.1
 │  ├─ GET    /health                    → Health check endpoint
 │  └─ GET    /metrics                   → Prometheus metrics (opsiyonel)
 │
-├─ 🚀 HTTP/3 QUIC Datagrams (Experimental - v0.4.2)
+├─ 🚀 HTTP/3 QUIC Datagrams (Experimental - v0.4.4)
 │  ├─ Channel: Telemetry (0)           → OpenTelemetry metrics streaming
 │  │                                     └─ Real-time metrics over QUIC
 │  │                                     └─ Low latency, unreliable delivery
@@ -504,7 +504,7 @@ aunsorm-server v0.4.1
 > **📌 NOT:** Bu ağaçta gösterilen her komut ve endpoint, ilerleyen sürümlerde **daha fazla özellik ve parametre** ile genişletilecektir.
 > 
 > **🔜 GELECEK ENDPOINT'LER:**
-> - **v0.4.3 (Current Sprint):** ID Generation endpoints - `aunsorm-id` crate hazır, 3 endpoint eklenmesi gerekiyor
+> - **v0.4.5 (Q4 2025):** ID Generation endpoints - `aunsorm-id` crate hazır, 3 endpoint eklenmesi gerekiyor
 > - **v0.5.0 (Q1 2026):** ACME Protocol endpoints (RFC 8555) - `aunsorm-acme` crate hazır, 8 endpoint entegrasyonu bekliyor
 > - **v0.6.0 (Q2 2026):** WebTransport API - Bidirectional HTTP/3 QUIC streams, production-grade datagram hardening
 > - **v0.7.0 (Q3 2026):** Blockchain integration endpoints - Transparency log anchoring to public chains 
@@ -523,7 +523,7 @@ aunsorm-server v0.4.1
 - ✅ **Multi-platform MDM:** iOS, Android, Windows, macOS, Linux desteği
 - ✅ **Transparency Logging:** Merkle tree based audit trail
 - ✅ **HTTP/3 QUIC Datagrams:** Experimental low-latency telemetry streaming
-- 🚧 **HEAD-Stamped IDs:** Git commit SHA tabanlı benzersiz kimlik üretimi (`aunsorm-id` crate hazır, endpoint entegrasyonu bekleniyor)
+- � **HEAD-Stamped IDs:** Git commit SHA tabanlı benzersiz kimlik üretimi (`aunsorm-id` crate hazır, v0.4.5'te entegre edilecek)
 - 📋 **ACME Protocol:** Let's Encrypt uyumlu otomatik sertifika yönetimi (RFC 8555, `aunsorm-acme` crate hazır, v0.5.0'da entegre edilecek)
 - ✅ **Production Ready:** Async/await, structured logging, OpenTelemetry
 
@@ -756,7 +756,7 @@ cargo test --features http3-experimental --test http3_datagram -- --nocapture
 ```
 
 **Limitasyonlar (Experimental):**
-- ⚠️ Production kullanımı önerilmez (v0.4.2 - PoC stage)
+- ⚠️ Production kullanımı önerilmez (v0.4.4 - PoC stage)
 - ⚠️ Certificate pinning eksik
 - ⚠️ Rate limiting yok
 - ⚠️ Datagram ordering garanti edilmez
@@ -773,10 +773,11 @@ Detaylı döküman: [`docs/src/architecture/http3-quic.md`](docs/src/architectur
 
 ### 🎯 Yakında Gelecek Özellikler
 
-#### v0.4.3 (Q4 2025) - RSA Support
-- ✅ RSA 2048/4096 key generation
-- ✅ Windows ve legacy sistem uyumluluğu
-- ✅ Multi-algorithm certificate support
+#### v0.4.5 (Q4 2025) - ID Generation Service
+- 📋 **HEAD-Stamped IDs:** `aunsorm-id` crate server entegrasyonu
+- 🔗 **3 REST Endpoints:** /id/generate, /id/parse, /id/verify-head
+- 🎯 **CI/CD Integration:** Git commit SHA tracking for artifacts
+- ✅ **Monotonic Timestamps:** Collision-free ID generation
 
 #### v0.5.0 (Q1 2026) - **Let's Encrypt ACME Client + Server Endpoints**
 
@@ -1185,8 +1186,8 @@ aunsorm-cli acme certify --domain www.example.com \
 Detaylı roadmap için: [ROADMAP.md](ROADMAP.md)
 
 **Yakın gelecek:**
--  **v0.4.2** (Now): CA sign-server command
--  **v0.4.3** (Q4 2025): RSA key generation
+-  **v0.4.4** (Now): HTTP/3 QUIC Datagrams PoC + Service Discovery Directive
+-  **v0.4.5** (Q4 2025): HEAD-Stamped ID Generation endpoints
 -  **v0.5.0** (Q1 2026): Let's Encrypt ACME client
 -  **v0.5.1** (Q1 2026): Certificate monitoring & alerting
 -  **v0.6.0** (Q2 2026): HSM integration, CT monitoring

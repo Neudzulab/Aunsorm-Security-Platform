@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Planned for v0.4.5 (Q4 2025)
+- **HEAD-Stamped ID Generation Service**
+  - Server endpoint integration for `aunsorm-id` crate
+  - REST API: `/id/generate`, `/id/parse`, `/id/verify-head`
+  - CI/CD artifact tracking with Git commit SHA
+  - Monotonic timestamp-based collision-free IDs
+
+### Planned for v0.5.0 (Q1 2026)
+- ACME v2 protocol client implementation (Let's Encrypt integration)
+- Automatic certificate issuance and renewal
+- Domain validation (HTTP-01, DNS-01, TLS-ALPN-01)
+- Zero-downtime certificate rotation
+- Prometheus metrics and monitoring
+
+## [0.4.4] - 2025-10-17
+
+### Added
+- **Service Discovery Directive in AGENTS.md**
+  - 🚨 Mandatory endpoint documentation policy for all agents
+  - Status indicators: ✅ Active, 🚧 Development, 📋 Planned, 🔮 Future
+  - Responsibility matrix for Platform, Identity, Crypto, and Interop agents
+  - Git commit checkpoint: README vs routes.rs comparison requirement
+- **Missing Service Documentation**
+  - `aunsorm-id` crate (v0.1.0) documented as 📋 Planned for v0.4.5
+  - 3 ID endpoints: `/id/generate`, `/id/parse`, `/id/verify-head`
+  - `aunsorm-acme` crate documented as 📋 Planned for v0.5.0
+  - 8 ACME endpoints for RFC 8555 compliance
+- **HTTP/3 QUIC Datagrams (Experimental)**
+  - Merged HTTP/3 PoC from origin/main (982 lines)
+  - 3 datagram channels: Telemetry(0), Audit(1), Ratchet(2)
+  - Postcard binary encoding (max payload: 1150 bytes)
+  - Alt-Svc header for HTTP/3 upgrade advertisement
+  - Feature flag: `http3-experimental`
+  - 120+ lines of HTTP/3 documentation in README
+- **Parametric Random Number Endpoint**
+  - `/random/number?min=X&max=Y` query parameters
+  - Default range: 0-100 (backward compatible)
+  - Validation: min ≤ max, max ≤ u64::MAX/2
+  - Mathematical entropy mixing: NEUDZ-PCS + AACM models
+  - Chi-square validation: χ² = 101.18 ≈ 100.0 (4M samples)
+
+### Fixed
+- Duplicate `/transparency/tree` route causing test failures
+- Missing `listen_port()` accessor method in `ServerState`
+- Proptest whitespace calibration bug (added `prop_assume!(!note_text.trim().is_empty())`)
+- Route conflict from duplicate `.with_state(state)` call
+
+### Changed
+- **Version Standardization**
+  - All version references updated from v0.4.2 → v0.4.4
+  - CLI version: v0.4.1 → v0.4.4
+  - Server version: v0.4.1 → v0.4.4
+  - Roadmap timeline adjusted for ID service (v0.4.5) and ACME (v0.5.0)
+- **Documentation Improvements**
+  - README expanded: 1167 → 1214 lines (+47 lines)
+  - Comprehensive CLI command tree documentation
+  - Server endpoint tree with 17 active + 11 planned endpoints
+  - Kalibrasyon system explanation (100+ lines)
+  - HTTP/3 QUIC technical documentation (120+ lines)
+  - Professional consistency across all sections
+
 ### Added
 - RSA 2048/4096 anahtar üretimi `ring` entegrasyonu ile birlikte etkinleştirildi.
 - `aunsorm-cli x509` komutları için `--algorithm` seçeneği (ed25519, rsa2048, rsa4096)
