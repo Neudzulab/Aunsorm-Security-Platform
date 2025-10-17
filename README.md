@@ -405,6 +405,30 @@ aunsorm-server v0.4.1
 │                                          └─ χ² = 101.18 ≈ 100.0 (4M samples validated)
 │                                          └─ Performans: ~78,000 samples/second
 │
+├─ 🆔 ID Generation (HEAD-Stamped Unique IDs)
+│  ├─ POST   /id/generate 🚧            → Git HEAD tabanlı benzersiz kimlik oluştur
+│  │                                       └─ `aunsorm-id` crate hazır (v0.1.0)
+│  │                                       └─ [Devam Ediyor] Endpoint entegrasyonu bekleniyor
+│  │                                       └─ Format: aid.<namespace>.<head>.<payload>
+│  │                                       └─ Input: namespace (optional, default: "aunsorm")
+│  │                                       └─ Output: HeadStampedId (JSON)
+│  │                                       │   ├─ id: string
+│  │                                       │   ├─ namespace: string
+│  │                                       │   ├─ head_prefix: string (8 hex chars)
+│  │                                       │   ├─ fingerprint: string (20 hex chars)
+│  │                                       │   ├─ timestamp_micros: u64
+│  │                                       │   └─ counter: u64
+│  │
+│  ├─ POST   /id/parse 🚧               → Kimlik doğrula ve çözümle
+│  │                                       └─ Input: id (string)
+│  │                                       └─ Output: HeadStampedId (JSON) or error
+│  │                                       └─ Validation: format, fingerprint, namespace
+│  │
+│  └─ POST   /id/verify-head 🚧         → Kimliğin HEAD ile eşleştiğini doğrula
+│                                          └─ Input: id (string), head (git SHA)
+│                                          └─ Output: { "matches": boolean }
+│                                          └─ Use case: CI/CD artifact verification
+│
 ├─ 📹 SFU Integration (E2EE Key Management)
 │  ├─ POST   /sfu/context               → E2EE session oluştur
 │  │                                       └─ Input: room_id, participant, enable_e2ee
@@ -446,21 +470,42 @@ aunsorm-server v0.4.1
 │  ├─ Max wire size: 1350 bytes
 │  └─ Feature flag: `http3-experimental`
 │
-└─ 🔜 ACME Protocol (v0.5.0 - Planned)
-   ├─ GET    /acme/directory            → ACME directory discovery
-   ├─ HEAD   /acme/new-nonce            → Nonce generation
-   ├─ POST   /acme/new-account          → Account creation
-   ├─ POST   /acme/new-order            → Certificate order
-   ├─ POST   /acme/authz/{id}           → Authorization status
-   ├─ POST   /acme/challenge/{id}       → Challenge validation
-   ├─ POST   /acme/finalize/{order_id}  → Certificate finalization
-   └─ POST   /acme/revoke-cert          → Certificate revocation
+└─ 🔜 ACME Protocol (RFC 8555)
+   ├─ GET    /acme/directory 📋         → [Planlandı v0.5.0] ACME directory discovery
+   │                                       └─ `aunsorm-acme` crate hazır (directory parser)
+   │                                       └─ Output: newNonce, newAccount, newOrder URLs
+   │
+   ├─ HEAD   /acme/new-nonce 📋         → [Planlandı v0.5.0] Nonce generation
+   │                                       └─ Replay-Nonce header generation
+   │                                       └─ NonceManager hazır (in-memory + SQLite)
+   │
+   ├─ POST   /acme/new-account 📋       → [Planlandı v0.5.0] Account creation
+   │                                       └─ JWS signature verification (JwsSigner hazır)
+   │                                       └─ Account key registration
+   │
+   ├─ POST   /acme/new-order 📋         → [Planlandı v0.5.0] Certificate order
+   │                                       └─ Domain validation workflow
+   │                                       └─ Challenge generation (http-01, dns-01)
+   │
+   ├─ POST   /acme/authz/{id} 📋        → [Planlandı v0.5.0] Authorization status
+   │                                       └─ Challenge status polling
+   │
+   ├─ POST   /acme/challenge/{id} 📋    → [Planlandı v0.5.0] Challenge validation
+   │                                       └─ HTTP-01, DNS-01 verification
+   │
+   ├─ POST   /acme/finalize/{order_id} 📋 → [Planlandı v0.5.0] Certificate finalization
+   │                                       └─ CSR processing + X.509 issuance
+   │                                       └─ Integration: `aunsorm-x509` CA signing
+   │
+   └─ POST   /acme/revoke-cert 📋       → [Planlandı v0.5.0] Certificate revocation
+                                           └─ CRL management
 ```
 
 > **📌 NOT:** Bu ağaçta gösterilen her komut ve endpoint, ilerleyen sürümlerde **daha fazla özellik ve parametre** ile genişletilecektir.
 > 
 > **🔜 GELECEK ENDPOINT'LER:**
-> - **v0.5.0 (Q1 2026):** ACME Protocol endpoints (RFC 8555) - `aunsorm-acme` crate zaten hazır, entegrasyon bekliyor
+> - **v0.4.3 (Current Sprint):** ID Generation endpoints - `aunsorm-id` crate hazır, 3 endpoint eklenmesi gerekiyor
+> - **v0.5.0 (Q1 2026):** ACME Protocol endpoints (RFC 8555) - `aunsorm-acme` crate hazır, 8 endpoint entegrasyonu bekliyor
 > - **v0.6.0 (Q2 2026):** WebTransport API - Bidirectional HTTP/3 QUIC streams, production-grade datagram hardening
 > - **v0.7.0 (Q3 2026):** Blockchain integration endpoints - Transparency log anchoring to public chains 
 > Detaylı kullanım ve tüm parametreler için:
@@ -478,6 +523,8 @@ aunsorm-server v0.4.1
 - ✅ **Multi-platform MDM:** iOS, Android, Windows, macOS, Linux desteği
 - ✅ **Transparency Logging:** Merkle tree based audit trail
 - ✅ **HTTP/3 QUIC Datagrams:** Experimental low-latency telemetry streaming
+- 🚧 **HEAD-Stamped IDs:** Git commit SHA tabanlı benzersiz kimlik üretimi (`aunsorm-id` crate hazır, endpoint entegrasyonu bekleniyor)
+- 📋 **ACME Protocol:** Let's Encrypt uyumlu otomatik sertifika yönetimi (RFC 8555, `aunsorm-acme` crate hazır, v0.5.0'da entegre edilecek)
 - ✅ **Production Ready:** Async/await, structured logging, OpenTelemetry
 
 **Hızlı Başlangıç:**
