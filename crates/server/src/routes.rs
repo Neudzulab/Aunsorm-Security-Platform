@@ -69,7 +69,9 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         // ID Generation endpoints (v0.4.5)
         .route("/id/generate", post(generate_id))
         .route("/id/parse", post(parse_id))
-        .route("/id/verify-head", post(verify_head));
+        .route("/id/verify-head", post(verify_head))
+        // Security endpoints (media token generation)
+        .route("/security/generate-media-token", post(generate_media_token));
 
     #[cfg(feature = "http3-experimental")]
     let router = {
@@ -1157,4 +1159,142 @@ async fn verify_head(
         matches,
         fingerprint: parsed.fingerprint_hex(),
     }))
+}
+
+// ========================================
+// Security: Media Token Generation
+// ========================================
+
+#[derive(Debug, Deserialize)]
+struct MediaTokenRequest {
+    #[serde(rename = "roomId")]
+    room_id: String,
+    identity: String,
+    #[serde(rename = "participantName")]
+    participant_name: Option<String>,
+    metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct MediaTokenResponse {
+    token: String,
+    #[serde(rename = "ttlSeconds")]
+    ttl_seconds: u64,
+    driver: String,
+    #[serde(rename = "bridgeUrl")]
+    bridge_url: String,
+    #[serde(rename = "issuedAt")]
+    issued_at: String,
+    #[serde(rename = "expiresAt")]
+    expires_at: String,
+    #[serde(rename = "roomId")]
+    room_id: String,
+    identity: String,
+}
+
+/// POST /security/generate-media-token handler
+/// Generates JWT token for Zasian media server authentication
+async fn generate_media_token(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<MediaTokenRequest>,
+) -> Result<Json<MediaTokenResponse>, ApiError> {
+    if payload.room_id.trim().is_empty() {
+        return Err(ApiError::invalid_request("roomId boş olamaz"));
+    }
+    if payload.identity.trim().is_empty() {
+        return Err(ApiError::invalid_request("identity boş olamaz"));
+    }
+
+    let now = SystemTime::now();
+    let participant_name = payload
+        .participant_name
+        .unwrap_or_else(|| payload.identity.clone());
+
+    // Build JWT claims
+    let mut claims = Claims {
+        subject: Some(payload.identity.clone()),
+        issuer: Some(state.issuer().to_owned()),
+        audience: Some(Audience::Single("zasian-media".to_owned())),
+        ..Default::default()
+    };
+
+    // Add custom claims for room and participant
+    claims.custom.insert(
+        "roomId".to_owned(),
+        serde_json::Value::String(payload.room_id.clone()),
+    );
+    claims.custom.insert(
+        "participantName".to_owned(),
+        serde_json::Value::String(participant_name.clone()),
+    );
+
+    if let Some(metadata) = payload.metadata {
+        claims
+            .custom
+            .insert("metadata".to_owned(), metadata);
+    }
+
+    claims.ensure_jwt_id();
+    claims.set_expiration_from_now(state.token_ttl());
+
+    // Sign the token
+    let token = state
+        .signing_agent()
+        .sign(&claims)
+        .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
+
+    // Calculate timestamps
+    let iat = claims.issued_at.unwrap_or(now);
+    let exp = claims.expiration.unwrap_or(
+        now + Duration::from_secs(state.token_ttl().as_secs()),
+    );
+
+    let ttl_seconds = state.token_ttl().as_secs();
+
+    // Get bridge URL from environment or use default
+    let bridge_url = std::env::var("ZASIAN_WEBSOCKET_URL")
+        .unwrap_or_else(|_| "wss://localhost:50045/zasian".to_owned());
+
+    // Record token in JTI store (optional, for replay protection)
+    if let Some(jti) = &claims.jwt_id {
+        if let Err(err) = state
+            .jti_store()
+            .record_token(
+                jti.clone(),
+                claims.subject.clone().unwrap_or_default(),
+                exp,
+            )
+            .await
+        {
+            warn!(
+                jti = %jti,
+                error = %err,
+                "JTI kaydedilemedi (JWT yine de kullanılabilir)"
+            );
+        }
+    }
+
+    Ok(Json(MediaTokenResponse {
+        token,
+        ttl_seconds,
+        driver: "zasian".to_owned(),
+        bridge_url,
+        issued_at: format_timestamp(iat),
+        expires_at: format_timestamp(exp),
+        room_id: payload.room_id,
+        identity: payload.identity,
+    }))
+}
+
+fn format_timestamp(time: SystemTime) -> String {
+    match time.duration_since(UNIX_EPOCH) {
+        Ok(d) => {
+            let secs = d.as_secs();
+            let millis = d.subsec_millis();
+            chrono::DateTime::from_timestamp(secs as i64, millis * 1_000_000)
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_owned())
+        }
+        Err(_) => "1970-01-01T00:00:00Z".to_owned(),
+    }
 }

@@ -1,7 +1,6 @@
 ﻿# Build artifacts
 target/
 node_modules/
-Cargo.lock
 
 # Test certificates (generated)
 *.crt
