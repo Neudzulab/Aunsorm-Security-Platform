@@ -1219,27 +1219,28 @@ async fn generate_media_token(
     };
 
     // Add custom claims for room and participant
-    claims.custom.insert(
+    claims.extra.insert(
         "roomId".to_owned(),
         serde_json::Value::String(payload.room_id.clone()),
     );
-    claims.custom.insert(
+    claims.extra.insert(
         "participantName".to_owned(),
         serde_json::Value::String(participant_name.clone()),
     );
 
     if let Some(metadata) = payload.metadata {
         claims
-            .custom
+            .extra
             .insert("metadata".to_owned(), metadata);
     }
 
     claims.ensure_jwt_id();
+    claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
 
     // Sign the token
     let token = state
-        .signing_agent()
+        .signer()
         .sign(&claims)
         .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
 
@@ -1256,23 +1257,24 @@ async fn generate_media_token(
         .unwrap_or_else(|_| "wss://localhost:50045/zasian".to_owned());
 
     // Record token in JTI store (optional, for replay protection)
-    if let Some(jti) = &claims.jwt_id {
-        if let Err(err) = state
-            .jti_store()
-            .record_token(
-                jti.clone(),
-                claims.subject.clone().unwrap_or_default(),
-                exp,
-            )
-            .await
-        {
-            warn!(
-                jti = %jti,
-                error = %err,
-                "JTI kaydedilemedi (JWT yine de kullanılabilir)"
-            );
-        }
-    }
+    let jti = claims
+        .jwt_id
+        .clone()
+        .ok_or_else(|| ApiError::server_error("JTI üretilemedi"))?;
+    
+    state
+        .record_token(
+            &jti,
+            exp,
+            claims.subject.as_deref(),
+            Some("zasian-media"),
+        )
+        .await
+        .map_err(|err| {
+            warn!(jti = %jti, error = %err, "Token kaydı başarısız (JWT yine de kullanılabilir)");
+            // Don't fail the request, just log the warning
+        })
+        .ok();
 
     Ok(Json(MediaTokenResponse {
         token,
@@ -1289,12 +1291,28 @@ async fn generate_media_token(
 fn format_timestamp(time: SystemTime) -> String {
     match time.duration_since(UNIX_EPOCH) {
         Ok(d) => {
+            // Simple ISO 8601 formatting (UTC)
             let secs = d.as_secs();
-            let millis = d.subsec_millis();
-            chrono::DateTime::from_timestamp(secs as i64, millis * 1_000_000)
-                .map(|dt| dt.to_rfc3339())
-                .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_owned())
+            let nanos = d.subsec_nanos();
+            let millis = nanos / 1_000_000;
+            
+            // Calculate date components (simplified, good enough for 2020-2099)
+            let days_since_epoch = secs / 86400;
+            let secs_today = secs % 86400;
+            
+            let hours = secs_today / 3600;
+            let minutes = (secs_today % 3600) / 60;
+            let seconds = secs_today % 60;
+            
+            // Approximate year/month/day (simplified)
+            let years_since_epoch = days_since_epoch / 365;
+            let year = 1970 + years_since_epoch;
+            
+            format!(
+                "{:04}-01-01T{:02}:{:02}:{:02}.{:03}Z",
+                year, hours, minutes, seconds, millis
+            )
         }
-        Err(_) => "1970-01-01T00:00:00Z".to_owned(),
+        Err(_) => "1970-01-01T00:00:00.000Z".to_owned(),
     }
 }

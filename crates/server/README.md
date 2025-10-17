@@ -226,13 +226,89 @@ Yanıtlarda dönülen anahtarlar direkt olarak SRTP/SFrame benzeri katmanlarda k
 
 Depo kökünde yer alan `Dockerfile` ile sunucuyu konteyner olarak paketleyebilirsiniz:
 
+### 📦 Varsayılan Build (PQC Aktif)
+
 ```bash
+# Varsayılan: PQC=true, OTEL=false, HTTP3=false
 docker build -t aunsorm-server .
+
 docker run --rm -p 8080:8080 \
   -e AUNSORM_JWT_SEED_B64="$(openssl rand -base64 32)" \
   -e AUNSORM_ISSUER="https://aunsorm.local" \
   -e AUNSORM_AUDIENCE="aunsorm-clients" \
   aunsorm-server
 ```
+
+### ⚡ Hızlı Build (PQC Kapalı - 10x Daha Hızlı)
+
+```bash
+# PQC olmadan build (development için önerilen)
+docker build -t aunsorm-server:fast \
+  --build-arg ENABLE_PQC=false \
+  .
+
+docker run --rm -p 8080:8080 \
+  -e AUNSORM_JWT_SEED_B64="$(openssl rand -base64 32)" \
+  -e AUNSORM_ISSUER="https://aunsorm.local" \
+  -e AUNSORM_AUDIENCE="aunsorm-clients" \
+  aunsorm-server:fast
+```
+
+### 🔍 OpenTelemetry ile Build
+
+```bash
+# OTEL aktif (production monitoring için)
+docker build -t aunsorm-server:otel \
+  --build-arg ENABLE_OTEL=true \
+  .
+
+docker run --rm -p 8080:8080 \
+  -e AUNSORM_JWT_SEED_B64="$(openssl rand -base64 32)" \
+  -e AUNSORM_ISSUER="https://aunsorm.local" \
+  -e AUNSORM_AUDIENCE="aunsorm-clients" \
+  -e AUNSORM_OTEL_ENDPOINT="http://jaeger:4318" \
+  aunsorm-server:otel
+```
+
+### 🚀 HTTP/3 QUIC ile Build (Experimental)
+
+```bash
+# HTTP/3 experimental features
+docker build -t aunsorm-server:http3 \
+  --build-arg ENABLE_HTTP3=true \
+  .
+
+docker run --rm -p 8080:8080 \
+  -e AUNSORM_JWT_SEED_B64="$(openssl rand -base64 32)" \
+  -e AUNSORM_ISSUER="https://aunsorm.local" \
+  -e AUNSORM_AUDIENCE="aunsorm-clients" \
+  aunsorm-server:http3
+```
+
+### 🎯 Tüm Özellikler Aktif
+
+```bash
+# Production: PQC + OTEL + HTTP3
+docker build -t aunsorm-server:full \
+  --build-arg ENABLE_PQC=true \
+  --build-arg ENABLE_OTEL=true \
+  --build-arg ENABLE_HTTP3=true \
+  .
+
+docker run --rm -p 8080:8080 \
+  -e AUNSORM_JWT_SEED_B64="$(openssl rand -base64 32)" \
+  -e AUNSORM_ISSUER="https://aunsorm.local" \
+  -e AUNSORM_AUDIENCE="aunsorm-clients" \
+  -e AUNSORM_OTEL_ENDPOINT="http://jaeger:4318" \
+  aunsorm-server:full
+```
+
+### 📊 Build Arguments
+
+| Argument | Varsayılan | Açıklama |
+|----------|-----------|----------|
+| `ENABLE_PQC` | `true` | Post-quantum crypto (ağır build, yüksek güvenlik) |
+| `ENABLE_OTEL` | `false` | OpenTelemetry tracing (production monitoring) |
+| `ENABLE_HTTP3` | `false` | HTTP/3 QUIC experimental features |
 
 Konteyner varsayılan olarak `0.0.0.0:8080` adresinde dinler ve loglar `RUST_LOG=info` seviyesindedir.

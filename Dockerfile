@@ -1,10 +1,33 @@
 # syntax=docker/dockerfile:1
 
 FROM rustlang/rust:nightly AS builder
+
+# Build arguments (varsayılan değerler)
+ARG ENABLE_OTEL=false
+ARG ENABLE_HTTP3=true
+ARG ENABLE_PQC=false
+
 WORKDIR /build
 COPY . .
-RUN cargo build --release --locked -p aunsorm-server \
-    && strip target/release/aunsorm-server
+
+# Feature flags ile build
+RUN set -eux; \
+    FEATURES=""; \
+    if [ "$ENABLE_OTEL" = "true" ]; then FEATURES="$FEATURES,otel"; fi; \
+    if [ "$ENABLE_HTTP3" = "true" ]; then FEATURES="$FEATURES,http3-experimental"; fi; \
+    if [ "$ENABLE_PQC" = "false" ]; then \
+        echo "PQC disabled - using --no-default-features"; \
+        cargo build --release --locked --no-default-features -p aunsorm-server; \
+    else \
+        if [ -n "$FEATURES" ]; then \
+            FEATURES=$(echo "$FEATURES" | sed 's/^,//'); \
+            echo "Building with features: $FEATURES"; \
+            cargo build --release --locked --features "$FEATURES" -p aunsorm-server; \
+        else \
+            cargo build --release --locked -p aunsorm-server; \
+        fi; \
+    fi; \
+    strip target/release/aunsorm-server
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
