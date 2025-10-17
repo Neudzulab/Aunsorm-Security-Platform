@@ -9,6 +9,7 @@ env:
   CARGO_TERM_COLOR: always
   RUSTDOCFLAGS: -D warnings
   ENABLE_PQC_POC: "false"
+  ENABLE_HTTP3_POC: "false"
 
 jobs:
   lint:
@@ -159,3 +160,25 @@ jobs:
           python-version: '3.x'
       - name: Validate PQC PoC fixtures
         run: python3 certifications/tests/pqc/run_pqc_poc.py
+
+  http3-poc:
+    name: HTTP3 PoC Canary
+    if: ${{ env.ENABLE_HTTP3_POC == 'true' }}
+    needs:
+      - doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.76.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: http3-poc
+      - name: Run server HTTP3 tests
+        run: cargo test -p aunsorm-server --features http3-experimental
+      - name: Run HTTP3 integration tests
+        run: |
+          cargo test -p aunsorm-tests --features http3-experimental --test http3_datagram
+          cargo test -p aunsorm-tests --features http3-experimental --test http3_poc_ci

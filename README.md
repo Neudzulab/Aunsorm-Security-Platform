@@ -785,6 +785,8 @@ cargo test --features http3-experimental --test http3_datagram -- --nocapture
 # Test: Channel routing validation
 ```
 
+> 🛠️ Ops Notu: GitHub Actions üzerinde `ENABLE_HTTP3_POC=true` olarak tetiklenen akış, `http3-poc` işini çalıştırarak HTTP/3 canary testlerini (`aunsorm-server` + entegrasyon testleri) doğrular.
+
 **Limitasyonlar (Experimental):**
 - ⚠️ Production kullanımı önerilmez (v0.4.4 - PoC stage)
 - ⚠️ Certificate pinning eksik
@@ -1226,7 +1228,7 @@ Detaylı roadmap için: [ROADMAP.md](ROADMAP.md)
 - [x] Araştırma & Seçim — `quinn`/`h3` ile `quiche` kıyaslaması ve datagram mesaj planı yayımlandı ([docs/src/architecture/http3-quic.md](docs/src/architecture/http3-quic.md)).
 - [x] PoC Sprinti — `apps/server` içinde `http3-experimental` dinleyici ve QUIC datagram telemetri PoC'u.
 - [x] Sertifikasyon ve Güvenlik Analizi — HSM uyumu ve QUIC datagram AEAD stratejileri raporlandı ([docs/src/operations/http3-quic-security.md](docs/src/operations/http3-quic-security.md)).
-- [ ] Ürünleştirme ve CI Entegrasyonu — HTTP/3 opsiyonel CI job'ı ve operasyon rehberi güncellenecek.
+- [x] Ürünleştirme ve CI Entegrasyonu — Opsiyonel `http3-poc` CI işi (`ENABLE_HTTP3_POC=true`) ve operasyon runbook'u güncellendi.
 
 ##  Contributing
 

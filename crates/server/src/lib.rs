@@ -33,6 +33,8 @@ pub use quic::datagram::{
     GaugeSample, HistogramBucket, HistogramSample, OtelPayload, QuicDatagramV1, RatchetProbe,
     RatchetStatus, MAX_PAYLOAD_BYTES, MAX_WIRE_BYTES,
 };
+#[cfg(feature = "http3-experimental")]
+pub use quic::{build_alt_svc_header_value, spawn_http3_poc, Http3PocGuard, ALT_SVC_MAX_AGE};
 pub use routes::{build_router, serve};
 pub use state::ServerState;
 pub use telemetry::{init_tracing, TelemetryError, TelemetryGuard};

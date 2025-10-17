@@ -7,6 +7,7 @@ publish = false
 
 [features]
 default = []
+http3-experimental = ["aunsorm-server/http3-experimental"]
 aes-siv = ["aunsorm-packet/aes-siv"]
 kms-gcp = ["aunsorm-kms/kms-gcp"]
 kms-azure = ["aunsorm-kms/kms-azure"]
@@ -16,6 +17,7 @@ kms-remote = ["kms-gcp", "kms-azure"]
 [dependencies]
 aunsorm-core = { path = "../crates/core" }
 aunsorm-packet = { path = "../crates/packet" }
+aunsorm-jwt = { path = "../crates/jwt" }
 aunsorm-kms = { path = "../crates/kms" }
 aunsorm-server = { path = "../crates/server" }
 proptest = "1.4"
@@ -27,3 +29,4 @@ ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tiny_http = "0.12"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }

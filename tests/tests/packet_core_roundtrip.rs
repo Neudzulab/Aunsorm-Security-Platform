@@ -153,7 +153,7 @@ proptest! {
     ) {
         // Boş veya sadece whitespace içeren note_text'i filtrele
         prop_assume!(!note_text.trim().is_empty());
-        
+
         let (calibration, _) =
             calib_from_text(&org_salt, &note_text).expect("calibration");
         let packet = encrypt_one_shot(EncryptParams {
