@@ -1,4 +1,4 @@
-# Aunsorm Cryptography Suite
+﻿# Aunsorm Cryptography Suite
 
 **Modern, bağımsız ve production-ready kriptografi ve sertifika yönetim platformu.**
 
@@ -6,7 +6,7 @@ Aunsorm, end-to-end encryption (E2EE), post-quantum cryptography (PQC), JWT toke
 
 ## 🚀 Özellikler
 
-### ✅ Aktif Özellikler (v0.4.4)
+### ✅ Aktif Özellikler (v0.4.5)
 
 #### 🔐 X.509 Certificate Authority (CA)
 - **Self-Hosted CA:** Kendi sertifika otoritenizi kurun
@@ -158,7 +158,7 @@ Aunsorm, CLI araçlarından production-ready HTTP API'ye kadar eksiksiz bir güv
 ##### 🔧 Aunsorm CLI - Komut Satırı Araçları
 
 ```
-aunsorm-cli v0.4.4
+aunsorm-cli v0.4.5
 │
 ├─ 🔐 Encryption & Decryption
 │  ├─ encrypt                          → EXTERNAL kalibrasyon ile AEAD şifreleme
@@ -390,7 +390,7 @@ aunsorm-cli v0.4.4
 ##### 🌐 Aunsorm Server - Production HTTP API
 
 ```
-aunsorm-server v0.4.4
+aunsorm-server v0.4.5
 │
 ├─ 🔐 OAuth 2.0 / OIDC Flow
 │  ├─ POST   /oauth/begin-auth          → PKCE S256 yetkilendirme başlat
@@ -406,9 +406,9 @@ aunsorm-server v0.4.4
 │                                          └─ Performans: ~78,000 samples/second
 │
 ├─ 🆔 ID Generation (HEAD-Stamped Unique IDs)
-│  ├─ POST   /id/generate �            → [Planlandı v0.4.5] Git HEAD tabanlı benzersiz kimlik oluştur
-│  │                                       └─ `aunsorm-id` crate hazır (v0.1.0)
-│  │                                       └─ Server endpoint entegrasyonu bekliyor
+│  ├─ POST   /id/generate �            → Git HEAD tabanlı benzersiz kimlik oluştur
+│  │                                       └─ `aunsorm-id` crate (v0.4.1)
+│  │                                       └─ Environment: AUNSORM_HEAD, GITHUB_SHA, GIT_COMMIT
 │  │                                       └─ Format: aid.<namespace>.<head>.<payload>
 │  │                                       └─ Input: namespace (optional, default: "aunsorm")
 │  │                                       └─ Output: HeadStampedId (JSON)
@@ -1186,7 +1186,7 @@ aunsorm-cli acme certify --domain www.example.com \
 Detaylı roadmap için: [ROADMAP.md](ROADMAP.md)
 
 **Yakın gelecek:**
--  **v0.4.4** (Now): HTTP/3 QUIC Datagrams PoC + Service Discovery Directive
+-  **v0.4.5** (Now): HTTP/3 QUIC Datagrams PoC + Service Discovery Directive
 -  **v0.4.5** (Q4 2025): HEAD-Stamped ID Generation endpoints
 -  **v0.5.0** (Q1 2026): Let's Encrypt ACME client
 -  **v0.5.1** (Q1 2026): Certificate monitoring & alerting

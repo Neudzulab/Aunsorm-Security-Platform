@@ -39,6 +39,9 @@ use crate::state::{auth_ttl, ServerState, SfuStepOutcome, TransparencyTreeSnapsh
 use crate::transparency::TransparencySnapshot as LedgerTransparencySnapshot;
 use serde_json::Value;
 
+// ID generation types (aunsorm-id crate)
+use aunsorm_id::{parse_head_id, HeadIdGenerator, IdError};
+
 /// HTTP yönlendiricisini oluşturur.
 ///
 /// # Panics
@@ -59,7 +62,11 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/mdm/register", post(register_device))
         .route("/mdm/policy/:platform", get(fetch_policy))
         .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
-        .route("/transparency/tree", get(transparency_tree));
+        .route("/transparency/tree", get(transparency_tree))
+        // ID Generation endpoints (v0.4.5)
+        .route("/id/generate", post(generate_id))
+        .route("/id/parse", post(parse_id))
+        .route("/id/verify-head", post(verify_head));
 
     #[cfg(feature = "http3-experimental")]
     let router = {
@@ -849,4 +856,184 @@ mod tests {
             build_alt_svc_header_value(port).expect("expected header can be constructed");
         assert_eq!(header, &expected);
     }
+// ========================================================================
+// ID GENERATION HANDLERS (v0.4.5)
+// ========================================================================
+
+/// POST /id/generate request payload
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GenerateIdRequest {
+    /// Namespace (optional, default: from env or "aunsorm")
+    #[serde(default)]
+    namespace: Option<String>,
+}
+
+/// POST /id/generate response
+#[derive(Debug, Serialize)]
+struct GenerateIdResponse {
+    /// Generated ID string
+    id: String,
+    /// Namespace used
+    namespace: String,
+    /// HEAD prefix (8 hex chars)
+    head_prefix: String,
+    /// Full fingerprint (20 hex chars)
+    fingerprint: String,
+    /// Timestamp in microseconds
+    timestamp_micros: u64,
+    /// Atomic counter value
+    counter: u64,
+}
+
+/// POST /id/parse request payload
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ParseIdRequest {
+    /// ID string to parse
+    id: String,
+}
+
+/// POST /id/parse response
+#[derive(Debug, Serialize)]
+struct ParseIdResponse {
+    /// Original ID string
+    id: String,
+    /// Namespace
+    namespace: String,
+    /// HEAD prefix (8 hex chars)
+    head_prefix: String,
+    /// Full fingerprint (20 hex chars)
+    fingerprint: String,
+    /// Timestamp in microseconds
+    timestamp_micros: u64,
+    /// Atomic counter value
+    counter: u64,
+    /// Validation status
+    valid: bool,
+}
+
+/// POST /id/verify-head request payload
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VerifyHeadRequest {
+    /// ID string to verify
+    id: String,
+    /// Git HEAD SHA to verify against
+    head: String,
+}
+
+/// POST /id/verify-head response
+#[derive(Debug, Serialize)]
+struct VerifyHeadResponse {
+    /// ID string
+    id: String,
+    /// HEAD provided
+    head: String,
+    /// Whether the ID matches the HEAD
+    matches: bool,
+    /// ID fingerprint (for debugging)
+    fingerprint: String,
+}
+
+/// POST /id/generate handler
+async fn generate_id(
+    State(_state): State<Arc<ServerState>>,
+    Json(payload): Json<GenerateIdRequest>,
+) -> Result<Json<GenerateIdResponse>, ApiError> {
+    // Try to create generator from environment
+    let generator = if let Some(namespace) = payload.namespace {
+        HeadIdGenerator::from_env()
+            .and_then(|_gen| {
+                // Get HEAD from generator, reconstruct with custom namespace
+                let head = std::env::var("AUNSORM_HEAD")
+                    .or_else(|_| std::env::var("GITHUB_SHA"))
+                    .or_else(|_| std::env::var("GIT_COMMIT"))
+                    .or_else(|_| std::env::var("CI_COMMIT_SHA"))
+                    .or_else(|_| std::env::var("VERGEN_GIT_SHA"))
+                    .map_err(|_| IdError::MissingHead)?;
+                HeadIdGenerator::with_namespace(head, namespace)
+            })
+            .map_err(|e| {
+                ApiError::server_error(format!(
+                    "ID generator oluşturulamadı: {}. Lütfen AUNSORM_HEAD veya GITHUB_SHA environment variable'ını ayarlayın.",
+                    e
+                ))
+            })?
+    } else {
+        HeadIdGenerator::from_env().map_err(|e| {
+            ApiError::server_error(format!(
+                "ID generator oluşturulamadı: {}. Lütfen AUNSORM_HEAD veya GITHUB_SHA environment variable'ını ayarlayın.",
+                e
+            ))
+        })?
+    };
+
+    // Generate ID
+    let id = generator.next_id().map_err(|e| {
+        ApiError::server_error(format!("ID üretilemedi: {}", e))
+    })?;
+
+    Ok(Json(GenerateIdResponse {
+        id: id.as_str().to_owned(),
+        namespace: id.namespace().to_owned(),
+        head_prefix: id.head_prefix(),
+        fingerprint: id.fingerprint_hex(),
+        timestamp_micros: id.timestamp_micros(),
+        counter: id.counter(),
+    }))
+}
+
+/// POST /id/parse handler
+async fn parse_id(
+    State(_state): State<Arc<ServerState>>,
+    Json(payload): Json<ParseIdRequest>,
+) -> Result<Json<ParseIdResponse>, ApiError> {
+    if payload.id.trim().is_empty() {
+        return Err(ApiError::invalid_request("id boş olamaz"));
+    }
+
+    match parse_head_id(&payload.id) {
+        Ok(parsed) => Ok(Json(ParseIdResponse {
+            id: parsed.as_str().to_owned(),
+            namespace: parsed.namespace().to_owned(),
+            head_prefix: parsed.head_prefix(),
+            fingerprint: parsed.fingerprint_hex(),
+            timestamp_micros: parsed.timestamp_micros(),
+            counter: parsed.counter(),
+            valid: true,
+        })),
+        Err(e) => Err(ApiError::invalid_request(format!(
+            "ID parse edilemedi: {}",
+            e
+        ))),
+    }
+}
+
+/// POST /id/verify-head handler
+async fn verify_head(
+    State(_state): State<Arc<ServerState>>,
+    Json(payload): Json<VerifyHeadRequest>,
+) -> Result<Json<VerifyHeadResponse>, ApiError> {
+    if payload.id.trim().is_empty() {
+        return Err(ApiError::invalid_request("id boş olamaz"));
+    }
+    if payload.head.trim().is_empty() {
+        return Err(ApiError::invalid_request("head boş olamaz"));
+    }
+
+    let parsed = parse_head_id(&payload.id).map_err(|e| {
+        ApiError::invalid_request(format!("ID parse edilemedi: {}", e))
+    })?;
+
+    let matches = parsed.matches_head(&payload.head).map_err(|e| {
+        ApiError::invalid_request(format!("HEAD doğrulanamadı: {}", e))
+    })?;
+
+    Ok(Json(VerifyHeadResponse {
+        id: parsed.as_str().to_owned(),
+        head: payload.head,
+        matches,
+        fingerprint: parsed.fingerprint_hex(),
+    }))
 }
