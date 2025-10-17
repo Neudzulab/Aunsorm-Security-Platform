@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-acme` içinde `NonceManager`, `newNonce` uç noktasına yapılan çağrıları
   test edilebilir istemci soyutlamasıyla yönetip Replay-Nonce havuzunu otomatik
   doldurur.
+- `aunsorm-acme` için Ed25519 tabanlı ACME JWS imzalama yardımcıları ve
+  deterministik test vektörleri eklendi.
 - `aunsorm-id` crate'i için opsiyonel `serde` seri/deserialize desteği ve JSON
   yuvarlama testleri eklendi.
 

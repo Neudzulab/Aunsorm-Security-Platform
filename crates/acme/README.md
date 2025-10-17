@@ -20,6 +20,8 @@ kullanılacaktır.
   saklar.
 - `NonceManager`, ACME `newNonce` uç noktasını çağırıp taşınabilir bir
   istemci soyutlamasıyla nonce havuzunu otomatik doldurur.
+- Ed25519 hesap anahtarlarıyla ACME JWS (`protected`, `payload`, `signature`)
+  üretir; `kid` veya JWK tabanlı başlık bağlamını destekler.
 
 ## Testler
 

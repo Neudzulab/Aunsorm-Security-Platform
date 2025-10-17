@@ -113,7 +113,7 @@
 - [ ] ACME v2 protocol implementation
   - [x] Directory endpoint parsing
   - [x] Nonce management
-  - [ ] JWS (JSON Web Signature) signing
+- [x] JWS (JSON Web Signature) signing
   - [ ] Account key generation (RSA/ECDSA)
   
 - [ ] Domain validation handlers
