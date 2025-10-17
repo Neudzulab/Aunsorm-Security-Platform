@@ -755,6 +755,10 @@ impl ServerState {
         &self.audience
     }
 
+    pub const fn listen_port(&self) -> u16 {
+        self.listen_port
+    }
+
     pub const fn token_ttl(&self) -> Duration {
         self.token_ttl
     }

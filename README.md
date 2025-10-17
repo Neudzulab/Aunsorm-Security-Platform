@@ -424,6 +424,28 @@ aunsorm-server v0.4.1
 │  ├─ GET    /health                    → Health check endpoint
 │  └─ GET    /metrics                   → Prometheus metrics (opsiyonel)
 │
+├─ 🚀 HTTP/3 QUIC Datagrams (Experimental - v0.4.2)
+│  ├─ Channel: Telemetry (0)           → OpenTelemetry metrics streaming
+│  │                                     └─ Real-time metrics over QUIC
+│  │                                     └─ Low latency, unreliable delivery
+│  │                                     └─ Max payload: 1150 bytes
+│  │
+│  ├─ Channel: Audit (1)               → Audit event stream
+│  │                                     └─ Security event logging
+│  │                                     └─ Transparency log updates
+│  │
+│  └─ Channel: Ratchet (2)             → Session ratchet probes
+│                                        └─ E2EE session state monitoring
+│                                        └─ Forward secrecy validation
+│
+│  **Features:**
+│  ├─ Protocol: HTTP/3 (QUIC RFC 9000)
+│  ├─ Framing: DATAGRAM frames (RFC 9221)
+│  ├─ Encoding: postcard (compact binary)
+│  ├─ Alt-Svc: Auto-advertises H3 upgrade
+│  ├─ Max wire size: 1350 bytes
+│  └─ Feature flag: `http3-experimental`
+│
 └─ 🔜 ACME Protocol (v0.5.0 - Planned)
    ├─ GET    /acme/directory            → ACME directory discovery
    ├─ HEAD   /acme/new-nonce            → Nonce generation
@@ -439,8 +461,8 @@ aunsorm-server v0.4.1
 > 
 > **🔜 GELECEK ENDPOINT'LER:**
 > - **v0.5.0 (Q1 2026):** ACME Protocol endpoints (RFC 8555) - `aunsorm-acme` crate zaten hazır, entegrasyon bekliyor
-> - **v0.6.0:** WebTransport E2EE endpoints - HTTP/3 QUIC datagrams
-> - **v0.7.0:** Blockchain integration endpoints - Transparency log anchoring 
+> - **v0.6.0 (Q2 2026):** WebTransport API - Bidirectional HTTP/3 QUIC streams, production-grade datagram hardening
+> - **v0.7.0 (Q3 2026):** Blockchain integration endpoints - Transparency log anchoring to public chains 
 > Detaylı kullanım ve tüm parametreler için:
 > - CLI: `aunsorm-cli <command> --help`
 > - Server: [`crates/server/README.md`](crates/server/README.md)
@@ -455,6 +477,7 @@ aunsorm-server v0.4.1
 - ✅ **Session Ratcheting:** SFU E2EE için otomatik key rotation
 - ✅ **Multi-platform MDM:** iOS, Android, Windows, macOS, Linux desteği
 - ✅ **Transparency Logging:** Merkle tree based audit trail
+- ✅ **HTTP/3 QUIC Datagrams:** Experimental low-latency telemetry streaming
 - ✅ **Production Ready:** Async/await, structured logging, OpenTelemetry
 
 **Hızlı Başlangıç:**
@@ -465,13 +488,20 @@ export AUNSORM_JWT_KID="prod-key-2025"
 export AUNSORM_ISSUER="https://auth.example.com"
 export AUNSORM_AUDIENCE="example-app"
 
-# Sunucuyu başlat
+# Sunucuyu başlat (HTTP/2)
 cargo run --release --bin aunsorm-server
+
+# HTTP/3 QUIC experimental desteği ile başlat
+cargo run --release --features http3-experimental --bin aunsorm-server
 
 # Test et
 curl http://localhost:8080/health
 curl http://localhost:8080/random/number
 curl "http://localhost:8080/random/number?min=1&max=1000"
+
+# HTTP/3 bağlantı upgrade bilgisi (Alt-Svc header)
+curl -I http://localhost:8080/health
+# Alt-Svc: h3=":8080"; ma=86400
 ```
 
 Detaylı API dokümantasyonu ve kullanım örnekleri için: [`crates/server/README.md`](crates/server/README.md)
@@ -572,6 +602,127 @@ curl "http://localhost:8080/random/number?min=50"
 - ✅ Audit trail (her request için entropy hex)
 
 Detaylı matematiksel analiz: [`crates/server/PRODUCTION_ENTROPY_MODEL.md`](crates/server/PRODUCTION_ENTROPY_MODEL.md)
+
+#### 🚀 HTTP/3 QUIC Datagrams (Experimental)
+
+Aunsorm Server, **HTTP/3 üzerinde QUIC DATAGRAM** frame'leri ile düşük gecikmeli, güvenilir olmayan veri akışı sağlar. Bu özellik, gerçek zamanlı telemetri, audit logging ve session monitoring için optimize edilmiştir.
+
+**Neden QUIC Datagrams?**
+- ⚡ **Ultra-low latency:** TCP head-of-line blocking yok
+- 🔒 **Built-in encryption:** TLS 1.3 integrated
+- 📦 **Unreliable delivery:** Fire-and-forget semantics
+- 🎯 **Multiplexing:** Tek connection üzerinde çoklu stream
+- 🚀 **0-RTT reconnection:** Session resumption
+
+**Datagram Kanalları:**
+
+| Kanal | ID | Kullanım | Max Payload |
+|-------|----|----------|-------------|
+| **Telemetry** | 0 | OpenTelemetry metrics streaming | 1150 bytes |
+| **Audit** | 1 | Security event logging | 1150 bytes |
+| **Ratchet** | 2 | E2EE session state probes | 1150 bytes |
+
+**Protokol Detayları:**
+```
+Wire Format (postcard binary encoding):
+┌─────────────────────────────────────────┐
+│ Version (u8)                            │ 1 byte
+├─────────────────────────────────────────┤
+│ Channel (u8)                            │ 1 byte
+├─────────────────────────────────────────┤
+│ Timestamp (u64, milliseconds)           │ 8 bytes
+├─────────────────────────────────────────┤
+│ Payload (enum-tagged, compact)          │ ≤ 1150 bytes
+└─────────────────────────────────────────┘
+Max total wire size: 1350 bytes
+```
+
+**Payload Türleri:**
+
+1. **OtelPayload (Telemetry):**
+   ```rust
+   {
+       "gauge_name": "server.cpu.utilization",
+       "value_f64": 45.2,
+       "unit": "percent",
+       "attributes": {"host": "prod-01"}
+   }
+   ```
+
+2. **AuditEvent (Audit):**
+   ```rust
+   {
+       "action": "token.issued",
+       "subject": "user@example.com",
+       "metadata": {"token_id": "abc123"}
+   }
+   ```
+
+3. **RatchetProbe (Ratchet):**
+   ```rust
+   {
+       "session_id": "sess_xyz",
+       "message_no": 42,
+       "ratchet_counter": 15
+   }
+   ```
+
+**HTTP/3 Upgrade Mekanizması:**
+
+Sunucu, HTTP/2 response'larına `Alt-Svc` header'ı ekleyerek H3 desteğini duyurur:
+
+```http
+HTTP/1.1 200 OK
+Alt-Svc: h3=":8080"; ma=86400
+...
+```
+
+Client bu header'ı gördüğünde, aynı endpoint'i HTTP/3 ile tekrar deneyebilir.
+
+**Feature Flag:**
+```toml
+# Cargo.toml
+[features]
+http3-experimental = ["h3", "h3-quinn", "quinn", "rustls"]
+```
+
+**Derleme ve Çalıştırma:**
+```bash
+# HTTP/3 desteği ile derle
+cargo build --release --features http3-experimental
+
+# Sunucuyu başlat
+cargo run --release --features http3-experimental --bin aunsorm-server
+
+# Log'larda HTTP/3 listener bilgisi görünür:
+# INFO aunsorm_server: HTTP/3 PoC spawned on 127.0.0.1:8080
+```
+
+**Test:**
+```bash
+# HTTP/3 QUIC datagram testi
+cargo test --features http3-experimental --test http3_datagram -- --nocapture
+
+# Test: Telemetry datagram encode/decode roundtrip
+# Test: Alt-Svc header injection verification
+# Test: Channel routing validation
+```
+
+**Limitasyonlar (Experimental):**
+- ⚠️ Production kullanımı önerilmez (v0.4.2 - PoC stage)
+- ⚠️ Certificate pinning eksik
+- ⚠️ Rate limiting yok
+- ⚠️ Datagram ordering garanti edilmez
+- ⚠️ Browser support sınırlı (Chrome 92+, Firefox 88+)
+
+**Gelecek İyileştirmeler (v0.6.0):**
+- ✨ WebTransport API support
+- ✨ Bidirectional datagram streams
+- ✨ Certificate transparency integration
+- ✨ Congestion control tuning
+- ✨ Production-grade hardening
+
+Detaylı döküman: [`docs/src/architecture/http3-quic.md`](docs/src/architecture/http3-quic.md)
 
 ### 🎯 Yakında Gelecek Özellikler
 
