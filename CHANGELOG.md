@@ -28,6 +28,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Zero-downtime certificate rotation
 - Prometheus metrics and monitoring
 
+## [0.4.6] - 2025-10-18
+
+### 🚨 BREAKING CHANGES
+
+**OAuth2 endpoints now RFC 6749/7636 compliant - schema updated!**
+
+#### `/oauth/begin-auth` endpoint changes:
+- ❌ **Removed:** `username` field (non-standard)
+- ✅ **Added:** `redirect_uri` (required, HTTPS enforced)
+- ✅ **Added:** `state` (optional, CSRF protection)
+- ✅ **Added:** `scope` (optional, permission delegation)
+- ✅ **Added:** `subject` (optional hint, replaces username)
+- ✅ **Response:** Returns `code` instead of `auth_request_id`
+- ✅ **Response:** Echoes `state` parameter for CSRF validation
+
+#### `/oauth/token` endpoint changes:
+- ✅ **Added:** `grant_type` field (must be "authorization_code")
+- ✅ **Added:** `redirect_uri` field (must match authorization request)
+- ✅ **Changed:** `auth_request_id` → `code` (authorization code)
+- ✅ **Validation:** Enforces redirect_uri match (prevents authorization code interception)
+- ✅ **Scope:** Embedded in JWT claims if provided during authorization
+
+### Added
+- **RFC 6749 OAuth 2.0 Authorization Framework compliance**
+  - Standard authorization code flow with PKCE (RFC 7636)
+  - Redirect URI validation (HTTPS required, localhost HTTP allowed)
+  - State parameter support for CSRF protection
+  - Scope parameter support for permission delegation
+  - Single-use authorization codes (consumed after first exchange)
+  - Comprehensive error responses (invalid_grant, invalid_client, invalid_request)
+
+- **Security Enhancements**
+  - Redirect URI open redirect prevention (URL validation)
+  - State parameter replay protection
+  - Authorization code reuse prevention
+  - Subject hint validation (control character filtering)
+
+- **Documentation**
+  - `docs/oauth-aunsorm-integration-request.md`: Complete RFC compliance guide
+  - TypeScript/JavaScript PKCE client implementation example
+  - Web app integration patterns and security best practices
+  - Migration guide for clients using old schema
+
+### Changed
+- **OAuth2 Schema Updates**
+  - `BeginAuthRequest`: Removed `username`, added `redirect_uri`, `state`, `scope`, `subject`
+  - `BeginAuthResponse`: Changed `auth_request_id` → `code`, added `state` echo
+  - `TokenRequest`: Added `grant_type`, `redirect_uri`, changed `auth_request_id` → `code`
+  - `AuthRequest` (state): Added `redirect_uri`, `state`, `scope` fields
+
+- **Test Suite Updates**
+  - Updated all OAuth2 tests to use new RFC-compliant schema
+  - Added redirect URI validation tests
+  - Added state parameter tests
+  - All 17 server tests passing
+
+### Documentation
+- README.md: Updated OAuth2 section with RFC references and examples
+- Added PKCE flow example with curl commands
+- Documented redirect_uri validation rules
+- Added state parameter CSRF protection explanation
+- Updated service tree with OAuth2 compliance details
+
+### Security
+- **CVE Prevention:** Open redirect vulnerability fixed via redirect_uri validation
+- **CSRF Protection:** State parameter support added (RFC 6749 §10.12)
+- **Code Interception Prevention:** redirect_uri match validation enforced
+
+### Notes
+- **Migration Required:** Existing clients using `username` field will receive 422 errors
+- **Web App Compatibility:** Now compatible with standard OAuth2 libraries (oauth4webapi, etc.)
+- **Mobile App Support:** Ready for iOS/Android OAuth flows with custom URL schemes
+- **Issue Reference:** Fixes #12 (OAuth2 + Aunsorm integration request)
+
 ## [0.4.5] - 2025-10-17
 
 ### Added

@@ -71,8 +71,11 @@ async fn pkce_flow_succeeds() {
     let digest = Sha256::digest(code_verifier.as_bytes());
     let code_challenge = URL_SAFE_NO_PAD.encode(digest);
     let begin_payload = json!({
-        "username": "  alice  ",
+        "subject": "alice",
         "client_id": "  demo-client  ",
+        "redirect_uri": "https://app.example.com/callback",
+        "state": "random-csrf-token-123",
+        "scope": "read write",
         "code_challenge": code_challenge,
         "code_challenge_method": "S256"
     });
@@ -93,11 +96,14 @@ async fn pkce_flow_succeeds() {
         .await
         .expect("body");
     let begin: BeginAuthResponse = serde_json::from_slice(&body).expect("json");
+    assert_eq!(begin.state.as_deref(), Some("random-csrf-token-123"));
 
     let token_payload = json!({
-        "auth_request_id": begin.auth_request_id,
+        "grant_type": "authorization_code",
+        "code": begin.code,
         "code_verifier": code_verifier,
-        "client_id": "demo-client"
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback"
     });
     let response = app
         .clone()
@@ -137,7 +143,7 @@ async fn pkce_flow_succeeds() {
         .expect("body");
     let introspect: IntrospectResponse = serde_json::from_slice(&body).expect("introspect");
     assert!(introspect.active);
-    assert_eq!(introspect.username.as_deref(), Some("alice"));
+    assert_eq!(introspect.sub.as_deref(), Some("alice"));
     assert_eq!(introspect.client_id.as_deref(), Some("demo-client"));
 
     let metrics_response = app
@@ -499,8 +505,8 @@ async fn reject_non_s256_method() {
     let state = setup_state();
     let app = build_router(state);
     let begin_payload = json!({
-        "username": "alice",
         "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback",
         "code_challenge": "abcd",
         "code_challenge_method": "plain"
     });
@@ -527,26 +533,36 @@ async fn reject_blank_identity_fields() {
     let code_challenge = URL_SAFE_NO_PAD.encode(digest);
     let payloads = vec![
         json!({
-            "username": "   ",
+            "subject": "   ",
             "client_id": "demo-client",
+            "redirect_uri": "https://app.example.com/callback",
             "code_challenge": code_challenge.clone(),
             "code_challenge_method": "S256"
         }),
         json!({
-            "username": "alice",
+            "subject": "alice",
             "client_id": "\n\tdemo",
+            "redirect_uri": "https://app.example.com/callback",
             "code_challenge": code_challenge.clone(),
             "code_challenge_method": "S256"
         }),
         json!({
-            "username": "alice\u{0007}",
+            "subject": "alice\u{0007}",
             "client_id": "demo-client",
+            "redirect_uri": "https://app.example.com/callback",
             "code_challenge": code_challenge.clone(),
             "code_challenge_method": "S256"
         }),
         json!({
-            "username": "alice",
+            "subject": "alice",
             "client_id": "   ",
+            "redirect_uri": "https://app.example.com/callback",
+            "code_challenge": code_challenge.clone(),
+            "code_challenge_method": "S256"
+        }),
+        json!({
+            "client_id": "demo-client",
+            "redirect_uri": "   ",
             "code_challenge": code_challenge,
             "code_challenge_method": "S256"
         }),
@@ -762,7 +778,9 @@ fn random_distribution_smoke_test() {
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct BeginAuthResponse {
-    auth_request_id: String,
+    code: String,
+    #[serde(default)]
+    state: Option<String>,
     expires_in: u64,
 }
 

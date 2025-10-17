@@ -392,12 +392,36 @@ aunsorm-cli v0.4.5
 ```
 aunsorm-server v0.4.5
 │
-├─ 🔐 OAuth 2.0 / OIDC Flow
-│  ├─ POST   /oauth/begin-auth          → PKCE S256 yetkilendirme başlat
-│  ├─ POST   /oauth/token               → Access token al
-│  ├─ POST   /oauth/introspect          → Token doğrula
-│  ├─ GET    /oauth/jwks.json           → Public key seti (JWKS)
-│  └─ GET    /oauth/transparency        → Token şeffaflık günlüğü
+├─ 🔐 OAuth 2.0 / OIDC Flow (RFC 6749 + RFC 7636 PKCE)
+│  ├─ POST   /oauth/begin-auth ✅       → RFC uyumlu yetkilendirme başlat
+│  │                                       └─ Input: client_id, redirect_uri, state, scope, code_challenge (S256)
+│  │                                       └─ Output: code (authorization code), state (echoed)
+│  │                                       └─ PKCE: SHA-256 code_challenge required
+│  │                                       └─ State: CSRF protection (recommended)
+│  │                                       └─ Redirect URI: HTTPS enforced (localhost HTTP allowed)
+│  │                                       └─ Subject: Optional hint (not for authentication)
+│  │
+│  ├─ POST   /oauth/token ✅            → Access token al (authorization_code grant)
+│  │                                       └─ Input: grant_type, code, code_verifier, client_id, redirect_uri
+│  │                                       └─ Output: access_token (JWT), token_type (Bearer), expires_in
+│  │                                       └─ PKCE Verification: SHA-256(code_verifier) == code_challenge
+│  │                                       └─ Redirect URI Match: CRITICAL security validation
+│  │                                       └─ Single-use code: Consumed after first use
+│  │                                       └─ Scope: Embedded in JWT claims if provided
+│  │
+│  ├─ POST   /oauth/introspect ✅       → Token doğrula (RFC 7662)
+│  │                                       └─ Input: token (JWT access token)
+│  │                                       └─ Output: active (bool), sub, client_id, scope, exp, iat
+│  │                                       └─ JTI Replay Protection: SQLite-based token store
+│  │                                       └─ Signature Validation: Ed25519 public key verification
+│  │
+│  ├─ GET    /oauth/jwks.json ✅        → Public key seti (RFC 7517 JWKS)
+│  │                                       └─ Output: Multiple Ed25519 public keys
+│  │                                       └─ Use Case: OAuth/OIDC discovery, token verification
+│  │
+│  └─ GET    /oauth/transparency ✅     → Token şeffaflık günlüğü
+│                                          └─ Output: Token issuance events (Merkle tree)
+│                                          └─ Audit Trail: JTI, subject, audience, expiry
 │
 ├─ 🎲 Cryptographic RNG (Matematiksel Geliştirilmiş Entropi)
 │  └─ GET    /random/number             → HKDF + NEUDZ-PCS + AACM mixing
@@ -553,6 +577,35 @@ curl "http://localhost:8080/random/number?min=1&max=1000"
 # HTTP/3 bağlantı upgrade bilgisi (Alt-Svc header)
 curl -I http://localhost:8080/health
 # Alt-Svc: h3=":8080"; ma=86400
+
+# OAuth2 PKCE Flow (RFC 6749 + RFC 7636)
+# 1. Authorization Request
+CODE_VERIFIER="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+CODE_CHALLENGE=$(echo -n "$CODE_VERIFIER" | openssl dgst -sha256 -binary | base64 | tr -d '=' | tr '+/' '-_')
+
+curl -X POST http://localhost:8080/oauth/begin-auth \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"client_id\": \"webapp-123\",
+    \"redirect_uri\": \"https://app.example.com/callback\",
+    \"state\": \"random-csrf-token-xyz\",
+    \"scope\": \"read write\",
+    \"code_challenge\": \"$CODE_CHALLENGE\",
+    \"code_challenge_method\": \"S256\"
+  }"
+# Response: {"code":"auth_abc123","state":"random-csrf-token-xyz","expires_in":600}
+
+# 2. Token Exchange
+curl -X POST http://localhost:8080/oauth/token \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"grant_type\": \"authorization_code\",
+    \"code\": \"auth_abc123\",
+    \"code_verifier\": \"$CODE_VERIFIER\",
+    \"client_id\": \"webapp-123\",
+    \"redirect_uri\": \"https://app.example.com/callback\"
+  }"
+# Response: {"access_token":"eyJ...","token_type":"Bearer","expires_in":600}
 ```
 
 Detaylı API dokümantasyonu ve kullanım örnekleri için: [`crates/server/README.md`](crates/server/README.md)
