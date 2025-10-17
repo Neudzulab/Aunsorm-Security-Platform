@@ -938,7 +938,7 @@ curl http://localhost:8080/acme/directory
 
 ```bash
 # From source
-cargo install --path packages/aunsorm-crypt/crates/cli
+cargo install --path /aunsorm-crypt/crates/cli
 
 # Binary release (coming soon)
 curl -sSL https://install.aunsorm.dev | sh

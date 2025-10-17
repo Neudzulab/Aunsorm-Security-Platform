@@ -59,9 +59,9 @@
 **Bağımlılıklar:** `ring` v0.17+
 
 **Dosyalar:**
-- `packages/aunsorm-crypt/Cargo.toml` - ring dependency
-- `packages/aunsorm-crypt/crates/x509/src/ca.rs` - RSA keygen impl
-- `packages/aunsorm-crypt/crates/x509/src/tests/rsa_tests.rs` - Test suite
+- `/aunsorm-crypt/Cargo.toml` - ring dependency
+- `/aunsorm-crypt/crates/x509/src/ca.rs` - RSA keygen impl
+- `/aunsorm-crypt/crates/x509/src/tests/rsa_tests.rs` - Test suite
 
 ---
 
@@ -166,11 +166,11 @@
 **Tahmini Süre:** 40-60 saat (2-3 hafta)
 
 **Dosyalar:**
-- `packages/aunsorm-crypt/crates/acme/` - New crate
-- `packages/aunsorm-crypt/crates/acme/src/client.rs` - ACME client
-- `packages/aunsorm-crypt/crates/acme/src/validation.rs` - Validation handlers
-- `packages/aunsorm-crypt/crates/acme/src/renewal.rs` - Renewal logic
-- `packages/aunsorm-crypt/crates/cli/src/acme_commands.rs` - CLI integration
+- `/aunsorm-crypt/crates/acme/` - New crate
+- `/aunsorm-crypt/crates/acme/src/client.rs` - ACME client
+- `/aunsorm-crypt/crates/acme/src/validation.rs` - Validation handlers
+- `/aunsorm-crypt/crates/acme/src/renewal.rs` - Renewal logic
+- `/aunsorm-crypt/crates/cli/src/acme_commands.rs` - CLI integration
 
 **Success Criteria:**
 1. ✅ Let's Encrypt'ten production sertifika alabilme
