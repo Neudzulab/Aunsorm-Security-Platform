@@ -12,4 +12,6 @@
 - [HTTP/3 QUIC Güvenlik Değerlendirmesi](operations/http3-quic-security.md)
 - [Pazar İstihbaratı ve Gelecek Vizyonu Çalıştayı](operations/market-intelligence.md)
 - [KMS Conformance ve Sertifikasyon Raporları](operations/kms-certification.md)
+- [Regülasyon Uyumluluk Kontrol Listesi](operations/compliance-checklist.md)
+- [Blockchain İnovasyon Programı](innovation/blockchain.md)
 - [Gelecek Yol Haritası](appendix/roadmap.md)

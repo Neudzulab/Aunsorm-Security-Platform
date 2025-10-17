@@ -1327,9 +1327,7 @@ async fn generate_media_token(
     );
 
     if let Some(metadata) = payload.metadata {
-        claims
-            .extra
-            .insert("metadata".to_owned(), metadata);
+        claims.extra.insert("metadata".to_owned(), metadata);
     }
 
     claims.ensure_jwt_id();
@@ -1344,9 +1342,9 @@ async fn generate_media_token(
 
     // Calculate timestamps
     let iat = claims.issued_at.unwrap_or(now);
-    let exp = claims.expiration.unwrap_or(
-        now + Duration::from_secs(state.token_ttl().as_secs()),
-    );
+    let exp = claims
+        .expiration
+        .unwrap_or_else(|| now + Duration::from_secs(state.token_ttl().as_secs()));
 
     let ttl_seconds = state.token_ttl().as_secs();
 
@@ -1361,12 +1359,7 @@ async fn generate_media_token(
         .ok_or_else(|| ApiError::server_error("JTI üretilemedi"))?;
 
     state
-        .record_token(
-            &jti,
-            exp,
-            claims.subject.as_deref(),
-            Some("zasian-media"),
-        )
+        .record_token(&jti, exp, claims.subject.as_deref(), Some("zasian-media"))
         .await
         .map_err(|err| {
             warn!(jti = %jti, error = %err, "Token kaydı başarısız (JWT yine de kullanılabilir)");
@@ -1387,8 +1380,9 @@ async fn generate_media_token(
 }
 
 fn format_timestamp(time: SystemTime) -> String {
-    match time.duration_since(UNIX_EPOCH) {
-        Ok(d) => {
+    time.duration_since(UNIX_EPOCH).map_or_else(
+        |_| "1970-01-01T00:00:00.000Z".to_owned(),
+        |d| {
             // Simple ISO 8601 formatting (UTC)
             let secs = d.as_secs();
             let nanos = d.subsec_nanos();
@@ -1406,11 +1400,7 @@ fn format_timestamp(time: SystemTime) -> String {
             let years_since_epoch = days_since_epoch / 365;
             let year = 1970 + years_since_epoch;
 
-            format!(
-                "{:04}-01-01T{:02}:{:02}:{:02}.{:03}Z",
-                year, hours, minutes, seconds, millis
-            )
-        }
-        Err(_) => "1970-01-01T00:00:00.000Z".to_owned(),
-    }
+            format!("{year:04}-01-01T{hours:02}:{minutes:02}:{seconds:02}.{millis:03}Z")
+        },
+    )
 }

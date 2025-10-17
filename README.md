@@ -1215,6 +1215,17 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 ## Yan Ürün & MDM Altyapısı
 - [x] MDM temel altyapısı: kayıt, politika deposu ve sertifika dağıtım planı.
 
+## Blockchain İnovasyon Programı
+- [x] `docs/src/innovation/blockchain.md` vizyon, regülasyon rehberi ve teslimat yol haritasını yayımla.
+- [x] `tests/blockchain/` altında mock ledger + bütünlük senaryosu iskeletlerini hazırlayıp PoC testlerini ekle.
+- [x] Opsiyonel `.github/workflows/blockchain-poc.yml` işi ve `tests/blockchain/config.example.toml` yapılandırmasını oluştur.
+- [ ] Hyperledger Fabric için DID doğrulama PoC'unu REST katmanı planıyla birlikte sun.
+- [ ] Quorum tabanlı audit trail ve tokenizasyon gereksinimlerini `docs/src/operations/blockchain-integration.md` içinde belgeleyerek finalize et.
+- [ ] Zincirler arası test harness'ini `tests/blockchain/cross_network.rs` taslağıyla planla ve veri seti gereksinimlerini tanımla.
+- [ ] eIDAS/SOC 2 denetim raporu şablonlarını `certifications/` altında yayımla.
+- [ ] FATF Travel Rule uyumluluğu için zincir üstü izleme ve raporlama entegrasyon stratejisini oluştur.
+- [ ] Müşteri başına saklama/anahtar silme politikalarını blockchain katmanıyla eşleyip operasyonel runbook'a ekle.
+
 ## Test, Fuzz ve Benchmark Çalıştırma
 
 Aşağıdaki komutlar test/fuzz/bench altyapısını kullanıma hazır hale getirir:

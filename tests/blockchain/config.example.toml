@@ -1,0 +1,22 @@
+# Example configuration for triggering the blockchain PoC tests.
+# Replace the placeholder values with environment-specific endpoints
+# when running `.github/workflows/blockchain-poc.yml` with real infrastructure.
+
+[rpc]
+url = "https://rpc.devnet.example"
+network = "devnet"
+chain_id = 1337
+
+[commitment]
+# Maximum drift allowed between block timestamps and server clocks.
+max_clock_skew_ms = 5000
+# Maximum number of pending blocks per batch before forcing a flush.
+batch_size = 50
+
+[telemetry]
+# Logical topic identifier for QUIC datagram mirroring.
+channel = "ops/blockchain"
+
+[keys]
+# Seed material for deterministic test key generation. DO NOT use in production.
+seed_phrase = "test-only deterministic key seed"
