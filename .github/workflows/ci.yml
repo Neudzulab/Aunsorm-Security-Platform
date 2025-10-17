@@ -8,6 +8,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTDOCFLAGS: -D warnings
+  ENABLE_PQC_POC: "false"
 
 jobs:
   lint:
@@ -143,3 +144,18 @@ jobs:
       - name: cargo deny
         if: matrix.check == 'deny'
         run: cargo deny check
+
+  pqc-poc:
+    name: PQC PoC Fixtures
+    if: ${{ env.ENABLE_PQC_POC == 'true' }}
+    needs:
+      - doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Validate PQC PoC fixtures
+        run: python3 certifications/tests/pqc/run_pqc_poc.py

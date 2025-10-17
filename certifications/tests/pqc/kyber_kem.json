@@ -1,0 +1,30 @@
+{
+  "scenario": "CRYSTALS-Kyber ML-KEM-768 anahtar değişimi PoC",
+  "nist_reference": "FIPS 203 (ML-KEM)",
+  "etsi_enisa_reference": "ETSI GR CYBER PQC 001, ENISA Post-Quantum Cryptography Whitepaper (2023)",
+  "target_domains": ["ACME ACME Mutual TLS", "Aunsorm içi session ratchet"],
+  "prerequisites": [
+    "LibOQS 0.9.2 veya eşdeğer ML-KEM-768 kapsülleme desteği",
+    "AUNSORM_STRICT=1 ile PQC zorunlu kip",
+    "Hybrid ECDH + ML-KEM fallback kapalı"
+  ],
+  "flow": [
+    {
+      "phase": "init",
+      "description": "İstemci ML-KEM-768 public key'i `kem_pk` alanında taşır; kapsülleme parametreleri ETSI'nin hibrit profil kılavuzuyla uyumlu olarak SHA3 tabanlıdır."
+    },
+    {
+      "phase": "encapsulate",
+      "description": "Sunucu `encapsulate(kem_pk)` çağrısıyla paylaşılan sırrı üretir; sonuç kapsül ETSI GR CYBER PQC 001 Bölüm 7 uyumluluk tablosuna göre 1184 bayttır."
+    },
+    {
+      "phase": "decapsulate",
+      "description": "İstemci `decapsulate(kem_sk, capsule)` işlemi ile paylaşılan sırrı türetir; NIST FIPS 203 referans vektörleriyle aynı test vektörleri kullanılır."
+    }
+  ],
+  "success_criteria": [
+    "Paylaşılan sırların HKDF-SHA3-256 türevi 32 baytlık session anahtarını üretmesi",
+    "Kalibrasyon kimliği ile kapsül `packet::Envelope` içinde loglanabilir olması",
+    "Strict kipte ML-KEM dışındaki tekliflerin reddedilmesi"
+  ]
+}

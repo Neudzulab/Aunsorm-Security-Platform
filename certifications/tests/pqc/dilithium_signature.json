@@ -1,0 +1,30 @@
+{
+  "scenario": "CRYSTALS-Dilithium ML-DSA-65 imza akışı PoC",
+  "nist_reference": "FIPS 204 (ML-DSA)",
+  "etsi_enisa_reference": "ETSI GR CYBER PQC 001, ENISA Algorithms, Key Sizes and Protocols Report (2024)",
+  "target_domains": ["Firmware güncellemeleri", "Şeffaflık defteri imza zincirleri"],
+  "prerequisites": [
+    "`aunsorm-pqc` crate'inde ML-DSA-65 özelliği açık",
+    "Dilithium referans vektörleri `tests/data/pqc/ml-dsa-65.json` (gelecek çalışma)",
+    "Imzalar için deterministic nonce üretimi devre dışı"
+  ],
+  "flow": [
+    {
+      "phase": "keygen",
+      "description": "`signature::KeyPair::generate_ml_dsa_65` işlemi BSI TR-02102-1 Bölüm 2.3.4 ile uyumlu entropi kontrollerini loglar."
+    },
+    {
+      "phase": "sign",
+      "description": "Firmware manifesti SHAKE-256 ile hashlenir; `sign_detached` çıktısı 4595 bayt Dilithium imzasını üretir ve ETSI'nin önerdiği 24 ay geçerlilik politikasıyla damgalanır."
+    },
+    {
+      "phase": "verify",
+      "description": "`verify_detached` çağrısı NIST FIPS 204 `PQCsignKAT_256.rsp` vektörlerine karşı doğrulanır ve başarısızlık durumunda strict kip süreci durdurulur."
+    }
+  ],
+  "success_criteria": [
+    "İmza doğrulamaları strict kipte %100 deterministik sonuç verir",
+    "BSI TR-02102-1 referansına göre anahtar döndürme politikaları 12 ayı aşmaz",
+    "Şeffaflık defterine aktarılan imza meta verileri ENISA'nın minimum denetim alanlarını içerir"
+  ]
+}

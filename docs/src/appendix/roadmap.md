@@ -16,3 +16,21 @@
    [KMS Conformance ve Sertifikasyon Raporları](../operations/kms-certification.md)
    bölümü ile yayımlandı. CI entegrasyon testleri bu fixture’ları kullanarak
    GCP, Azure ve PKCS#11 sağlayıcılarını doğrular.
+
+## Post-Kuantum Sertifikasyon Hazırlığı
+
+- **NIST Final Algoritmaları:** FIPS 203 (ML-KEM/CRYSTALS-Kyber), FIPS 204
+  (ML-DSA/CRYSTALS-Dilithium) ve FIPS 205 (SPHINCS+), üretim geçiş planında
+  zorunlu referans alınacak ana kaynaklardır. Kyber-768 ve Dilithium-65
+  `aunsorm-pqc` kutusunda varsayılan, Kyber-1024 ve SPHINCS+-SHAKE-128f ise
+  yüksek güven profilleri için opsiyonel olarak hedeflenmiştir.
+- **ETSI/ENISA Önerileri:** ETSI GR CYBER PQC 001 ve ENISA Post-Quantum
+  Cryptography (2023) raporları, hibrit TLS el sıkışmaları ve uzun süreli imza
+  zincirleri için kontrol listelerimizi yönlendirir. Bu dokümanlar hibrit
+  PQC + klasik geçiş senaryolarında minimum kayıt ve denetim alanlarını
+  tanımlar.
+- **Hedef Uygulama Alanları:** Karşılıklı TLS oturumları, firmware
+  güncelleme imza zincirleri, şeffaflık defteri kanıtları ve müşteri tarafı
+  kalibrasyon oturumları post-kuantum sertifikasyonunun öncelikli kapsamıdır.
+  Sertifikasyon PoC’leri `certifications/tests/pqc/` dizininde toplanacak ve
+  CI pipeline’ındaki opsiyonel iş adımıyla doğrulanacaktır.

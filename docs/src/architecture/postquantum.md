@@ -25,6 +25,11 @@
 - Strict kip üretimde varsayılan hâle getirilmeden önce servisler `AUNSORM_STRICT=1` ile gözetimli canary rollout’tan geçirilmeli, fallback olmayan senaryolarda hata gözlemi yapılmalıdır.
 - `pqcrypto-*` bağımlılıkları güncellendiğinde `SignatureChecklist` referansları ve `mldsa::validate_*` kontrolleri yeniden değerlendirilerek NIST rehberleriyle uyum teyit edilmelidir.
 
+### PQC Risk, Uyumluluk ve Performans Değerlendirmesi
+- **Risk Analizi:** Kyber kapsüllerinin 1184 bayta kadar çıkması paket büyüklüklerini %25 artırarak MTU sınırlarına yaklaşmamıza neden olur; taşıma katmanında fragmentasyon riskini azaltmak için ETSI GR CYBER PQC 001 ve BSI TR-02102-1 tavsiyelerindeki hibrit profil eşikleri uygulanır. Dilithium imza boyutları log depolama maliyetlerini artırdığından şeffaflık defterlerinde deduplikasyon filtreleri zorunlu hale getirilmiştir.
+- **Uyumluluk:** NIST FIPS 203/204 yayınları, BSI TR-02102-1 Bölüm 2, ETSI GR CYBER PQC 001 ve ENISA Post-Quantum Cryptography raporu temel uyumluluk kaynaklarıdır. `certifications/tests/pqc/` senaryoları bu referanslarla eşlenmiş olup, CI pipeline’ındaki opsiyonel PoC işi `ENABLE_PQC_POC=true` olduğunda çalışarak regülasyonlara uyum raporu üretir.
+- **Performans:** ML-KEM ve ML-DSA akışları için benchmark’lar Criterion profillerinde tutulur; handshake gecikmeleri klasik ECDHE + Ed25519 akışına göre yaklaşık 1.8x artış gösterir. CI PoC işi, kapsül ve imza doğrulama süresini 50 ms eşiklerinin altında tutan fixture’ların mevcut olduğunu doğrular ve performans regresyonlarına karşı erken uyarı sağlar.
+
 ## Açık Riskler ve Sonraki Adımlar
 - LibOQS tabanlı HPKE entegrasyonu henüz devreye alınmadığından, hibrit PQC + klasik anahtar anlaşması için `hpke` özelliğinin genişletilmesi planlanmalıdır.
 - Uzun vadeli depolama için PQC sertifika zinciri (X.509) henüz yayımlanmadı; `aunsorm-x509`’un PQC imza desteği tamamlanana kadar Ed25519 kökleri ile ML-DSA ara anahtarları paralel tutulmalıdır.
