@@ -15,6 +15,46 @@ Bu hedefler programın kapsamını tanımlar.
    - HTTP/3 `alt-svc` keşfi ve ALPN (`h3`, `h3-29`) reklamı için yapılandırma gereksinimlerini belirle.
    - Datagram kullanım senaryoları (otel metrikleri, denetim olayı yayınları) için mesaj formatı ve boyut sınırı belgele.
 
+### 1.1 Kütüphane Kıyaslaması
+| Kütüphane | TLS 1.3 / 0-RTT | Datagram API | MSRV Notu | Öne Çıkan Artılar | Belirlenen Riskler |
+|-----------|-----------------|--------------|-----------|------------------|--------------------|
+| `quinn` 0.11 | Tam TLS 1.3 desteği, 0-RTT yeniden kullanım `enable_0rtt()` ile kontrol ediliyor. | `send_datagram`/`read_datagram` çağrıları istikrarlı. | Sürüm notlarında 1.65 belirtilmiş olsa da 1.76 ile derleme testi yapıldı; bağımlılıklar MSRV hedefimizi karşılıyor. | Saf Rust implementasyon, `rustls` tabanlı güvenli TLS, aktif bakım, QUIC RFC9000 uyumu. | Akış yönetimi için arabellek ayarlarının dikkatli yapılması gerekiyor; varsayılan limitler telemetri patlamalarında yeterli değil. |
+| `h3` 0.0.6 | QUIC katmanı `quinn` üzerinden TLS 1.3 kullanıyor; 0-RTT isteğe bağlı olarak iletilebiliyor. | `ReceiveStream::read_datagram` ile HTTP/3 datagram ekleri destekleniyor. | MSRV 1.74; `quinn` + `http` ekosistemi 1.76 üzerinde sorunsuz. | HTTP/3 request/response soyutlaması mevcut `tower` servislerine yakın API sunuyor. | Sunucu tarafı push henüz stabil değil; tasarımda zorunlu tutulmamalı. |
+| `quiche` 0.22 | BoringSSL tabanlı TLS 1.3, 0-RTT geniş destek. | `stream_send` yanında `conn.send_datagram`/`recv_datagram`. | Rust binding'leri için `bindgen` + BoringSSL kurulumu gerekiyor; MSRV 1.74 üstünde çalışıyor. | Çok olgunlaştırılmış performans profili, Cloudflare üretiminde kullanılıyor. | Harici C bağımlılıkları CI/CI pipeline'ımıza ek operasyonel yük getiriyor; statik linkleme karmaşık. |
+
+Bu kıyaslama sonucunda Interop Agent, **temel PoC** için `quinn` + `h3` ikilisini öneriyor; `quiche` ise ileri performans testleri ve alternatif TLS yığını gereksinimleri için yedek seçenek olarak dokümante edildi.
+
+### 1.2 Alt-Svc ve ALPN Reklamı
+- `apps/server` HTTPS uçları için `http3-experimental` özelliği etkin olduğunda aşağıdaki başlıkların gönderilmesi planlandı:
+  - `alt-svc: h3=":443"; ma=3600, h3-29=":443"; ma=3600`
+  - `alt-svc` başlığının yanında `server` uçlarında `Alt-Svc` denetimi için bir healthcheck log girdisi tutulacak.
+- TLS konfigürasyonu `rustls` tabanlı olarak ALPN listesini `[b"h3", b"h3-29", b"http/1.1"]` şeklinde sırayla reklamlayacak. HTTP/2 desteği `h2` crate'i üzerinden sürdürülecek ve bağlantı müzakeresi başarısız olduğunda otomatik fallback devreye girecek.
+- QUIC endpoint'i `0-RTT` oturum kabul ettiğinde sunucu tarafı `anti_replay` deposuna yeni `SessionId` kayıtları açacak; STRICT kipinde 0-RTT yalnızca iç ağlarda açılacak.
+
+### 1.3 QUIC Datagram Mesaj Formatı
+- Telemetri ve olay akışları için hafif ve sabit boyutlu bir şema tercih edildi. Datagram yükü `postcard` (Serde tabanlı `no_std` codec) ile kodlanacak.
+- Mesaj zarfı: 
+  ```text
+  struct QuicDatagramV1 {
+      version: u8 = 1,
+      channel: u8,        // 0 = otel metrikleri, 1 = denetim olayı, 2 = ratchet gözlemi
+      sequence: u32,      // sarma mod 2^32, kayıp tespiti için
+      timestamp_ms: u64,  // UNIX epoch
+      payload: Vec<u8>,   // postcard ile nested struct (örn. CounterSample)
+  }
+  ```
+- `payload` alanları kanal tipine göre ayrı modüllerde belirlendi: 
+  - `otel`: Sıkıştırılmış `MetricSnapshot` yapısı (counter, histogram, gauge).
+  - `audit`: `AuditEvent` (event_id, principal_id, outcome, resource).
+  - `ratchet`: `RatchetProbe` (session_id, step, drift, status).
+- En büyük paket boyutu MTU 1350 bayt hedeflenerek hesaplandı; `payload` için üst sınır 1150 bayt olacak şekilde `apps/server` konfigürasyonuna limit kontrolü eklenmesi planlandı. Limit aşımı durumunda olay queue'ya yönlendirilecek.
+
+### 1.4 Karar ve Sonraki Adımlar
+- Araştırma aşaması tamamlandı ve sonuç raporu bu dokümana işlendi.
+- Platform Agent, `quinn` + `h3` PoC uygulaması için `apps/server` crate'inde `http3-experimental` özelliğini hazırlamakla görevlendirildi.
+- Interop Agent, datagram şemasının Rust tiplerini `crates/server/src/quic/datagram.rs` altında tasarlayacak ve property test senaryolarını `tests/http3` klasöründe hazırlayacak.
+- Güvenlik notu: 0-RTT tekrar saldırılarına karşı STRICT modda `anti_replay` tablosu zorunlu hale getirilecek; belge revizyonu güvenlik ekibine iletildi.
+
 2. **PoC Sprinti (Interop + Platform Agent)**
    - `apps/server` içinde HTTP/3 dinleyicisi açan deneysel bir özellik bayrağı (`http3-experimental`) ekle.
    - QUIC datagram kanalını mock telemetri verisiyle besleyen PoC entegrasyonu yaz; `tests/blockchain/` planındaki mock ledger yaklaşımıyla uyumlu olacak şekilde test iskeleti hazırla.
