@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::body::{to_bytes, Body};
 use axum::http::{Request, StatusCode};
@@ -14,8 +14,13 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use crate::config::{LedgerBackend, ServerConfig};
+use crate::fabric::{
+    canonical_challenge, FABRIC_POC_CHANNEL, FABRIC_POC_DID, FABRIC_POC_KEY_SEED,
+    FABRIC_POC_METHOD_ID, FABRIC_POC_TRANSACTION_ID,
+};
 use crate::routes::build_router;
 use crate::state::ServerState;
+use ed25519_dalek::Signer;
 
 #[derive(Debug, Deserialize)]
 struct TransparencyTree {
@@ -41,6 +46,66 @@ struct RandomNumberPayload {
     min: u64,
     max: u64,
     entropy: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct FabricVerificationResponse {
+    did: String,
+    verified: bool,
+    controller: String,
+    status: String,
+    channel: String,
+    #[serde(rename = "mspId")]
+    msp_id: String,
+    #[serde(rename = "ledger_anchor")]
+    ledger_anchor: FabricLedgerAnchorResponse,
+    #[serde(rename = "verification_method")]
+    verification_method: FabricVerificationMethodResponse,
+    service: Option<FabricVerificationServiceResponse>,
+    audit: FabricVerificationAuditResponse,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct FabricLedgerAnchorResponse {
+    #[serde(rename = "blockIndex")]
+    block_index: u64,
+    #[serde(rename = "blockHash")]
+    block_hash: String,
+    #[serde(rename = "transactionId")]
+    transaction_id: String,
+    #[serde(rename = "timestampMs")]
+    timestamp_ms: u64,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct FabricVerificationMethodResponse {
+    id: String,
+    #[serde(rename = "type")]
+    ty: String,
+    controller: String,
+    #[serde(rename = "publicKeyBase64")]
+    public_key_base64: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct FabricVerificationServiceResponse {
+    id: String,
+    #[serde(rename = "type")]
+    ty: String,
+    endpoint: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct FabricVerificationAuditResponse {
+    challenge: String,
+    #[serde(rename = "checkedAtMs")]
+    checked_at_ms: u64,
+    #[serde(rename = "clockSkewMs")]
+    clock_skew_ms: u64,
 }
 
 fn test_seed() -> [u8; 32] {
@@ -775,6 +840,129 @@ fn random_distribution_smoke_test() {
     );
 }
 
+#[tokio::test]
+async fn fabric_did_verification_succeeds() {
+    let state = setup_state();
+    let app = build_router(Arc::clone(&state));
+    let document = state
+        .fabric_registry()
+        .document(FABRIC_POC_DID)
+        .expect("fabric did");
+    let anchor_hash_hex = document.anchor.block_hash_hex();
+    let expected_controller = document.controller.clone();
+    let expected_msp = document.msp_id.clone();
+    let expected_tx = document.anchor.transaction_id.clone();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("time");
+    let timestamp_ms = now
+        .as_secs()
+        .saturating_mul(1_000)
+        .saturating_add(u64::from(now.subsec_millis()));
+    let challenge = canonical_challenge(FABRIC_POC_DID, &anchor_hash_hex, timestamp_ms);
+    let key_pair =
+        Ed25519KeyPair::from_seed(FABRIC_POC_METHOD_ID, FABRIC_POC_KEY_SEED).expect("seed");
+    let signature = key_pair.signing_key().sign(&challenge);
+    let payload = json!({
+        "did": FABRIC_POC_DID,
+        "channel": FABRIC_POC_CHANNEL,
+        "proof": {
+            "challenge": URL_SAFE_NO_PAD.encode(&challenge),
+            "signature": URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+            "block_hash": anchor_hash_hex,
+            "transaction_id": FABRIC_POC_TRANSACTION_ID,
+            "timestamp_ms": timestamp_ms,
+        }
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/blockchain/fabric/did/verify")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let verification: FabricVerificationResponse =
+        serde_json::from_slice(&body).expect("verification json");
+    assert!(verification.verified);
+    assert_eq!(verification.did, FABRIC_POC_DID);
+    assert_eq!(verification.controller, expected_controller);
+    assert_eq!(verification.channel, FABRIC_POC_CHANNEL);
+    assert_eq!(verification.msp_id, expected_msp);
+    assert_eq!(verification.ledger_anchor.block_hash, anchor_hash_hex);
+    assert_eq!(verification.ledger_anchor.transaction_id, expected_tx);
+    assert!(verification.audit.clock_skew_ms <= 30_000);
+    assert_eq!(
+        verification.audit.challenge,
+        URL_SAFE_NO_PAD.encode(&challenge)
+    );
+    assert_eq!(verification.status, "active");
+    assert!(verification.service.is_some());
+    assert!(verification.verification_method.public_key_base64.len() >= 40);
+}
+
+#[tokio::test]
+async fn fabric_did_verification_rejects_tampered_anchor() {
+    let state = setup_state();
+    let document = state
+        .fabric_registry()
+        .document(FABRIC_POC_DID)
+        .expect("fabric did");
+    let anchor_hash_hex = document.anchor.block_hash_hex();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("time");
+    let timestamp_ms = now
+        .as_secs()
+        .saturating_mul(1_000)
+        .saturating_add(u64::from(now.subsec_millis()));
+    let challenge = canonical_challenge(FABRIC_POC_DID, &anchor_hash_hex, timestamp_ms);
+    let key_pair =
+        Ed25519KeyPair::from_seed(FABRIC_POC_METHOD_ID, FABRIC_POC_KEY_SEED).expect("seed");
+    let signature = key_pair.signing_key().sign(&challenge);
+    let mut tampered_hash = anchor_hash_hex.clone();
+    if let Some(last) = tampered_hash.pop() {
+        let replacement = if last == '0' { '1' } else { '0' };
+        tampered_hash.push(replacement);
+    }
+    let payload = json!({
+        "did": FABRIC_POC_DID,
+        "channel": FABRIC_POC_CHANNEL,
+        "proof": {
+            "challenge": URL_SAFE_NO_PAD.encode(&challenge),
+            "signature": URL_SAFE_NO_PAD.encode(signature.to_bytes()),
+            "block_hash": tampered_hash,
+            "transaction_id": FABRIC_POC_TRANSACTION_ID,
+            "timestamp_ms": timestamp_ms,
+        }
+    });
+    let app = build_router(Arc::clone(&state));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/blockchain/fabric/did/verify")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let error: ApiErrorBody = serde_json::from_slice(&body).expect("error json");
+    assert_eq!(error.error, "invalid_request");
+    assert!(error
+        .error_description
+        .contains("block_hash ledger kaydıyla eşleşmiyor"));
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct BeginAuthResponse {
@@ -790,6 +978,13 @@ struct TokenResponse {
     access_token: String,
     token_type: String,
     expires_in: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiErrorBody {
+    error: String,
+    #[serde(rename = "error_description")]
+    error_description: String,
 }
 
 #[allow(dead_code)]

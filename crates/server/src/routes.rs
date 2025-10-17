@@ -16,7 +16,7 @@ use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
     Engine as _,
 };
-use hex::encode as hex_encode;
+use hex::{decode_to_slice, encode as hex_encode};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::signal;
@@ -33,6 +33,7 @@ use aunsorm_mdm::{
 
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
+use crate::fabric::{FabricDidError, FabricDidVerificationRequest};
 #[cfg(feature = "http3-experimental")]
 use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
 #[cfg(feature = "http3-experimental")]
@@ -71,7 +72,9 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/id/parse", post(parse_id))
         .route("/id/verify-head", post(verify_head))
         // Security endpoints (media token generation)
-        .route("/security/generate-media-token", post(generate_media_token));
+        .route("/security/generate-media-token", post(generate_media_token))
+        // Blockchain DID verification PoC
+        .route("/blockchain/fabric/did/verify", post(verify_fabric_did));
 
     #[cfg(feature = "http3-experimental")]
     let router = {
@@ -317,7 +320,8 @@ async fn begin_auth(
     // Basic URL validation (scheme check)
     if !redirect_uri_trimmed.starts_with("https://")
         && !redirect_uri_trimmed.starts_with("http://localhost")
-        && !redirect_uri_trimmed.starts_with("http://127.0.0.1") {
+        && !redirect_uri_trimmed.starts_with("http://127.0.0.1")
+    {
         return Err(ApiError::invalid_request(
             "redirect_uri HTTPS kullanmalıdır (localhost için HTTP izinli)",
         ));
@@ -355,7 +359,7 @@ async fn begin_auth(
         trimmed.to_owned()
     } else {
         // Default subject if not provided
-        format!("client:{}", sanitized_client_id)
+        format!("client:{sanitized_client_id}")
     };
 
     // Validate code_challenge
@@ -1403,4 +1407,215 @@ fn format_timestamp(time: SystemTime) -> String {
             format!("{year:04}-01-01T{hours:02}:{minutes:02}:{seconds:02}.{millis:03}Z")
         },
     )
+}
+
+// ========================================
+// Blockchain DID Verification (Hyperledger Fabric PoC)
+// ========================================
+
+#[derive(Debug, Deserialize)]
+struct FabricDidVerificationPayload {
+    did: String,
+    channel: String,
+    proof: FabricDidProofPayload,
+}
+
+#[derive(Debug, Deserialize)]
+struct FabricDidProofPayload {
+    challenge: String,
+    signature: String,
+    block_hash: String,
+    transaction_id: String,
+    timestamp_ms: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FabricDidVerificationResponse {
+    did: String,
+    verified: bool,
+    controller: String,
+    status: String,
+    channel: String,
+    #[serde(rename = "mspId")]
+    msp_id: String,
+    ledger_anchor: FabricLedgerAnchorResponse,
+    verification_method: FabricVerificationMethodResponse,
+    service: Option<FabricVerificationServiceResponse>,
+    audit: FabricVerificationAuditResponse,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FabricLedgerAnchorResponse {
+    #[serde(rename = "blockIndex")]
+    block_index: u64,
+    #[serde(rename = "blockHash")]
+    block_hash: String,
+    #[serde(rename = "transactionId")]
+    transaction_id: String,
+    #[serde(rename = "timestampMs")]
+    timestamp_ms: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FabricVerificationMethodResponse {
+    id: String,
+    #[serde(rename = "type")]
+    ty: String,
+    controller: String,
+    #[serde(rename = "publicKeyBase64")]
+    public_key_base64: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FabricVerificationServiceResponse {
+    id: String,
+    #[serde(rename = "type")]
+    ty: String,
+    endpoint: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct FabricVerificationAuditResponse {
+    challenge: String,
+    #[serde(rename = "checkedAtMs")]
+    checked_at_ms: u64,
+    #[serde(rename = "clockSkewMs")]
+    clock_skew_ms: u64,
+}
+
+fn map_fabric_error(error: FabricDidError) -> ApiError {
+    match error {
+        FabricDidError::UnknownDid(did) => {
+            ApiError::not_found(format!("DID kaydı bulunamadı: {did}"))
+        }
+        FabricDidError::ChannelMismatch { expected, found } => ApiError::invalid_request(format!(
+            "channel beklenen değeri karşılamıyor: beklenen {expected}, bulundu {found}"
+        )),
+        FabricDidError::BlockHashMismatch { expected, found } => {
+            ApiError::invalid_request(format!(
+                "block_hash ledger kaydıyla eşleşmiyor: beklenen {}, bulundu {}",
+                hex_encode(expected),
+                hex_encode(found),
+            ))
+        }
+        FabricDidError::TransactionMismatch { expected, found } => {
+            ApiError::invalid_request(format!(
+                "transaction_id beklenen değeri karşılamıyor: beklenen {expected}, bulundu {found}"
+            ))
+        }
+        FabricDidError::ChallengeMismatch => {
+            ApiError::invalid_request("challenge canonical biçimle eşleşmiyor")
+        }
+        FabricDidError::SignatureInvalid => ApiError::invalid_request("imza doğrulanamadı"),
+        FabricDidError::Clock(err) => {
+            ApiError::server_error(format!("sistem saati okunamadı: {err}"))
+        }
+        FabricDidError::ClockOverflow => {
+            ApiError::server_error("sistem saati hesaplaması taşma üretti")
+        }
+        FabricDidError::ClockSkew {
+            delta_ms,
+            allowed_ms,
+        } => ApiError::invalid_request(format!(
+            "clock skew çok yüksek: {delta_ms}ms (izin verilen {allowed_ms}ms)"
+        )),
+    }
+}
+
+async fn verify_fabric_did(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<FabricDidVerificationPayload>,
+) -> Result<Json<FabricDidVerificationResponse>, ApiError> {
+    let did = payload.did.trim();
+    if did.is_empty() {
+        return Err(ApiError::invalid_request("did boş olamaz"));
+    }
+    let channel = payload.channel.trim();
+    if channel.is_empty() {
+        return Err(ApiError::invalid_request("channel boş olamaz"));
+    }
+    let transaction_id = payload.proof.transaction_id.trim();
+    if transaction_id.is_empty() {
+        return Err(ApiError::invalid_request("transaction_id boş olamaz"));
+    }
+
+    let challenge = URL_SAFE_NO_PAD
+        .decode(payload.proof.challenge.as_bytes())
+        .map_err(|_| ApiError::invalid_request("challenge base64url çözülemedi"))?;
+    if challenge.is_empty() {
+        return Err(ApiError::invalid_request("challenge boş olamaz"));
+    }
+
+    let signature_bytes = URL_SAFE_NO_PAD
+        .decode(payload.proof.signature.as_bytes())
+        .map_err(|_| ApiError::invalid_request("signature base64url çözülemedi"))?;
+    if signature_bytes.len() != ed25519_dalek::SIGNATURE_LENGTH {
+        return Err(ApiError::invalid_request(
+            "signature uzunluğu 64 bayt olmalıdır",
+        ));
+    }
+    let mut signature = [0_u8; ed25519_dalek::SIGNATURE_LENGTH];
+    signature.copy_from_slice(&signature_bytes);
+
+    let mut block_hash = [0_u8; 32];
+    decode_to_slice(payload.proof.block_hash.as_bytes(), &mut block_hash)
+        .map_err(|_| ApiError::invalid_request("block_hash hex formatında olmalıdır"))?;
+
+    let request = FabricDidVerificationRequest {
+        did,
+        channel,
+        block_hash,
+        transaction_id,
+        timestamp_ms: payload.proof.timestamp_ms,
+        challenge: &challenge,
+        signature,
+    };
+
+    let verification = state
+        .fabric_registry()
+        .verify(request)
+        .map_err(map_fabric_error)?;
+
+    let document = verification.document;
+    let anchor = &document.anchor;
+    let method = &document.verification_method;
+    let service = document
+        .service
+        .as_ref()
+        .map(|svc| FabricVerificationServiceResponse {
+            id: svc.id.clone(),
+            ty: svc.r#type.to_owned(),
+            endpoint: svc.endpoint.clone(),
+        });
+    let challenge_b64 = URL_SAFE_NO_PAD.encode(&verification.challenge);
+    let public_key_b64 = URL_SAFE_NO_PAD.encode(method.public_key_bytes());
+
+    let response = FabricDidVerificationResponse {
+        did: document.did.clone(),
+        verified: true,
+        controller: document.controller.clone(),
+        status: document.status.as_str().to_owned(),
+        channel: document.channel.clone(),
+        msp_id: document.msp_id.clone(),
+        ledger_anchor: FabricLedgerAnchorResponse {
+            block_index: anchor.block_index,
+            block_hash: anchor.block_hash_hex(),
+            transaction_id: anchor.transaction_id.clone(),
+            timestamp_ms: anchor.timestamp_ms,
+        },
+        verification_method: FabricVerificationMethodResponse {
+            id: method.id.clone(),
+            ty: method.algorithm().to_owned(),
+            controller: method.controller.clone(),
+            public_key_base64: public_key_b64,
+        },
+        service,
+        audit: FabricVerificationAuditResponse {
+            challenge: challenge_b64,
+            checked_at_ms: verification.checked_at_ms,
+            clock_skew_ms: verification.clock_skew_ms,
+        },
+    };
+
+    Ok(Json(response))
 }
