@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deterministik test vektörleri eklendi.
 - `aunsorm-id` crate'i için opsiyonel `serde` seri/deserialize desteği ve JSON
   yuvarlama testleri eklendi.
+- HTTP/3 + QUIC programı için kütüphane kıyaslaması ve datagram mesaj planı `docs/src/architecture/http3-quic.md` içinde yayımlandı.
 
 ### Changed
 - CA otomasyon dokümantasyonu ve kimlik bileşeni açıklamaları RSA desteğini
