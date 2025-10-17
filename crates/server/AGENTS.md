@@ -7,3 +7,4 @@
 - PKCE yalnızca `S256` yöntemiyle desteklenmeli; farklı yöntemler açık bir hata mesajıyla reddedilmelidir.
 - Strict kipte kalıcı JTI deposu zorunludur; in-memory seçenekler hataya sebep olmalıdır.
 - Testler başarılı bir tam PKCE akışını ve en az bir hata senaryosunu kapsamalıdır.
+- Yeni HTTP endpoint'i eklediğinizde: `CHANGELOG.md` `[Unreleased]` bölümüne kayıt açın ve `README.md` sunucu endpoint ağacını güncelleyin (durum etiketi ve açıklama ekleyin).

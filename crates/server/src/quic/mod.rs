@@ -4,4 +4,4 @@ pub mod datagram;
 mod listener;
 
 #[cfg(feature = "http3-experimental")]
-pub use listener::{build_alt_svc_header_value, spawn_http3_poc};
+pub use listener::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
