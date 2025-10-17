@@ -92,3 +92,27 @@ Analiz sırasında aşağıdaki mevzuat ve standartlar referans alındı:
 Bu değerlendirme sonucunda HTTP/3 + QUIC programının **Sertifikasyon ve Güvenlik Analizi**
 evresi tamamlanmış sayılır. Ürünleştirme sprinti öncesinde runbook ve CI iş akışlarının
 güncellenmesi gerekmektedir.
+
+## Operasyon Runbook Güncellemesi
+
+### Aktivasyon ve Geri Alma
+1. CI tarafında `ENABLE_HTTP3_POC=true` olarak ayarlanmış bir workflow dispatch'i tetikleyin. `http3-poc` işi başarılı olmadan üretim ortamında özellik açılmamalıdır.
+2. `aunsorm-server` dağıtımlarında `--features http3-experimental` ile derlenen sürüm, `AUNSORM_HTTP3_ENABLED=1` çevre değişkeniyle canary ortamına alınır. Özellik devre dışı bırakılırken her iki bayrak da temizlenmelidir.
+3. Canary süresince `Alt-Svc` başlığı ve `GET /http3/capabilities` yanıtı gözlemlenir; geriye dönüş gerektiğinde deployment manifest'lerinden ilgili feature bayrağı kaldırılır ve hizmet yeniden başlatılır.
+
+### Gözlemlenebilirlik Kontrolleri
+- `otel` kanalındaki metrikler için `pending_auth_requests`, `active_tokens`, `sfu_contexts`, `mdm_registered_devices` sayaç/gauge değerleri canary süresince `Grafana` paneline taşınır; beklenen sapma ≤ %5.
+- QUIC endpoint'i üzerinde `quinn` bağlantı logları `http3-poc` guard'ının `local_addr()` çıktısıyla karşılaştırılır; beklenmeyen port değişimi tespit edilirse dağıtım durdurulur.
+- `security.http3.aead_failure` etiketi 15 dakikada bir gözden geçirilir; tek bir hata dahi gözlemlenirse özellik derhal geri alınır.
+
+### Incident Tepkisi
+1. HTTP/3 kaynaklı incident'larda `ops/http3-canary` etiketiyle Jira/Linear kartı açılır.
+2. İlk 30 dakika içinde Alt-Svc gözlemleri, QUIC handshake logları ve datagram batch örnekleri toplanır ve runbook eki olarak dokümante edilir.
+3. Incident kapatıldığında `docs/src/operations/http3-quic-security.md` belgesindeki “Feedback Döngüsü” tablosu güncellenir ve kalıcı aksiyon maddeleri ilgili ekip backlog'una taşınır.
+
+### Feedback Döngüsü
+| Adım | Açıklama | SLA |
+|------|----------|-----|
+| Canary müşteri raporu alımı | Destek ekibi raporu `ops/http3-canary` etiketiyle Jira/Linear kartına dönüştürür | ≤ 24 saat |
+| Operasyonel inceleme | Ops + Interop ekipleri rapor edilen davranışı `http3-poc` CI çıktılarıyla karşılaştırır | ≤ 48 saat |
+| Karar ve paylaşım | Sonuçlar bu dokümanın runbook bölümüne ve haftalık durum notlarına işlenir | ≤ 72 saat |

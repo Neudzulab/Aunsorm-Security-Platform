@@ -92,6 +92,12 @@ Bu kıyaslama sonucunda Interop Agent, **temel PoC** için `quinn` + `h3` ikilis
    - Operasyon rehberinde (ops runbook) HTTP/3 aktif etme/geri alma prosedürlerini, gözlemlenebilirlik metriklerini ve hata ayıklama adımlarını güncelle.
    - Canary sürümü sonrasında müşteri geri bildirimleri için Jira/Linear kartlarını bağlayan geri besleme döngüsü oluştur.
 
+   **Tamamlanan teslimatlar:**
+
+   - `ci.yml` içerisine opsiyonel `http3-poc` işi eklendi; değişken `ENABLE_HTTP3_POC=true` olduğunda `aunsorm-server` ve entegrasyon testleri `--features http3-experimental` ile koşturuluyor.【F:.github/workflows/ci.yml†L8-L11】【F:.github/workflows/ci.yml†L117-L140】
+   - `docs/src/operations/http3-quic-security.md` runbook bölümü HTTP/3 özelliğini açma/kapatma adımlarını, gözlemlenebilirlik metriklerini ve incident sırasında uygulanacak teşhis rutinlerini belgeliyor.【F:docs/src/operations/http3-quic-security.md†L112-L196】
+   - Canary geri besleme akışı için Jira/Linear kartlarının `ops/http3-canary` etiketiyle ilişkilendirilmesi, müşteri raporlarının 24 saat içinde değerlendirilmesi ve sonuçların aynı dokümanda “Feedback Döngüsü” tablosuna işlenmesi kararlaştırıldı.【F:docs/src/operations/http3-quic-security.md†L198-L232】
+
 ## Risk ve Bağımlılıklar
 - **Kütüphane olgunluğu:** `quiche` ve `h3` sürümlerinin MSRV 1.76 ile uyumluluğu takip edilmelidir.
 - **Firewall/NAT engelleri:** UDP tabanlı QUIC trafiğinin kısıtlanabileceği ortamlar için otomatik HTTP/2 geri dönüş mekanizması şarttır.

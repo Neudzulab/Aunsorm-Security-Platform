@@ -10,10 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Experimental `GET /http3/capabilities` endpoint exposing Alt-Svc metadata and QUIC datagram channel descriptors behind the `http3-experimental` feature flag.
 - Router test coverage ensuring the HTTP/3 capability payload advertises active status and datagram limits.
+- Optional `http3-poc` GitHub Actions job gated by `ENABLE_HTTP3_POC=true`, executing `aunsorm-server` and integration tests with `http3-experimental` enabled.
+- HTTP/3 canary integration test (`http3_poc_ci`) that asserts the QUIC listener binds to the expected port and produces telemetry datagrams.
 
 ### Documentation
 - README HTTP/3 service tree and discovery section updated with `GET /http3/capabilities` usage examples.
 - `crates/server/AGENTS.md` now requires README + CHANGELOG updates whenever a new HTTP endpoint is introduced.
+- HTTP/3 operations runbook extended with activation/rollback steps, observability checks, and incident feedback SLA’ları.
 
 ### Planned for v0.5.0 (Q1 2026)
 - ACME v2 protocol client implementation (Let's Encrypt integration)

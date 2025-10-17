@@ -666,7 +666,7 @@ async fn sfu_context_step_rejects_unknown() {
 async fn random_number_endpoint_returns_entropy() {
     let state = setup_state();
     let app = build_router(Arc::clone(&state));
-    
+
     // Test 1: Default range (0-100)
     let response = app
         .oneshot(
@@ -688,7 +688,7 @@ async fn random_number_endpoint_returns_entropy() {
     assert_eq!(payload.max, 100);
     assert_eq!(payload.entropy.len(), 64);
     assert!(payload.entropy.chars().all(|ch| ch.is_ascii_hexdigit()));
-    
+
     // Test 2: Custom range (15-5000)
     let app2 = build_router(Arc::clone(&state));
     let response2 = app2
@@ -709,7 +709,7 @@ async fn random_number_endpoint_returns_entropy() {
     assert!((15..=5000).contains(&payload2.value));
     assert_eq!(payload2.min, 15);
     assert_eq!(payload2.max, 5000);
-    
+
     // Test 3: Invalid range (min > max)
     let app3 = build_router(state);
     let response3 = app3
@@ -729,11 +729,11 @@ async fn random_number_endpoint_returns_entropy() {
 #[test]
 fn random_distribution_smoke_test() {
     let state = setup_state();
-    let samples: u64 = 1_000;  // Smoke test - sadece 1K örnek
+    let samples: u64 = 1_000; // Smoke test - sadece 1K örnek
     let mut sum: u64 = 0;
     let mut min_value: u64 = u64::MAX;
     let mut max_value: u64 = 0;
-    
+
     for _ in 0..samples {
         let draw = state.random_inclusive(1, 100);
         assert!((1..=100).contains(&draw), "Value out of range: {}", draw);
@@ -741,20 +741,20 @@ fn random_distribution_smoke_test() {
         min_value = min_value.min(draw);
         max_value = max_value.max(draw);
     }
-    
+
     let sum_u32 = u32::try_from(sum).expect("sum within bounds");
     let samples_u32 = u32::try_from(samples).expect("samples within bounds");
     let mean = f64::from(sum_u32) / f64::from(samples_u32);
     let expected = 50.5_f64;
     let deviation = (mean - expected).abs();
-    
+
     // Smoke test - sadece genel sınırları kontrol et
     assert!(
         min_value >= 1 && max_value <= 100,
         "Range check failed: min={min_value}, max={max_value}"
     );
     assert!(
-        deviation < 5.0,  // Gevşek tolerans - smoke test
+        deviation < 5.0, // Gevşek tolerans - smoke test
         "Mean deviation too high: mean={mean}, expected={expected}, deviation={deviation}"
     );
 }

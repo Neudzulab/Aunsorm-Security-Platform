@@ -26,6 +26,10 @@ const TELEMETRY_INTERVAL: Duration = Duration::from_secs(5);
 pub const ALT_SVC_MAX_AGE: u32 = 3600;
 
 /// HTTP/3 için `Alt-Svc` başlık değerini oluşturur.
+///
+/// # Errors
+///
+/// Geçersiz bir başlık değeri üretilecek olursa [`InvalidHeaderValue`] döner.
 pub fn build_alt_svc_header_value(port: u16) -> Result<HeaderValue, InvalidHeaderValue> {
     HeaderValue::from_str(&format!(
         "h3=\":{port}\"; ma={ALT_SVC_MAX_AGE}, h3-29=\":{port}\"; ma={ALT_SVC_MAX_AGE}"
@@ -36,6 +40,18 @@ pub fn build_alt_svc_header_value(port: u16) -> Result<HeaderValue, InvalidHeade
 pub struct Http3PocGuard {
     endpoint: quinn::Endpoint,
     driver: JoinHandle<()>,
+}
+
+impl Http3PocGuard {
+    /// Returns the local socket address that the HTTP/3 `PoC` listener bound to.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`ServerError::Io`] if the underlying QUIC endpoint
+    /// cannot report its bound address.
+    pub fn local_addr(&self) -> Result<SocketAddr, ServerError> {
+        Ok(self.endpoint.local_addr()?)
+    }
 }
 
 impl Drop for Http3PocGuard {
