@@ -7,19 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned for v0.4.5 (Q4 2025)
-- **HEAD-Stamped ID Generation Service**
-  - Server endpoint integration for `aunsorm-id` crate
-  - REST API: `/id/generate`, `/id/parse`, `/id/verify-head`
-  - CI/CD artifact tracking with Git commit SHA
-  - Monotonic timestamp-based collision-free IDs
-
 ### Planned for v0.5.0 (Q1 2026)
 - ACME v2 protocol client implementation (Let's Encrypt integration)
 - Automatic certificate issuance and renewal
 - Domain validation (HTTP-01, DNS-01, TLS-ALPN-01)
 - Zero-downtime certificate rotation
 - Prometheus metrics and monitoring
+
+## [0.4.5] - 2025-10-17
+
+### Added
+- **HEAD-Stamped ID Generation Service**
+  - 3 REST endpoints: `POST /id/generate`, `POST /id/parse`, `POST /id/verify-head`
+  - Full integration of `aunsorm-id` crate (v0.4.5) into server
+  - Environment variable support: AUNSORM_HEAD, GITHUB_SHA, GIT_COMMIT, CI_COMMIT_SHA, VERGEN_GIT_SHA
+  - Custom namespace support with fallback to default ("aunsorm")
+  - Git commit SHA-based unique identifier generation
+  - Monotonic timestamp (microseconds) + atomic counter for collision prevention
+  - HEAD fingerprint verification for artifact tracking
+  - JSON response format with full metadata
+  - Turkish error messages for validation failures
+
+### Changed
+- **Test Suite Optimization**
+  - Removed redundant 1M+ sample distribution tests
+  - Added smoke test (1K samples, ~0.04s) for random number generation
+  - Reduced test execution time from 60+ seconds to <5 seconds
+  - All 242 tests passing successfully
+
+### Documentation
+- README.md: Updated ID Generation endpoints from 📋 Planned → ✅ Active
+- Service tree: Marked 3 ID endpoints as production-ready
+- Environment variable configuration documented
+- Added usage examples and response format documentation
 
 ## [0.4.4] - 2025-10-17
 

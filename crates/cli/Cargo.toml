@@ -1,6 +1,6 @@
 [package]
 name = "aunsorm-cli"
-version = "0.4.1"
+version = "0.4.5"
 edition = "2021"
 license = "Apache-2.0"
 description = "Command-line interface for the Aunsorm secure tooling suite"

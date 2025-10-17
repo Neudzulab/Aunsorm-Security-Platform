@@ -1,6 +1,6 @@
 # Aunsorm Cryptography Suite - Roadmap
 
-## v0.4.2 (Current - October 2025)
+## v0.4.5 (Current - October 17, 2025)
 
 ### ✅ Tamamlanan Özellikler
 
@@ -32,7 +32,15 @@
    - Key derivation (HKDF)
    - Profile-based KDF (Argon2)
 
-## v0.4.3 (Planned - Q4 2025)
+6. **HEAD-Stamped ID Generation Service** ✨ NEW
+   - Git commit SHA-based unique IDs
+   - REST API: `/id/generate`, `/id/parse`, `/id/verify-head`
+   - Custom namespace support
+   - Monotonic timestamp + atomic counter
+   - CI/CD artifact tracking
+   - Environment variable support (AUNSORM_HEAD, GITHUB_SHA, etc.)
+
+## v0.4.3 (Completed - Q4 2025)
 
 ### 🎯 RSA Key Generation Support
 
