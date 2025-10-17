@@ -297,3 +297,18 @@ Her iş için alanda uzman bir agent görevlendir. Yapılan işleri birbirleri i
 * [x] Head bilgisine bağlı, çakışmasız benzersiz ID jeneratörü (projeler arası paylaşım için API).
 * [x] MDM (Mobile Device Management) temel altyapısı: kayıt, politika deposu ve sertifika dağıtım planı.
 * [x] Lokal HTTPS geliştirme ortamı için SAN destekli öz-imzalı sertifika otomasyonu (`x509 local-dev`, CLI + kütüphane).
+
+19) Blockchain İnovasyon Programı
+
+- **Program Sahibi:** Blockchain inovasyon koordinasyon ekibi; yürütme desteği Crypto, Identity ve Interop ajanlarından sağlanacaktır.
+- **Kısa Vadeli PoC (31 Temmuz 2024):**
+  - `docs/innovation/blockchain.md` vizyon ve regülasyon rehberini tamamla.
+  - `tests/blockchain/` altında mock ledger arayüzü ve veri bütünlüğü kontrolü için test iskeletini tasarlayıp sorumlu ajana atamayı gerçekleştir.
+  - Interop ekibi için `.github/workflows/blockchain-poc.yml` CI job taslağı ve `tests/blockchain/config.example.toml` örnek yapılandırmasını hazırlama planını oluştur.
+- **Orta Vadeli Entegrasyon (31 Ekim 2024):** DID, denetim izi ve tokenizasyon akışlarını Hyperledger/Quorum PoC’leriyle entegre ederek uçtan uca demo hedefini belirle.
+- **Uzun Vadeli Sertifikasyon (31 Mart 2025):** eIDAS, SOC 2 ve FATF kapsamındaki uyumluluk paketlerinin hazırlanması, bağımsız denetçi raporları için dokümantasyon şablonlarının teslimi.
+- **Test İskeleti ve Kaynaklar (15 Ağustos 2024):**
+  - `tests/blockchain/mock_ledger.rs` dosyasında trait bazlı mock defter arayüzü, veri bütünlüğü senaryoları için fixture planı.
+  - `tests/blockchain/integrity_cases.rs` içindeki temel kontroller için veri seti üretim stratejisi.
+  - CI job’ı için ayrılmış runner kapasitesi, cache anahtarları ve başarısız PoC testleri için otomatik Slack uyarıları.
+  - PoC sonuçlarının belgelendiği `docs/innovation/blockchain.md` altındaki “Çıktılar ve Ölçümleme” bölümünü güncel tutma sorumluluğu.
