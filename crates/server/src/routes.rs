@@ -1,4 +1,4 @@
-use std::borrow::ToOwned;
+use std::borrow::{Cow, ToOwned};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -34,7 +34,9 @@ use aunsorm_mdm::{
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
 #[cfg(feature = "http3-experimental")]
-use crate::quic::{build_alt_svc_header_value, spawn_http3_poc};
+use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
+#[cfg(feature = "http3-experimental")]
+use crate::quic::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
 use crate::state::{auth_ttl, ServerState, SfuStepOutcome, TransparencyTreeSnapshot};
 use crate::transparency::TransparencySnapshot as LedgerTransparencySnapshot;
 use serde_json::Value;
@@ -63,6 +65,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/mdm/policy/:platform", get(fetch_policy))
         .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
         .route("/transparency/tree", get(transparency_tree))
+        .route("/http3/capabilities", get(http3_capabilities))
         // ID Generation endpoints (v0.4.5)
         .route("/id/generate", post(generate_id))
         .route("/id/parse", post(parse_id))
@@ -159,6 +162,92 @@ async fn shutdown_signal() {
 
     #[cfg(not(unix))]
     ctrl_c.await;
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Http3DatagramChannelDescriptor {
+    channel: u8,
+    label: Cow<'static, str>,
+    purpose: Cow<'static, str>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Http3DatagramCapabilities {
+    supported: bool,
+    max_payload_bytes: Option<usize>,
+    channels: Vec<Http3DatagramChannelDescriptor>,
+    notes: Option<Cow<'static, str>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Http3CapabilitiesResponse {
+    enabled: bool,
+    status: Cow<'static, str>,
+    alt_svc_port: Option<u16>,
+    alt_svc_max_age: Option<u32>,
+    datagrams: Http3DatagramCapabilities,
+}
+
+#[cfg(feature = "http3-experimental")]
+async fn http3_capabilities(
+    State(state): State<Arc<ServerState>>,
+) -> (StatusCode, Json<Http3CapabilitiesResponse>) {
+    let response = Http3CapabilitiesResponse {
+        enabled: true,
+        status: Cow::Borrowed("active"),
+        alt_svc_port: Some(state.listen_port()),
+        alt_svc_max_age: Some(ALT_SVC_MAX_AGE),
+        datagrams: Http3DatagramCapabilities {
+            supported: true,
+            max_payload_bytes: Some(MAX_PAYLOAD_BYTES),
+            channels: vec![
+                Http3DatagramChannelDescriptor {
+                    channel: DatagramChannel::Telemetry.as_u8(),
+                    label: Cow::Borrowed("telemetry"),
+                    purpose: Cow::Borrowed(
+                        "OpenTelemetry metrik anlık görüntüsü (OtelPayload)",
+                    ),
+                },
+                Http3DatagramChannelDescriptor {
+                    channel: DatagramChannel::Audit.as_u8(),
+                    label: Cow::Borrowed("audit"),
+                    purpose: Cow::Borrowed("Yetkilendirme denetim olayları (AuditEvent)"),
+                },
+                Http3DatagramChannelDescriptor {
+                    channel: DatagramChannel::Ratchet.as_u8(),
+                    label: Cow::Borrowed("ratchet"),
+                    purpose: Cow::Borrowed(
+                        "Oturum ratchet ilerleme gözlemleri (RatchetProbe)",
+                    ),
+                },
+            ],
+            notes: Some(Cow::Borrowed(
+                "Datagram yükleri postcard ile serileştirilir; en fazla 1150 bayt payload desteklenir.",
+            )),
+        },
+    };
+    (StatusCode::OK, Json(response))
+}
+
+#[cfg(not(feature = "http3-experimental"))]
+async fn http3_capabilities(
+    State(_state): State<Arc<ServerState>>,
+) -> (StatusCode, Json<Http3CapabilitiesResponse>) {
+    let response = Http3CapabilitiesResponse {
+        enabled: false,
+        status: Cow::Borrowed("feature_disabled"),
+        alt_svc_port: None,
+        alt_svc_max_age: None,
+        datagrams: Http3DatagramCapabilities {
+            supported: false,
+            max_payload_bytes: None,
+            channels: Vec::new(),
+            notes: Some(Cow::Borrowed(
+                "HTTP/3 desteği pasif. `--features http3-experimental` ile derleyerek etkinleştirin.",
+            )),
+        },
+    };
+    (StatusCode::NOT_IMPLEMENTED, Json(response))
 }
 
 #[derive(Debug, Deserialize)]
@@ -811,6 +900,7 @@ async fn next_sfu_step(
 #[cfg(all(test, feature = "http3-experimental"))]
 mod tests {
     use super::*;
+    use axum::body::to_bytes;
     use std::net::SocketAddr;
     use std::time::Duration;
     use tower::ServiceExt;
@@ -856,6 +946,41 @@ mod tests {
             build_alt_svc_header_value(port).expect("expected header can be constructed");
         assert_eq!(header, &expected);
     }
+
+    #[tokio::test]
+    async fn http3_capabilities_reports_active_status() {
+        let state = build_test_state();
+        let router = build_router(Arc::clone(&state));
+        let response = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/http3/capabilities")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+        assert_eq!(response.status(), StatusCode::OK);
+        let header = response
+            .headers()
+            .get(header::ALT_SVC)
+            .expect("Alt-Svc header is present");
+        let expected =
+            build_alt_svc_header_value(state.listen_port()).expect("expected header is built");
+        assert_eq!(header, &expected);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body is collected");
+        let payload: Http3CapabilitiesResponse =
+            serde_json::from_slice(&body).expect("payload parses");
+        assert!(payload.enabled);
+        assert_eq!(payload.status.as_ref(), "active");
+        assert_eq!(payload.alt_svc_port, Some(state.listen_port()));
+        assert_eq!(payload.alt_svc_max_age, Some(ALT_SVC_MAX_AGE));
+        assert_eq!(payload.datagrams.max_payload_bytes, Some(MAX_PAYLOAD_BYTES));
+        assert_eq!(payload.datagrams.channels.len(), 3);
+    }
+}
 // ========================================================================
 // ID GENERATION HANDLERS (v0.4.5)
 // ========================================================================
@@ -956,23 +1081,21 @@ async fn generate_id(
             })
             .map_err(|e| {
                 ApiError::server_error(format!(
-                    "ID generator oluşturulamadı: {}. Lütfen AUNSORM_HEAD veya GITHUB_SHA environment variable'ını ayarlayın.",
-                    e
+                    "ID generator oluşturulamadı: {e}. Lütfen AUNSORM_HEAD veya GITHUB_SHA environment variable'ını ayarlayın."
                 ))
             })?
     } else {
         HeadIdGenerator::from_env().map_err(|e| {
             ApiError::server_error(format!(
-                "ID generator oluşturulamadı: {}. Lütfen AUNSORM_HEAD veya GITHUB_SHA environment variable'ını ayarlayın.",
-                e
+                "ID generator oluşturulamadı: {e}. Lütfen AUNSORM_HEAD veya GITHUB_SHA environment variable'ını ayarlayın."
             ))
         })?
     };
 
     // Generate ID
-    let id = generator.next_id().map_err(|e| {
-        ApiError::server_error(format!("ID üretilemedi: {}", e))
-    })?;
+    let id = generator
+        .next_id()
+        .map_err(|e| ApiError::server_error(format!("ID üretilemedi: {e}")))?;
 
     Ok(Json(GenerateIdResponse {
         id: id.as_str().to_owned(),
@@ -1004,8 +1127,7 @@ async fn parse_id(
             valid: true,
         })),
         Err(e) => Err(ApiError::invalid_request(format!(
-            "ID parse edilemedi: {}",
-            e
+            "ID parse edilemedi: {e}"
         ))),
     }
 }
@@ -1022,13 +1144,12 @@ async fn verify_head(
         return Err(ApiError::invalid_request("head boş olamaz"));
     }
 
-    let parsed = parse_head_id(&payload.id).map_err(|e| {
-        ApiError::invalid_request(format!("ID parse edilemedi: {}", e))
-    })?;
+    let parsed = parse_head_id(&payload.id)
+        .map_err(|e| ApiError::invalid_request(format!("ID parse edilemedi: {e}")))?;
 
-    let matches = parsed.matches_head(&payload.head).map_err(|e| {
-        ApiError::invalid_request(format!("HEAD doğrulanamadı: {}", e))
-    })?;
+    let matches = parsed
+        .matches_head(&payload.head)
+        .map_err(|e| ApiError::invalid_request(format!("HEAD doğrulanamadı: {e}")))?;
 
     Ok(Json(VerifyHeadResponse {
         id: parsed.as_str().to_owned(),

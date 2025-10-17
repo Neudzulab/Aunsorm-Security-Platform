@@ -449,6 +449,10 @@ aunsorm-server v0.4.5
 │  └─ GET    /metrics                   → Prometheus metrics (opsiyonel)
 │
 ├─ 🚀 HTTP/3 QUIC Datagrams (Experimental - v0.4.4)
+│  ├─ GET    /http3/capabilities 🚧    → HTTP/3 durum & datagram kanalı keşfi
+│  │                                     └─ Output: enabled, alt_svc_port, alt_svc_max_age
+│  │                                     └─ Datagram kanalları ve payload açıklamaları
+│  │                                     └─ Feature flag: `http3-experimental`
 │  ├─ Channel: Telemetry (0)           → OpenTelemetry metrics streaming
 │  │                                     └─ Real-time metrics over QUIC
 │  │                                     └─ Low latency, unreliable delivery
@@ -653,6 +657,32 @@ Detaylı matematiksel analiz: [`crates/server/PRODUCTION_ENTROPY_MODEL.md`](crat
 #### 🚀 HTTP/3 QUIC Datagrams (Experimental)
 
 Aunsorm Server, **HTTP/3 üzerinde QUIC DATAGRAM** frame'leri ile düşük gecikmeli, güvenilir olmayan veri akışı sağlar. Bu özellik, gerçek zamanlı telemetri, audit logging ve session monitoring için optimize edilmiştir.
+
+**HTTP/3 Capability Discovery:**
+
+- `GET /http3/capabilities` endpoint'i, HTTP/3 PoC dinleyicisinin durumunu ve QUIC datagram kanallarını JSON formatında döndürür.
+- `enabled`, `alt_svc_port` ve `alt_svc_max_age` alanları; client'ların hangi port üzerinden H3 upgrade yapabileceğini bildirir.
+- `datagrams.channels` listesi; Telemetry/Audit/Ratchet kanallarının numeric ID'leri ve amaçlarını içerir.
+
+```bash
+curl -s http://127.0.0.1:8080/http3/capabilities | jq
+{
+  "enabled": true,
+  "status": "active",
+  "alt_svc_port": 8080,
+  "alt_svc_max_age": 3600,
+  "datagrams": {
+    "supported": true,
+    "max_payload_bytes": 1150,
+    "channels": [
+      { "channel": 0, "label": "telemetry", "purpose": "OpenTelemetry metrik anlık görüntüsü (OtelPayload)" },
+      { "channel": 1, "label": "audit", "purpose": "Yetkilendirme denetim olayları (AuditEvent)" },
+      { "channel": 2, "label": "ratchet", "purpose": "Oturum ratchet ilerleme gözlemleri (RatchetProbe)" }
+    ],
+    "notes": "Datagram yükleri postcard ile serileştirilir; en fazla 1150 bayt payload desteklenir."
+  }
+}
+```
 
 **Neden QUIC Datagrams?**
 - ⚡ **Ultra-low latency:** TCP head-of-line blocking yok
