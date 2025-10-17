@@ -48,6 +48,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/mdm/policy/:platform", get(fetch_policy))
         .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
         .route("/transparency/tree", get(transparency_tree))
+        .route("/random/number", get(random_number))
         .with_state(state)
 }
 
@@ -265,6 +266,20 @@ async fn exchange_token(
         token_type: "Bearer",
         expires_in: state.token_ttl().as_secs(),
     }))
+}
+
+#[derive(Debug, Serialize)]
+struct RandomNumberResponse {
+    value: u64,
+    entropy: String,
+}
+
+async fn random_number(State(state): State<Arc<ServerState>>) -> Json<RandomNumberResponse> {
+    let (value, entropy) = state.random_value_with_proof(1, 100);
+    Json(RandomNumberResponse {
+        value,
+        entropy: hex_encode(entropy),
+    })
 }
 
 #[derive(Debug, Deserialize)]
