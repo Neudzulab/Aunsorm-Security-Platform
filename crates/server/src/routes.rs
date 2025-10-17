@@ -34,7 +34,7 @@ use aunsorm_mdm::{
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
 #[cfg(feature = "http3-experimental")]
-use crate::quic::spawn_http3_poc;
+use crate::quic::{build_alt_svc_header_value, spawn_http3_poc};
 use crate::state::{auth_ttl, ServerState, SfuStepOutcome, TransparencyTreeSnapshot};
 use crate::transparency::TransparencySnapshot as LedgerTransparencySnapshot;
 use serde_json::Value;
@@ -71,9 +71,8 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
     #[cfg(feature = "http3-experimental")]
     let router = {
         let port = state.listen_port();
-        let header_value = format!("h3=\":{port}\"; ma=3600, h3-29=\":{port}\"; ma=3600");
         let header_value =
-            HeaderValue::from_str(&header_value).expect("Alt-Svc başlığı oluşturulamadı");
+            build_alt_svc_header_value(port).expect("Alt-Svc başlığı oluşturulamadı");
         let header_value = Arc::new(header_value);
         router.layer(middleware::from_fn(
             move |req: axum::http::Request<Body>, next: Next| {
@@ -349,20 +348,20 @@ async fn random_number(
 ) -> Result<Json<RandomNumberResponse>, ApiError> {
     let min = params.min;
     let max = params.max;
-    
+
     // Validation
     if min > max {
         return Err(ApiError::invalid_request(
             "min değeri max değerinden büyük olamaz",
         ));
     }
-    
+
     if max > u64::MAX / 2 {
         return Err(ApiError::invalid_request(
             "max değeri çok büyük (güvenlik limiti: u64::MAX/2)",
         ));
     }
-    
+
     let (value, entropy) = state.random_value_with_proof(min, max);
     Ok(Json(RandomNumberResponse {
         value,
@@ -809,6 +808,54 @@ async fn next_sfu_step(
     }
 }
 
+#[cfg(all(test, feature = "http3-experimental"))]
+mod tests {
+    use super::*;
+    use std::net::SocketAddr;
+    use std::time::Duration;
+    use tower::ServiceExt;
+
+    use crate::config::{LedgerBackend, ServerConfig};
+
+    fn build_test_state() -> Arc<ServerState> {
+        let listen: SocketAddr = "127.0.0.1:9443".parse().expect("socket address");
+        let key_pair =
+            aunsorm_jwt::Ed25519KeyPair::generate("test-server").expect("key pair generation");
+        let config = ServerConfig::new(
+            listen,
+            "https://aunsorm.test",
+            "test-audience",
+            Duration::from_secs(300),
+            false,
+            key_pair,
+            LedgerBackend::Memory,
+        )
+        .expect("config is valid");
+        Arc::new(ServerState::try_new(config).expect("state is constructed"))
+    }
+
+    #[tokio::test]
+    async fn alt_svc_header_is_injected_for_http3_routes() {
+        let state = build_test_state();
+        let port = state.listen_port();
+        let router = build_router(Arc::clone(&state));
+        let response = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/health")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+        let header = response
+            .headers()
+            .get(header::ALT_SVC)
+            .expect("Alt-Svc header is present");
+        let expected =
+            build_alt_svc_header_value(port).expect("expected header can be constructed");
+        assert_eq!(header, &expected);
+    }
 // ========================================================================
 // ID GENERATION HANDLERS (v0.4.5)
 // ========================================================================
