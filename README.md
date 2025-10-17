@@ -390,7 +390,7 @@ Detaylı roadmap için: [ROADMAP.md](ROADMAP.md)
 
 ## HTTP/3 + QUIC Programı Durumu
 - [x] Araştırma & Seçim — `quinn`/`h3` ile `quiche` kıyaslaması ve datagram mesaj planı yayımlandı ([docs/src/architecture/http3-quic.md](docs/src/architecture/http3-quic.md)).
-- [ ] PoC Sprinti — `apps/server` içinde `http3-experimental` dinleyici ve QUIC datagram telemetri PoC'u.
+- [x] PoC Sprinti — `apps/server` içinde `http3-experimental` dinleyici ve QUIC datagram telemetri PoC'u.
 - [ ] Sertifikasyon ve Güvenlik Analizi — HSM uyumu ve QUIC datagram AEAD stratejileri raporlanacak.
 - [ ] Ürünleştirme ve CI Entegrasyonu — HTTP/3 opsiyonel CI job'ı ve operasyon rehberi güncellenecek.
 

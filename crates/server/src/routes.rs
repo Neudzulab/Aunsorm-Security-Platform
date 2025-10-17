@@ -3,8 +3,12 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[cfg(feature = "http3-experimental")]
+use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::http::{header, HeaderValue, StatusCode};
+#[cfg(feature = "http3-experimental")]
+use axum::middleware::{self, Next};
 use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -29,12 +33,20 @@ use aunsorm_mdm::{
 
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
+#[cfg(feature = "http3-experimental")]
+use crate::quic::spawn_http3_poc;
 use crate::state::{auth_ttl, ServerState, SfuStepOutcome, TransparencyTreeSnapshot};
 use crate::transparency::TransparencySnapshot as LedgerTransparencySnapshot;
 use serde_json::Value;
 
+/// HTTP yönlendiricisini oluşturur.
+///
+/// # Panics
+///
+/// `http3-experimental` özelliği etkinleştirildiğinde `Alt-Svc` başlığı
+/// oluşturulamazsa panikler.
 pub fn build_router(state: Arc<ServerState>) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/oauth/begin-auth", post(begin_auth))
         .route("/oauth/token", post(exchange_token))
         .route("/oauth/introspect", post(introspect))
@@ -47,8 +59,30 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/mdm/register", post(register_device))
         .route("/mdm/policy/:platform", get(fetch_policy))
         .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
-        .route("/transparency/tree", get(transparency_tree))
-        .with_state(state)
+        .route("/transparency/tree", get(transparency_tree));
+
+    #[cfg(feature = "http3-experimental")]
+    let router = {
+        let port = state.listen_port();
+        let header_value = format!("h3=\":{port}\"; ma=3600, h3-29=\":{port}\"; ma=3600");
+        let header_value =
+            HeaderValue::from_str(&header_value).expect("Alt-Svc başlığı oluşturulamadı");
+        let header_value = Arc::new(header_value);
+        router.layer(middleware::from_fn(
+            move |req: axum::http::Request<Body>, next: Next| {
+                let header_value = Arc::clone(&header_value);
+                async move {
+                    let mut response = next.run(req).await;
+                    response
+                        .headers_mut()
+                        .insert(header::ALT_SVC, header_value.as_ref().clone());
+                    response
+                }
+            },
+        ))
+    };
+
+    router.with_state(state)
 }
 
 /// HTTP sunucusunu başlatır.
@@ -59,6 +93,15 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
 pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
     let listen = config.listen;
     let state = Arc::new(ServerState::try_new(config)?);
+    #[cfg(feature = "http3-experimental")]
+    let _http3_guard = {
+        let guard = spawn_http3_poc(listen, Arc::clone(&state))?;
+        info!(
+            port = listen.port(),
+            "HTTP/3 PoC dinleyicisi etkinleştirildi"
+        );
+        guard
+    };
     let router = build_router(Arc::clone(&state));
     let listener = tokio::net::TcpListener::bind(listen).await?;
     info!(address = %listen, "aunsorm-server dinlemede");

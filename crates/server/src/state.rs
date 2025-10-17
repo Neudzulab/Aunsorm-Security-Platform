@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -19,6 +20,11 @@ use tokio::sync::{Mutex, RwLock};
 
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::error::ServerError;
+#[cfg(feature = "http3-experimental")]
+use crate::quic::datagram::{
+    AuditEvent, AuditOutcome, DatagramPayload, OtelPayload, QuicDatagramV1, RatchetProbe,
+    RatchetStatus,
+};
 use crate::transparency::{
     TransparencyEvent as LedgerTransparencyEvent, TransparencyLedger,
     TransparencySnapshot as LedgerTransparencySnapshot,
@@ -646,6 +652,7 @@ fn default_mdm_directory() -> Result<MdmDirectory, ServerError> {
 }
 
 pub struct ServerState {
+    listen_port: u16,
     issuer: String,
     audience: String,
     token_ttl: Duration,
@@ -669,7 +676,7 @@ impl ServerState {
     /// JTI defteri başlatılırken hata oluşursa `ServerError` döner.
     pub fn try_new(config: ServerConfig) -> Result<Self, ServerError> {
         let ServerConfig {
-            listen: _,
+            listen,
             issuer,
             audience,
             token_ttl,
@@ -701,6 +708,7 @@ impl ServerState {
         )?;
         let mdm = default_mdm_directory()?;
         Ok(Self {
+            listen_port: listen.port(),
             issuer,
             audience,
             token_ttl,
@@ -741,6 +749,11 @@ impl ServerState {
         &self.jwks
     }
 
+    #[cfg(feature = "http3-experimental")]
+    pub const fn listen_port(&self) -> u16 {
+        self.listen_port
+    }
+
     pub const fn strict(&self) -> bool {
         self.strict
     }
@@ -757,6 +770,105 @@ impl ServerState {
     /// locks are poisoned.
     pub fn registered_device_count(&self) -> Result<usize, ServerError> {
         self.mdm.device_count().map_err(|err| map_mdm_error(&err))
+    }
+
+    #[cfg(feature = "http3-experimental")]
+    /// HTTP/3 denetim ve telemetri datagramlarını üretir.
+    ///
+    /// # Errors
+    ///
+    /// İç metrik sorguları başarısız olursa veya değerler temsil sınırlarını
+    /// aşarsa `ServerError` döner.
+    pub async fn http3_datagram_batch(
+        &self,
+        base_sequence: u32,
+        timestamp_ms: u64,
+    ) -> Result<Vec<QuicDatagramV1>, ServerError> {
+        const MAX_EXACT_IN_F64: u64 = 1_u64 << f64::MANTISSA_DIGITS;
+
+        let now = SystemTime::now();
+        let pending = self.auth_request_count().await;
+        let active = self.active_token_count(now).await?;
+        let sfu = self.sfu_context_count(now).await;
+        let devices = self.registered_device_count()?;
+
+        let to_u64 = |value: usize, field: &str| -> Result<u64, ServerError> {
+            u64::try_from(value)
+                .map_err(|_| ServerError::Configuration(format!("{field} 64-bit sınırını aştı")))
+        };
+
+        let pending_u64 = to_u64(pending, "bekleyen yetkilendirme sayısı")?;
+        let active_u64 = to_u64(active, "aktif token sayısı")?;
+        let sfu_u64 = to_u64(sfu, "SFU bağlam sayısı")?;
+        let devices_u64 = to_u64(devices, "MDM cihaz sayısı")?;
+
+        let coerce_to_f64 = |value: u64, field: &str| -> Result<f64, ServerError> {
+            if value > MAX_EXACT_IN_F64 {
+                return Err(ServerError::Configuration(format!(
+                    "{field} f64 hassasiyet sınırını aştı"
+                )));
+            }
+            #[allow(clippy::cast_precision_loss)]
+            // Yukarıda doğrulanan değerler f64 mantissa sınırları içinde kalır.
+            let coerced = value as f64;
+            Ok(coerced)
+        };
+
+        let mut otel = OtelPayload::new();
+        otel.add_counter("pending_auth_requests", pending_u64);
+        otel.add_counter("active_tokens", active_u64);
+        otel.add_gauge("sfu_contexts", coerce_to_f64(sfu_u64, "SFU bağlam sayısı")?);
+        otel.add_gauge(
+            "mdm_registered_devices",
+            coerce_to_f64(devices_u64, "MDM cihaz sayısı")?,
+        );
+
+        let map_err = |err: crate::quic::datagram::DatagramError| {
+            ServerError::Configuration(format!("HTTP/3 datagram üretilemedi: {err}"))
+        };
+
+        let mut sequence = base_sequence;
+        let telemetry = QuicDatagramV1::new(sequence, timestamp_ms, DatagramPayload::Otel(otel))
+            .map_err(map_err)?;
+
+        sequence = sequence.wrapping_add(1);
+        let audit = QuicDatagramV1::new(
+            sequence,
+            timestamp_ms,
+            DatagramPayload::Audit(AuditEvent {
+                event_id: format!("{timestamp_ms:016x}:{sequence:08x}"),
+                principal_id: "system@aunsorm".to_owned(),
+                outcome: AuditOutcome::Success,
+                resource: format!("telemetry://{}", self.issuer()),
+            }),
+        )
+        .map_err(map_err)?;
+
+        sequence = sequence.wrapping_add(1);
+        let mut session_id = [0_u8; 16];
+        session_id[..4].copy_from_slice(&sequence.to_be_bytes());
+        let drift = if pending_u64 >= active_u64 {
+            i64::try_from(pending_u64 - active_u64).unwrap_or(i64::MAX)
+        } else {
+            -i64::try_from(active_u64 - pending_u64).unwrap_or(i64::MAX)
+        };
+        let ratchet = QuicDatagramV1::new(
+            sequence,
+            timestamp_ms,
+            DatagramPayload::Ratchet(RatchetProbe {
+                session_id,
+                step: u64::from(sequence),
+                drift,
+                status: if pending_u64 > 0 {
+                    RatchetStatus::Advancing
+                } else {
+                    RatchetStatus::Stalled
+                },
+            }),
+        )
+        .map_err(map_err)?;
+
+        Ok(vec![telemetry, audit, ratchet])
     }
 
     pub async fn register_auth_request(
