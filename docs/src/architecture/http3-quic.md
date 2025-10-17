@@ -60,6 +60,21 @@ Bu kıyaslama sonucunda Interop Agent, **temel PoC** için `quinn` + `h3` ikilis
    - QUIC datagram kanalını mock telemetri verisiyle besleyen PoC entegrasyonu yaz; `tests/blockchain/` planındaki mock ledger yaklaşımıyla uyumlu olacak şekilde test iskeleti hazırla.
    - Performans karşılaştırması için HTTP/2 ve HTTP/3 isteklerinde p50/p99 gecikme ölçümleri topla.
 
+   **Tamamlanan teslimatlar:**
+
+   - `spawn_http3_poc` fonksiyonu ile `quinn` + `h3` tabanlı UDP dinleyici otomatik açılıyor, self-signed sertifika `rcgen` ile anlık üretiliyor ve bağlantı başına metrik/denetim/ratchet datagramları gönderiliyor.【F:crates/server/src/quic/listener.rs†L21-L170】【F:crates/server/src/state.rs†L741-L811】
+   - HTTP/1.1 tarafında `Alt-Svc` başlığı otomatik olarak portu baz alarak ekleniyor; PoC aktifken healthcheck loguna HTTP/3 desteği yazılıyor.【F:crates/server/src/routes.rs†L18-L74】【F:crates/server/src/routes.rs†L95-L123】
+   - PoC telemetrisi için üretilen varsayılan datagram yükü 72 bayt; testler hem boyut sınırını hem de kanal eşlemesini doğruluyor.【F:crates/server/src/quic/datagram.rs†L189-L218】【F:tests/tests/http3_datagram.rs†L1-L51】
+   - `tests/tests/http3_datagram.rs` entegrasyonu `MAX_WIRE_BYTES` eşiğini korurken OTel snapshot'larının `postcard` üzerinden kararlı şekilde kodlandığını ve aşırı büyük yüklerin reddedildiğini regresyon testi haline getirdi.【F:tests/tests/http3_datagram.rs†L1-L51】
+
+   **Ölçüm Tablosu (PoC senaryosu):**
+
+   | Kanal | İçerik | Ölçülen tel boyutu |
+   |-------|--------|---------------------|
+   | Telemetry (`DatagramPayload::Otel`) | `pending_auth_requests=3`, `active_tokens=2`, `sfu_contexts=1.0` | 72 bayt (postcard)【F:crates/server/src/quic/datagram.rs†L189-L218】|
+
+   HTTP/2 ve HTTP/3 gecikme kıyasları için üretim ortamında ölçüm yapılması gerekmektedir; PoC kapsamında HTTP/3 yanıtları `/health` ve `/metrics` uçlarında başarıyla servis edilmektedir.【F:crates/server/src/quic/listener.rs†L126-L182】
+
 3. **Sertifikasyon ve Güvenlik Analizi (Security + Identity Agent)**
    - TLS 1.3 gereksinimlerinin HSM destekli anahtar yönetimiyle uyumunu doğrula.
    - QUIC datagram akışlarında bütünlük ve kimlik doğrulama seçeneklerini değerlendir; gerektiğinde paket başına AEAD etiketi zorunluluğu tanımla.

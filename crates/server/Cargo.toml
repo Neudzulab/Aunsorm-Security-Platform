@@ -14,6 +14,15 @@ otel = [
     "dep:opentelemetry-otlp",
     "dep:tracing-opentelemetry",
 ]
+http3-experimental = [
+    "dep:bytes",
+    "dep:futures",
+    "dep:h3",
+    "dep:h3-quinn",
+    "dep:quinn",
+    "dep:rcgen",
+    "dep:rustls",
+]
 
 [dependencies]
 axum = { version = "0.7", features = ["json"] }
@@ -29,7 +38,7 @@ aunsorm-mdm = { path = "../mdm" }
 zeroize = { workspace = true }
 rand_core = { workspace = true }
 hex = { workspace = true }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 rusqlite = { version = "0.31", default-features = false, features = ["bundled"] }
@@ -38,6 +47,14 @@ opentelemetry = { version = "0.24", optional = true }
 opentelemetry_sdk = { version = "0.24", optional = true, features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.17", optional = true, features = ["http-proto"] }
 tracing-opentelemetry = { version = "0.25", optional = true }
+bytes = { version = "1", optional = true }
+futures = { version = "0.3", default-features = false, features = ["std"], optional = true }
+h3 = { version = "0.0.8", optional = true }
+h3-quinn = { version = "0.0.10", optional = true }
+postcard = { version = "1.0", features = ["alloc"] }
+quinn = { version = "0.11.7", default-features = false, features = ["runtime-tokio", "rustls"], optional = true }
+rcgen = { version = "0.12", optional = true }
+rustls = { version = "0.22", optional = true }
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }
