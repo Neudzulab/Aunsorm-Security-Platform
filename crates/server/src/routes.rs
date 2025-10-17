@@ -262,7 +262,7 @@ struct BeginAuthRequest {
     scope: Option<String>,
     code_challenge: String,
     code_challenge_method: String,
-    
+
     // Optional subject hint (not for authentication)
     #[serde(default)]
     subject: Option<String>,
@@ -296,7 +296,7 @@ async fn begin_auth(
             "PKCE yöntemi yalnızca S256 desteklenir",
         ));
     }
-    
+
     // Validate client_id
     if client_id.chars().any(char::is_control) {
         return Err(ApiError::invalid_request(
@@ -307,22 +307,22 @@ async fn begin_auth(
     if sanitized_client_id.is_empty() {
         return Err(ApiError::invalid_request("client_id boş bırakılamaz"));
     }
-    
+
     // RFC 6749 §3.1.2: Validate redirect_uri (HTTPS required, localhost HTTP allowed)
     let redirect_uri_trimmed = redirect_uri.trim();
     if redirect_uri_trimmed.is_empty() {
         return Err(ApiError::invalid_request("redirect_uri gereklidir"));
     }
-    
+
     // Basic URL validation (scheme check)
-    if !redirect_uri_trimmed.starts_with("https://") 
+    if !redirect_uri_trimmed.starts_with("https://")
         && !redirect_uri_trimmed.starts_with("http://localhost")
         && !redirect_uri_trimmed.starts_with("http://127.0.0.1") {
         return Err(ApiError::invalid_request(
             "redirect_uri HTTPS kullanmalıdır (localhost için HTTP izinli)",
         ));
     }
-    
+
     // Validate state if provided (should be opaque string, no control chars)
     if let Some(ref s) = client_state {
         if s.chars().any(char::is_control) {
@@ -331,7 +331,7 @@ async fn begin_auth(
             ));
         }
     }
-    
+
     // Validate scope if provided
     if let Some(ref s) = scope {
         if s.chars().any(char::is_control) {
@@ -340,7 +340,7 @@ async fn begin_auth(
             ));
         }
     }
-    
+
     // Validate subject hint if provided
     let final_subject = if let Some(subj) = subject {
         if subj.chars().any(char::is_control) {
@@ -357,7 +357,7 @@ async fn begin_auth(
         // Default subject if not provided
         format!("client:{}", sanitized_client_id)
     };
-    
+
     // Validate code_challenge
     if URL_SAFE_NO_PAD
         .decode(&code_challenge)
@@ -369,7 +369,7 @@ async fn begin_auth(
             "code_challenge değeri base64url kodlu SHA-256 çıktısı olmalıdır",
         ));
     }
-    
+
     // RFC 6749: Register authorization request
     let authorization_code = state
         .register_auth_request(
@@ -381,7 +381,7 @@ async fn begin_auth(
             code_challenge,
         )
         .await;
-    
+
     Ok(Json(BeginAuthResponse {
         code: authorization_code,
         state: client_state,
@@ -415,14 +415,14 @@ async fn exchange_token(
             "grant_type 'authorization_code' olmalıdır",
         ));
     }
-    
+
     // RFC 7636 §4.1: Validate code_verifier length
     if payload.code_verifier.len() < 43 || payload.code_verifier.len() > 128 {
         return Err(ApiError::invalid_request(
             "code_verifier uzunluğu 43 ile 128 karakter arasında olmalıdır",
         ));
     }
-    
+
     // Consume authorization code (single-use)
     let auth_request = state
         .consume_auth_request(&payload.code)
@@ -430,17 +430,17 @@ async fn exchange_token(
         .ok_or_else(|| {
             ApiError::invalid_grant("Yetkilendirme kodu bulunamadı veya süresi doldu")
         })?;
-    
+
     // RFC 6749 §4.1.3: Validate client_id match
     if auth_request.client_id != payload.client_id {
         return Err(ApiError::invalid_client("client_id eşleşmiyor"));
     }
-    
+
     // RFC 6749 §4.1.3: Validate redirect_uri match (CRITICAL for security)
     if auth_request.redirect_uri != payload.redirect_uri {
         return Err(ApiError::invalid_grant("redirect_uri eşleşmiyor"));
     }
-    
+
     // RFC 7636 §4.6: Verify PKCE code_challenge
     let verifier_bytes = payload.code_verifier.as_bytes();
     let digest = Sha256::digest(verifier_bytes);
@@ -457,19 +457,19 @@ async fn exchange_token(
     claims.ensure_jwt_id();
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
-    
+
     // Add client_id to token claims
     claims
         .extra
         .insert("client_id".to_string(), Value::String(payload.client_id));
-    
+
     // Add scope to token claims if provided
     if let Some(scope) = auth_request.scope {
         claims
             .extra
             .insert("scope".to_string(), Value::String(scope));
     }
-    
+
     let subject_for_log = claims.subject.clone();
     let audience_for_log = claims
         .audience
@@ -1359,7 +1359,7 @@ async fn generate_media_token(
         .jwt_id
         .clone()
         .ok_or_else(|| ApiError::server_error("JTI üretilemedi"))?;
-    
+
     state
         .record_token(
             &jti,
@@ -1393,19 +1393,19 @@ fn format_timestamp(time: SystemTime) -> String {
             let secs = d.as_secs();
             let nanos = d.subsec_nanos();
             let millis = nanos / 1_000_000;
-            
+
             // Calculate date components (simplified, good enough for 2020-2099)
             let days_since_epoch = secs / 86400;
             let secs_today = secs % 86400;
-            
+
             let hours = secs_today / 3600;
             let minutes = (secs_today % 3600) / 60;
             let seconds = secs_today % 60;
-            
+
             // Approximate year/month/day (simplified)
             let years_since_epoch = days_since_epoch / 365;
             let year = 1970 + years_since_epoch;
-            
+
             format!(
                 "{:04}-01-01T{:02}:{:02}:{:02}.{:03}Z",
                 year, hours, minutes, seconds, millis
