@@ -2,7 +2,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::http::{header, Method, Response as HttpResponse, StatusCode};
+use axum::http::header::InvalidHeaderValue;
+use axum::http::{header, HeaderValue, Method, Response as HttpResponse, StatusCode};
 use bytes::Bytes;
 use h3::server::{Connection as H3Connection, RequestResolver};
 use h3_quinn::quinn::{
@@ -22,7 +23,14 @@ use crate::quic::datagram::{DatagramError, QuicDatagramV1};
 use crate::state::ServerState;
 
 const TELEMETRY_INTERVAL: Duration = Duration::from_secs(5);
-const ALT_SVC_MAX_AGE: u32 = 3600;
+pub const ALT_SVC_MAX_AGE: u32 = 3600;
+
+/// HTTP/3 için `Alt-Svc` başlık değerini oluşturur.
+pub fn build_alt_svc_header_value(port: u16) -> Result<HeaderValue, InvalidHeaderValue> {
+    HeaderValue::from_str(&format!(
+        "h3=\":{port}\"; ma={ALT_SVC_MAX_AGE}, h3-29=\":{port}\"; ma={ALT_SVC_MAX_AGE}"
+    ))
+}
 
 /// HTTP/3 `PoC` dinleyicisini canlı tutan koruyucu.
 pub struct Http3PocGuard {
@@ -339,4 +347,18 @@ enum DatagramLoopError {
     Closed,
     #[error("HTTP/3 datagram gönderilemedi: {0}")]
     Send(quinn::SendDatagramError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alt_svc_header_includes_port_and_max_age() {
+        let header = build_alt_svc_header_value(9443).expect("header is constructed");
+        assert_eq!(
+            header.to_str().expect("header value is valid utf8"),
+            "h3=\":9443\"; ma=3600, h3-29=\":9443\"; ma=3600"
+        );
+    }
 }
