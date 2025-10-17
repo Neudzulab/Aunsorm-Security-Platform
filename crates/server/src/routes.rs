@@ -254,15 +254,25 @@ async fn http3_capabilities(
 
 #[derive(Debug, Deserialize)]
 struct BeginAuthRequest {
-    username: String,
     client_id: String,
+    redirect_uri: String,
+    #[serde(default)]
+    state: Option<String>,
+    #[serde(default)]
+    scope: Option<String>,
     code_challenge: String,
     code_challenge_method: String,
+    
+    // Optional subject hint (not for authentication)
+    #[serde(default)]
+    subject: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct BeginAuthResponse {
-    auth_request_id: String,
+    code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<String>,
     expires_in: u64,
 }
 
@@ -271,26 +281,23 @@ async fn begin_auth(
     Json(payload): Json<BeginAuthRequest>,
 ) -> Result<Json<BeginAuthResponse>, ApiError> {
     let BeginAuthRequest {
-        username,
         client_id,
+        redirect_uri,
+        state: client_state,
+        scope,
         code_challenge,
         code_challenge_method,
+        subject,
     } = payload;
 
+    // RFC 7636: Validate PKCE method
     if code_challenge_method != "S256" {
         return Err(ApiError::invalid_request(
             "PKCE yöntemi yalnızca S256 desteklenir",
         ));
     }
-    if username.chars().any(char::is_control) {
-        return Err(ApiError::invalid_request(
-            "kullanıcı adı kontrol karakteri içeremez",
-        ));
-    }
-    let sanitized_username = username.trim();
-    if sanitized_username.is_empty() {
-        return Err(ApiError::invalid_request("kullanıcı adı boş bırakılamaz"));
-    }
+    
+    // Validate client_id
     if client_id.chars().any(char::is_control) {
         return Err(ApiError::invalid_request(
             "client_id kontrol karakteri içeremez",
@@ -300,6 +307,58 @@ async fn begin_auth(
     if sanitized_client_id.is_empty() {
         return Err(ApiError::invalid_request("client_id boş bırakılamaz"));
     }
+    
+    // RFC 6749 §3.1.2: Validate redirect_uri (HTTPS required, localhost HTTP allowed)
+    let redirect_uri_trimmed = redirect_uri.trim();
+    if redirect_uri_trimmed.is_empty() {
+        return Err(ApiError::invalid_request("redirect_uri gereklidir"));
+    }
+    
+    // Basic URL validation (scheme check)
+    if !redirect_uri_trimmed.starts_with("https://") 
+        && !redirect_uri_trimmed.starts_with("http://localhost")
+        && !redirect_uri_trimmed.starts_with("http://127.0.0.1") {
+        return Err(ApiError::invalid_request(
+            "redirect_uri HTTPS kullanmalıdır (localhost için HTTP izinli)",
+        ));
+    }
+    
+    // Validate state if provided (should be opaque string, no control chars)
+    if let Some(ref s) = client_state {
+        if s.chars().any(char::is_control) {
+            return Err(ApiError::invalid_request(
+                "state kontrol karakteri içeremez",
+            ));
+        }
+    }
+    
+    // Validate scope if provided
+    if let Some(ref s) = scope {
+        if s.chars().any(char::is_control) {
+            return Err(ApiError::invalid_request(
+                "scope kontrol karakteri içeremez",
+            ));
+        }
+    }
+    
+    // Validate subject hint if provided
+    let final_subject = if let Some(subj) = subject {
+        if subj.chars().any(char::is_control) {
+            return Err(ApiError::invalid_request(
+                "subject kontrol karakteri içeremez",
+            ));
+        }
+        let trimmed = subj.trim();
+        if trimmed.is_empty() {
+            return Err(ApiError::invalid_request("subject boş olamaz"));
+        }
+        trimmed.to_owned()
+    } else {
+        // Default subject if not provided
+        format!("client:{}", sanitized_client_id)
+    };
+    
+    // Validate code_challenge
     if URL_SAFE_NO_PAD
         .decode(&code_challenge)
         .map(|bytes| bytes.len())
@@ -310,24 +369,33 @@ async fn begin_auth(
             "code_challenge değeri base64url kodlu SHA-256 çıktısı olmalıdır",
         ));
     }
-    let auth_id = state
+    
+    // RFC 6749: Register authorization request
+    let authorization_code = state
         .register_auth_request(
-            sanitized_username.to_owned(),
+            final_subject,
             sanitized_client_id.to_owned(),
+            redirect_uri_trimmed.to_owned(),
+            client_state.clone(),
+            scope,
             code_challenge,
         )
         .await;
+    
     Ok(Json(BeginAuthResponse {
-        auth_request_id: auth_id,
+        code: authorization_code,
+        state: client_state,
         expires_in: auth_ttl().as_secs(),
     }))
 }
 
 #[derive(Debug, Deserialize)]
 struct TokenRequest {
-    auth_request_id: String,
+    grant_type: String,
+    code: String,
     code_verifier: String,
     client_id: String,
+    redirect_uri: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -341,20 +409,39 @@ async fn exchange_token(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<TokenRequest>,
 ) -> Result<Json<TokenResponse>, ApiError> {
+    // RFC 6749 §4.1.3: Validate grant_type
+    if payload.grant_type != "authorization_code" {
+        return Err(ApiError::invalid_request(
+            "grant_type 'authorization_code' olmalıdır",
+        ));
+    }
+    
+    // RFC 7636 §4.1: Validate code_verifier length
     if payload.code_verifier.len() < 43 || payload.code_verifier.len() > 128 {
         return Err(ApiError::invalid_request(
             "code_verifier uzunluğu 43 ile 128 karakter arasında olmalıdır",
         ));
     }
+    
+    // Consume authorization code (single-use)
     let auth_request = state
-        .consume_auth_request(&payload.auth_request_id)
+        .consume_auth_request(&payload.code)
         .await
         .ok_or_else(|| {
-            ApiError::invalid_grant("Yetkilendirme isteği bulunamadı veya süresi doldu")
+            ApiError::invalid_grant("Yetkilendirme kodu bulunamadı veya süresi doldu")
         })?;
+    
+    // RFC 6749 §4.1.3: Validate client_id match
     if auth_request.client_id != payload.client_id {
         return Err(ApiError::invalid_client("client_id eşleşmiyor"));
     }
+    
+    // RFC 6749 §4.1.3: Validate redirect_uri match (CRITICAL for security)
+    if auth_request.redirect_uri != payload.redirect_uri {
+        return Err(ApiError::invalid_grant("redirect_uri eşleşmiyor"));
+    }
+    
+    // RFC 7636 §4.6: Verify PKCE code_challenge
     let verifier_bytes = payload.code_verifier.as_bytes();
     let digest = Sha256::digest(verifier_bytes);
     let challenge = URL_SAFE_NO_PAD.encode(digest);
@@ -362,6 +449,7 @@ async fn exchange_token(
         return Err(ApiError::invalid_grant("PKCE doğrulaması başarısız"));
     }
 
+    // Generate JWT access token
     let mut claims = Claims::new();
     claims.subject = Some(auth_request.subject);
     claims.issuer = Some(state.issuer().to_owned());
@@ -369,9 +457,19 @@ async fn exchange_token(
     claims.ensure_jwt_id();
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
+    
+    // Add client_id to token claims
     claims
         .extra
         .insert("client_id".to_string(), Value::String(payload.client_id));
+    
+    // Add scope to token claims if provided
+    if let Some(scope) = auth_request.scope {
+        claims
+            .extra
+            .insert("scope".to_string(), Value::String(scope));
+    }
+    
     let subject_for_log = claims.subject.clone();
     let audience_for_log = claims
         .audience

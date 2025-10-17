@@ -62,6 +62,9 @@ const SFU_CONTEXT_TTL: Duration = Duration::from_secs(900);
 pub struct AuthRequest {
     pub subject: String,
     pub client_id: String,
+    pub redirect_uri: String,
+    pub state: Option<String>,
+    pub scope: Option<String>,
     pub code_challenge: String,
     pub created_at: SystemTime,
     pub expires_at: SystemTime,
@@ -905,12 +908,18 @@ impl ServerState {
         &self,
         subject: String,
         client_id: String,
+        redirect_uri: String,
+        state: Option<String>,
+        scope: Option<String>,
         code_challenge: String,
     ) -> String {
         let now = SystemTime::now();
         let request = AuthRequest {
             subject,
             client_id,
+            redirect_uri,
+            state,
+            scope,
             code_challenge,
             created_at: now,
             expires_at: now + AUTH_TTL,
