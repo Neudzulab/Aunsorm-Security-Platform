@@ -55,6 +55,18 @@ Bu kıyaslama sonucunda Interop Agent, **temel PoC** için `quinn` + `h3` ikilis
 - Interop Agent, datagram şemasının Rust tiplerini `crates/server/src/quic/datagram.rs` altında tasarlayacak ve property test senaryolarını `tests/http3` klasöründe hazırlayacak.
 - Güvenlik notu: 0-RTT tekrar saldırılarına karşı STRICT modda `anti_replay` tablosu zorunlu hale getirilecek; belge revizyonu güvenlik ekibine iletildi.
 
+### 1.5 Değerlendirme Takvimi ve Çıktıları
+| Milat | Süre | Sahip | Beklenen Çıktı |
+|-------|------|-------|----------------|
+| Kitaplık API doğrulaması | 3 gün | Interop Agent | `quinn`/`h3` API'leri ile PoC modül iskeleti (`crates/server/src/quic/listener.rs`). |
+| Datagram şeması prototipi | 2 gün | Interop Agent | `QuicDatagramV1` için encode/decode testleri (`tests/tests/http3_datagram.rs`). |
+| ALPN + Alt-Svc konfigürasyonu | 2 gün | Platform Agent | `GET /http3/capabilities` uç noktasıyla entegrasyon ve log denetimi. |
+| Risk değerlendirme özeti | 1 gün | Security & Identity Agent | 0-RTT, anti-replay ve HSM bağımlılık raporu (`docs/src/operations/http3-quic-security.md`). |
+
+- `Exit criteria`: Tüm çıktılar CI'da `ENABLE_HTTP3_POC=true` koşulu altında yeşile dönmeli, PoC dinleyicisi en az 10k request yük testini tamamlamalı ve datagram encode/decode testleri sıfır hata ile kapanmalıdır.
+- `Observation hooks`: `otel` kanalında `pending_auth_requests` ve `active_tokens` metrikleri PoC boyunca %5 sapma sınırını aşmayacak, `audit` kanalında ise tekrar saldırısı girişimleri `DatagramError::IntegrityViolation` log girdisi üretmeyecektir.
+- `Dependencies`: `postcard` crate'inin MSRV 1.76 ile uyumu günlük kontrol edilerek sürüm yükseltmelerinde `cargo deny` ve fuzz hedefleriyle regresyon testi yapılacaktır.
+
 2. **PoC Sprinti (Interop + Platform Agent)**
    - `apps/server` içinde HTTP/3 dinleyicisi açan deneysel bir özellik bayrağı (`http3-experimental`) ekle.
    - QUIC datagram kanalını mock telemetri verisiyle besleyen PoC entegrasyonu yaz; `tests/blockchain/` planındaki mock ledger yaklaşımıyla uyumlu olacak şekilde test iskeleti hazırla.

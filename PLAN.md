@@ -300,7 +300,7 @@ Her iş için alanda uzman bir agent görevlendir. Yapılan işleri birbirleri i
 
 19) HTTP/3 ve QUIC Datagram Programı
 
-- [ ] Interop Agent: HTTP/3 + QUIC datagram değerlendirmesini `docs/src/architecture/http3-quic.md` içerisinde tanımlanan teslimat aşamalarına göre planlasın; `quinn`, `h3`, `quiche` kütüphane araştırmaları tamamlanıp raporlanacak.
+- [x] Interop Agent: HTTP/3 + QUIC datagram değerlendirmesini `docs/src/architecture/http3-quic.md` içerisinde tanımlanan teslimat aşamalarına göre planlasın; `quinn`, `h3`, `quiche` kütüphane araştırmaları tamamlanıp raporlanacak. (Bkz. §1.5 değerlendirme takvimi.)
 - [x] Platform Agent: `apps/server` için `http3-experimental` bayrağıyla PoC dinleyici ve QUIC datagram telemetri entegrasyonunu geliştirsin; performans ölçümleri dokümante edilecek.
 - [ ] Security & Identity Agent: TLS 1.3 + HSM uyumu ve datagram güvenlik gereksinimlerini değerlendirsin; RFC 9000/9114 referanslı risk analizi çıktılarını operasyonel dokümana eklesin.
 20) Blockchain İnovasyon Programı
