@@ -7,7 +7,7 @@
 - Keep stakeholder documentation (README, PLAN, TODO, ROADMAP) aligned with current sprint intents and revision rules.
 
 ## Roadmap & Milestones
-- [ ] STEP-AUN-001: Publish updated agent charters and sprint intake checklist aligned with revizyon kilidi policy.
+- [x] STEP-AUN-001: Publish updated agent charters and sprint intake checklist aligned with revizyon kilidi policy. (Doc: `docs/src/operations/agent-charters.md`)
   - owner: @ProjectCoordinator
 - [ ] STEP-AUN-002: Baseline calibration + ratchet documentation under docs/src/architecture/ with mermaid diagrams for review.
   - owner: @CryptoAgent
