@@ -37,6 +37,35 @@ Luna SA HSM ve SoftHSM v2 modülleriyle aşağıdaki doğrulamalar yapıldı:
 - Sertifika yenileme sürecinde `aunsorm-cli x509 rotate` komutu ile HSM slot değişimi
   test edildi; oturum kesintisi yaşanmadı.
 
+## TLS 1.3 + HSM Risk Analizi
+HSM entegrasyonu ile TLS 1.3 el sıkışmasının kesintisiz çalıştığını doğrularken,
+QUIC katmanındaki gereksinimlerle birlikte değerlendirilmiş bir risk kaydı
+oluşturuldu. Değerlendirme; RFC 8446 (TLS 1.3), RFC 9000 (QUIC çekirdeği) ve
+RFC 9114 (HTTP/3) referanslı kontrol listesine dayanır.
+
+### Değerlendirme Metodolojisi
+- **Test Senaryoları:** HSM üzerinde saklanan ECDSA P-256 ve Ed25519 anahtarları
+  ile `quinn` tabanlı sunucuya ardışık handshake ve key update işlemleri uygulandı.
+- **RFC Eşlemesi:** QUIC'in TLS 1.3 taşıma kısıtları (RFC 9000 §8) ve HTTP/3
+  gereksinimleri (RFC 9114 §9) referans alınarak riskler sınıflandırıldı.
+- **Olası Kötü Senaryolar:** 0-RTT tekrar kullanımı, HSM slot arızası, datagram
+  bozulmaları ve bağlantı yeniden anahtarlaması incelendi.
+
+### Risk Kayıtları ve Mitigasyonlar
+| Risk Kimliği | RFC Referansı | Etki | Mitigasyon | Durum |
+|--------------|---------------|------|------------|-------|
+| TLS-HSM-01 | RFC 8446 §4.4; RFC 9000 §8.1 | HSM imza gecikmesi, QUIC el sıkışmasında zaman aşımı | `quinn::ServerConfig::use_retry(true)` + handshake timeout 8s; HSM sağlık kontrolü her 30 sn | Süreçte |
+| TLS-HSM-02 | RFC 9000 §7; RFC 9114 §9.1 | 0-RTT tekrarında HSM anahtar rotasyonu sırasında eski ticket'ların kabulü | Ticket depolamasını `anti_replay` TTL 30dk ile sınırla, 0-RTT sadece canary | Uygulandı |
+| TLS-HSM-03 | RFC 9000 §5.4.3 | Trafik anahtarı güncellemesinde HSM slot değişimi ile tutarsızlık | QUIC `KEY_PHASE` değişimlerini HSM `audit` loguyla korele et, başarısızlıkta oturumu kapat | Uygulandı |
+| DTLS-QUIC-01 | RFC 9000 §12; RFC 9114 §9.5 | Datagram integrity hatası ile telemetry kaybı | `DatagramError::IntegrityViolation` alarmı + `ACK_GAP` metriği eşik >5 olduğunda otomatik rollback | Planlandı |
+
+### Karar Özeti
+- TLS 1.3'ün HSM imzalı sertifikalarla kullanımı üretim için uygundur; `ServerConfig`
+  parametreleri risk matrisindeki mitigasyonlarla güncellenecektir.
+- Datagram güvenlik gereksinimleri AEAD stratejisi ile hizalıdır; `DTLS-QUIC-01`
+  riskinin kapanması için alarm entegrasyonu tamamlanmalıdır.
+- Risk tablosu `ops/http3-canary` dashboard'una taşınarak sürekli izleme sağlanacaktır.
+
 ## QUIC Datagram AEAD Stratejisi
 PoC aşamasındaki datagramlar sadece `postcard` ile seri hale getiriliyordu. Sertifikasyon
 analizi sonucunda aşağıdaki zorunlu güvenlik artırımları tanımlandı:
