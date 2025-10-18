@@ -10,6 +10,8 @@
 - [KMS/HSM Conformance Raporu](operations/kms-conformance.md)
 - [CA İmzalama Otomasyon Planı](operations/ca-automation.md)
 - [HTTP/3 QUIC Güvenlik Değerlendirmesi](operations/http3-quic-security.md)
+- [Blockchain Entegrasyonu ve Runbook'u](operations/blockchain-integration.md)
+- [Operasyon Runbook'u: Müşteri Saklama & Anahtar İmha](operations/runbook-retention.md)
 - [Pazar İstihbaratı ve Gelecek Vizyonu Çalıştayı](operations/market-intelligence.md)
 - [KMS Conformance ve Sertifikasyon Raporları](operations/kms-certification.md)
 - [Regülasyon Uyumluluk Kontrol Listesi](operations/compliance-checklist.md)
