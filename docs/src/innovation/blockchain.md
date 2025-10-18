@@ -1,6 +1,6 @@
 # Blockchain İnovasyon Programı
 
-*Revizyon: 2025-10-22*
+*Revizyon: 2025-10-24*
 
 ## Vizyon ve Stratejik Amaçlar
 - **Şeffaflık ve Denetlenebilirlik:** Aunsorm güven zincirini kamu veya özel blokzincirlere çapalayarak sertifika ve anahtar işlemlerinin denetlenebilirliğini artırmak.
@@ -30,7 +30,8 @@
 
 ### Uzun Vadeli Sertifikasyon (31 Mart 2025)
 - [ ] eIDAS ve SOC 2 için blokzincir kayıt süreçlerinin bağımsız denetim raporlarını üret ve `certifications/` altında paylaşılacak şablonları tanımla.
-- [ ] FATF Travel Rule uyumluluğu için zincir üstü işlem izleme ve raporlama entegrasyonlarını değerlendir.
+- [x] FATF Travel Rule uyumluluğu için zincir üstü işlem izleme ve raporlama entegrasyonlarını değerlendir.
+  - Travel Rule veri eşlemesi, TravelRuleBridge mimarisi ve raporlama mil taşları [`docs/src/operations/blockchain-integration.md`](../operations/blockchain-integration.md#fatf-travel-rule-entegrasyon-stratejisi) bölümünde planlandı.
 - [ ] Müşteri başına saklama politikaları ve anahtar silme prosedürleri için denetim izlerini Blockchain katmanıyla ilişkilendir.
 
 ## Test Kaynakları ve Operasyonel Artefaktlar
