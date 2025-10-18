@@ -262,6 +262,80 @@ gizlilikten ödün vermeden denetlenebilir biçimde paylaşılmasını hedefler.
 - **2025-03-01:** Canlı ortamda haftalık tokenizasyon tatbikatı ve felaket
   kurtarma (DR) planının Quorum zinciriyle test edilmesi.
 
+## Müşteri Bazlı Saklama ve Anahtar İmha Runbook'u
+
+Bu runbook, müşteri başına saklama ve anahtar imha politikalarının
+`PolicyStore` kaynaklarından alınarak Quorum tabanlı `AuditAsset` kayıtlarına
+yansıtılmasını, Fabric entegrasyonuyla tutarlı tutulmasını ve operasyon ekipleri
+için izlenebilir kılınmasını amaçlar.
+
+### Sorumluluk Matrisi
+- **PolicyStore Bakımı (`Security & Identity Agent`):** Saklama ve anahtar
+  imha politikalarını versiyonlar bazında yayımlar; değişiklikleri
+  `policy_events` Kafka kuyruğuna yazar.
+- **AuditRelay (`Interop Agent`):** Politika değişikliklerini alıp Quorum
+  `AuditAssetRegistry` sözleşmesine `mint`/`retire` çağrılarını gerçekleştirir.
+- **Ops On-Call (`Platform Agent`):** Aşağıdaki runbook adımlarının icrasından,
+  alarm takibinden ve raporlamadan sorumludur.
+
+### Politika Eşleme Adımları
+1. **Politika Değişikliğini Yakala:** `PolicyStore` üzerinde yeni sürüm
+   oluşturulduğunda `policy_events` kuyruğuna `retention_policy.version` ve
+   `key_disposition` alanlarını içeren kayıt düşer. `RetentionSync` cron job'ı
+   bu kuyruğu 60 saniyede bir poll eder.
+2. **Ön Kontroller:** `RetentionSync`, ilgili müşterinin `org_scope`
+   değerinin Fabric `bridge-relay` tarafından doğrulandığını ve `travel_rule`
+   pseudonym'i ile eşleştiğini teyit eder. Eşleşmeyen kayıtlar için
+   `retention_policy_mismatch` alarmı açılır.
+3. **Quorum Güncellemesi:** Her müşteri için aktif anahtar saklama politikası
+   Quorum `AuditAssetRegistry::mint` çağrısına `retention_policy`
+   metaverisi olarak eklenir. Anahtar imha politikası tetiklendiğinde aynı
+   token `retire` edilerek `kms_key_destroyed` olayı yayımlanır.
+4. **KMS Senkronizasyonu:** `aunsorm-kms` servisi, imha edilen anahtarın HSM
+   tarafında kalıcı olarak silindiğini `kms_key_destroyed` event'i ile teyit
+   eder; bu event hem Fabric hem Quorum log'larına çapalanır.
+5. **Runbook Doğrulaması:** Ops ekibi aşağıdaki kontrol listesine göre durumu
+   doğrular ve sonuçları haftalık olarak `operations/runbook-retention.md`
+   raporuna işler.
+
+### Operasyon Kontrol Listesi
+- [ ] `RetentionSync` job'ı son 15 dakika içinde başarılı bir çalıştırmaya
+  sahip mi? (`retention_sync_last_success_seconds` metriği < 900 olmalı.)
+- [ ] `retention_policy_mismatch` alarmı açık mı? Açık ise `PolicyStore`
+  girdileri ve Fabric kayıtları arasında manuel uzlaştırma yapılmalı.
+- [ ] Son `AuditAssetRegistry::mint` çağrıları `retention_policy` metaverisini
+  içeriyor mu? (`quorum_audit_mint_missing_policy` metriği 0 olmalı.)
+- [ ] Anahtar imha işlemleri için HSM audit log'ları, Quorum `kms_key_destroyed`
+  eventi ve Fabric `bridge-relay` referansı aynı `calibration_ref` değerini
+  taşıyor mu?
+- [ ] Politika versiyon değişiklikleri Travel Rule raporlarına (`complianceProgramRef`)
+  yansımış mı? Günlük rapor kontrolünde farklılık varsa `travel_rule_reconcile`
+  işini manuel tetikle.
+
+### Düzeltici Eylemler
+- **Politika Eşleşmiyor:** `RetentionSync` job'ını `--reconcile` bayrağıyla
+  çalıştır; başarısız olursa `PolicyStore` girdilerini manuel olarak gözden geçir
+  ve uyumsuz kayıtları `policy_events` kuyruğunda yeniden sırala.
+- **Quorum Güncellemesi Başarısız:** `AuditRelay` pod log'larında `mint`
+  hatasını kontrol et, gerekli ise pod'u yeniden başlat ve `mint`
+  çağrısını `audit_mint_replay` script'iyle tekrar gönder.
+- **HSM İmha Onayı Gelmedi:** `aunsorm-kms` servisinde `key_destroy_finalize`
+  prosedürünü çalıştır; eğer başarısız olursa ilgili anahtarı `kms_pending_destroy`
+  tablosuna taşıyıp `Ops On-Call` eskalasyonunu aç.
+- **Travel Rule Uyumsuzluğu:** `travel_rule_reconcile` job'ını yeniden çalıştır
+  ve TRISA yanıtlarını doğrula; kalıcı başarısızlıkta uyum ekibi ile birlikte
+  manuel rapor üret.
+
+### Raporlama
+- Haftalık olarak `operations/runbook-retention.md` dokümanı güncellenir ve
+  CI pipeline'ına artefakt olarak eklenir.
+- Aylık SOC 2 ve eIDAS raporları, Quorum `retention_policy` metaveri versiyon
+  listesi ile karşılaştırılır; sapma varsa `certifications/compliance_exports/`
+  altına istisna notu eklenir.
+- Blockchain inovasyon programı kapsamında Travel Rule ve retention verileri
+  `docs/src/operations/blockchain-integration.md` bu bölüm aracılığıyla
+  güncel tutulur.
+
 ## Test ve Regresyon
 - `fabric_did_verification_succeeds` testi, imza doğrulamasının ve ledger
   doğrulamasının mutlu yolu kapsar.
