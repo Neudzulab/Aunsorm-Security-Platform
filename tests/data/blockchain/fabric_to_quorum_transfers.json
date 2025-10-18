@@ -1,0 +1,34 @@
+[
+  {
+    "transfer_id": "fab-qrm-bridge-001",
+    "fabric_channel": "org1.supplychain",
+    "fabric_block": 412,
+    "fabric_tx": "c44a9fd7c0fbdab52a1329d6a6eac12f4a99142f7c6baf68f7c833a669df9e2e",
+    "quorum_block": 9832,
+    "quorum_tx": "0x3bc9984a845bd0526e73983aa09597c32ec569c6cb94fe0fceddd07d34d4d5b1",
+    "asset": "USDG",
+    "amount": "125000.0000",
+    "kyc_reference": "kyc-2024-05-31-fab-org1-048",
+    "timestamp_ms": 1717843205000,
+    "controls": [
+      "fabric_chaincode_hash_locked",
+      "quorum_mpc_release_signature"
+    ]
+  },
+  {
+    "transfer_id": "fab-qrm-bridge-002",
+    "fabric_channel": "org1.supplychain",
+    "fabric_block": 417,
+    "fabric_tx": "09dfe66c31b748f308de7f4aa7bdb89194a975b76c5bdfca09c85340d9a55246",
+    "quorum_block": 9851,
+    "quorum_tx": "0x2744df1dc7a8b4aa29a4e8d3539a66a44c817a166df0df955d5627f18a6dcbcc",
+    "asset": "EURG",
+    "amount": "42000.5000",
+    "kyc_reference": "kyc-2024-05-31-fab-org1-052",
+    "timestamp_ms": 1717843905000,
+    "controls": [
+      "fabric_dual_signature",
+      "quorum_travel_rule_export"
+    ]
+  }
+]

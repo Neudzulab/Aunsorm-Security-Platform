@@ -1,0 +1,33 @@
+[
+  {
+    "settlement_id": "qrm-sep-bridge-201",
+    "quorum_block": 10412,
+    "quorum_tx": "0x89f7c62994dbb970c87f0df8bd9450174577fcb1314ea56456354f6b5c7c163e",
+    "sepolia_block": 5386201,
+    "sepolia_tx": "0x5de14a5d4ac444b3f1cd483577625054d098ef0c7d5b627bb75e1d821adeafc1",
+    "asset": "USDC",
+    "amount": "99500.0000",
+    "aml_case_reference": "aml-2024-06-02-071",
+    "timestamp_ms": 1717932805000,
+    "controls": [
+      "quorum_rate_limit_enforced",
+      "sepolia_finality_checkpoint"
+    ]
+  },
+  {
+    "settlement_id": "qrm-sep-bridge-202",
+    "quorum_block": 10433,
+    "quorum_tx": "0x4e6b8b450382607f8d7329b2b0a5387a9d21fbe1bd420b4c2a4e2ab5c7e65133",
+    "sepolia_block": 5386294,
+    "sepolia_tx": "0x42b92ef8f69b86a69344a40e6c76c5a4c9de54d61532e54f8b629823a3d4337e",
+    "asset": "USDC",
+    "amount": "30500.7500",
+    "aml_case_reference": "aml-2024-06-02-079",
+    "timestamp_ms": 1717933105000,
+    "controls": [
+      "quorum_rate_limit_enforced",
+      "sepolia_finality_checkpoint",
+      "oracle_price_snapshot"
+    ]
+  }
+]
