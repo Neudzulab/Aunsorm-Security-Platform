@@ -1,6 +1,6 @@
 # Hyperledger Fabric DID Doğrulama Planı
 
-*Revizyon: 2025-10-22*
+*Revizyon: 2025-10-24*
 
 ## Amaç ve Kapsam
 - Hyperledger Fabric ağına çapalanmış Aunsorm DID kayıtlarının kanıtlarının
@@ -163,6 +163,92 @@ modelini ve operasyonel beklentilerini netleştirir.
   varlık transferi yoktur; bu sayede müşteri KYC/AML verisi zincire yazılmaz.
   Travel Rule kapsamında gerekli raporlar `audit_asset_daily_rollup`'tan
   türetilen XML şablonları ile üretilir.
+
+## FATF Travel Rule Entegrasyon Stratejisi
+
+FATF Recommendation 16 gereksinimlerini karşılamak amacıyla zincir üstü
+gözlemlenebilirlik ile zincir dışı müşteri kimlik kayıtlarını bağlayan
+modüler bir entegrasyon planı oluşturuldu. Strateji, Travel Rule kapsamında
+zorunlu olan gönderici/alıcı (originator/beneficiary) özniteliklerinin
+gizlilikten ödün vermeden denetlenebilir biçimde paylaşılmasını hedefler.
+
+### Amaç ve Sorumluluk Matrisi
+- **TravelRuleBridge Servisi:** Fabric ve Quorum olaylarını Travel Rule
+  raporlayıcılarına (TRISA uyumlu VASP ağları ve ulusal rejimler) ileten
+  yeni bir mikroservistir. Operasyon sahibi `Security & Identity Agent`,
+  devreye alma desteği `Interop Agent` üzerindedir.
+- **Kapsam:** VASP'ler arası token transferleri, müşteri saklama politikası
+  değişiklikleri ve `AuditAsset` mint/retire olayları Travel Rule bildirim
+  gereksinimi açısından değerlendirilir.
+- **Uyumluluk Dayanakları:** FATF Recommendation 16, MAS PSN02 ve
+  Avrupa Birliği TFR taslağı ile uyumlu veri alanları sağlanır.
+
+### Veri Kaynakları ve Eşleme
+| Kaynak | Açıklama | Travel Rule Alanı |
+| --- | --- | --- |
+| `AuditAssetRegistry::mint` olayı | Tokenizasyon sırasında yayılan Quorum log'u | `transactionReference`, `originatorVASP`, `beneficiaryVASP` |
+| `travel_rule_queue` Kafka topic'i | Fabric köprü servisinden gelen müşteri pseudonym + KYC hash'leri | `originatorPersonId`, `beneficiaryPersonId` |
+| `PolicyStore::retention_policy` cevabı | Müşteri saklama politikası meta verisi | `complianceProgramRef` |
+| `aunsorm-id` dizini | JWT tabanlı müşteri kimlik doğrulama id'si | `originatorCustomerId` |
+
+- Pseudonym değerleri `sha256(org_scope || customer_id || report_window)`
+  olarak hesaplanır ve yalnızca `OrgCompliance` tarafından HSM'de tutulan
+  `travel_rule_unmask` anahtarı ile çözülebilir.
+- `travel_rule_queue` üzerinde taşınan KYC hash setleri TRISA protokolü ile
+  uyumlu `TravelRulePayload` şeması (JSON + JWE) içine oturtulur.
+
+### Gerçek Zamanlı İzleme ve Alarm Mekanizması
+- Fabric köprüsü, Quorum'a aktarılmadan önce Travel Rule eşiğini tetikleyip
+  tetiklemediğini kontrol eder; yüksek değerli (`> 1 BTC` eşdeğeri) transfer
+  adayları için `travel_rule_high_value` metriği oluşturulur.
+- `TravelRuleBridge`, Quorum log'larını `eth_getLogs` webhooku ile 5 saniye
+  aralıklarla tarar ve yeni `AuditAsset` olaylarını `travel_rule_queue`
+  kuyruğuna yazar.
+- İzleme pipeline'ı, OpenTelemetry ile `tr.rule.span` adlandırması kullanarak
+  Fabric transaction ID, Quorum blok numarası ve müşteri pseudonym'i arasında
+  korelasyon oluşturur.
+- Uyumsuzluk veya veri eksikliği durumunda `travel_rule_missing_payload`
+  alarmı PagerDuty'ye 2 dakikalık gecikme ile yönlendirilir.
+
+### Raporlama ve Bildirim Akışı
+1. `TravelRuleBridge`, `travel_rule_queue` üzerindeki her olayı TRISA ağına
+   göndermeden önce `TravelRuleValidator` bileşeni ile doğrular.
+2. Doğrulanan kayıtlar, TRISA `SendTransfers` API'sine 15 dakika içinde
+   gönderilir; API yanıtları `travel_rule_report_log` Postgres tablosunda
+   saklanır.
+3. Günlük olarak `audit_asset_daily_rollup` görünümü, Travel Rule
+   raporlarının doğrulandığını ve ilgili `complianceProgramRef` alanının
+   eşleştiğini kontrol eder.
+4. Regülasyon gereği saklama süresince (5 yıl) raporlar şifreli obje
+   depolamasında tutulur; süresi dolan kayıtlar `TravelRuleRetentionJob`
+   tarafından otomatik olarak imha edilir ve Quorum `retire` olayı ile
+   eşleştirilir.
+5. Haftalık olarak MAS/FinCEN XML şablonları `travel_rule_exporter`
+   container'ı tarafından üretilip `certifications/compliance_exports/`
+   dizinine arşivlenir.
+
+### Uyum ve Gizlilik Kontrolleri
+- Travel Rule mesajları, sadece TRISA ile JWE şifreli kanal üzerinden
+  paylaşılır; TLS mTLS sertifikaları `aunsorm-x509` yerel CA'sı ile imzalanır.
+- `TravelRuleBridge`, `AUNSORM_STRICT=1` iken eksik KYC hash'i veya
+  eşleşmeyen pseudonym tespit ettiğinde transferi reddeder ve Quorum
+  `AuditAsset` mint işlemini iptal eder.
+- Travel Rule kapsamındaki tüm saklama politikaları `retention_policy`
+  alanı üzerinden raporlara dahil edilerek eIDAS/SOC 2 eşleştirmesi yapılır.
+- Veri erişim günlükleri, `travel_rule_audit` adında ayrı bir OpenTelemetry
+  span seti ile saklanır; `OrgCompliance` dışındaki erişimler engellenir.
+
+### Mil Taşları
+- **2024-11-30:** `TravelRuleBridge` beta sürümü ile Fabric/Quorum olaylarının
+  `travel_rule_queue` üzerinden taşınmasının tamamlanması.
+- **2024-12-20:** TRISA UAT ortamına ilk uçtan uca rapor gönderiminin
+  gerçekleştirilməsi ve `travel_rule_report_log` şemasının dondurulması.
+- **2025-01-31:** MAS ve FinCEN XML ihracı için `travel_rule_exporter`
+  container'ının CI pipeline'ına eklenmesi.
+- **2025-02-28:** Travel Rule raporlarının müşteri saklama politikası
+  eşlemesiyle CI entegrasyon testlerinin tamamlanması.
+- **2025-03-15:** Production cut-over tatbikatı ve bağımsız denetim için
+  raporların `certifications/` arşivine aktarılması.
 
 ### Yol Haritası ve Mil Taşları
 - **2024-11-15:** AuditRelay prototipinin Fabric PoC ortamına bağlanması.

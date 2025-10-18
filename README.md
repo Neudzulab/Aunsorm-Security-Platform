@@ -1245,7 +1245,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
   - GoQuorum 23.x audit ağı, `AuditAsset` soulbound token modeli ve `TOKENIZE_AUDIT` yetkileri ayrıntılandırıldı; AuditRelay köprüsü ve SOC 2/eIDAS raporlama takvimi belirlendi.
 - [x] Zincirler arası test harness'ini `tests/blockchain/cross_network.rs` taslağıyla planla ve veri seti gereksinimlerini tanımla.
 - [x] eIDAS/SOC 2 denetim raporu şablonlarını `certifications/` altında yayımla (bkz. [eIDAS Uygunluk Değerlendirme Raporu Şablonu](certifications/eidas_assessment_template.md) ve [SOC 2 Tip II Denetim Raporu Şablonu](certifications/soc2_report_template.md)).
-- [ ] FATF Travel Rule uyumluluğu için zincir üstü izleme ve raporlama entegrasyon stratejisini oluştur.
+- [x] FATF Travel Rule uyumluluğu için zincir üstü izleme ve raporlama entegrasyon stratejisini oluştur. (Bkz. [FATF Travel Rule Entegrasyon Stratejisi](docs/src/operations/blockchain-integration.md#fatf-travel-rule-entegrasyon-stratejisi))
 - [ ] Müşteri başına saklama/anahtar silme politikalarını blockchain katmanıyla eşleyip operasyonel runbook'a ekle.
 
 ## Test, Fuzz ve Benchmark Çalıştırma

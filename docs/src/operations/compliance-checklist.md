@@ -1,6 +1,6 @@
 # Regülasyon Uyumluluk Kontrol Listesi
 
-*Revizyon: 2025-10-18*
+*Revizyon: 2025-10-24*
 
 Bu kontrol listesi, Aunsorm platformunun eIDAS, SOC 2 ve FATF gibi standartlarla uyumunu sürdürmek için her sprint sonunda gözden geçirilmesi gereken maddeleri derler.
 
@@ -20,7 +20,7 @@ Bu kontrol listesi, Aunsorm platformunun eIDAS, SOC 2 ve FATF gibi standartlarla
    - CI ortamında `BLOCKCHAIN_POC_ENABLED` bayrağıyla koşan iş sonuçları gözlemlenip raporlandı mı?
 4. **Denetim ve Raporlama**
    - SOC 2 için gerekli denetim izleri `certifications/` altında toplanan şablonlarla eşleşiyor mu?
-   - FATF Travel Rule gereksinimleri için zincir üstü izleme planı güncellendi mi?
+   - FATF Travel Rule gereksinimleri için zincir üstü izleme planı güncellendi mi? (Bkz. [`TravelRuleBridge` stratejisi](blockchain-integration.md#fatf-travel-rule-entegrasyon-stratejisi))
 5. **DID ve Tokenizasyon Yol Haritası**
    - Hyperledger Fabric/Quorum PoC’leri için kimlik ve yetkilendirme akışları belgelendi mi? (`POST /blockchain/fabric/did/verify` planı tamamlandı mı?)
    - `tests/blockchain/config.example.toml` dosyasında yer alan ağ parametreleri gerçek ortamla uyumlu mu?
