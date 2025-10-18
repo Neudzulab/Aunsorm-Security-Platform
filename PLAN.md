@@ -1,3 +1,52 @@
+# Aunsorm Delivery Plan
+
+## Objectives
+- Maintain a security-first multi-crate Rust platform that enforces calibration-bound cryptography and zero unsafe code usage.
+- Coordinate specialized agents so each scope (core, platform, identity, interop) advances without conflicting with locked deliverables.
+- Provide transparent roadmap visibility across CLI, server, PQC, and compliance tracks for 2025 program increments.
+- Keep stakeholder documentation (README, PLAN, TODO, ROADMAP) aligned with current sprint intents and revision rules.
+
+## Roadmap & Milestones
+- [ ] STEP-AUN-001: Publish updated agent charters and sprint intake checklist aligned with revizyon kilidi policy.
+  - owner: @ProjectCoordinator
+- [ ] STEP-AUN-002: Baseline calibration + ratchet documentation under docs/src/architecture/ with mermaid diagrams for review.
+  - owner: @CryptoAgent
+- [ ] STEP-AUN-003: Finalize platform endpoint tree sync between README.md and crates/server routes.
+  - owner: @PlatformAgent
+- [ ] STEP-AUN-004: Deliver identity flows (JWT, X.509, KMS) integration tests in tests/data/ with CI gating.
+  - owner: @IdentityAgent
+- [ ] STEP-AUN-005: Refresh interop benchmarking (benches/, fuzz/, crates/pytests/) and publish 10k-exec sanity artifacts.
+  - owner: @InteropAgent
+
+## Roles & Owners
+@ProjectCoordinator — Cross-agent governance & plan hygiene
+@CryptoAgent — crates/core, crates/pqc, crates/packet delivery
+@PlatformAgent — crates/cli, crates/server, crates/wasm alignment
+@IdentityAgent — crates/jwt, crates/x509, crates/kms stewardship
+@InteropAgent — benches, fuzz, crates/pytests, examples coverage
+
+## Deliverables & Acceptance
+- Active PLAN.md, ROADMAP.md, and TODO.md kept in sync with sprint checkpoints and revision lock notes.
+- Security calibration binding, ratchet lifecycle, and PQC fallback rules fully documented with acceptance tests.
+- CLI/server endpoints demonstrably wired with status indicators in README.md and regression-tested via CI.
+- Identity/KMS suites validated against Known Answer Tests and interop harnesses, producing reproducible artefacts.
+
+## Risks
+- Scope drift if agents bypass revision lock; mitigation: enforce checklist review per STEP-AUN-001.
+- PQC/vendor dependency churn; mitigation: maintain deny.toml and audit gates before merging changes.
+- Documentation staleness across multi-agent contributions; mitigation: embed doc update requirement in each milestone definition.
+
+## References
+- README.md (platform overview and endpoint tree)
+- ROADMAP.md (program increments)
+- TODO.md (active sprint backlog)
+- docs/src/architecture/ and docs/src/operations/ (detailed design references)
+- AGENTS.md files for scope-specific working agreements
+
+---
+
+## Legacy Plan (Preserved)
+
 şağıdaki talimatları eksiksiz uygula ve tek bir Git deposu üret. Depo; Rust merkezli, güvenlik-odaklı, PQC opsiyonlu, EXTERNAL kalibrasyon metni zorunlu bağlama (binding) kullanan, oturum/rachet destekli, JWT/OAuth/X.509/KMS entegrasyonlu Aunsorm v1.01+ siber güvenlik aracıdır. “En iyisi olmak” hedefiyle üretim kalitesinde çık. Kodda #![forbid(unsafe_code)], tüm uyarıları hata say. Yerine getirilemeyen gereksinim kalmasın; boş iskelet bırakma.
 
 0) Dil, standartlar, kalite
