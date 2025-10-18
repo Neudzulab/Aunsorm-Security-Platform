@@ -1243,7 +1243,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] Hyperledger Fabric için DID doğrulama PoC'unu REST katmanı planıyla birlikte sun (bkz. [`POST /blockchain/fabric/did/verify`](docs/src/operations/blockchain-integration.md)).
 - [x] Quorum tabanlı audit trail ve tokenizasyon gereksinimlerini `docs/src/operations/blockchain-integration.md` içinde belgeleyerek finalize et.
   - GoQuorum 23.x audit ağı, `AuditAsset` soulbound token modeli ve `TOKENIZE_AUDIT` yetkileri ayrıntılandırıldı; AuditRelay köprüsü ve SOC 2/eIDAS raporlama takvimi belirlendi.
-- [ ] Zincirler arası test harness'ini `tests/blockchain/cross_network.rs` taslağıyla planla ve veri seti gereksinimlerini tanımla.
+- [x] Zincirler arası test harness'ini `tests/blockchain/cross_network.rs` taslağıyla planla ve veri seti gereksinimlerini tanımla.
 - [ ] eIDAS/SOC 2 denetim raporu şablonlarını `certifications/` altında yayımla.
 - [ ] FATF Travel Rule uyumluluğu için zincir üstü izleme ve raporlama entegrasyon stratejisini oluştur.
 - [ ] Müşteri başına saklama/anahtar silme politikalarını blockchain katmanıyla eşleyip operasyonel runbook'a ekle.
