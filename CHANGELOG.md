@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `crates/server/AGENTS.md` now requires README + CHANGELOG updates whenever a new HTTP endpoint is introduced.
 - HTTP/3 operations runbook extended with activation/rollback steps, observability checks, and incident feedback SLA’ları.
 - New blockchain innovation guide (`docs/src/innovation/blockchain.md`) and compliance checklist cross-referencing CI artefaktları ve regülasyon maddeleri.
+- Agent charter and sprint intake guide aligned with the revizyon kilidi policy (`docs/src/operations/agent-charters.md`).
 
 ### Planned for v0.5.0 (Q1 2026)
 - ACME v2 protocol client implementation (Let's Encrypt integration)

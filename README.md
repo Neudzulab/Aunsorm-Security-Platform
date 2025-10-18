@@ -1286,6 +1286,7 @@ Projeyi keşfetmeye başlamadan önce aşağıdaki belgeleri okuyun:
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Topluluk davranış standartları.
 - [SECURITY.md](SECURITY.md) — Güvenlik açığı bildirim prosedürü.
 - [docs/](docs/) — mdBook tabanlı mimari rehber (`mdbook serve docs`).
+- [Agent Charter ve Sprint Intake Kılavuzu](docs/src/operations/agent-charters.md) — Ajan sorumlulukları ve revizyon kilidiyle uyumlu sprint intake checklist'i.
 
 Statik HTML çıktısını yerel olarak üretmek için `mdbook build docs` komutunu
 kullanabilirsiniz; CI pipeline'ı her çalıştığında aynı kitap otomatik olarak
