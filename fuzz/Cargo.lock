@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-core"
-version = "0.4.1"
+version = "0.4.5"
 dependencies = [
  "argon2",
  "base64",
@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-packet"
-version = "0.4.1"
+version = "0.4.5"
 dependencies = [
  "aead",
  "aes",
