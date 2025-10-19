@@ -1,3 +1,9 @@
+<!--
+  File: PLAN.md
+  Purpose: Delivery roadmap and cross-agent coordination aligned with VibeCO governance for the Aunsorm program.
+  Last updated: Recorded VibeCO v0.7.0 documentation sync covering architecture tree upkeep and file headers.
+-->
+
 # Aunsorm Delivery Plan
 
 ## Objectives
@@ -18,6 +24,9 @@
   - owner: @IdentityAgent
 - [x] STEP-AUN-005: Refresh interop benchmarking (benches/, fuzz/, crates/pytests/) and publish 10k-exec sanity artifacts. (Ref: `docs/src/operations/testing.md`, `scripts/interop-sanity.sh`.)
   - owner: @InteropAgent
+- [x] STEP-AUN-006: VibeCO v0.7.0 dokümantasyon kontrol listesini uygulayarak README mimari ağacını ve plan belgelerini senkronla.
+  - README.md mimari ağacı, CHANGELOG.md, PLAN.md ve PROJECT_SUMMARY.md başlıkları canonical formatla güncellendi.
+  - owner: @ProjectCoordinator
 
 ## Roles & Owners
 @ProjectCoordinator — Cross-agent governance & plan hygiene
@@ -29,7 +38,8 @@
 ## Deliverables & Acceptance
 - Active PLAN.md, ROADMAP.md, and TODO.md kept in sync with sprint checkpoints and revision lock notes.
 - Security calibration binding, ratchet lifecycle, and PQC fallback rules fully documented with acceptance tests.
-- CLI/server endpoints demonstrably wired with status indicators in README.md and regression-tested via CI.
+- CLI/server endpoints demonstrably wired with status indicators in README.md and regression-tested via CI; mimari ağaç VibeCO disipliniyle güncel tutulur.
+- VibeCO v0.7.0 header formatı tüm aktif plan belgelerine uygulanır ve ilerideki değişikliklerde korunur.
 - Identity/KMS suites validated against Known Answer Tests and interop harnesses, producing reproducible artefacts.
 
 ## Risks

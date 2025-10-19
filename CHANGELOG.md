@@ -1,3 +1,8 @@
+<!--
+  Scope: Repository-wide change history for the Aunsorm Cryptography Suite.
+  Last updated: Logged VibeCO v0.7.0 documentation alignment and architecture tree sync.
+-->
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
@@ -8,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- VibeCO v0.7.0 uyumu için README, PLAN ve PROJECT_SUMMARY dosyalarına açıklayıcı başlık blokları eklendi.
 - Hyperledger Fabric DID doğrulama PoC'u için `POST /blockchain/fabric/did/verify` endpoint'i ve `FabricDidRegistry` PoC kayıt deposu.
 - Server entegrasyon testleri: `fabric_did_verification_succeeds` ve `fabric_did_verification_rejects_tampered_anchor`.
 - Experimental `GET /http3/capabilities` endpoint exposing Alt-Svc metadata and QUIC datagram channel descriptors behind the `http3-experimental` feature flag.
@@ -24,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `invalid_scope` errors when clients use unauthorized values.
 
 ### Documentation
+- README mimari ağacı VibeCO formatıyla yeniden yazıldı; endpoint durum etiketleri ve servis ağaç disiplini notları güncellendi.
+- PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.
 - Hyperledger Fabric DID doğrulama planı (`docs/src/operations/blockchain-integration.md`) ve uyumluluk kontrol listesi güncellemeleri.
 - README HTTP/3 service tree and discovery section updated with `GET /http3/capabilities` usage examples.
 - `crates/server/AGENTS.md` now requires README + CHANGELOG updates whenever a new HTTP endpoint is introduced.
