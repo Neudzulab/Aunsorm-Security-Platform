@@ -11,7 +11,7 @@
   - owner: @ProjectCoordinator
 - [x] STEP-AUN-002: Baseline calibration + ratchet documentation under docs/src/architecture/ with mermaid diagrams for review. (Doc: `docs/src/architecture/calibration.md`)
   - owner: @CryptoAgent
-- [ ] STEP-AUN-003: Finalize platform endpoint tree sync between README.md and crates/server routes.
+- [x] STEP-AUN-003: Finalize platform endpoint tree sync between README.md and crates/server routes (endpoint durumu ikonları, ID & media token servisleri, Fabric PoC ve HTTP/3 notları hizalandı).
   - owner: @PlatformAgent
 - [ ] STEP-AUN-004: Deliver identity flows (JWT, X.509, KMS) integration tests in tests/data/ with CI gating.
   - owner: @IdentityAgent

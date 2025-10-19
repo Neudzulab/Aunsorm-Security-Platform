@@ -424,13 +424,13 @@ aunsorm-server v0.4.5
 │                                          └─ Audit Trail: JTI, subject, audience, expiry
 │
 ├─ 🎲 Cryptographic RNG (Matematiksel Geliştirilmiş Entropi)
-│  └─ GET    /random/number             → HKDF + NEUDZ-PCS + AACM mixing
+│  └─ GET    /random/number ✅          → HKDF + NEUDZ-PCS + AACM mixing
 │                                          └─ Query: ?min=X&max=Y (default: 0-100)
 │                                          └─ χ² = 101.18 ≈ 100.0 (4M samples validated)
 │                                          └─ Performans: ~78,000 samples/second
 │
 ├─ 🆔 ID Generation (HEAD-Stamped Unique IDs)
-│  ├─ POST   /id/generate �            → Git HEAD tabanlı benzersiz kimlik oluştur
+│  ├─ POST   /id/generate ✅            → Git HEAD tabanlı benzersiz kimlik oluştur
 │  │                                       └─ `aunsorm-id` crate (v0.4.1)
 │  │                                       └─ Environment: AUNSORM_HEAD, GITHUB_SHA, GIT_COMMIT
 │  │                                       └─ Format: aid.<namespace>.<head>.<payload>
@@ -443,40 +443,45 @@ aunsorm-server v0.4.5
 │  │                                       │   ├─ timestamp_micros: u64
 │  │                                       │   └─ counter: u64
 │  │
-│  ├─ POST   /id/parse �               → [Planlandı v0.4.5] Kimlik doğrula ve çözümle
+│  ├─ POST   /id/parse ✅               → Kimlik doğrula ve çözümle
 │  │                                       └─ Input: id (string)
 │  │                                       └─ Output: HeadStampedId (JSON) or error
 │  │                                       └─ Validation: format, fingerprint, namespace
 │  │
-│  └─ POST   /id/verify-head �         → [Planlandı v0.4.5] Kimliğin HEAD ile eşleştiğini doğrula
+│  └─ POST   /id/verify-head ✅         → Kimliğin HEAD ile eşleştiğini doğrula
 │                                          └─ Input: id (string), head (git SHA)
 │                                          └─ Output: { "matches": boolean }
 │                                          └─ Use case: CI/CD artifact verification
 │
 ├─ 📹 SFU Integration (E2EE Key Management)
-│  ├─ POST   /sfu/context               → E2EE session oluştur
+│  ├─ POST   /sfu/context ✅            → E2EE session oluştur
 │  │                                       └─ Input: room_id, participant, enable_e2ee
 │  │                                       └─ Output: context_id, session_id, key, nonce
-│  └─ POST   /sfu/context/step          → Ratchet key rotation
+│  └─ POST   /sfu/context/step ✅       → Ratchet key rotation
 │                                          └─ Forward secrecy + replay protection
 │
 ├─ 📱 MDM (Mobile Device Management)
-│  ├─ POST   /mdm/register              → Cihaz kaydı + Politika + Sertifika
-│  ├─ GET    /mdm/policy/{platform}     → Platform politikası (ios/android/windows)
-│  └─ GET    /mdm/cert-plan/{device_id} → Sertifika dağıtım planı
+│  ├─ POST   /mdm/register ✅           → Cihaz kaydı + Politika + Sertifika
+│  ├─ GET    /mdm/policy/{platform} ✅  → Platform politikası (ios/android/windows)
+│  └─ GET    /mdm/cert-plan/{device_id} ✅ → Sertifika dağıtım planı
+│
+├─ 🎫 Media Access Tokens
+│  └─ POST   /security/generate-media-token ✅ → Zasian medya köprüsü için JWT üret
+│                                              └─ Input: roomId, identity, participantName?, metadata?
+│                                              └─ Output: token, ttlSeconds, bridgeUrl, issuedAt, expiresAt
+│
+├─ 🔍 Transparency & Audit
+│  └─ GET    /transparency/tree ✅      → Merkle tree audit log
+│
+├─ 📊 Monitoring
+│  ├─ GET    /health ✅                 → Health check endpoint
+│  └─ GET    /metrics ✅                → Prometheus metrics (opsiyonel)
 │
 ├─ ⛓️ Blockchain DID Doğrulama (Hyperledger Fabric PoC)
 │  └─ POST   /blockchain/fabric/did/verify 🚧 → Fabric ağına çapalanmış DID kanıtını doğrula
 │                                             └─ Input: did, channel, proof{challenge(base64url), signature(base64url), block_hash(hex), transaction_id, timestamp_ms}
 │                                             └─ Output: ledger_anchor, verification_method, audit(clock_skew)
 │                                             └─ Saat sapması limiti: ≤ 30 saniye, Ed25519 imza doğrulaması
-│
-├─ 🔍 Transparency & Audit
-│  └─ GET    /transparency/tree         → Merkle tree audit log
-│
-├─ 📊 Monitoring
-│  ├─ GET    /health                    → Health check endpoint
-│  └─ GET    /metrics                   → Prometheus metrics (opsiyonel)
 │
 ├─ 🚀 HTTP/3 QUIC Datagrams (Experimental - v0.4.4)
 │  ├─ GET    /http3/capabilities 🚧    → HTTP/3 durum & datagram kanalı keşfi
@@ -538,10 +543,9 @@ aunsorm-server v0.4.5
 > **📌 NOT:** Bu ağaçta gösterilen her komut ve endpoint, ilerleyen sürümlerde **daha fazla özellik ve parametre** ile genişletilecektir.
 > 
 > **🔜 GELECEK ENDPOINT'LER:**
-> - **v0.4.5 (Q4 2025):** ID Generation endpoints - `aunsorm-id` crate hazır, 3 endpoint eklenmesi gerekiyor
 > - **v0.5.0 (Q1 2026):** ACME Protocol endpoints (RFC 8555) - `aunsorm-acme` crate hazır, 8 endpoint entegrasyonu bekliyor
 > - **v0.6.0 (Q2 2026):** WebTransport API - Bidirectional HTTP/3 QUIC streams, production-grade datagram hardening
-> - **v0.7.0 (Q3 2026):** Blockchain integration endpoints - Transparency log anchoring to public chains 
+> - **v0.7.0 (Q3 2026):** Blockchain integration endpoints - Transparency log anchoring to public chains
 > Detaylı kullanım ve tüm parametreler için:
 > - CLI: `aunsorm-cli <command> --help`
 > - Server: [`crates/server/README.md`](crates/server/README.md)
@@ -557,7 +561,7 @@ aunsorm-server v0.4.5
 - ✅ **Multi-platform MDM:** iOS, Android, Windows, macOS, Linux desteği
 - ✅ **Transparency Logging:** Merkle tree based audit trail
 - ✅ **HTTP/3 QUIC Datagrams:** Experimental low-latency telemetry streaming
-- � **HEAD-Stamped IDs:** Git commit SHA tabanlı benzersiz kimlik üretimi (`aunsorm-id` crate hazır, v0.4.5'te entegre edilecek)
+- ✅ **HEAD-Stamped IDs:** Git commit SHA tabanlı benzersiz kimlik üretimi (server + CLI akışları)
 - 📋 **ACME Protocol:** Let's Encrypt uyumlu otomatik sertifika yönetimi (RFC 8555, `aunsorm-acme` crate hazır, v0.5.0'da entegre edilecek)
 - ✅ **Production Ready:** Async/await, structured logging, OpenTelemetry
 
