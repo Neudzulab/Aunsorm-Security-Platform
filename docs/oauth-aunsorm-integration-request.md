@@ -184,13 +184,13 @@ Content-Type: application/json
 
 ### Backend (Rust - Platform Agent)
 
-- [ ] Update `BeginAuthRequest` struct (remove `username`, add `redirect_uri`, `state`, `scope`, `subject`)
-- [ ] Add `redirect_uri` validation (HTTPS, URL format, registration check)
-- [ ] Store `state` and `scope` in auth session (`ServerState::auth_sessions`)
-- [ ] Return `code` instead of `auth_request_id` in response
-- [ ] Echo `state` in response
-- [ ] Update `exchange_token` to validate `redirect_uri` match
-- [ ] Add `scope` to generated JWT claims
+- [x] Update `BeginAuthRequest` struct (remove `username`, add `redirect_uri`, `state`, `scope`, `subject`)
+- [x] Add `redirect_uri` validation (HTTPS, URL format, registration check)
+- [x] Store `state` and `scope` in auth session (`ServerState::auth_sessions`)
+- [x] Return `code` instead of `auth_request_id` in response
+- [x] Echo `state` in response
+- [x] Update `exchange_token` to validate `redirect_uri` match
+- [x] Add `scope` to generated JWT claims
 - [x] Add error responses: `invalid_scope`, `invalid_redirect_uri`
 
 ### Frontend (Web App Integration)
@@ -207,18 +207,18 @@ Content-Type: application/json
 
 - [ ] Update `README.md` OAuth2 section with new schema examples
 - [ ] Create `docs/operations/oauth-web-integration.md` (PKCE client guide)
-- [ ] Add OpenAPI/Swagger spec for updated endpoints
-- [ ] Document redirect URI registration process
+- [x] Add OpenAPI/Swagger spec for updated endpoints
+- [x] Document redirect URI registration process
 
 ### Testing
 
 - [ ] Add `tests/oauth_rfc_compliance.rs`:
-  - [ ] Test full authorization code flow
-  - [ ] Test PKCE S256 validation
-  - [ ] Test `redirect_uri` security (open redirect prevention)
+  - [x] Test full authorization code flow
+  - [x] Test PKCE S256 validation
+  - [x] Test `redirect_uri` security (open redirect prevention)
   - [ ] Test `state` replay protection
-  - [ ] Test invalid scope rejection
-  - [ ] Test missing required params (400 errors)
+  - [x] Test invalid scope rejection
+  - [x] Test missing required params (400 errors)
 
 ## Security Considerations
 
