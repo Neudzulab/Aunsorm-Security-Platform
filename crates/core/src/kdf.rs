@@ -1,5 +1,6 @@
 use std::fmt;
 use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use hkdf::Hkdf;
@@ -154,6 +155,44 @@ impl fmt::Display for KdfProfile {
     }
 }
 
+/// Hatalı ön ayar etiketini temsil eden hata türü.
+///
+/// # Examples
+/// ```
+/// use aunsorm_core::KdfPreset;
+///
+/// let err = KdfPreset::parse("invalid").unwrap_err();
+/// assert_eq!(err.label(), "invalid");
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KdfPresetParseError {
+    invalid: String,
+}
+
+impl KdfPresetParseError {
+    /// Hatanın oluşmasına sebep olan etiketi döndürür.
+    ///
+    /// # Examples
+    /// ```
+    /// use aunsorm_core::KdfPreset;
+    ///
+    /// let err = KdfPreset::parse("unknown").unwrap_err();
+    /// assert_eq!(err.label(), "unknown");
+    /// ```
+    #[must_use]
+    pub fn label(&self) -> &str {
+        &self.invalid
+    }
+}
+
+impl fmt::Display for KdfPresetParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown KDF preset '{}'", self.invalid)
+    }
+}
+
+impl std::error::Error for KdfPresetParseError {}
+
 /// Hazır profil isimleri.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KdfPreset {
@@ -163,6 +202,69 @@ pub enum KdfPreset {
     High,
     Ultra,
     Auto,
+}
+
+impl KdfPreset {
+    /// KDF ön ayar etiketini ASCII küçük harfe dönüştürülmüş olarak döndürür.
+    ///
+    /// # Examples
+    /// ```
+    /// use aunsorm_core::KdfPreset;
+    ///
+    /// assert_eq!(KdfPreset::High.as_str(), "high");
+    /// ```
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Mobile => "mobile",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Ultra => "ultra",
+            Self::Auto => "auto",
+        }
+    }
+
+    /// ASCII büyük/küçük harfe duyarsız şekilde KDF ön ayar etiketini çözümler.
+    ///
+    /// # Errors
+    /// Girdi bilinen ön ayarlardan biriyle eşleşmediğinde `KdfPresetParseError` döner.
+    ///
+    /// # Examples
+    /// ```
+    /// use aunsorm_core::KdfPreset;
+    ///
+    /// let preset = KdfPreset::parse("Medium").expect("parse preset");
+    /// assert_eq!(preset, KdfPreset::Medium);
+    /// ```
+    pub fn parse(value: &str) -> Result<Self, KdfPresetParseError> {
+        let normalized = value.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "mobile" => Ok(Self::Mobile),
+            "low" => Ok(Self::Low),
+            "medium" => Ok(Self::Medium),
+            "high" => Ok(Self::High),
+            "ultra" => Ok(Self::Ultra),
+            "auto" => Ok(Self::Auto),
+            _ => Err(KdfPresetParseError {
+                invalid: value.trim().to_string(),
+            }),
+        }
+    }
+}
+
+impl fmt::Display for KdfPreset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for KdfPreset {
+    type Err = KdfPresetParseError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
 }
 
 const fn select_preset_for_specs(memory_mib: u64, cores: usize) -> KdfPreset {
@@ -383,5 +485,30 @@ mod tests {
         assert!(formatted.contains("len: 4"));
         assert!(!formatted.contains("0x41"));
         assert!(!formatted.contains("0x42"));
+    }
+
+    #[test]
+    fn preset_parse_accepts_case_insensitive_labels() {
+        let cases = [
+            ("Mobile", KdfPreset::Mobile),
+            ("LOW", KdfPreset::Low),
+            ("medium", KdfPreset::Medium),
+            ("High", KdfPreset::High),
+            ("ULTRA", KdfPreset::Ultra),
+            ("auto", KdfPreset::Auto),
+        ];
+
+        for (label, expected) in cases {
+            let preset = KdfPreset::parse(label).expect("parse preset");
+            assert_eq!(preset, expected);
+            assert_eq!(preset.as_str(), expected.as_str());
+        }
+    }
+
+    #[test]
+    fn preset_parse_rejects_unknown_label() {
+        let err = KdfPreset::parse("unsupported").unwrap_err();
+        assert_eq!(err.label(), "unsupported");
+        assert_eq!(err.to_string(), "unknown KDF preset 'unsupported'");
     }
 }

@@ -17,7 +17,9 @@ pub use calibration::{
     CalibrationRange,
 };
 pub use error::CoreError;
-pub use kdf::{derive_seed64_and_pdk, KdfInfo, KdfPreset, KdfProfile, SensitiveVec};
+pub use kdf::{
+    derive_seed64_and_pdk, KdfInfo, KdfPreset, KdfPresetParseError, KdfProfile, SensitiveVec,
+};
 pub use salts::Salts;
 pub use session::{SessionRatchet, SessionRatchetState, StepSecret};
 pub use transparency::{
