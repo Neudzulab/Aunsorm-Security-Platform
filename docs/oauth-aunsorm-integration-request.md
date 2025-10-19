@@ -191,7 +191,7 @@ Content-Type: application/json
 - [ ] Echo `state` in response
 - [ ] Update `exchange_token` to validate `redirect_uri` match
 - [ ] Add `scope` to generated JWT claims
-- [ ] Add error responses: `invalid_scope`, `invalid_redirect_uri`
+- [x] Add error responses: `invalid_scope`, `invalid_redirect_uri`
 
 ### Frontend (Web App Integration)
 

@@ -60,6 +60,31 @@ const AUTH_TTL: Duration = Duration::from_secs(300);
 const SFU_CONTEXT_TTL: Duration = Duration::from_secs(900);
 
 #[derive(Debug, Clone)]
+pub struct OAuthClient {
+    allowed_redirects: Vec<String>,
+    allowed_scopes: Vec<String>,
+}
+
+impl OAuthClient {
+    pub const fn new(allowed_redirects: Vec<String>, allowed_scopes: Vec<String>) -> Self {
+        Self {
+            allowed_redirects,
+            allowed_scopes,
+        }
+    }
+
+    pub fn allows_redirect(&self, candidate: &str) -> bool {
+        self.allowed_redirects
+            .iter()
+            .any(|allowed| allowed == candidate)
+    }
+
+    pub fn allowed_scopes(&self) -> &[String] {
+        &self.allowed_scopes
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct AuthRequest {
     pub subject: String,
     pub client_id: String,
@@ -112,6 +137,35 @@ fn generate_id() -> String {
     let mut buf = [0_u8; 16];
     OsRng.fill_bytes(&mut buf);
     hex::encode(buf)
+}
+
+fn default_oauth_clients() -> HashMap<String, OAuthClient> {
+    let mut clients = HashMap::new();
+    clients.insert(
+        "demo-client".to_string(),
+        OAuthClient::new(
+            vec![
+                "https://app.example.com/callback".to_string(),
+                "https://demo.example.com/oauth/callback".to_string(),
+                "http://localhost:3000/callback".to_string(),
+                "http://127.0.0.1:3000/callback".to_string(),
+                "http://localhost:8080/callback".to_string(),
+            ],
+            vec![
+                "read".to_string(),
+                "write".to_string(),
+                "introspect".to_string(),
+            ],
+        ),
+    );
+    clients.insert(
+        "webapp-123".to_string(),
+        OAuthClient::new(
+            vec!["https://app.example.com/callback".to_string()],
+            vec!["read".to_string(), "write".to_string()],
+        ),
+    );
+    clients
 }
 
 #[derive(Debug, Clone)]
@@ -689,6 +743,7 @@ pub struct ServerState {
     signer: JwtSigner,
     verifier: JwtVerifier,
     jwks: Jwks,
+    oauth_clients: Arc<HashMap<String, OAuthClient>>,
     auth_store: AuthStore,
     ledger: TokenLedger,
     sfu_store: SfuStore,
@@ -742,6 +797,7 @@ impl ServerState {
         let fabric = FabricDidRegistry::poc()?;
         let mut entropy_salt = [0_u8; 32];
         OsRng.fill_bytes(&mut entropy_salt);
+        let oauth_clients = Arc::new(default_oauth_clients());
         Ok(Self {
             listen_port: listen.port(),
             issuer,
@@ -751,6 +807,7 @@ impl ServerState {
             signer,
             verifier,
             jwks,
+            oauth_clients,
             auth_store: AuthStore::new(),
             ledger,
             sfu_store: SfuStore::new(),
@@ -789,6 +846,10 @@ impl ServerState {
 
     pub const fn jwks(&self) -> &Jwks {
         &self.jwks
+    }
+
+    pub fn oauth_client(&self, client_id: &str) -> Option<&OAuthClient> {
+        self.oauth_clients.get(client_id)
     }
 
     pub const fn strict(&self) -> bool {

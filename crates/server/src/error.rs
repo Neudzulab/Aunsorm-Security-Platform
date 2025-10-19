@@ -42,6 +42,13 @@ impl ErrorBody {
         }
     }
 
+    pub fn invalid_redirect_uri(message: impl Into<String>) -> Self {
+        Self {
+            error: "invalid_redirect_uri",
+            error_description: message.into(),
+        }
+    }
+
     pub fn invalid_grant(message: impl Into<String>) -> Self {
         Self {
             error: "invalid_grant",
@@ -52,6 +59,13 @@ impl ErrorBody {
     pub fn invalid_client(message: impl Into<String>) -> Self {
         Self {
             error: "invalid_client",
+            error_description: message.into(),
+        }
+    }
+
+    pub fn invalid_scope(message: impl Into<String>) -> Self {
+        Self {
+            error: "invalid_scope",
             error_description: message.into(),
         }
     }
@@ -88,12 +102,23 @@ impl ApiError {
         Self::new(StatusCode::BAD_REQUEST, ErrorBody::invalid_request(message))
     }
 
+    pub fn invalid_redirect_uri(message: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::BAD_REQUEST,
+            ErrorBody::invalid_redirect_uri(message),
+        )
+    }
+
     pub fn invalid_grant(message: impl Into<String>) -> Self {
         Self::new(StatusCode::BAD_REQUEST, ErrorBody::invalid_grant(message))
     }
 
     pub fn invalid_client(message: impl Into<String>) -> Self {
         Self::new(StatusCode::UNAUTHORIZED, ErrorBody::invalid_client(message))
+    }
+
+    pub fn invalid_scope(message: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, ErrorBody::invalid_scope(message))
     }
 
     pub fn server_error(message: impl Into<String>) -> Self {

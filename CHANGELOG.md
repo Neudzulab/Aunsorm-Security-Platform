@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cross-network harness plan with deterministic datasets (`tests/blockchain/cross_network.rs`) and accompanying fixtures for Fabric→Quorum and Quorum→Sepolia köprü akışları.
 - Identity flow integration test harness combining JWT, KMS and X.509 via deterministic fixtures (`tests/tests/identity_flows.rs`).
 
+### Changed
+- `/oauth/begin-auth` now validates registered redirect URIs and scopes, returning RFC-compliant `invalid_redirect_uri` and
+  `invalid_scope` errors when clients use unauthorized values.
+
 ### Documentation
 - Hyperledger Fabric DID doğrulama planı (`docs/src/operations/blockchain-integration.md`) ve uyumluluk kontrol listesi güncellemeleri.
 - README HTTP/3 service tree and discovery section updated with `GET /http3/capabilities` usage examples.

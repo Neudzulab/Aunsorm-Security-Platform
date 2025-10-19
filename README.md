@@ -399,6 +399,8 @@ aunsorm-server v0.4.5
 │  │                                       └─ PKCE: SHA-256 code_challenge required
 │  │                                       └─ State: CSRF protection (recommended)
 │  │                                       └─ Redirect URI: HTTPS enforced (localhost HTTP allowed)
+│  │                                       └─ Redirect Registry: URI must be pre-registered per client (`invalid_redirect_uri` on mismatch)
+│  │                                       └─ Scope Registry: Enforces client-allowed scopes (`invalid_scope` on mismatch)
 │  │                                       └─ Subject: Optional hint (not for authentication)
 │  │
 │  ├─ POST   /oauth/token ✅            → Access token al (authorization_code grant)

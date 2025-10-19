@@ -69,6 +69,22 @@ EXTERNAL kalibrasyon bağlamını zorunlu kılan JWT üretimini ve JTI tabanlı 
       └─ AUNSORM_OTEL_ENDPOINT           → OTLP exporter endpoint
 ```
 
+### OAuth Client Registry
+
+`aunsorm-server` dahili olarak yetkilendirilmiş OAuth istemci listesiyle birlikte gelir.
+Bu kayıt, entegrasyon testleri ve dokümantasyondaki örnek akışların aynı doğrulamayı
+yaşamasını sağlar.
+
+| Client ID     | Allowed Redirect URIs                                                  | Allowed Scopes           |
+|---------------|------------------------------------------------------------------------|--------------------------|
+| `demo-client` | `https://app.example.com/callback`, `https://demo.example.com/oauth/callback`, `http://localhost:3000/callback`, `http://127.0.0.1:3000/callback`, `http://localhost:8080/callback` | `read`, `write`, `introspect` |
+| `webapp-123`  | `https://app.example.com/callback`                                     | `read`, `write`          |
+
+Her yetkilendirme isteği bu tabloya göre doğrulanır:
+
+- **Redirect URI** kayıtlı değilse sunucu `invalid_redirect_uri` döner.
+- **Scope** istemciye tanımlı listeden değilse `invalid_scope` hatası üretir.
+
 ## 🚀 Getting Started
 
 ### Windows (PowerShell)

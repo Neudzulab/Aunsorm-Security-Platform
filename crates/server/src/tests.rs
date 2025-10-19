@@ -210,6 +210,7 @@ async fn pkce_flow_succeeds() {
     assert!(introspect.active);
     assert_eq!(introspect.sub.as_deref(), Some("alice"));
     assert_eq!(introspect.client_id.as_deref(), Some("demo-client"));
+    assert_eq!(introspect.scope.as_deref(), Some("read write"));
 
     let metrics_response = app
         .clone()
@@ -597,43 +598,63 @@ async fn reject_blank_identity_fields() {
     let digest = Sha256::digest(verifier.as_bytes());
     let code_challenge = URL_SAFE_NO_PAD.encode(digest);
     let payloads = vec![
-        json!({
-            "subject": "   ",
-            "client_id": "demo-client",
-            "redirect_uri": "https://app.example.com/callback",
-            "code_challenge": code_challenge.clone(),
-            "code_challenge_method": "S256"
-        }),
-        json!({
-            "subject": "alice",
-            "client_id": "\n\tdemo",
-            "redirect_uri": "https://app.example.com/callback",
-            "code_challenge": code_challenge.clone(),
-            "code_challenge_method": "S256"
-        }),
-        json!({
-            "subject": "alice\u{0007}",
-            "client_id": "demo-client",
-            "redirect_uri": "https://app.example.com/callback",
-            "code_challenge": code_challenge.clone(),
-            "code_challenge_method": "S256"
-        }),
-        json!({
-            "subject": "alice",
-            "client_id": "   ",
-            "redirect_uri": "https://app.example.com/callback",
-            "code_challenge": code_challenge.clone(),
-            "code_challenge_method": "S256"
-        }),
-        json!({
-            "client_id": "demo-client",
-            "redirect_uri": "   ",
-            "code_challenge": code_challenge,
-            "code_challenge_method": "S256"
-        }),
+        (
+            "blank subject",
+            json!({
+                "subject": "   ",
+                "client_id": "demo-client",
+                "redirect_uri": "https://app.example.com/callback",
+                "code_challenge": code_challenge.clone(),
+                "code_challenge_method": "S256"
+            }),
+            "invalid_request",
+        ),
+        (
+            "client_id with control characters",
+            json!({
+                "subject": "alice",
+                "client_id": "\n\tdemo",
+                "redirect_uri": "https://app.example.com/callback",
+                "code_challenge": code_challenge.clone(),
+                "code_challenge_method": "S256"
+            }),
+            "invalid_request",
+        ),
+        (
+            "subject with control characters",
+            json!({
+                "subject": "alice\u{0007}",
+                "client_id": "demo-client",
+                "redirect_uri": "https://app.example.com/callback",
+                "code_challenge": code_challenge.clone(),
+                "code_challenge_method": "S256"
+            }),
+            "invalid_request",
+        ),
+        (
+            "blank client_id",
+            json!({
+                "subject": "alice",
+                "client_id": "   ",
+                "redirect_uri": "https://app.example.com/callback",
+                "code_challenge": code_challenge.clone(),
+                "code_challenge_method": "S256"
+            }),
+            "invalid_request",
+        ),
+        (
+            "blank redirect",
+            json!({
+                "client_id": "demo-client",
+                "redirect_uri": "   ",
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256"
+            }),
+            "invalid_redirect_uri",
+        ),
     ];
 
-    for payload in payloads {
+    for (case, payload, expected_error) in payloads {
         let response = app
             .clone()
             .oneshot(
@@ -650,12 +671,78 @@ async fn reject_blank_identity_fields() {
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body");
-        let error: serde_json::Value = serde_json::from_slice(&body).expect("error json");
-        assert_eq!(
-            error.get("error").and_then(|value| value.as_str()),
-            Some("invalid_request")
-        );
+        let error: ApiErrorBody = serde_json::from_slice(&body).expect("error json");
+        assert_eq!(error.error, expected_error, "case: {case}");
     }
+}
+
+#[tokio::test]
+async fn reject_unregistered_redirect_uri() {
+    let state = setup_state();
+    let app = build_router(state);
+    let verifier = "identity-verifier-redirect-check-aaaaaaaaaaaaaaaaaaaa";
+    let digest = Sha256::digest(verifier.as_bytes());
+    let code_challenge = URL_SAFE_NO_PAD.encode(digest);
+    let payload = json!({
+        "subject": "alice",
+        "client_id": "demo-client",
+        "redirect_uri": "https://malicious.example.com/callback",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/begin-auth")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let error: ApiErrorBody = serde_json::from_slice(&body).expect("error json");
+    assert_eq!(error.error, "invalid_redirect_uri");
+    assert!(error.error_description.contains("yetkili değil"));
+}
+
+#[tokio::test]
+async fn reject_scope_outside_registration() {
+    let state = setup_state();
+    let app = build_router(state);
+    let verifier = "identity-verifier-scope-check-aaaaaaaaaaaaaaaaaaaaaa";
+    let digest = Sha256::digest(verifier.as_bytes());
+    let code_challenge = URL_SAFE_NO_PAD.encode(digest);
+    let payload = json!({
+        "subject": "alice",
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback",
+        "scope": "read delete",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/begin-auth")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let error: ApiErrorBody = serde_json::from_slice(&body).expect("error json");
+    assert_eq!(error.error, "invalid_scope");
+    assert!(error.error_description.contains("delete"));
 }
 
 #[tokio::test]
