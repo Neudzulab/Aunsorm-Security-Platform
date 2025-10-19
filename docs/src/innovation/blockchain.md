@@ -26,7 +26,9 @@
 - [x] Quorum tabanlı audit trail senaryosu için tokenizasyon ve yetki devri politikalarını belgeleyerek `docs/src/operations/blockchain-integration.md` dosyasına ekle.
   - GoQuorum 23.x üzerinde Istanbul BFT konsensüsü, `AuditAsset` soulbound token modeli ve `TOKENIZE_AUDIT` yetkilendirme politikaları ayrıntılandırıldı.
   - SOC 2/eIDAS raporlama gereksinimlerine yönelik mil taşları (2024-11-15 ila 2025-03-01) ve `AuditRelay` köprüleme servisi sorumlulukları tanımlandı.
-- [ ] Interop ekibi için zincirler arası test harness'ini `tests/blockchain/cross_network.rs` altında planla ve veri seti gereksinimlerini tanımla.
+- [x] Interop ekibi için zincirler arası test harness'ini `tests/blockchain/cross_network.rs` altında planla ve veri seti gereksinimlerini tanımla.
+  - `fabric-devnet → quorum-istanbul` ve `quorum-istanbul → ethereum-sepolia` senaryoları için ağ profilleri, köprüleme modelleri ve finalite hedefleri kod seviyesinde kataloglandı.
+  - Fixture gereksinimleri (`tests/data/blockchain/`) Travel Rule, AML ve hash kilitleme kontrollerini doğrulayacak alan setleriyle belirlendi; regresyon testleri veri kayıt sayısını ve zorunlu alanları doğrular.
 
 ### Uzun Vadeli Sertifikasyon (31 Mart 2025)
 - [ ] eIDAS ve SOC 2 için blokzincir kayıt süreçlerinin bağımsız denetim raporlarını üret ve `certifications/` altında paylaşılacak şablonları tanımla.
