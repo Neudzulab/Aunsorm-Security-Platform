@@ -1,4 +1,5 @@
 use std::borrow::{Cow, ToOwned};
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -279,6 +280,35 @@ struct BeginAuthResponse {
     expires_in: u64,
 }
 
+fn normalize_scope(
+    scope: Option<&str>,
+    allowed_scopes: &[String],
+) -> Result<Option<String>, ApiError> {
+    let Some(scope_value) = scope else {
+        return Ok(None);
+    };
+    let trimmed = scope_value.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::invalid_scope("scope boş olamaz"));
+    }
+    let mut normalized = Vec::new();
+    let mut seen = HashSet::new();
+    for token in trimmed.split_whitespace() {
+        if token.chars().any(char::is_control) {
+            return Err(ApiError::invalid_scope("scope kontrol karakteri içeremez"));
+        }
+        if !allowed_scopes.iter().any(|allowed| allowed == token) {
+            return Err(ApiError::invalid_scope(format!(
+                "scope değeri izinli değil: {token}",
+            )));
+        }
+        if seen.insert(token) {
+            normalized.push(token);
+        }
+    }
+    Ok(Some(normalized.join(" ")))
+}
+
 async fn begin_auth(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<BeginAuthRequest>,
@@ -310,11 +340,14 @@ async fn begin_auth(
     if sanitized_client_id.is_empty() {
         return Err(ApiError::invalid_request("client_id boş bırakılamaz"));
     }
+    let client = state
+        .oauth_client(sanitized_client_id)
+        .ok_or_else(|| ApiError::invalid_client("client_id kayıtlı değil"))?;
 
     // RFC 6749 §3.1.2: Validate redirect_uri (HTTPS required, localhost HTTP allowed)
     let redirect_uri_trimmed = redirect_uri.trim();
     if redirect_uri_trimmed.is_empty() {
-        return Err(ApiError::invalid_request("redirect_uri gereklidir"));
+        return Err(ApiError::invalid_redirect_uri("redirect_uri gereklidir"));
     }
 
     // Basic URL validation (scheme check)
@@ -322,8 +355,14 @@ async fn begin_auth(
         && !redirect_uri_trimmed.starts_with("http://localhost")
         && !redirect_uri_trimmed.starts_with("http://127.0.0.1")
     {
-        return Err(ApiError::invalid_request(
+        return Err(ApiError::invalid_redirect_uri(
             "redirect_uri HTTPS kullanmalıdır (localhost için HTTP izinli)",
+        ));
+    }
+
+    if !client.allows_redirect(redirect_uri_trimmed) {
+        return Err(ApiError::invalid_redirect_uri(
+            "redirect_uri kayıtlı istemci için yetkili değil",
         ));
     }
 
@@ -336,14 +375,7 @@ async fn begin_auth(
         }
     }
 
-    // Validate scope if provided
-    if let Some(ref s) = scope {
-        if s.chars().any(char::is_control) {
-            return Err(ApiError::invalid_request(
-                "scope kontrol karakteri içeremez",
-            ));
-        }
-    }
+    let normalized_scope = normalize_scope(scope.as_deref(), client.allowed_scopes())?;
 
     // Validate subject hint if provided
     let final_subject = if let Some(subj) = subject {
@@ -381,7 +413,7 @@ async fn begin_auth(
             sanitized_client_id.to_owned(),
             redirect_uri_trimmed.to_owned(),
             client_state.clone(),
-            scope,
+            normalized_scope,
             code_challenge,
         )
         .await;
@@ -611,6 +643,11 @@ async fn introspect(
                 .get("client_id")
                 .and_then(|value| value.as_str())
                 .map(ToOwned::to_owned);
+            let scope = claims
+                .extra
+                .get("scope")
+                .and_then(|value| value.as_str())
+                .map(ToOwned::to_owned);
             let jti = claims.jwt_id.clone();
             let active = if let Some(ref jti_value) = jti {
                 state.is_token_active(jti_value, now).await.map_err(|err| {
@@ -621,7 +658,7 @@ async fn introspect(
             };
             let response = IntrospectResponse {
                 active,
-                scope: None,
+                scope,
                 client_id,
                 username: claims.subject.clone(),
                 token_type: Some("Bearer"),
