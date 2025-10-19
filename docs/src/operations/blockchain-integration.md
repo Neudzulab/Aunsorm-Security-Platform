@@ -343,11 +343,19 @@ için izlenebilir kılınmasını amaçlar.
   manipüle edilmiş kanıtların reddedildiğini doğrular.
 - Blockchain PoC test harness'i (`tests/blockchain/`) hash zinciri
   tutarlılığını sınayarak ledger tarafındaki regresyonlara erken uyarı sağlar.
+- Zincirler arası harness (`tests/blockchain/cross_network.rs`) Fabric, Quorum
+  ve Sepolia ağ profillerini, köprüleme modellerini ve veri kümelerini tek
+  matriste birleştirir. Veri kümeleri `tests/data/blockchain/` altında Travel
+  Rule, AML ve finalite kontrolleri için zorunlu alan listeleriyle sağlanır.
+- Regresyon testleri, fixture dosyalarının kayıt sayılarını ve alan bütünlüğünü
+  doğrulayarak PoC ortamı ile belgelenen gereksinimler arasındaki sürtünmeyi
+  azaltır.
 
 ## İleri İşler
-- Zincirler arası test harness'i (`tests/blockchain/cross_network.rs`) için
-  veri seti gereksinimleri belirlenip PoC doğrulama endpoint'i ile entegre
-  edilecektir.
+- Zincirler arası test harness'i (`tests/blockchain/cross_network.rs`) PoC
+  doğrulama endpoint'i ile entegrasyon için sıradadır; veri kümeleri ve
+  kontrol setleri hazır durumda olup entegrasyon sırasında yeniden
+  kullanılacaktır.
 - Quorum `AuditAssetRegistry` sözleşmesi için formel doğrulama sonuçları ve
   bytecode hash'leri `certifications/quorum/` dizininde yayımlanacaktır.
 - Quorum ve Fabric arasında `bridge-relay` servisinin yüksek erişilebilirlik
