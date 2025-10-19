@@ -517,15 +517,19 @@ dependencies = [
  "aunsorm-kms",
  "aunsorm-packet",
  "aunsorm-server",
+ "aunsorm-x509",
  "base64 0.21.7",
  "ed25519-dalek",
  "hex",
+ "pem",
  "proptest",
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "tiny_http",
  "tokio",
+ "x509-parser 0.18.0",
 ]
 
 [[package]]

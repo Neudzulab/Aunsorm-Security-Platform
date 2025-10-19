@@ -1,0 +1,48 @@
+{
+  "flow_id": "alpha",
+  "kms": {
+    "signing_key_id": "jwt-sign-alpha",
+    "signing_seed_b64": "YWxwaGEtaWRlbnRpdHktc2VlZC0yMDI1LTExLTAxISE=",
+    "wrap_key_id": "wrap-alpha",
+    "wrap_seed_b64": "YWxwaGEtd3JhcC1rZXktbWF0ZXJpYWwtMjAyNS0hISs="
+  },
+  "jwt": {
+    "issuer": "https://identity.alpha.aunsorm",
+    "subject": "user-alpha-42",
+    "audience": "aunsorm-api",
+    "scope": [
+      "packet:read",
+      "session:manage"
+    ],
+    "ttl_seconds": 900,
+    "extra_claims": {
+      "tenant": "alpha-tenant",
+      "calibration_context": "Alpha Identity Flow 2025-11-01"
+    }
+  },
+  "x509": {
+    "common_name": "Alpha Identity CA",
+    "org_salt_b64": "YWxwaGEtb3JnLXNhbHQtMjAyNQ==",
+    "calibration_text": "Alpha Identity Flow 2025-11-01",
+    "cps_uris": [
+      "https://alpha.example.com/cps"
+    ],
+    "policy_oids": [
+      "1.2.3.4.5.6.7.8.1"
+    ],
+    "validity_days": 825,
+    "subject_alt_names": {
+      "dns": [
+        "id.alpha.internal"
+      ],
+      "ips": [
+        "10.10.10.10"
+      ]
+    }
+  },
+  "expectations": {
+    "calibration_id": "znNCw69cpohU0RsGWBMbrLEI",
+    "fingerprint_hex": "96a48012f1f23ebca88b65b45851655d90ff51984e6b0d7c3b798d77048d89eb",
+    "kms_signing_kid": "b83e6fbb0e089ae0c299f0872e04c6cbfb419fa22d2ad4ded27788321a7f4395"
+  }
+}

@@ -17,8 +17,9 @@ kms-remote = ["kms-gcp", "kms-azure"]
 [dependencies]
 aunsorm-core = { path = "../crates/core" }
 aunsorm-packet = { path = "../crates/packet" }
-aunsorm-jwt = { path = "../crates/jwt" }
+aunsorm-jwt = { path = "../crates/jwt", features = ["kms"] }
 aunsorm-kms = { path = "../crates/kms" }
+aunsorm-x509 = { path = "../crates/x509" }
 aunsorm-server = { path = "../crates/server" }
 proptest = "1.4"
 base64 = { workspace = true }
@@ -30,3 +31,6 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tiny_http = "0.12"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+pem = "3"
+tempfile = "3"
+x509-parser = "0.18"
