@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Blockchain PoC mock ledger (`tests/blockchain/mock_ledger.rs`) and integrity regression tests (`blockchain_poc`) validating hash chain enforcement.
 - Optional `blockchain-poc.yml` workflow guarded by `BLOCKCHAIN_POC_ENABLED`/manual dispatch for running the PoC harness end-to-end.
 - Cross-network harness plan with deterministic datasets (`tests/blockchain/cross_network.rs`) and accompanying fixtures for Fabric→Quorum and Quorum→Sepolia köprü akışları.
+- Identity flow integration test harness combining JWT, KMS and X.509 via deterministic fixtures (`tests/tests/identity_flows.rs`).
 
 ### Documentation
 - Hyperledger Fabric DID doğrulama planı (`docs/src/operations/blockchain-integration.md`) ve uyumluluk kontrol listesi güncellemeleri.
