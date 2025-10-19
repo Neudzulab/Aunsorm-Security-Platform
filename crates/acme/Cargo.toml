@@ -9,12 +9,17 @@ readme = "README.md"
 [dependencies]
 base64 = { workspace = true }
 http = "0.2"
+p256 = { version = "0.13", features = ["ecdsa"] }
+rsa = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true, features = ["oid"] }
 thiserror = { workspace = true }
 url = { workspace = true }
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+signature = { version = "2", default-features = false, features = ["std"] }
 zeroize = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1"
+rand_chacha = { workspace = true }
