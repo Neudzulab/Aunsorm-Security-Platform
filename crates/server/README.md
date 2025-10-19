@@ -8,45 +8,51 @@ EXTERNAL kalibrasyon bağlamını zorunlu kılan JWT üretimini ve JTI tabanlı 
 ```
 📦 Aunsorm Server (HTTP/REST API)
 │
-├─ 🔐 OAuth 2.0 / OIDC Flow
-│  ├─ POST   /oauth/begin-auth          → PKCE S256 yetkilendirme isteği oluştur
-│  ├─ POST   /oauth/token               → Kod ile JWT access token değiştir
-│  ├─ POST   /oauth/introspect          → Token geçerlilik kontrolü
-│  ├─ GET    /oauth/jwks.json           → Public key seti (JWKS)
-│  └─ GET    /oauth/transparency        → Token şeffaflık günlüğü
+├─ 🔐 OAuth 2.0 / OIDC Flow (RFC 6749 + RFC 7636)
+│  ├─ POST   /oauth/begin-auth ✅       → PKCE S256 yetkilendirme isteği oluştur
+│  ├─ POST   /oauth/token ✅            → Kod ile JWT access token değiştir
+│  ├─ POST   /oauth/introspect ✅       → Token geçerlilik kontrolü
+│  ├─ GET    /oauth/jwks.json ✅        → Public key seti (JWKS)
+│  └─ GET    /oauth/transparency ✅     → Token şeffaflık günlüğü
 │
 ├─ 🎲 Cryptographic RNG
-│  └─ GET    /random/number             → HKDF + Mathematical Mixing (parametric range)
+│  └─ GET    /random/number ✅          → HKDF + Mathematical Mixing (parametric range)
 │                                          └─ Query: ?min=X&max=Y (defaults: 0-100)
 │                                          └─ χ² = 101.18 ≈ 100.0 (4M samples tested)
 │
+├─ 🆔 ID Generation (HEAD-Stamped IDs)
+│  ├─ POST   /id/generate ✅            → Git HEAD tabanlı benzersiz kimlik üret
+│  ├─ POST   /id/parse ✅               → Kimlik çözümle ve doğrula
+│  └─ POST   /id/verify-head ✅         → HEAD ile eşleşme kontrolü
+│
 ├─ 📹 SFU Integration (E2EE Key Management)
-│  ├─ POST   /sfu/context               → Yeni E2EE session oluştur
-│  │                                       └─ Input: room_id, participant, enable_e2ee
-│  │                                       └─ Output: context_id, session_id, key, nonce
-│  └─ POST   /sfu/context/step          → Ratchet anahtarını ilerlet
-│                                          └─ Input: context_id
-│                                          └─ Output: message_no, key, nonce (rotated)
+│  ├─ POST   /sfu/context ✅            → Yeni E2EE session oluştur
+│  └─ POST   /sfu/context/step ✅       → Ratchet anahtarını ilerlet
 │
 ├─ 📱 MDM (Mobile Device Management)
-│  ├─ POST   /mdm/register              → Cihaz kaydı + Politika + Sertifika planı
-│  │                                       └─ Input: device_id, owner, platform
-│  │                                       └─ Output: DeviceRecord + Policy + CertPlan
-│  ├─ GET    /mdm/policy/{platform}     → Platform bazlı politika dokümanı
-│  │                                       └─ Platforms: ios, android, windows, macos, linux
-│  └─ GET    /mdm/cert-plan/{device_id} → Cihaza özel sertifika dağıtım planı
+│  ├─ POST   /mdm/register ✅           → Cihaz kaydı + Politika + Sertifika planı
+│  ├─ GET    /mdm/policy/{platform} ✅  → Platform bazlı politika dokümanı
+│  └─ GET    /mdm/cert-plan/{device_id} ✅ → Cihaza özel sertifika dağıtım planı
+│
+├─ 🎫 Media Access Tokens
+│  └─ POST   /security/generate-media-token ✅ → Zasian medya köprüsü için JWT
 │
 ├─ 🔍 Transparency & Audit
-│  └─ GET    /transparency/tree         → Merkle tree şeffaflık kaydı
-│                                          └─ Key publications, token issuance history
+│  └─ GET    /transparency/tree ✅      → Merkle tree şeffaflık kaydı
 │
 ├─ 📊 Monitoring & Health
-│  ├─ GET    /health                    → Sağlık durumu kontrolü
-│  └─ GET    /metrics                   → Prometheus format metrikler
+│  ├─ GET    /health ✅                 → Sağlık durumu kontrolü
+│  └─ GET    /metrics ✅                → Prometheus format metrikler
 │                                          ├─ aunsorm_pending_auth_requests
 │                                          ├─ aunsorm_active_tokens
 │                                          ├─ aunsorm_sfu_contexts
 │                                          └─ aunsorm_mdm_registered_devices
+│
+├─ ⛓️ Blockchain DID Doğrulama (Fabric PoC)
+│  └─ POST   /blockchain/fabric/did/verify 🚧 → Fabric DID kanıtını doğrula
+│
+├─ 🚀 HTTP/3 QUIC Datagrams (Experimental)
+│  └─ GET    /http3/capabilities 🚧    → HTTP/3 durumu ve datagram kanalları
 │
 └─ 🔧 Configuration
    ├─ Environment Variables:
