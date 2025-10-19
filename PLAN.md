@@ -9,7 +9,7 @@
 ## Roadmap & Milestones
 - [x] STEP-AUN-001: Publish updated agent charters and sprint intake checklist aligned with revizyon kilidi policy. (Doc: `docs/src/operations/agent-charters.md`)
   - owner: @ProjectCoordinator
-- [ ] STEP-AUN-002: Baseline calibration + ratchet documentation under docs/src/architecture/ with mermaid diagrams for review.
+- [x] STEP-AUN-002: Baseline calibration + ratchet documentation under docs/src/architecture/ with mermaid diagrams for review. (Doc: `docs/src/architecture/calibration.md`)
   - owner: @CryptoAgent
 - [ ] STEP-AUN-003: Finalize platform endpoint tree sync between README.md and crates/server routes.
   - owner: @PlatformAgent
