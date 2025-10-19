@@ -1,0 +1,25 @@
+[package]
+name = "interop-benches"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+criterion = { workspace = true }
+aunsorm-core = { path = "../crates/core" }
+aunsorm-x509 = { path = "../crates/x509" }
+
+[[bench]]
+name = "aead"
+path = "aead.rs"
+harness = false
+
+[[bench]]
+name = "session"
+path = "session.rs"
+harness = false
+
+[[bench]]
+name = "x509"
+path = "x509.rs"
+harness = false
