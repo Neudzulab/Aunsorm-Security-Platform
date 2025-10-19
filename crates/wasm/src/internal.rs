@@ -149,15 +149,9 @@ fn decode_org_salt(value: &str) -> Result<Vec<u8>, WasmError> {
 }
 
 fn parse_profile(input: Option<&str>) -> Result<KdfProfile, WasmError> {
-    let preset = match input.unwrap_or("medium").to_ascii_lowercase().as_str() {
-        "mobile" => KdfPreset::Mobile,
-        "low" => KdfPreset::Low,
-        "medium" => KdfPreset::Medium,
-        "high" => KdfPreset::High,
-        "ultra" => KdfPreset::Ultra,
-        "auto" => KdfPreset::Auto,
-        other => return Err(WasmError::InvalidProfile(other.to_owned())),
-    };
+    let label = input.unwrap_or("medium");
+    let preset =
+        KdfPreset::parse(label).map_err(|err| WasmError::InvalidProfile(err.label().to_owned()))?;
     Ok(KdfProfile::preset(preset))
 }
 

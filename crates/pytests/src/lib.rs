@@ -229,15 +229,8 @@ impl TryFrom<RawCase> for ReferenceCase {
 }
 
 fn parse_profile(label: &str) -> Result<KdfProfile, VectorError> {
-    let preset = match label {
-        "mobile" => KdfPreset::Mobile,
-        "low" => KdfPreset::Low,
-        "medium" => KdfPreset::Medium,
-        "high" => KdfPreset::High,
-        "ultra" => KdfPreset::Ultra,
-        "auto" => KdfPreset::Auto,
-        other => return Err(VectorError::Profile(other.to_string())),
-    };
+    let preset =
+        KdfPreset::parse(label).map_err(|err| VectorError::Profile(err.label().to_owned()))?;
     Ok(KdfProfile::preset(preset))
 }
 
