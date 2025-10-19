@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::convert::TryInto;
 
 use serde::{Deserialize, Serialize};
@@ -110,19 +110,57 @@ pub struct SessionStepOutcome {
     pub message_no: u64,
 }
 
-#[derive(Default, Debug)]
+const DEFAULT_SESSION_STORE_CAPACITY: usize = 1024;
+
+#[derive(Debug)]
 pub struct SessionStore {
     seen: HashSet<([u8; 16], u64)>,
+    order: VecDeque<([u8; 16], u64)>,
+    capacity: usize,
+}
+
+impl Default for SessionStore {
+    fn default() -> Self {
+        Self::with_capacity(DEFAULT_SESSION_STORE_CAPACITY)
+    }
 }
 
 impl SessionStore {
+    /// Creates a new session store with the default bounded capacity.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Creates a new session store with the provided bounded capacity.
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> Self {
+        let bounded = capacity.max(1);
+        Self {
+            seen: HashSet::with_capacity(bounded),
+            order: VecDeque::with_capacity(bounded),
+            capacity: bounded,
+        }
+    }
+
+    /// Registers the `(session_id, message_no)` pair, evicting the oldest
+    /// entry when the store reaches its capacity. Returns `true` when the
+    /// pair was not present and is recorded, `false` when it was already seen.
     pub fn register(&mut self, session_id: [u8; 16], message_no: u64) -> bool {
-        self.seen.insert((session_id, message_no))
+        let key = (session_id, message_no);
+        if self.seen.contains(&key) {
+            return false;
+        }
+
+        if self.seen.len() == self.capacity {
+            if let Some(oldest) = self.order.pop_front() {
+                self.seen.remove(&oldest);
+            }
+        }
+
+        self.order.push_back(key);
+        self.seen.insert(key);
+        true
     }
 }
 
@@ -418,6 +456,31 @@ mod tests {
         assert!(store.register(session_id, 1));
         assert!(!store.register(session_id, 1));
         assert!(store.register(session_id, 2));
+    }
+
+    #[test]
+    fn session_store_evicts_oldest_when_capacity_reached() {
+        let mut store = SessionStore::with_capacity(2);
+        let session_a = [1_u8; 16];
+        let session_b = [2_u8; 16];
+        let session_c = [3_u8; 16];
+
+        assert!(store.register(session_a, 1));
+        assert!(store.register(session_b, 1));
+        assert!(!store.register(session_a, 1));
+
+        assert!(store.register(session_c, 1));
+
+        assert!(store.register(session_a, 1));
+        assert!(!store.register(session_c, 1));
+    }
+
+    #[test]
+    fn session_store_capacity_minimum_is_enforced() {
+        let mut store = SessionStore::with_capacity(0);
+        let session = [9_u8; 16];
+        assert!(store.register(session, 1));
+        assert!(!store.register(session, 1));
     }
 
     #[test]
