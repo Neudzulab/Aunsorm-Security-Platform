@@ -1,8 +1,80 @@
-﻿# Aunsorm Cryptography Suite
+<!--
+  File: README.md
+  Purpose: Primary onboarding, feature overview, and service topology for the Aunsorm cryptography workspace.
+  Last updated: Synced documentation structure and architecture tree with VibeCO v0.7.0 directives.
+-->
+
+# Aunsorm Cryptography Suite
 
 **Modern, bağımsız ve production-ready kriptografi ve sertifika yönetim platformu.**
 
 Aunsorm, end-to-end encryption (E2EE), post-quantum cryptography (PQC), JWT token management, X.509 certificate authority ve **otomatik Let's Encrypt entegrasyonu** sağlayan kapsamlı bir güvenlik çözümüdür.
+
+## Architecture tree and update discipline
+
+Mevcut depo yapısı ve servis durumları aşağıda özetlenmiştir. Yeni dizinler, endpoint'ler veya planlanan çalışmalar eklendiğinde bu ağaç aynı commit içinde güncellenmelidir.
+
+```
+Aunsorm Cryptography Suite/
+├── apps/
+│   └── cli/                           # Komut satırı senaryoları ve bootstrap yardımcıları
+├── benches/                           # Criterion benchmark senaryoları (interop ölçümleri)
+├── certifications/                    # Uyumluluk artefaktları ve kanıt dokümanları
+├── crates/
+│   ├── core/                          # Kriptografik primitifler ve kalibrasyon altyapısı ✅
+│   ├── pqc/                           # Post-quantum algoritma adaptörleri 🚧
+│   ├── packet/                        # Paketleme ve taşıyıcı şemaları ✅
+│   ├── cli/                           # `aunsorm-cli` komutları ✅
+│   ├── server/                        # HTTP API yüzeyi (Axum)
+│   │   ├── GET /health ✅ - Liveness probe ve servis durumu
+│   │   ├── GET /metrics ✅ - Prometheus uyumlu metrikler
+│   │   ├── GET /oauth/jwks.json ✅ - JWKS anahtar yayını
+│   │   ├── POST /oauth/begin-auth ✅ - OAuth2 + PKCE yetkilendirme başlangıcı
+│   │   ├── POST /oauth/token ✅ - Authorization code takası
+│   │   ├── POST /oauth/introspect ✅ - Token doğrulama
+│   │   ├── GET /oauth/transparency ✅ - Şeffaflık günlükleri
+│   │   ├── POST /sfu/context 🚧 - Güvenli medya oturumu başlatma
+│   │   ├── POST /sfu/context/step 🚧 - SFU ratchet adımı ilerletme
+│   │   ├── POST /security/generate-media-token ✅ - Medya erişim token üretimi
+│   │   ├── POST /mdm/register ✅ - Cihaz kayıt akışı
+│   │   ├── GET /mdm/policy/:platform ✅ - Platform bazlı MDM politikası
+│   │   ├── GET /mdm/cert-plan/:device_id ✅ - Sertifika planı keşfi
+│   │   ├── POST /id/generate 🚧 - Kimlik üretimi (v0.4.5 entegrasyonu tamamlanıyor)
+│   │   ├── POST /id/parse 🚧 - Kimlik çözümleme (v0.4.5 entegrasyonu tamamlanıyor)
+│   │   ├── POST /id/verify-head 🚧 - Head damgalı kimlik doğrulama
+│   │   ├── POST /blockchain/fabric/did/verify 🚧 - Hyperledger Fabric DID doğrulama PoC'u
+│   │   ├── GET /http3/capabilities 🚧 - HTTP/3 PoC introspeksiyonu (`http3-experimental`)
+│   │   └── ACME endpoints 📋 [Planlandı v0.5.0] - Let's Encrypt otomasyonu (`/acme/directory`, `/acme/new-account`, `/acme/new-order`)
+│   ├── acme/                          # ACME istemcisi ve otomasyon altyapısı 📋 [Planlandı v0.5.0]
+│   ├── id/                            # Head-stamped ID kütüphanesi ve testler 🚧
+│   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅
+│   ├── kms/                           # Anahtar yönetimi hizmeti adaptörleri ✅
+│   ├── x509/                          # Sertifika otoritesi (CA) bileşenleri ✅
+│   ├── mdm/                           # Mobil cihaz yönetimi hizmetleri 🚧
+│   └── wasm/                          # WebAssembly hedefleri 📋 [Planlandı]
+├── docs/
+│   ├── src/                           # Operasyon, mimari, inovasyon dokümanları
+│   └── *.md                           # Politikalar ve runbook'lar
+├── examples/                          # Örnek entegrasyonlar ve istemciler
+├── fuzz/                              # cargo-fuzz hedefleri
+├── scripts/
+│   ├── ci/                            # CI orkestrasyon yardımcıları
+│   ├── maintenance/                   # Bakım ve sağlık raporları
+│   ├── interop-sanity.sh              # Interop doğrulama komut dosyası ✅
+│   └── automation/                    # Plan ve operasyon otomasyon scriptleri (Rust & Python)
+├── tests/
+│   ├── blockchain/                    # Fabric ve zincirler arası PoC testleri 🚧
+│   ├── data/                          # Deterministik test fixture'ları
+│   └── identity/                      # Kimlik akış entegrasyon testleri ✅
+├── CHANGELOG.md                       # Semver değişiklik günlüğü (her sürümde güncelle)
+├── PLAN.md                            # Teslimat planı ve sprint görevleri
+├── PROJECT_SUMMARY.md                 # Paydaş iletişim özeti
+└── README.md                          # Bu belge (mimari ağaç dahil)
+```
+
+- Endpoint veya dizin durumu değiştiğinde bu ağacı ve ilgili açıklamaları aynı commit içinde güncelleyin.
+- Deneme aşamasındaki özellikleri `🚧`, planlanan çalışmaları `📋 [Planlandı vX.Y.Z]`, üretime alınmış servisleri `✅` ile işaretleyin.
+- Yeni endpoint eklediğinizde README, CHANGELOG ve ilgili `AGENTS.md` dosyalarını senkron tutmayı unutmayın.
 
 ## 🚀 Özellikler
 

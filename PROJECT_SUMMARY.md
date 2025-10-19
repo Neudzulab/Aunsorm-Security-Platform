@@ -1,3 +1,9 @@
+<!--
+  File: PROJECT_SUMMARY.md
+  Purpose: Stakeholder-facing delivery snapshot for the Aunsorm security platform.
+  Last updated: Captured VibeCO v0.7.0 documentation alignment and architecture governance sync.
+-->
+
 # Aunsorm Security Platform
 
 > Calibration-bound cryptography and zero-trust automation delivered as a coordinated Rust workspace.
@@ -51,6 +57,7 @@
 |------|------------|---------|
 | 2025-03-01 | 5% | Plan structure aligned with VibeCO template; legacy requirements preserved for traceability. |
 | 2025-03-02 | 8% | Agent-specific milestones drafted; cross-doc sync tasks enumerated. |
+| 2025-03-05 | 12% | README architecture tree ve plan belgeleri VibeCO v0.7.0 formatına yükseltildi; dosya başlıkları eklendi. |
 
 ## Roadmap
 | Milestone | Due date | Owner | Focus |
@@ -69,3 +76,4 @@
 ## Additional Notes
 - Revizyon kilidi policy remains in effect; new tasks must be appended with `Revize:` references rather than editing locked items.
 - PROJECT_SUMMARY.md and PLAN.md should be reviewed together during sprint kickoffs to avoid divergence.
+- VibeCO v0.7.0 mimari ağaç ve dosya başlık yönergeleri tüm yeni dokümantasyon değişiklikleri için temel kontrol listesi olarak uygulanır.
