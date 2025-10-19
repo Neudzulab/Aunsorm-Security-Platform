@@ -16,7 +16,7 @@
 - [x] STEP-AUN-004: Deliver identity flows (JWT, X.509, KMS) integration tests in tests/data/ with CI gating.
   - Identity flow fixture (`tests/data/identity/identity_flow_alpha.json`) and integration test harness (`tests/tests/identity_flows.rs`) enforce deterministic JWT/KMS/X.509 coverage in CI.
   - owner: @IdentityAgent
-- [ ] STEP-AUN-005: Refresh interop benchmarking (benches/, fuzz/, crates/pytests/) and publish 10k-exec sanity artifacts.
+- [x] STEP-AUN-005: Refresh interop benchmarking (benches/, fuzz/, crates/pytests/) and publish 10k-exec sanity artifacts. (Ref: `docs/src/operations/testing.md`, `scripts/interop-sanity.sh`.)
   - owner: @InteropAgent
 
 ## Roles & Owners
