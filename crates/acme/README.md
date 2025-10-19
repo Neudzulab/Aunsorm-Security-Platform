@@ -23,6 +23,8 @@ kullanılacaktır.
 - Ed25519, ECDSA P-256 ve RSA (RS256) hesap anahtarlarıyla ACME JWS
   (`protected`, `payload`, `signature`) üretir; `kid` veya JWK tabanlı
   başlık bağlamını destekler.
+- ACME hesap anahtarları için RFC 7638 uyumlu JWK thumbprint değerleri
+  üretir; key-authorization hesaplamalarında kullanılabilir.
 
 ## Testler
 

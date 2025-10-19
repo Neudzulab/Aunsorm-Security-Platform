@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fmt;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -13,7 +14,7 @@ use rsa::pkcs1v15::SigningKey as RsaSigningKey;
 use rsa::traits::PublicKeyParts;
 use rsa::{RsaPrivateKey, RsaPublicKey};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use signature::Error as SignatureError;
 use thiserror::Error;
 use url::Url;
@@ -119,6 +120,17 @@ impl Ed25519AccountKey {
     #[must_use]
     pub fn jwk(&self) -> Ed25519Jwk {
         Ed25519Jwk::from_verifying_key(&self.verifying_key())
+    }
+
+    /// JWK başlık verilerinden RFC 7638 uyumlu thumbprint üretir.
+    #[must_use]
+    pub fn jwk_thumbprint(&self) -> String {
+        let jwk = self.jwk();
+        compute_jwk_thumbprint(&[
+            ("crv", jwk.crv.as_str()),
+            ("kty", jwk.kty.as_str()),
+            ("x", jwk.x.as_str()),
+        ])
     }
 
     /// Ham payload byte dizisini imzalayıp ACME JWS çıktısı üretir.
@@ -254,6 +266,18 @@ impl EcdsaP256AccountKey {
         EcdsaP256Jwk::from_verifying_key(&self.verifying_key())
     }
 
+    /// JWK başlık verilerinden RFC 7638 uyumlu thumbprint üretir.
+    #[must_use]
+    pub fn jwk_thumbprint(&self) -> String {
+        let jwk = self.jwk();
+        compute_jwk_thumbprint(&[
+            ("crv", jwk.crv.as_str()),
+            ("kty", jwk.kty.as_str()),
+            ("x", jwk.x.as_str()),
+            ("y", jwk.y.as_str()),
+        ])
+    }
+
     /// Ham payload byte dizisini imzalayıp ACME JWS çıktısı üretir.
     ///
     /// # Errors
@@ -357,6 +381,17 @@ impl RsaAccountKey {
     #[must_use]
     pub fn jwk(&self) -> RsaJwk {
         RsaJwk::from_public_key(self.verifying_key().as_ref())
+    }
+
+    /// JWK başlık verilerinden RFC 7638 uyumlu thumbprint üretir.
+    #[must_use]
+    pub fn jwk_thumbprint(&self) -> String {
+        let jwk = self.jwk();
+        compute_jwk_thumbprint(&[
+            ("e", jwk.e.as_str()),
+            ("kty", jwk.kty.as_str()),
+            ("n", jwk.n.as_str()),
+        ])
     }
 
     /// Ham payload byte dizisini imzalayıp ACME JWS çıktısı üretir.
@@ -469,6 +504,16 @@ fn sign_payload_internal<J: Serialize>(
         payload,
         signature,
     })
+}
+
+fn compute_jwk_thumbprint(entries: &[(&str, &str)]) -> String {
+    let mut map = BTreeMap::new();
+    for (key, value) in entries {
+        map.insert(*key, *value);
+    }
+    let canonical = serde_json::to_vec(&map).expect("jwk thumbprint serialization");
+    let digest = Sha256::digest(canonical);
+    URL_SAFE_NO_PAD.encode(digest)
 }
 
 #[cfg(test)]
@@ -618,6 +663,15 @@ mod tests {
     }
 
     #[test]
+    fn ed25519_thumbprint_is_stable() {
+        let key = sample_key();
+        assert_eq!(
+            key.jwk_thumbprint(),
+            "RdsIdO3CsMDzCjNZvzh9oqMmTgMASg3jgoAi8dXZLIQ"
+        );
+    }
+
+    #[test]
     fn ecdsa_sign_payload_with_jwk_binding() {
         let key = sample_p256_key();
         let payload = br#"{"resource":"newOrder"}"#;
@@ -689,6 +743,15 @@ mod tests {
     }
 
     #[test]
+    fn ecdsa_thumbprint_is_stable() {
+        let key = sample_p256_key();
+        assert_eq!(
+            key.jwk_thumbprint(),
+            "gWjt7nmB1udyFpLYVp0SxJnI8lJEvl7q8AFYZRqnGV8"
+        );
+    }
+
+    #[test]
     fn ecdsa_from_bytes_rejects_zero_scalar() {
         let err = EcdsaP256AccountKey::from_bytes(&[0_u8; 32]).unwrap_err();
         assert!(matches!(err, JwsError::InvalidEcdsaKey(_)));
@@ -746,5 +809,14 @@ mod tests {
         let verifying = key.verifying_key();
         assert_eq!(decoded_n, verifying.as_ref().n().to_bytes_be());
         assert_eq!(decoded_e, verifying.as_ref().e().to_bytes_be());
+    }
+
+    #[test]
+    fn rsa_thumbprint_is_stable() {
+        let key = sample_rsa_key();
+        assert_eq!(
+            key.jwk_thumbprint(),
+            "eUhjIXanXay3iIPcEh1jwOSpEEds2erAbAq3AdZ0sT8"
+        );
     }
 }
