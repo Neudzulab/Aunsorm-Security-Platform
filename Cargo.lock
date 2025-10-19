@@ -518,6 +518,7 @@ dependencies = [
  "aunsorm-packet",
  "aunsorm-server",
  "aunsorm-x509",
+ "axum",
  "base64 0.21.7",
  "ed25519-dalek",
  "hex",
@@ -529,6 +530,7 @@ dependencies = [
  "tempfile",
  "tiny_http",
  "tokio",
+ "tower 0.4.13",
  "x509-parser 0.18.0",
 ]
 
