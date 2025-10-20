@@ -1247,10 +1247,9 @@ impl ServerState {
             return Some(min);
         }
         let span = max.checked_sub(min)?;
-        let range = span
-            .checked_add(1)
-            .expect("range overflow when sampling randomness");
-        let threshold = u64::MAX - u64::MAX % range;
+        let range = u128::from(span) + 1;
+        let total_space = u128::from(u64::MAX) + 1;
+        let threshold = total_space - total_space % range;
 
         // Constant-time rejection sampling:
         // Tüm chunk'lar işlenir ve veri bağımlı dallanma kullanılmaz
@@ -1260,10 +1259,14 @@ impl ServerState {
         for chunk in entropy.chunks_exact(8) {
             let mut buf = [0_u8; 8];
             buf.copy_from_slice(chunk);
-            let candidate = u64::from_be_bytes(buf);
+            let candidate = u128::from(u64::from_be_bytes(buf));
 
             // Her zaman hesapla: hem mod işlemi hem de eşik kontrolü
-            let result = min + candidate % range;
+            let offset = u64::try_from(candidate % range)
+                .expect("entropy map offset should always fit within u64 range");
+            let result = min
+                .checked_add(offset)
+                .expect("result overflow when sampling randomness");
             let is_valid = u64::from(candidate < threshold);
 
             // Sadece ilk geçerli değeri seç: (1 ^ found_mask) bitwise olarak "bulunmadı"yı temsil eder
@@ -1409,5 +1412,27 @@ mod tests {
 
         let result = ServerState::map_entropy_to_range(&entropy, 10, 15);
         assert_eq!(result, Some(10));
+    }
+
+    #[test]
+    fn map_entropy_to_range_handles_full_u64_span() {
+        let mut entropy = [0_u8; 32];
+        entropy[..8].copy_from_slice(&u64::MAX.to_be_bytes());
+
+        let result = ServerState::map_entropy_to_range(&entropy, 0, u64::MAX);
+        assert_eq!(result, Some(u64::MAX));
+
+        let min = u64::MAX - 5;
+        let max = u64::MAX;
+        let range = u128::from(max - min) + 1;
+        let total_space = u128::from(u64::MAX) + 1;
+        let threshold = total_space - total_space % range;
+        let valid_candidate = u64::try_from(threshold - 1).expect("threshold fits in u64");
+        entropy[8..16].copy_from_slice(&valid_candidate.to_be_bytes());
+
+        let expected_offset =
+            u64::try_from(valid_candidate as u128 % range).expect("offset fits in u64");
+        let result = ServerState::map_entropy_to_range(&entropy, min, max);
+        assert_eq!(result, Some(min + expected_offset));
     }
 }
