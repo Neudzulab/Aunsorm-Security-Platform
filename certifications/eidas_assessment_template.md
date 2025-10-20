@@ -35,7 +35,18 @@
 
 > **İpucu:** Her satır için “Durum” alanını `✅ Uyumlu`, `⚠️ İyileştirme Gerekiyor` veya `🚧 İncelemede` olarak güncelleyin.
 
-## 5. Kontrol Doğrulama Detayları
+## 5. Blockchain Kayıt İzleme
+- **Ledger Entegrasyonu:**
+  - `fabric_anchor_ref`, `quorum_audit_ref` ve `travel_rule_bundle` alanları için son blok numaralarını ve hash değerlerini kaydedin.
+  - Hyperledger Fabric ve Quorum kayıtları arasında `calibration_ref` uyumunu doğrulayın; uyuşmazlık varsa `retention_policy_mismatch` olaylarını belgeleyin.
+- **Kayıt Yaşam Döngüsü:**
+  - `mint`, `rotate`, `retire` işlemlerinin her biri için tetikleyen servis (örn. `AuditRelay`, `RetentionSync`) ve zaman damgasını not alın.
+  - Her kayıt için Travel Rule veri paketinin (`TravelRuleBridge`) nasıl bağlandığını ve maskeleme stratejisini açıklayın.
+- **Denetim Adımları:**
+  - `tests/blockchain/integrity_cases.rs` sonuçlarını ekleyerek ledger bütünlüğü doğrulamasını özetleyin.
+  - `docs/src/operations/blockchain-integration.md` runbook'unda listelenen operasyon kontrol adımlarının durumunu raporlayın.
+
+## 6. Kontrol Doğrulama Detayları
 - **Kriter Adı:**
   - Kontrol Açıklaması
   - Kullanılan Test Yöntemi (örn. belge inceleme, teknik test, röportaj)
@@ -43,22 +54,22 @@
   - Sonuç ve değerlendirme
 - Kontroller arasında eIDAS Seviye 2 (Signatures) ve Seviye 3 (Qualified Signature) ayrımını belirtin.
 
-## 6. Varlık ve Kanıt Envanteri
+## 7. Varlık ve Kanıt Envanteri
 | Kanıt ID | Tür | Kaynak | Saklama Konumu | Hash/Checksum | İnceleme Tarihi |
 | --- | --- | --- | --- | --- | --- |
 | E-001 | Politika Belgesi | `docs/policies/` | Git Commit `abc1234` | SHA256(...) | 2024-05-12 |
 | E-002 | Test Raporu | `tests/certifications/` | Artefakt ID | SHA256(...) | 2024-05-12 |
 
-## 7. Risk ve Düzeltici Faaliyet Planı
+## 8. Risk ve Düzeltici Faaliyet Planı
 | Risk ID | Kategori | Tanım | Etki | Olasılık | Öncelik | Düzeltici Faaliyet | Sorumlu | Hedef Tarih | Durum |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
-## 8. İzleme ve Yeniden Değerlendirme
+## 9. İzleme ve Yeniden Değerlendirme
 - Periyodik takip planı (örn. yıllık, yarı yıllık)
 - Denetim planındaki mil taşları
 - Sürekli izleme metrikleri (telemetri, oturum istatistikleri, PQC testleri)
 
-## 9. Ekler
+## 10. Ekler
 - **Ek A:** Test senaryoları ve sonuç özetleri
 - **Ek B:** Politika ve prosedür referans listesi
 - **Ek C:** Yetkilendirme matrisleri

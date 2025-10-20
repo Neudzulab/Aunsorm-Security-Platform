@@ -58,22 +58,28 @@
 
 > **İşaretleme Rehberi:** Durum alanını `✅ Uygun`, `⚠️ İyileştirme Gerekli`, `🚧 Denetimde` olarak güncelleyin. Kanıt kolonunda ilgili artefakt ID’sini veya depo referansını belirtin.
 
-## 5. Kontrol Test Sonuçları
+## 5. Blockchain Kayıt Süreçleri
+- **Ledger Kapsamı:** Denetlenen dönemde kullanılan Hyperledger Fabric ve Quorum ağlarını, ilgili kanal/sözleşme adlarını ve erişim politikalarını belgeleyin.
+- **Metaveri İzleme:** `AuditAssetRegistry` kayıtlarındaki `retention_policy`, `travel_rule_bundle` ve `calibration_ref` alanlarının nasıl üretildiğini ve doğrulandığını açıklayın.
+- **İz Sürme:** `RetentionSync`, `AuditRelay` ve `TravelRuleBridge` servis log'larının nasıl toplandığını, hash'lendiğini ve `certifications/compliance_exports/` altında nasıl saklandığını belirtin.
+- **Test Kanıtları:** `tests/blockchain/cross_network.rs` ve `tests/blockchain/integrity_cases.rs` sonuçlarını özetleyerek ledger bütünlüğü kontrollerini rapora ekleyin.
+
+## 6. Kontrol Test Sonuçları
 - Test adı, test edilen dönem, beklenen sonuç
 - Uygulanan prosedürler (ör. örnekleme yöntemi, log analizi, yeniden yürütme)
 - Elde edilen bulgular ve değerlendirme
 - Bağlı risk seviyesi (Düşük/Orta/Yüksek)
 
-## 6. İstisnalar ve Yönetim Yanıtları
+## 7. İstisnalar ve Yönetim Yanıtları
 | İstisna ID | Kriter | Bulgular | Etki | Yönetim Yanıtı | Düzeltici Aksiyon | Hedef Tarih | Durum |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 
-## 7. Sürekli İzleme ve Gelişim
+## 8. Sürekli İzleme ve Gelişim
 - Denetim sonrası takip mekanizmaları
 - Otomatik kontroller (ör. telemetri uyarıları, CI kontrolleri)
 - Gelecek denetimlere hazırlık aksiyonları
 
-## 8. Ekler
+## 9. Ekler
 - **Ek A:** Kanıt envanteri listesi ve imzaları
 - **Ek B:** Denetim kapsamı dışında kalan bileşenler
 - **Ek C:** Terimler sözlüğü

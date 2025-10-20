@@ -31,7 +31,9 @@
   - Fixture gereksinimleri (`tests/data/blockchain/`) Travel Rule, AML ve hash kilitleme kontrollerini doğrulayacak alan setleriyle belirlendi; regresyon testleri veri kayıt sayısını ve zorunlu alanları doğrular.
 
 ### Uzun Vadeli Sertifikasyon (31 Mart 2025)
-- [ ] eIDAS ve SOC 2 için blokzincir kayıt süreçlerinin bağımsız denetim raporlarını üret ve `certifications/` altında paylaşılacak şablonları tanımla.
+- [x] eIDAS ve SOC 2 için blokzincir kayıt süreçlerinin bağımsız denetim raporlarını üret ve `certifications/` altında paylaşılacak şablonları tanımla.
+  - `certifications/eidas_assessment_template.md` dosyası, Fabric/Quorum çapalama kayıtlarının nasıl belgelenmesi gerektiğini belirten "Blockchain Kayıt İzleme" bölümünü ve Travel Rule kanıt eşlemesini içerir.
+  - `certifications/soc2_report_template.md` dosyası, Quorum `AuditAssetRegistry` metaverilerinin Trust Services Criteria matrisleri ile ilişkilendirildiği denetim adımlarını tanımlar.
 - [x] FATF Travel Rule uyumluluğu için zincir üstü işlem izleme ve raporlama entegrasyonlarını değerlendir.
   - Travel Rule veri eşlemesi, TravelRuleBridge mimarisi ve raporlama mil taşları [`docs/src/operations/blockchain-integration.md`](../operations/blockchain-integration.md#fatf-travel-rule-entegrasyon-stratejisi) bölümünde planlandı.
 - [ ] Müşteri başına saklama politikaları ve anahtar silme prosedürleri için denetim izlerini Blockchain katmanıyla ilişkilendir.
