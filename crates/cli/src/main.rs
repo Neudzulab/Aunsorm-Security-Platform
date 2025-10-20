@@ -1882,6 +1882,7 @@ fn emit_text(value: &str, out: Option<&Path>) -> CliResult<()> {
         if is_stdout_path(path) {
             println!("{value}");
         } else {
+            ensure_parent_dir(path)?;
             let mut owned = value.to_owned();
             owned.push('\n');
             fs::write(path, owned)?;
@@ -1905,6 +1906,7 @@ fn write_bytes(path: &Path, data: &[u8]) -> CliResult<()> {
         stdout.write_all(data)?;
         stdout.flush()?;
     } else {
+        ensure_parent_dir(path)?;
         fs::write(path, data)?;
     }
     Ok(())
@@ -2985,17 +2987,22 @@ fn save_replay_store(path: &Path, store: &PersistedReplayStore) -> CliResult<()>
     write_json_pretty(path, store)
 }
 
+fn ensure_parent_dir(path: &Path) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+    Ok(())
+}
+
 fn write_json_pretty<T: Serialize>(path: &Path, value: &T) -> CliResult<()> {
     if is_stdout_path(path) {
         let json = serde_json::to_string_pretty(value)?;
         println!("{json}");
         return Ok(());
     }
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)?;
-        }
-    }
+    ensure_parent_dir(path)?;
     let json = serde_json::to_string_pretty(value)?;
     fs::write(path, json.as_bytes())?;
     Ok(())
@@ -3006,11 +3013,7 @@ fn write_text_file(path: &Path, contents: &str) -> CliResult<()> {
         println!("{contents}");
         return Ok(());
     }
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)?;
-        }
-    }
+    ensure_parent_dir(path)?;
     fs::write(path, contents.as_bytes())?;
     Ok(())
 }
@@ -3470,6 +3473,20 @@ mod tests {
     }
 
     #[test]
+    fn write_bytes_creates_parent_directories() {
+        let tmpdir = tempdir().expect("tmpdir");
+        let nested = tmpdir
+            .path()
+            .join("artifacts")
+            .join("raw")
+            .join("coord.bin");
+        let payload = [0x42_u8; 16];
+        write_bytes(&nested, &payload).expect("write bytes");
+        let raw = fs::read(&nested).expect("raw nested");
+        assert_eq!(raw, payload);
+    }
+
+    #[test]
     fn handle_calib_coord_respects_raw_output() {
         let password = "correct horse battery staple";
         let org_salt_b64 = "V2VBcmVLdXQuZXU=";
@@ -3551,6 +3568,15 @@ mod tests {
         emit_text("deneme çıktısı", Some(tmp.path())).expect("emit text");
         let written = fs::read_to_string(tmp.path()).expect("read");
         assert_eq!(written, "deneme çıktısı\n");
+    }
+
+    #[test]
+    fn emit_text_creates_parent_directories() {
+        let tmpdir = tempdir().expect("tmpdir");
+        let nested = tmpdir.path().join("reports").join("pq").join("status.txt");
+        emit_text("durum", Some(&nested)).expect("emit text");
+        let written = fs::read_to_string(&nested).expect("read nested");
+        assert_eq!(written, "durum\n");
     }
 
     #[test]
