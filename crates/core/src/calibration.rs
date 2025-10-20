@@ -161,6 +161,31 @@ impl CalibrationRange {
 
         lower
     }
+
+    /// Verilen değerin aralığın adım ızgarası ile hizalı olup olmadığını
+    /// kontrol eder.
+    ///
+    /// Aralık dışındaki değerler `false` döndürür. Adım ızgarası, aralık
+    /// başlangıcından itibaren `step` büyüklüğünde ilerleyerek hesaplanır.
+    ///
+    /// ```
+    /// use aunsorm_core::CalibrationRange;
+    ///
+    /// let range = CalibrationRange { start: 100, end: 120, step: 4 };
+    /// assert!(range.is_step_aligned(100));
+    /// assert!(range.is_step_aligned(108));
+    /// assert!(!range.is_step_aligned(110));
+    /// assert!(!range.is_step_aligned(200));
+    /// ```
+    #[must_use]
+    pub const fn is_step_aligned(&self, value: u16) -> bool {
+        if value < self.start || value > self.end {
+            return false;
+        }
+
+        let step = if self.step == 0 { 1 } else { self.step };
+        (value - self.start) % step == 0
+    }
 }
 
 /// Kalibrasyon kimliğini temsil eden tür.
@@ -623,5 +648,29 @@ mod tests {
 
         // Üst adım aralığı aştığında alt adım seçilir.
         assert_eq!(range.clamp(135), 132);
+    }
+
+    #[test]
+    fn calibration_range_reports_step_alignment() {
+        let range = CalibrationRange {
+            start: 100,
+            end: 120,
+            step: 4,
+        };
+
+        assert!(range.is_step_aligned(100));
+        assert!(range.is_step_aligned(108));
+        assert!(range.is_step_aligned(120));
+        assert!(!range.is_step_aligned(102));
+        assert!(!range.is_step_aligned(130));
+
+        let zero_step = CalibrationRange {
+            start: 50,
+            end: 55,
+            step: 0,
+        };
+        assert!(zero_step.is_step_aligned(50));
+        assert!(zero_step.is_step_aligned(51));
+        assert!(!zero_step.is_step_aligned(60));
     }
 }
