@@ -916,18 +916,18 @@ impl ServerState {
             Ok(coerced)
         };
 
-        let mut otel = OtelPayload::new();
-        otel.add_counter("pending_auth_requests", pending_u64);
-        otel.add_counter("active_tokens", active_u64);
-        otel.add_gauge("sfu_contexts", coerce_to_f64(sfu_u64, "SFU bağlam sayısı")?);
-        otel.add_gauge(
-            "mdm_registered_devices",
-            coerce_to_f64(devices_u64, "MDM cihaz sayısı")?,
-        );
-
         let map_err = |err: crate::quic::datagram::DatagramError| {
             ServerError::Configuration(format!("HTTP/3 datagram üretilemedi: {err}"))
         };
+
+        let mut otel = OtelPayload::new();
+        otel.add_counter("pending_auth_requests", pending_u64);
+        otel.add_counter("active_tokens", active_u64);
+        let sfu_gauge = coerce_to_f64(sfu_u64, "SFU bağlam sayısı")?;
+        otel.add_gauge("sfu_contexts", sfu_gauge).map_err(map_err)?;
+        let devices_gauge = coerce_to_f64(devices_u64, "MDM cihaz sayısı")?;
+        otel.add_gauge("mdm_registered_devices", devices_gauge)
+            .map_err(map_err)?;
 
         let mut sequence = base_sequence;
         let telemetry = QuicDatagramV1::new(sequence, timestamp_ms, DatagramPayload::Otel(otel))

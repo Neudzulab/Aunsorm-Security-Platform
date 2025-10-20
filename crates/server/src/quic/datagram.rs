@@ -30,6 +30,9 @@ pub enum DatagramError {
     /// Zaman damgası `u64` sınırını aştı.
     #[error("timestamp overflow")]
     TimestampOverflow,
+    /// Gauge metric value is not finite.
+    #[error("gauge '{name}' value must be finite (got {value})")]
+    NonFiniteGauge { name: String, value: f64 },
 }
 
 /// Datagram kanal türleri.
@@ -134,11 +137,17 @@ impl OtelPayload {
     }
 
     /// Gauge örneği ekler.
-    pub fn add_gauge(&mut self, name: impl Into<String>, value: f64) {
-        self.gauges.push(GaugeSample {
-            name: name.into(),
-            value,
-        });
+    ///
+    /// # Errors
+    ///
+    /// Eğer değer sonlu değilse [`DatagramError::NonFiniteGauge`] döner.
+    pub fn add_gauge(&mut self, name: impl Into<String>, value: f64) -> Result<(), DatagramError> {
+        let name = name.into();
+        if !value.is_finite() {
+            return Err(DatagramError::NonFiniteGauge { name, value });
+        }
+        self.gauges.push(GaugeSample { name, value });
+        Ok(())
     }
 
     /// Histogram örneği ekler.
@@ -355,12 +364,28 @@ mod tests {
         let mut otel = OtelPayload::new();
         otel.add_counter("pending_auth_requests", 3);
         otel.add_counter("active_tokens", 2);
-        otel.add_gauge("sfu_contexts", 1.0);
+        otel.add_gauge("sfu_contexts", 1.0)
+            .expect("gauge value is finite");
         let frame = QuicDatagramV1::new(1, 1_726_092_800_000, DatagramPayload::Otel(otel))
             .expect("datagram constructed");
         let encoded = frame.encode().expect("datagram encodes");
         assert!(encoded.len() <= MAX_WIRE_BYTES);
         // The reference length allows the PoC ölçüm tablosu için doğrulama sağlar.
         assert_eq!(encoded.len(), 72);
+    }
+
+    #[test]
+    fn gauge_values_must_be_finite() {
+        let mut otel = OtelPayload::new();
+        let err = otel
+            .add_gauge("sfu_contexts", f64::NAN)
+            .expect_err("non-finite values are rejected");
+        assert!(matches!(
+            err,
+            DatagramError::NonFiniteGauge {
+                name,
+                value
+            } if name == "sfu_contexts" && value.is_nan()
+        ));
     }
 }
