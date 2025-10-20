@@ -14,6 +14,7 @@
 - [Blockchain Entegrasyonu ve Runbook'u](operations/blockchain-integration.md)
 - [Operasyon Runbook'u: Müşteri Saklama & Anahtar İmha](operations/runbook-retention.md)
 - [OAuth API OpenAPI Şeması](operations/oauth-openapi.md)
+- [OAuth Web Entegrasyonu Rehberi](operations/oauth-web-integration.md)
 - [Pazar İstihbaratı ve Gelecek Vizyonu Çalıştayı](operations/market-intelligence.md)
 - [KMS Conformance ve Sertifikasyon Raporları](operations/kms-certification.md)
 - [Regülasyon Uyumluluk Kontrol Listesi](operations/compliance-checklist.md)

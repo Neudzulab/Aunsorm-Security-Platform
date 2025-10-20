@@ -195,28 +195,28 @@ Content-Type: application/json
 
 ### Frontend (Web App Integration)
 
-- [ ] Implement PKCE S256 client (generate `code_verifier`, compute `code_challenge`)
-- [ ] Generate random `state` (CSRF token, store in sessionStorage)
-- [ ] Call `/oauth/begin-auth` with all required params
-- [ ] Handle `code` + `state` in callback route
-- [ ] Validate returned `state` matches stored value
-- [ ] Call `/oauth/token` with `code_verifier` and `redirect_uri`
-- [ ] Store access token securely (HttpOnly cookie or sessionStorage)
+- [x] Implement PKCE S256 client (generate `code_verifier`, compute `code_challenge`)
+- [x] Generate random `state` (CSRF token, store in sessionStorage)
+- [x] Call `/oauth/begin-auth` with all required params
+- [x] Handle `code` + `state` in callback route
+- [x] Validate returned `state` matches stored value
+- [x] Call `/oauth/token` with `code_verifier` and `redirect_uri`
+- [x] Store access token securely (HttpOnly cookie or sessionStorage)
 
 ### Documentation
 
-- [ ] Update `README.md` OAuth2 section with new schema examples
-- [ ] Create `docs/operations/oauth-web-integration.md` (PKCE client guide)
+- [x] Update `README.md` OAuth2 section with new schema examples
+- [x] Create `docs/operations/oauth-web-integration.md` (PKCE client guide)
 - [x] Add OpenAPI/Swagger spec for updated endpoints
 - [x] Document redirect URI registration process
 
 ### Testing
 
-- [ ] Add `tests/oauth_rfc_compliance.rs`:
+- [x] Add `tests/oauth_rfc_compliance.rs`:
   - [x] Test full authorization code flow
   - [x] Test PKCE S256 validation
   - [x] Test `redirect_uri` security (open redirect prevention)
-  - [ ] Test `state` replay protection
+  - [x] Test `state` replay protection
   - [x] Test invalid scope rejection
   - [x] Test missing required params (400 errors)
 
@@ -372,6 +372,10 @@ class AunsormOAuthClient {
   }
 }
 ```
+
+> Not: Bu referans implementasyonu `apps/web/lib/oauth-client.ts` içinde
+> `AunsormOAuthClient` olarak üretim kalitesinde uygulanmıştır ve Vitest
+> senaryolarıyla doğrulanmaktadır.
 
 ## References
 

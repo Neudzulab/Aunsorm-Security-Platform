@@ -259,6 +259,42 @@ async fn authorization_code_is_single_use() {
 }
 
 #[tokio::test]
+async fn state_is_bound_to_authorization_code() {
+    let state = demo_state();
+    let mut app = build_router(state.clone());
+    let (begin, verifier) = begin_flow(
+        &mut app,
+        "ivy",
+        Some("csrf-456"),
+        Some("read"),
+        "S256",
+        "https://app.example.com/callback",
+    )
+    .await;
+
+    let stored = state
+        .consume_auth_request(&begin.code)
+        .await
+        .expect("auth request stored");
+    assert_eq!(stored.state.as_deref(), Some("csrf-456"));
+    assert_eq!(stored.client_id, "demo-client");
+    assert_eq!(stored.redirect_uri, "https://app.example.com/callback");
+
+    let payload = json!({
+        "grant_type": "authorization_code",
+        "code": begin.code,
+        "code_verifier": verifier,
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback"
+    });
+    let error = exchange_code_error(&mut app, payload, StatusCode::BAD_REQUEST).await;
+    assert_eq!(error.error, "invalid_grant");
+    assert!(error
+        .error_description
+        .contains("Yetkilendirme kodu bulunamadı"));
+}
+
+#[tokio::test]
 async fn invalid_scope_rejected_during_authorization() {
     let state = demo_state();
     let mut app = build_router(state);
