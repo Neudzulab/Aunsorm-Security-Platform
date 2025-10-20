@@ -1253,28 +1253,33 @@ impl ServerState {
         let threshold = u64::MAX - u64::MAX % range;
 
         // Constant-time rejection sampling:
-        // Tüm chunklari işle, ama sadece ilk geçerli olanı kullan
-        let mut found_value: Option<u64> = None;
-        let mut found = false;
+        // Tüm chunk'lar işlenir ve veri bağımlı dallanma kullanılmaz
+        let mut selected = 0_u64;
+        let mut found_mask = 0_u64; // 0 -> bulunmadı, 1 -> bulundu
 
         for chunk in entropy.chunks_exact(8) {
             let mut buf = [0_u8; 8];
             buf.copy_from_slice(chunk);
             let candidate = u64::from_be_bytes(buf);
 
-            // Constant-time: her zaman hesapla, conditional assignment yap
-            let is_valid = candidate < threshold;
+            // Her zaman hesapla: hem mod işlemi hem de eşik kontrolü
             let result = min + candidate % range;
+            let is_valid = u64::from(candidate < threshold);
 
-            // Bitwise trick: ilk geçerli değeri sakla, sonrakilerini ignore et
-            // Bu sayede execution time entropy'den bağımsız olur
-            if is_valid && !found {
-                found_value = Some(result);
-                found = true;
-            }
+            // Sadece ilk geçerli değeri seç: (1 ^ found_mask) bitwise olarak "bulunmadı"yı temsil eder
+            let take_mask = is_valid & (1_u64 ^ found_mask);
+            let full_mask = u64::MAX.wrapping_mul(take_mask);
+
+            // Branchless seçim: maske 0xFFFF.. ise result, aksi halde mevcut değer korunur
+            selected = (selected & !full_mask) | (result & full_mask);
+            found_mask |= take_mask;
         }
 
-        found_value
+        if found_mask == 1 {
+            Some(selected)
+        } else {
+            None
+        }
     }
 
     /// Üretilen rastgele değeri ve kaynak entropisini döndürür.
@@ -1372,5 +1377,37 @@ impl TransparencyTreeSnapshot {
             return Ok(None);
         }
         KeyTransparencyLog::transcript_hash(&self.domain, &self.records).map(Some)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ServerState;
+
+    #[test]
+    fn map_entropy_to_range_selects_first_valid_candidate() {
+        let entropy = [0_u8; 32];
+        let result = ServerState::map_entropy_to_range(&entropy, 10, 15);
+        assert_eq!(result, Some(10));
+    }
+
+    #[test]
+    fn map_entropy_to_range_returns_none_when_all_candidates_invalid() {
+        let entropy = [0xFF_u8; 32];
+        let result = ServerState::map_entropy_to_range(&entropy, 10, 15);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn map_entropy_to_range_preserves_first_valid_value() {
+        let mut entropy = [0xFF_u8; 32];
+        // İlk chunk geçersiz (0xFF..). İkinci chunk 0 → 10 değeri.
+        entropy[8..16].copy_from_slice(&0_u64.to_be_bytes());
+        // Sonraki chunk'lar farklı geçerli değerler üretse bile ilk değer korunmalı.
+        entropy[16..24].copy_from_slice(&1_u64.to_be_bytes());
+        entropy[24..32].copy_from_slice(&2_u64.to_be_bytes());
+
+        let result = ServerState::map_entropy_to_range(&entropy, 10, 15);
+        assert_eq!(result, Some(10));
     }
 }

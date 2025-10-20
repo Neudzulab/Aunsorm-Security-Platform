@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `/oauth/begin-auth` now validates registered redirect URIs and scopes, returning RFC-compliant `invalid_redirect_uri` and
   `invalid_scope` errors when clients use unauthorized values.
+- Randomness API's entropy mapper now performs branchless constant-time rejection sampling to harden the `/random/number`
+  endpoint against timing analysis.
 
 ### Fixed
 - `derive_seed64_and_pdk` now rejects empty passwords, preventing accidental derivation of seeds from blank credentials.
