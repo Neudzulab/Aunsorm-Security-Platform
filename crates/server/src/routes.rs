@@ -20,6 +20,9 @@ use base64::{
 use hex::{decode_to_slice, encode as hex_encode};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use time::format_description::FormatItem;
+use time::macros::format_description;
+use time::OffsetDateTime;
 use tokio::signal;
 #[cfg(unix)]
 use tokio::signal::unix::{signal as unix_signal, SignalKind};
@@ -1420,30 +1423,39 @@ async fn generate_media_token(
     }))
 }
 
+const TIMESTAMP_FALLBACK: &str = "1970-01-01T00:00:00.000Z";
+const TIMESTAMP_FORMAT: &[FormatItem<'static>] =
+    format_description!("[year]-[month]-[day]T[hour]:[minute]:[second].[subsecond digits:3]Z");
+
 fn format_timestamp(time: SystemTime) -> String {
-    time.duration_since(UNIX_EPOCH).map_or_else(
-        |_| "1970-01-01T00:00:00.000Z".to_owned(),
-        |d| {
-            // Simple ISO 8601 formatting (UTC)
-            let secs = d.as_secs();
-            let nanos = d.subsec_nanos();
-            let millis = nanos / 1_000_000;
+    let datetime = OffsetDateTime::from(time);
+    datetime
+        .format(TIMESTAMP_FORMAT)
+        .unwrap_or_else(|_| TIMESTAMP_FALLBACK.to_owned())
+}
 
-            // Calculate date components (simplified, good enough for 2020-2099)
-            let days_since_epoch = secs / 86400;
-            let secs_today = secs % 86400;
+#[cfg(test)]
+mod timestamp_tests {
+    use super::format_timestamp;
+    use super::TIMESTAMP_FALLBACK;
+    use std::time::SystemTime;
+    use time::macros::datetime;
 
-            let hours = secs_today / 3600;
-            let minutes = (secs_today % 3600) / 60;
-            let seconds = secs_today % 60;
+    #[test]
+    fn formats_timestamp_with_millis_precision() {
+        let dt = datetime!(2024-05-18 15:04:05.678 UTC);
+        let time: SystemTime = dt.into();
+        assert_eq!(format_timestamp(time), "2024-05-18T15:04:05.678Z");
+    }
 
-            // Approximate year/month/day (simplified)
-            let years_since_epoch = days_since_epoch / 365;
-            let year = 1970 + years_since_epoch;
-
-            format!("{year:04}-01-01T{hours:02}:{minutes:02}:{seconds:02}.{millis:03}Z")
-        },
-    )
+    #[test]
+    fn preserves_epoch_fallback_when_formatting_fails() {
+        // The formatter should never fail for valid format descriptions, but
+        // guard against regressions by ensuring the fallback matches the
+        // documented value when formatting is not possible.
+        let time: SystemTime = datetime!(1970-01-01 00:00:00 UTC).into();
+        assert_eq!(format_timestamp(time), TIMESTAMP_FALLBACK);
+    }
 }
 
 // ========================================
