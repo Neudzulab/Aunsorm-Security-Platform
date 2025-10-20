@@ -891,6 +891,30 @@ async fn random_number_endpoint_returns_entropy() {
         .await
         .expect("response");
     assert_eq!(response3.status(), StatusCode::BAD_REQUEST);
+
+    // Test 4: Range near u64::MAX
+    let app4 = build_router(setup_state());
+    let high_min = u64::MAX - 10;
+    let high_max = u64::MAX;
+    let high_uri = format!("/random/number?min={high_min}&max={high_max}");
+    let response4 = app4
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(&high_uri)
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response4.status(), StatusCode::OK);
+    let body4 = to_bytes(response4.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let payload4: RandomNumberPayload = serde_json::from_slice(&body4).expect("random json");
+    assert!((high_min..=high_max).contains(&payload4.value));
+    assert_eq!(payload4.min, high_min);
+    assert_eq!(payload4.max, high_max);
 }
 
 /// Smoke test: Random number distribution check (quick validation)

@@ -584,12 +584,6 @@ async fn random_number(
         ));
     }
 
-    if max > u64::MAX / 2 {
-        return Err(ApiError::invalid_request(
-            "max değeri çok büyük (güvenlik limiti: u64::MAX/2)",
-        ));
-    }
-
     let (value, entropy) = state.random_value_with_proof(min, max);
     Ok(Json(RandomNumberResponse {
         value,
