@@ -292,6 +292,7 @@ dependencies = [
  "base64 0.21.7",
  "ed25519-dalek",
  "http 0.2.12",
+ "idna",
  "p256",
  "pretty_assertions",
  "rand_chacha 0.3.1",
