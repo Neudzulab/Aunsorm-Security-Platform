@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional `blockchain-poc.yml` workflow guarded by `BLOCKCHAIN_POC_ENABLED`/manual dispatch for running the PoC harness end-to-end.
 - Cross-network harness plan with deterministic datasets (`tests/blockchain/cross_network.rs`) and accompanying fixtures for Fabric→Quorum and Quorum→Sepolia köprü akışları.
 - Identity flow integration test harness combining JWT, KMS and X.509 via deterministic fixtures (`tests/tests/identity_flows.rs`).
+- Linux/macOS ortamları için `cargo fmt`/`cargo clippy`/`cargo test` adımlarını tek komutla çalıştıran `scripts/test-all.sh` betiği.
 
 ### Changed
 - `/oauth/begin-auth` now validates registered redirect URIs and scopes, returning RFC-compliant `invalid_redirect_uri` and
