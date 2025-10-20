@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::net::IpAddr;
 
+use idna::domain_to_ascii;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde::Serialize as DeriveSerialize;
 use thiserror::Error;
@@ -60,7 +61,30 @@ impl OrderIdentifier {
             return Err(OrderIdentifierError::EmptyDns);
         }
 
-        let normalized = without_trailing_dot.to_ascii_lowercase();
+        let (has_wildcard, remainder) = without_trailing_dot
+            .strip_prefix("*.")
+            .map_or((false, without_trailing_dot), |stripped| (true, stripped));
+
+        if remainder.is_empty() {
+            return Err(OrderIdentifierError::InvalidDns {
+                value: trimmed.to_owned(),
+            });
+        }
+
+        let normalized_remainder = if remainder.is_ascii() {
+            remainder.to_ascii_lowercase()
+        } else {
+            domain_to_ascii(remainder).map_err(|_| OrderIdentifierError::InvalidDns {
+                value: trimmed.to_owned(),
+            })?
+        };
+
+        let normalized = if has_wildcard {
+            format!("*.{normalized_remainder}")
+        } else {
+            normalized_remainder
+        };
+
         if normalized.len() > 253 {
             return Err(OrderIdentifierError::InvalidDns {
                 value: trimmed.to_owned(),
@@ -74,8 +98,8 @@ impl OrderIdentifier {
                 });
             }
 
-            if label == "*" {
-                if index != 0 {
+            if has_wildcard && index == 0 {
+                if label != "*" {
                     return Err(OrderIdentifierError::InvalidDns {
                         value: trimmed.to_owned(),
                     });
@@ -363,6 +387,25 @@ mod tests {
     fn dns_identifier_allows_wildcard_prefix() {
         let identifier = OrderIdentifier::dns("*.example.com").expect("wildcard kabul edilmeli");
         assert_eq!(identifier.value(), Cow::Borrowed("*.example.com"));
+    }
+
+    #[test]
+    fn dns_identifier_normalizes_unicode_domains() {
+        let identifier = OrderIdentifier::dns("bücher.example").expect("idna desteklenmeli");
+        assert_eq!(identifier.value(), Cow::Borrowed("xn--bcher-kva.example"));
+    }
+
+    #[test]
+    fn dns_identifier_preserves_wildcard_with_unicode_tail() {
+        let identifier =
+            OrderIdentifier::dns("*.münich.example").expect("wildcard unicode ile çalışmalı");
+        assert_eq!(identifier.value(), Cow::Borrowed("*.xn--mnich-kva.example"));
+    }
+
+    #[test]
+    fn dns_identifier_accepts_trailing_dot_notation() {
+        let identifier = OrderIdentifier::dns("Example.COM.").expect("trailing dot kabul edilmeli");
+        assert_eq!(identifier.value(), Cow::Borrowed("example.com"));
     }
 
     #[test]

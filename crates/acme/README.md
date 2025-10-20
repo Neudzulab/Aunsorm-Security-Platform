@@ -22,6 +22,8 @@ kullanılacaktır.
   istemci soyutlamasıyla nonce havuzunu otomatik doldurur.
 - ACME `newOrder` istekleri için tip güvenli identifier doğrulaması ve
   zaman aralığı (`notBefore`/`notAfter`) içeren builder sağlar.
+- `newOrder` identifier doğrulaması IDNA normalizasyonu sayesinde
+  uluslararası alan adlarını ve wildcard kombinasyonlarını destekler.
 - Ed25519, ECDSA P-256 ve RSA (RS256) hesap anahtarlarıyla ACME JWS
   (`protected`, `payload`, `signature`) üretir; `kid` veya JWK tabanlı
   başlık bağlamını destekler.
