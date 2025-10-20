@@ -357,6 +357,8 @@ fn derive_hkdf_outputs(
 /// Salt uzunlukları yetersiz olduğunda veya Argon2/HKDF işlemleri başarısız olduğunda
 /// `CoreError` döner.
 ///
+/// * `CoreError::InvalidInput` — Parola boş olduğunda.
+///
 /// # Örnek
 /// ```
 /// use aunsorm_core::{kdf::{KdfProfile, KdfPreset}, derive_seed64_and_pdk};
@@ -385,6 +387,10 @@ pub fn derive_seed64_and_pdk(
     salt_chain: &[u8],
     profile: KdfProfile,
 ) -> Result<(SensitiveVec, SensitiveVec, KdfInfo), CoreError> {
+    if password.is_empty() {
+        return Err(CoreError::invalid_input("password must not be empty"));
+    }
+
     if salt_pwd.len() < 8 {
         return Err(CoreError::salt_too_short(
             "password salt must be >= 8 bytes",
@@ -459,6 +465,15 @@ mod tests {
         assert_eq!(pdk_a, pdk_b);
         assert_eq!(info_a.profile, info_b.profile);
         assert_eq!(info_a.password_salt_digest, info_b.password_salt_digest);
+    }
+
+    #[test]
+    fn derive_seed64_rejects_empty_password() {
+        let profile = KdfProfile::preset(KdfPreset::Low);
+        let err =
+            derive_seed64_and_pdk("", b"12345678", b"abcdefgh", b"ABCDEFGH", profile).unwrap_err();
+
+        assert!(matches!(err, CoreError::InvalidInput(_)));
     }
 
     #[test]
