@@ -59,3 +59,4 @@ rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 ring = "0.17"
 rsa = "0.9.8"
 url = "2.5"
+percent-encoding = "2.3"

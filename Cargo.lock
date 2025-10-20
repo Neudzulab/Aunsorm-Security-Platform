@@ -294,6 +294,7 @@ dependencies = [
  "http 0.2.12",
  "idna",
  "p256",
+ "percent-encoding",
  "pretty_assertions",
  "rand_chacha 0.3.1",
  "rsa",
