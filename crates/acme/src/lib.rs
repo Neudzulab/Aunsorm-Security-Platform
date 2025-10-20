@@ -5,6 +5,7 @@
 mod directory;
 mod jws;
 mod nonce;
+mod order;
 
 pub use directory::{AcmeDirectory, AcmeDirectoryError, AcmeDirectoryMeta, KnownEndpoint};
 pub use jws::{
@@ -14,4 +15,8 @@ pub use jws::{
 pub use nonce::{
     NewNonceRequester, NonceError, NonceManager, NonceManagerError, NoncePool, NonceRequestError,
     ReplayNonce, REPLAY_NONCE_HEADER,
+};
+pub use order::{
+    IdentifierKind, NewOrderError, NewOrderRequest, NewOrderRequestBuilder, OrderIdentifier,
+    OrderIdentifierError,
 };
