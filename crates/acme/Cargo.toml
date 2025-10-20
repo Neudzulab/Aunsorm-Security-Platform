@@ -17,6 +17,7 @@ sha2 = { workspace = true, features = ["oid"] }
 thiserror = { workspace = true }
 url = { workspace = true }
 idna = { workspace = true }
+percent-encoding = { workspace = true }
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 signature = { version = "2", default-features = false, features = ["std"] }
 zeroize = { workspace = true }

@@ -20,6 +20,9 @@ kullanılacaktır.
   saklar.
 - `NonceManager`, ACME `newNonce` uç noktasını çağırıp taşınabilir bir
   istemci soyutlamasıyla nonce havuzunu otomatik doldurur.
+- `NewAccountRequest` builder'ı ACME hesap oluşturma istekleri için
+  `mailto:`/`tel:` iletişim URI doğrulaması ve `externalAccountBinding`
+  kontrolleri sağlar.
 - ACME `newOrder` istekleri için tip güvenli identifier doğrulaması ve
   zaman aralığı (`notBefore`/`notAfter`) içeren builder sağlar.
 - `newOrder` identifier doğrulaması IDNA normalizasyonu sayesinde
