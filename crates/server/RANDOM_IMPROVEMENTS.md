@@ -64,22 +64,30 @@ fn map_entropy_to_range(entropy: &[u8; 32], min: u64, max: u64) -> Option<u64> {
     let span = max.checked_sub(min)?;
     let range = span.checked_add(1)?;
     let threshold = u64::MAX - u64::MAX % range;
-    
+
     // Constant-time: tüm chunk'ları kontrol et
-    let mut result: Option<u64> = None;
+    let mut selected = 0_u64;
+    let mut found_mask = 0_u64;
     for chunk in entropy.chunks_exact(8) {
         let mut buf = [0_u8; 8];
         buf.copy_from_slice(chunk);
         let candidate = u64::from_be_bytes(buf);
-        
-        // Sadece ilk geçerli değeri al (constant-time)
-        if candidate < threshold && result.is_none() {
-            result = Some(min + candidate % range);
-        }
+
+        let is_valid = u64::from(candidate < threshold);
+        let result = min + candidate % range;
+        let take_mask = is_valid & (1_u64 ^ found_mask);
+        let mask = u64::MAX.wrapping_mul(take_mask);
+
+        selected = (selected & !mask) | (result & mask);
+        found_mask |= take_mask;
     }
-    result
+
+    (found_mask == 1).then_some(selected)
 }
 ```
+
+**Durum (2025-03-05):** ✅ Uygulandı — `ServerState::map_entropy_to_range` mask tabanlı branchless seçim kullanır ve unit testlerle
+doğrulanır (`state.rs`).
 
 ### 3. ChaCha20-RNG Alternatifi (Öncelik: Düşük - Performans)
 
