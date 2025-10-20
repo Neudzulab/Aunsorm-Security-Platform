@@ -62,3 +62,12 @@ fn audit_and_ratchet_channels_are_tagged_correctly() {
     assert_eq!(ratchet_frame.payload, ratchet);
     assert_eq!(audit_frame.payload, audit);
 }
+
+#[test]
+fn gauge_values_must_be_finite() {
+    let mut otel = OtelPayload::new();
+    let err = otel
+        .add_gauge("invalid", f64::INFINITY)
+        .expect_err("non-finite gauge values must be rejected");
+    assert!(matches!(err, DatagramError::NonFiniteGauge { .. }));
+}
