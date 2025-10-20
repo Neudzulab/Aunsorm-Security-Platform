@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/oauth/begin-auth` now validates registered redirect URIs and scopes, returning RFC-compliant `invalid_redirect_uri` and
   `invalid_scope` errors when clients use unauthorized values.
 
+### Fixed
+- `derive_seed64_and_pdk` now rejects empty passwords, preventing accidental derivation of seeds from blank credentials.
+
 ### Documentation
 - README mimari ağacı VibeCO formatıyla yeniden yazıldı; endpoint durum etiketleri ve servis ağaç disiplini notları güncellendi.
 - PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.
