@@ -1388,6 +1388,12 @@ cargo clippy --all-targets --all-features
 cargo test --all-features
 ```
 
+Yerel otomasyon için Linux/macOS ortamlarında `./scripts/test-all.sh`,
+Windows üzerinde ise `pwsh ./scripts/test-all.ps1` komutları aynı
+pipeline'ı çalıştırır. Her iki betik de `--skip-fmt`, `--skip-clippy`
+ve `--skip-tests` bayrakları ile adımları seçmeli olarak atlamayı
+destekler.
+
 Gereksinimler ilerledikçe bu belge güncellenecektir.
 
 
