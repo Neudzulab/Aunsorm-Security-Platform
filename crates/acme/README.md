@@ -20,6 +20,8 @@ kullanılacaktır.
   saklar.
 - `NonceManager`, ACME `newNonce` uç noktasını çağırıp taşınabilir bir
   istemci soyutlamasıyla nonce havuzunu otomatik doldurur.
+- ACME `newOrder` istekleri için tip güvenli identifier doğrulaması ve
+  zaman aralığı (`notBefore`/`notAfter`) içeren builder sağlar.
 - Ed25519, ECDSA P-256 ve RSA (RS256) hesap anahtarlarıyla ACME JWS
   (`protected`, `payload`, `signature`) üretir; `kid` veya JWK tabanlı
   başlık bağlamını destekler.
