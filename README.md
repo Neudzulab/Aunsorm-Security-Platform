@@ -678,6 +678,42 @@ curl -I http://localhost:8080/health
 # Alt-Svc: h3=":8080"; ma=86400
 
 # OAuth2 PKCE Flow (RFC 6749 + RFC 7636)
+
+> Web entegrasyon ekipleri için `apps/web/lib/oauth-client.ts` içinde
+> `AunsormOAuthClient` sınıfı sağlanmıştır. PKCE `code_verifier` ve CSRF
+> `state` üretimi, `/oauth/begin-auth` çağrısı, callback doğrulaması ve
+> `/oauth/token` değişimi bu yardımcı ile otomatikleştirilebilir. Ayrıntılı
+> kullanım rehberi için [`docs/src/operations/oauth-web-integration.md`](docs/src/operations/oauth-web-integration.md)
+> belgesine bakın.
+
+```typescript
+// Proje yapınıza göre import yolunu uyarlayın.
+import { AunsormOAuthClient, MemoryStore } from '../apps/web/lib/oauth-client.js';
+
+const oauth = new AunsormOAuthClient({
+  baseUrl: 'https://auth.example.com',
+  storage: new MemoryStore(),
+});
+
+const { code } = await oauth.beginAuthorization({
+  clientId: 'webapp-123',
+  redirectUri: 'https://app.example.com/callback',
+  scope: 'read write',
+});
+
+const { code: verifiedCode } = oauth.handleCallback(window.location.href);
+const token = await oauth.exchangeToken({
+  code: verifiedCode,
+  clientId: 'webapp-123',
+  redirectUri: 'https://app.example.com/callback',
+});
+
+console.log('Access token stored in session', token.access_token);
+```
+
+CLI ile manuel doğrulama yapmak isteyen operasyon ekipleri aşağıdaki adımları izleyebilir:
+
+```bash
 # 1. Authorization Request
 CODE_VERIFIER="dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 CODE_CHALLENGE=$(echo -n "$CODE_VERIFIER" | openssl dgst -sha256 -binary | base64 | tr -d '=' | tr '+/' '-_')
