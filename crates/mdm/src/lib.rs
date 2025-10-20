@@ -372,7 +372,7 @@ impl MdmDirectory {
             .last_seen
             .checked_add(plan.renewal_interval())
             .unwrap_or(SystemTime::UNIX_EPOCH);
-        let next_renewal = system_time_to_unix(&renewal_at);
+        let next_renewal = system_time_to_unix(renewal_at);
         Ok(Some(DeviceCertificatePlan {
             device_id: record.device_id,
             owner: record.owner,
@@ -398,7 +398,7 @@ impl MdmDirectory {
     }
 }
 
-fn system_time_to_unix(time: &SystemTime) -> u64 {
+fn system_time_to_unix(time: SystemTime) -> u64 {
     time.duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or(0)

@@ -7,6 +7,7 @@ use serde::{Deserialize, Deserializer, Serializer};
 pub mod time {
     use super::{Deserialize, Deserializer, Duration, Serializer, SystemTime, UNIX_EPOCH};
 
+    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub fn serialize<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
