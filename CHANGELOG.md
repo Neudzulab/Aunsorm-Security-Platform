@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ACME `newOrder` identifier doğrulaması artık IDNA normalizasyonu ile uluslararası alan adlarını destekliyor.
 - ACME `newAccount` isteği builder'ı e-posta/telefon URI doğrulaması ve
   `externalAccountBinding` yapısı için zorunlu alan kontrolleri ekledi.
+- `HeadIdGenerator::from_env_with_namespace` yardımıyla HEAD-stamped ID jeneratörleri çalışma anında namespace geçersiz kılmayı
+  destekler hale geldi.
 - Hyperledger Fabric DID doğrulama PoC'u için `POST /blockchain/fabric/did/verify` endpoint'i ve `FabricDidRegistry` PoC kayıt deposu.
 - Server entegrasyon testleri: `fabric_did_verification_succeeds` ve `fabric_did_verification_rejects_tampered_anchor`.
 - Experimental `GET /http3/capabilities` endpoint exposing Alt-Svc metadata and QUIC datagram channel descriptors behind the `http3-experimental` feature flag.
@@ -35,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `invalid_scope` errors when clients use unauthorized values.
 - Randomness API's entropy mapper now performs branchless constant-time rejection sampling to harden the `/random/number`
   endpoint against timing analysis.
+- `/id/generate` endpoint'i, namespace doğrulama hatalarında artık `invalid_request` döndürerek misconfiguration ile istemci
+  hatalarını ayırt ediyor ve HEAD bilgisi için `from_env_with_namespace` yardımcısını kullanıyor.
 
 ### Fixed
 - `derive_seed64_and_pdk` now rejects empty passwords, preventing accidental derivation of seeds from blank credentials.

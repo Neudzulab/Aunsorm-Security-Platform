@@ -112,9 +112,23 @@ impl HeadIdGenerator {
     /// Ortamda geçerli bir HEAD değeri yoksa veya namespace uygunsuz ise
     /// [`IdError`] döner.
     pub fn from_env() -> Result<Self, IdError> {
-        let head = infer_head_from_env()?;
         let namespace =
             std::env::var("AUNSORM_ID_NAMESPACE").unwrap_or_else(|_| DEFAULT_NAMESPACE.to_owned());
+        Self::from_env_with_namespace(namespace)
+    }
+
+    /// Ortam değişkenlerinden HEAD bilgisini okuyarak verilen namespace ile
+    /// jeneratörü oluşturur.
+    ///
+    /// Bu yardımcı, varsayılan namespace yerine çalışma anında sağlanan
+    /// namespace'i kullanarak generator oluşturmayı kolaylaştırır.
+    ///
+    /// # Errors
+    ///
+    /// Ortamda geçerli bir HEAD değeri yoksa veya namespace doğrulaması
+    /// başarısız olursa [`IdError`] döner.
+    pub fn from_env_with_namespace(namespace: impl AsRef<str>) -> Result<Self, IdError> {
+        let head = infer_head_from_env()?;
         Self::with_namespace(head, namespace)
     }
 
@@ -681,6 +695,35 @@ mod tests {
             std::env::set_var("VERGEN_GIT_SHA", value);
         } else {
             std::env::remove_var("VERGEN_GIT_SHA");
+        }
+        if let Some(value) = prev_namespace {
+            std::env::set_var("AUNSORM_ID_NAMESPACE", value);
+        } else {
+            std::env::remove_var("AUNSORM_ID_NAMESPACE");
+        }
+    }
+
+    #[test]
+    fn from_env_with_namespace_overrides_request_namespace() {
+        let prev_head = std::env::var("AUNSORM_HEAD").ok();
+        let prev_namespace = std::env::var("AUNSORM_ID_NAMESPACE").ok();
+
+        std::env::set_var("AUNSORM_HEAD", HEAD);
+        std::env::set_var("AUNSORM_ID_NAMESPACE", "default-ns");
+
+        let generator =
+            HeadIdGenerator::from_env_with_namespace("Ops/Delivery").expect("generator");
+        assert_eq!(generator.namespace(), "ops-delivery");
+        let expected_prefix = {
+            let digest = Sha256::digest(HEAD.as_bytes());
+            hex::encode(&digest[..FINGERPRINT_PREFIX_BYTES])
+        };
+        assert_eq!(generator.head_prefix(), expected_prefix);
+
+        if let Some(value) = prev_head {
+            std::env::set_var("AUNSORM_HEAD", value);
+        } else {
+            std::env::remove_var("AUNSORM_HEAD");
         }
         if let Some(value) = prev_namespace {
             std::env::set_var("AUNSORM_ID_NAMESPACE", value);

@@ -1040,10 +1040,16 @@ mod tests {
     use super::*;
     use axum::body::to_bytes;
     use std::net::SocketAddr;
+    use std::sync::OnceLock;
     use std::time::Duration;
+    use tokio::sync::Mutex;
     use tower::ServiceExt;
 
     use crate::config::{LedgerBackend, ServerConfig};
+
+    const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    static ENV_GUARD: OnceLock<Mutex<()>> = OnceLock::new();
 
     fn build_test_state() -> Arc<ServerState> {
         let listen: SocketAddr = "127.0.0.1:9443".parse().expect("socket address");
@@ -1118,6 +1124,94 @@ mod tests {
         assert_eq!(payload.datagrams.max_payload_bytes, Some(MAX_PAYLOAD_BYTES));
         assert_eq!(payload.datagrams.channels.len(), 3);
     }
+
+    #[tokio::test]
+    async fn id_generate_honours_namespace_override() {
+        let _guard = ENV_GUARD.get_or_init(|| Mutex::new(())).lock().await;
+        let prev_head = std::env::var("AUNSORM_HEAD").ok();
+        let prev_namespace = std::env::var("AUNSORM_ID_NAMESPACE").ok();
+
+        std::env::set_var("AUNSORM_HEAD", HEAD);
+        std::env::set_var("AUNSORM_ID_NAMESPACE", "default");
+
+        let state = build_test_state();
+        let router = build_router(Arc::clone(&state));
+
+        let payload = serde_json::json!({ "namespace": "Ops/Delivery" });
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/id/generate")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(payload.to_string()))
+            .expect("request is built");
+
+        let response = router.oneshot(request).await.expect("request succeeds");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body collected");
+        let generated: GenerateIdResponse = serde_json::from_slice(&body).expect("response parses");
+        assert_eq!(generated.namespace, "ops-delivery");
+        assert!(generated.id.starts_with("aid.ops-delivery."));
+        let expected_prefix = HeadIdGenerator::with_namespace(HEAD, "ops-delivery")
+            .expect("generator")
+            .head_prefix()
+            .to_owned();
+        assert_eq!(generated.head_prefix, expected_prefix);
+
+        if let Some(value) = prev_head {
+            std::env::set_var("AUNSORM_HEAD", value);
+        } else {
+            std::env::remove_var("AUNSORM_HEAD");
+        }
+        if let Some(value) = prev_namespace {
+            std::env::set_var("AUNSORM_ID_NAMESPACE", value);
+        } else {
+            std::env::remove_var("AUNSORM_ID_NAMESPACE");
+        }
+    }
+
+    #[tokio::test]
+    async fn id_generate_rejects_invalid_namespace() {
+        let _guard = ENV_GUARD.get_or_init(|| Mutex::new(())).lock().await;
+        let prev_head = std::env::var("AUNSORM_HEAD").ok();
+        let prev_namespace = std::env::var("AUNSORM_ID_NAMESPACE").ok();
+
+        std::env::set_var("AUNSORM_HEAD", HEAD);
+        std::env::remove_var("AUNSORM_ID_NAMESPACE");
+
+        let state = build_test_state();
+        let router = build_router(state);
+
+        let payload = serde_json::json!({ "namespace": "***" });
+        let request = axum::http::Request::builder()
+            .method("POST")
+            .uri("/id/generate")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(axum::body::Body::from(payload.to_string()))
+            .expect("request is built");
+
+        let response = router.oneshot(request).await.expect("request succeeds");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body collected");
+        let error: serde_json::Value = serde_json::from_slice(&body).expect("payload parses");
+        assert_eq!(error["error"], "invalid_request");
+        let description = error["error_description"].as_str().expect("description");
+        assert!(description.contains("Namespace"));
+
+        if let Some(value) = prev_head {
+            std::env::set_var("AUNSORM_HEAD", value);
+        } else {
+            std::env::remove_var("AUNSORM_HEAD");
+        }
+        if let Some(value) = prev_namespace {
+            std::env::set_var("AUNSORM_ID_NAMESPACE", value);
+        }
+    }
 }
 // ========================================================================
 // ID GENERATION HANDLERS (v0.4.5)
@@ -1133,7 +1227,7 @@ struct GenerateIdRequest {
 }
 
 /// POST /id/generate response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct GenerateIdResponse {
     /// Generated ID string
     id: String,
@@ -1199,35 +1293,28 @@ struct VerifyHeadResponse {
     fingerprint: String,
 }
 
+fn generator_config_error(error: &IdError) -> ApiError {
+    ApiError::server_error(format!(
+        "ID generator oluşturulamadı: {error}. Lütfen AUNSORM_HEAD veya GITHUB_SHA environment variable'ını ayarlayın."
+    ))
+}
+
 /// POST /id/generate handler
 async fn generate_id(
     State(_state): State<Arc<ServerState>>,
     Json(payload): Json<GenerateIdRequest>,
 ) -> Result<Json<GenerateIdResponse>, ApiError> {
     // Try to create generator from environment
-    let generator = if let Some(namespace) = payload.namespace {
-        HeadIdGenerator::from_env()
-            .and_then(|_gen| {
-                // Get HEAD from generator, reconstruct with custom namespace
-                let head = std::env::var("AUNSORM_HEAD")
-                    .or_else(|_| std::env::var("GITHUB_SHA"))
-                    .or_else(|_| std::env::var("GIT_COMMIT"))
-                    .or_else(|_| std::env::var("CI_COMMIT_SHA"))
-                    .or_else(|_| std::env::var("VERGEN_GIT_SHA"))
-                    .map_err(|_| IdError::MissingHead)?;
-                HeadIdGenerator::with_namespace(head, namespace)
-            })
-            .map_err(|e| {
-                ApiError::server_error(format!(
-                    "ID generator oluşturulamadı: {e}. Lütfen AUNSORM_HEAD veya GITHUB_SHA environment variable'ını ayarlayın."
-                ))
+    let generator = match payload.namespace {
+        Some(namespace) => {
+            HeadIdGenerator::from_env_with_namespace(namespace).map_err(|err| match err {
+                IdError::InvalidNamespace | IdError::NamespaceTooLong { .. } => {
+                    ApiError::invalid_request(format!("Namespace doğrulanamadı: {err}"))
+                }
+                _ => generator_config_error(&err),
             })?
-    } else {
-        HeadIdGenerator::from_env().map_err(|e| {
-            ApiError::server_error(format!(
-                "ID generator oluşturulamadı: {e}. Lütfen AUNSORM_HEAD veya GITHUB_SHA environment variable'ını ayarlayın."
-            ))
-        })?
+        }
+        None => HeadIdGenerator::from_env().map_err(|err| generator_config_error(&err))?,
     };
 
     // Generate ID
