@@ -267,7 +267,8 @@ async fn acme_directory_and_order_flow() {
         .get(REPLAY_NONCE_HEADER)
         .expect("account nonce header")
         .to_str()
-        .expect("nonce str");
+        .expect("nonce str")
+        .to_owned();
     assert!(!account_nonce.is_empty());
     let location = response
         .headers()
@@ -287,6 +288,46 @@ async fn acme_directory_and_order_flow() {
         vec!["mailto:security@example.com".to_string()]
     );
     assert_eq!(account.kid, location);
+
+    let account_nonce_value = ReplayNonce::parse(account_nonce).expect("account nonce parse");
+    let account_url = Url::parse(&location).expect("account url");
+    let account_status_jws = key
+        .sign_payload(
+            &[],
+            &account_nonce_value,
+            &account_url,
+            KeyBinding::Kid(&account.kid),
+        )
+        .expect("account status jws");
+    let account_status_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(account_url.path())
+                .header(header::CONTENT_TYPE, "application/jose+json")
+                .body(Body::from(
+                    serde_json::to_vec(&account_status_jws).expect("serialize"),
+                ))
+                .expect("account status request"),
+        )
+        .await
+        .expect("account status response");
+    assert_eq!(account_status_response.status(), StatusCode::OK);
+    let account_status_nonce = account_status_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("account status nonce header")
+        .to_str()
+        .expect("nonce str");
+    assert!(!account_status_nonce.is_empty());
+    let account_status_body = to_bytes(account_status_response.into_body(), usize::MAX)
+        .await
+        .expect("account status body");
+    let account_status: TestAccountResponseBody =
+        serde_json::from_slice(&account_status_body).expect("account status json");
+    assert_eq!(account_status.kid, location);
+    assert_eq!(account_status.contact, account.contact);
 
     // Fetch another nonce for new-order.
     let nonce_response = app
@@ -341,7 +382,8 @@ async fn acme_directory_and_order_flow() {
         .get(REPLAY_NONCE_HEADER)
         .expect("order nonce header")
         .to_str()
-        .expect("nonce str");
+        .expect("nonce str")
+        .to_owned();
     assert!(!order_nonce_header.is_empty());
     let order_location = response
         .headers()
@@ -350,6 +392,7 @@ async fn acme_directory_and_order_flow() {
         .to_str()
         .expect("location str")
         .to_owned();
+    let order_url = Url::parse(&order_location).expect("order url");
     let body = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("order body");
@@ -362,6 +405,46 @@ async fn acme_directory_and_order_flow() {
     assert!(order_location.contains("/acme/order/"));
     let finalize_endpoint = order.finalize.clone();
     assert!(order.certificate.is_none());
+
+    let order_status_nonce = ReplayNonce::parse(order_nonce_header).expect("order nonce parse");
+    let order_status_jws = key
+        .sign_payload(
+            &[],
+            &order_status_nonce,
+            &order_url,
+            KeyBinding::Kid(&account.kid),
+        )
+        .expect("order status jws");
+    let order_status_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(order_url.path())
+                .header(header::CONTENT_TYPE, "application/jose+json")
+                .body(Body::from(
+                    serde_json::to_vec(&order_status_jws).expect("serialize"),
+                ))
+                .expect("order status request"),
+        )
+        .await
+        .expect("order status response");
+    assert_eq!(order_status_response.status(), StatusCode::OK);
+    let order_status_nonce_header = order_status_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("order status nonce header")
+        .to_str()
+        .expect("nonce str");
+    assert!(!order_status_nonce_header.is_empty());
+    let order_status_body = to_bytes(order_status_response.into_body(), usize::MAX)
+        .await
+        .expect("order status body");
+    let order_status: TestOrderResponseBody =
+        serde_json::from_slice(&order_status_body).expect("order status json");
+    assert_eq!(order_status.status, "pending");
+    assert_eq!(order_status.identifiers.len(), 1);
+    assert_eq!(order_status.finalize, finalize_endpoint);
 
     // Fetch nonce for finalize request.
     let nonce_response = app
@@ -423,7 +506,8 @@ async fn acme_directory_and_order_flow() {
         .get(REPLAY_NONCE_HEADER)
         .expect("nonce header")
         .to_str()
-        .expect("nonce str");
+        .expect("nonce str")
+        .to_owned();
     assert!(!finalize_nonce_header.is_empty());
     let finalize_location = finalize_response
         .headers()
@@ -448,6 +532,38 @@ async fn acme_directory_and_order_flow() {
         finalized.certificate.as_deref(),
         Some(expected_certificate.as_str())
     );
+
+    let finalize_nonce_value = ReplayNonce::parse(finalize_nonce_header).expect("finalize nonce");
+    let order_refresh_jws = key
+        .sign_payload(
+            &[],
+            &finalize_nonce_value,
+            &order_url,
+            KeyBinding::Kid(&account.kid),
+        )
+        .expect("order refresh jws");
+    let order_refresh_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(order_url.path())
+                .header(header::CONTENT_TYPE, "application/jose+json")
+                .body(Body::from(
+                    serde_json::to_vec(&order_refresh_jws).expect("serialize"),
+                ))
+                .expect("order refresh request"),
+        )
+        .await
+        .expect("order refresh response");
+    assert_eq!(order_refresh_response.status(), StatusCode::OK);
+    let order_refresh_body = to_bytes(order_refresh_response.into_body(), usize::MAX)
+        .await
+        .expect("order refresh body");
+    let refreshed: TestOrderResponseBody =
+        serde_json::from_slice(&order_refresh_body).expect("order refresh json");
+    assert_eq!(refreshed.status, "valid");
+    assert_eq!(refreshed.certificate, finalized.certificate);
 
     let certificate_response = app
         .clone()

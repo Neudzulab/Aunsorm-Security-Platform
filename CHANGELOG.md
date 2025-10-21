@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-server` ACME servisi: `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` uçları JWS doğrulaması ve nonce/account/order yönetimiyle yayınlandı.
 - ACME finalize akışı: `POST /acme/order/{order_id}/finalize` CSR SubjectAltName kapsamını doğrulayıp sertifika URL'si yayınlar.
 - ACME sertifika zinciri yayını: `GET /acme/cert/{order_id}` finalize edilmiş order için PEM formatında leaf + issuer zinciri döner.
+- ACME POST-as-GET kaynakları: `POST /acme/account/{id}` ve `POST /acme/order/{order_id}` mevcut hesap/order durumunu kid doğrulamasıyla döndürür.
 - ACME onboarding entegrasyon testi (`acme_happy_path_flow`) directory → new-nonce → new-account → new-order senaryosunu doğruluyor.
 - `aunsorm-cli acme` komutları: directory keşfi (`acme directory`), hesap kaydı (`acme register`) ve order oluşturma (`acme order`) akışları state dosyası yönetimi ve JSON çıktısı desteğiyle eklendi.
 - `aunsorm-cli acme finalize` komutu: CSR dosyasından finalize isteği gönderip order durumunu state dosyasında günceller.

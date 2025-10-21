@@ -241,6 +241,58 @@ impl AcmeService {
         })
     }
 
+    pub async fn handle_account_lookup(
+        &self,
+        account_id: &str,
+        jws: AcmeJws,
+    ) -> Result<NewAccountOutcome, AcmeProblem> {
+        let account_url = self.endpoints.account_url(account_id).map_err(|err| {
+            AcmeProblem::server_internal(format!("Hesap URL'i oluşturulamadı: {err}"))
+        })?;
+        let account_url_string = account_url.to_string();
+        let header = parse_protected_header(&jws.protected)?;
+        if header.url != account_url_string {
+            return Err(AcmeProblem::malformed(
+                "protected header içindeki url hesap kaynağını göstermeli",
+            ));
+        }
+        let kid = header
+            .kid
+            .as_deref()
+            .ok_or_else(|| AcmeProblem::malformed("account sorgusu kid alanı içermeli"))?;
+        if header.jwk.is_some() {
+            return Err(AcmeProblem::malformed(
+                "account sorgusu JWK taşıyamaz; mevcut hesabın kid'i kullanılmalıdır",
+            ));
+        }
+
+        self.consume_nonce(&header.nonce).await?;
+        ensure_post_as_get_payload(&jws.payload)?;
+
+        let accounts = self.accounts.lock().await;
+        let account = accounts
+            .get_by_kid(kid)
+            .ok_or_else(|| AcmeProblem::unauthorized("Hesap bulunamadı"))?;
+        if account.location != account_url_string {
+            return Err(AcmeProblem::unauthorized(
+                "Hesap isteği farklı bir account kaynağını hedefliyor",
+            ));
+        }
+        let key = account.key.clone();
+        let response = AccountResponse::from_account(account);
+        let location = account.location.clone();
+        drop(accounts);
+
+        verify_signature(&key, &jws)?;
+
+        Ok(NewAccountOutcome {
+            response,
+            location,
+            status: StatusCode::OK,
+            link_terms: self.terms_of_service.clone(),
+        })
+    }
+
     #[allow(clippy::too_many_lines)] // ACME RFC 8555 validations require a single flow for clarity
     pub async fn handle_new_order(&self, jws: AcmeJws) -> Result<NewOrderOutcome, AcmeProblem> {
         let header = parse_protected_header(&jws.protected)?;
@@ -341,6 +393,60 @@ impl AcmeService {
         Ok(NewOrderOutcome {
             response,
             location: order_url,
+        })
+    }
+
+    pub async fn handle_order_lookup(
+        &self,
+        order_id: &str,
+        jws: AcmeJws,
+    ) -> Result<OrderLookupOutcome, AcmeProblem> {
+        let order_url = self.endpoints.order_url(order_id).map_err(|err| {
+            AcmeProblem::server_internal(format!("Order URL'i oluşturulamadı: {err}"))
+        })?;
+        let order_url_string = order_url.to_string();
+        let header = parse_protected_header(&jws.protected)?;
+        if header.url != order_url_string {
+            return Err(AcmeProblem::malformed(
+                "protected header içindeki url order kaynağını göstermeli",
+            ));
+        }
+        let kid = header
+            .kid
+            .as_deref()
+            .ok_or_else(|| AcmeProblem::malformed("order sorgusu kid alanı içermeli"))?;
+        if header.jwk.is_some() {
+            return Err(AcmeProblem::malformed(
+                "order sorgusu JWK taşıyamaz; mevcut hesabın kid'i kullanılmalıdır",
+            ));
+        }
+
+        self.consume_nonce(&header.nonce).await?;
+        ensure_post_as_get_payload(&jws.payload)?;
+
+        let accounts = self.accounts.lock().await;
+        let account = accounts
+            .get_by_kid(kid)
+            .ok_or_else(|| AcmeProblem::unauthorized("Hesap bulunamadı"))?;
+        let key = account.key.clone();
+        drop(accounts);
+        verify_signature(&key, &jws)?;
+
+        let orders = self.orders.lock().await;
+        let order = orders
+            .get(order_id)
+            .ok_or_else(|| AcmeProblem::unauthorized("Order bulunamadı"))?;
+        if order.account_id != kid {
+            return Err(AcmeProblem::unauthorized(
+                "Order belirtilen hesapla ilişkili değil",
+            ));
+        }
+        let response = order.to_response();
+        drop(orders);
+
+        Ok(OrderLookupOutcome {
+            response,
+            location: order_url_string,
         })
     }
 
@@ -905,6 +1011,12 @@ pub struct NewOrderOutcome {
 }
 
 #[derive(Debug)]
+pub struct OrderLookupOutcome {
+    pub response: OrderResponse,
+    pub location: String,
+}
+
+#[derive(Debug)]
 pub struct FinalizeOrderOutcome {
     pub response: OrderResponse,
     pub location: String,
@@ -1161,6 +1273,30 @@ fn parse_finalize_payload(encoded: &str) -> Result<IncomingFinalizePayload, Acme
     serde_json::from_slice(&bytes).map_err(|err| {
         AcmeProblem::malformed(format!("finalize payload JSON ayrıştırılamadı: {err}"))
     })
+}
+
+fn ensure_post_as_get_payload(payload: &str) -> Result<(), AcmeProblem> {
+    if payload.is_empty() {
+        return Ok(());
+    }
+
+    let decoded = decode_base64(payload).map_err(|_| {
+        AcmeProblem::malformed("POST-as-GET isteği payload base64 olarak çözülemedi")
+    })?;
+    if decoded.is_empty() {
+        return Ok(());
+    }
+    let trimmed: Vec<u8> = decoded
+        .into_iter()
+        .filter(|byte| !byte.is_ascii_whitespace())
+        .collect();
+    if trimmed.is_empty() || trimmed == b"{}" {
+        return Ok(());
+    }
+
+    Err(AcmeProblem::malformed(
+        "POST-as-GET isteği boş payload içermelidir",
+    ))
 }
 
 fn normalize_contacts(values: &[String]) -> Result<Vec<String>, AcmeProblem> {
