@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ACME onboarding entegrasyon testi (`acme_happy_path_flow`) directory → new-nonce → new-account → new-order senaryosunu doğruluyor.
 - `aunsorm-cli acme` komutları: directory keşfi (`acme directory`), hesap kaydı (`acme register`) ve order oluşturma (`acme order`) akışları state dosyası yönetimi ve JSON çıktısı desteğiyle eklendi.
 - `aunsorm-cli acme finalize` komutu: CSR dosyasından finalize isteği gönderip order durumunu state dosyasında günceller.
+- `aunsorm-cli acme fetch-cert` komutu: finalize edilmiş order için PEM zincirini indirip belirtilen dosyaya yazar.
+- `scripts/deploy_gateway_cert.sh` betiği: ACME kayıt/order/finalize akışını zincirleyip sertifikayı gateway dağıtımı için otomatikleştirir.
 - VibeCO v0.7.0 uyumu için README, PLAN ve PROJECT_SUMMARY dosyalarına açıklayıcı başlık blokları eklendi.
 - ACME hesap anahtarları için RFC 7638 uyumlu JWK thumbprint yardımcıları (Ed25519, ES256, RS256).
 - ACME `newOrder` identifier doğrulaması artık IDNA normalizasyonu ile uluslararası alan adlarını destekliyor.
@@ -58,6 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README HTTP/3 service tree and discovery section updated with `GET /http3/capabilities` usage examples.
 - `crates/server/AGENTS.md` now requires README + CHANGELOG updates whenever a new HTTP endpoint is introduced.
 - HTTP/3 operations runbook extended with activation/rollback steps, observability checks, and incident feedback SLA’ları.
+- Yeni ACME gateway otomasyon rehberi (`docs/src/operations/acme-gateway-automation.md`) cron senaryoları, hata yakalama ipuçları ve dağıtım komutlarıyla yayımlandı.
 - New blockchain innovation guide (`docs/src/innovation/blockchain.md`) and compliance checklist cross-referencing CI artefaktları ve regülasyon maddeleri.
 - Agent charter and sprint intake guide aligned with the revizyon kilidi policy (`docs/src/operations/agent-charters.md`).
 - OAuth PKCE uçları için OpenAPI 3.1 şeması ve redirect URI kayıt rehberi (`docs/src/operations/oauth-openapi.md`).

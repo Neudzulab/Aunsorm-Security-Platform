@@ -236,6 +236,9 @@ enum AcmeCommands {
     Order(AcmeOrderArgs),
     /// Mevcut ACME order'ını CSR ile finalize et
     Finalize(AcmeFinalizeArgs),
+    /// Son ACME order'ı için sertifika paketini indir
+    #[command(name = "fetch-cert")]
+    FetchCert(AcmeFetchCertArgs),
 }
 
 #[derive(Args)]
@@ -303,6 +306,19 @@ struct AcmeFinalizeArgs {
     /// Finalize yanıtını JSON olarak dosyaya kaydet
     #[arg(long, value_name = "PATH")]
     output: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct AcmeFetchCertArgs {
+    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    #[arg(long, default_value = "http://localhost:8080")]
+    server: String,
+    /// Hesap durum dosyası (anahtar + meta bilgiler)
+    #[arg(long, value_name = "PATH")]
+    account: PathBuf,
+    /// Sertifika paketinin yazılacağı dosya yolu (`-` stdout'a yazar)
+    #[arg(long, value_name = "PATH")]
+    output: PathBuf,
 }
 
 #[derive(Args)]
@@ -2978,6 +2994,7 @@ fn handle_acme(command: AcmeCommands) -> CliResult<()> {
         AcmeCommands::Register(args) => handle_acme_register(&args),
         AcmeCommands::Order(args) => handle_acme_order(&args),
         AcmeCommands::Finalize(args) => handle_acme_finalize(&args),
+        AcmeCommands::FetchCert(args) => handle_acme_fetch_cert(&args),
     }
 }
 
@@ -3241,6 +3258,42 @@ fn handle_acme_finalize(args: &AcmeFinalizeArgs) -> CliResult<()> {
         &location,
         &args.account,
         args.output.as_deref(),
+    );
+
+    Ok(())
+}
+
+fn handle_acme_fetch_cert(args: &AcmeFetchCertArgs) -> CliResult<()> {
+    let (state, _) = load_account_state(&args.account)?;
+    let snapshot = state.last_order.as_ref().ok_or_else(|| {
+        CliError::AcmeState("hesap dosyasında indirilecek order bulunamadı".to_string())
+    })?;
+    let certificate_url = snapshot.certificate.as_deref().ok_or_else(|| {
+        CliError::AcmeState(
+            "order henüz sertifika URL'si döndürmedi; finalize adımını tamamlayın".to_string(),
+        )
+    })?;
+    let certificate_url =
+        Url::parse(certificate_url).map_err(|err| CliError::InvalidUrl(err.to_string()))?;
+
+    let mut client = AcmeClient::new(&args.server)?;
+    let response = client.get(&certificate_url)?;
+    if response.status != StatusCode::OK {
+        return Err(CliError::AcmeHttp {
+            message: format!(
+                "ACME sertifika uç noktası beklenmeyen durum döndürdü: {}",
+                response.status
+            ),
+        });
+    }
+
+    write_text_file(&args.output, &response.body)?;
+    let bundle_len = response.body.len();
+    let location = snapshot.location.clone();
+    println!(
+        "acme fetch-cert: certificate={} | bytes={} | order={location}",
+        args.output.display(),
+        bundle_len,
     );
 
     Ok(())
@@ -4290,6 +4343,14 @@ mod tests {
         request.respond(response).expect("respond finalize");
     }
 
+    fn respond_certificate(request: Request, body: &str, nonce: &str) {
+        let mut response = Response::from_string(body.to_string());
+        response
+            .add_header(Header::from_bytes("content-type", "text/plain; charset=utf-8").unwrap());
+        response.add_header(Header::from_bytes("Replay-Nonce", nonce).unwrap());
+        request.respond(response).expect("respond certificate");
+    }
+
     fn respond_not_found(request: Request) {
         let response = Response::from_string("not found").with_status_code(404);
         request.respond(response).expect("respond fallback");
@@ -4370,6 +4431,70 @@ mod tests {
         let response_json: Value = read_json_file(output_path.as_path()).expect("order json");
         assert_eq!(response_json["status"], "valid");
         assert_eq!(response_json["certificate"], certificate_url);
+    }
+
+    #[test]
+    fn handle_acme_fetch_cert_downloads_bundle() {
+        let server = Server::http(("127.0.0.1", 0)).expect("server");
+        let base_url = format!("http://{}", server.server_addr());
+        let order_location = format!("{base_url}/acme/order/order123");
+        let certificate_url = format!("{base_url}/acme/cert/order123");
+
+        let account_file = NamedTempFile::new().expect("account");
+        let account_path = account_file.path().to_path_buf();
+        let (mut state, _key) = AcmeAccountState::generate_ed25519();
+        state.kid = Some(format!("{base_url}/acme/account/acct123"));
+        state.last_order = Some(AcmeOrderSnapshot {
+            location: order_location.clone(),
+            status: "valid".to_string(),
+            finalize: format!("{order_location}/finalize"),
+            expires: "2025-11-02T00:00:00Z".to_string(),
+            not_before: None,
+            not_after: None,
+            identifiers: vec![AcmeOrderIdentifierSnapshot {
+                ty: "dns".to_string(),
+                value: "example.com".to_string(),
+            }],
+            authorizations: vec![format!("{base_url}/acme/authz/order123-00")],
+            certificate: Some(certificate_url.clone()),
+        });
+        save_account_state(account_file.path(), &state).expect("save state");
+
+        let certificate_body = "-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----\n";
+        let bundle_path = NamedTempFile::new().expect("bundle");
+        let output_path = bundle_path.path().to_path_buf();
+        let nonce = URL_SAFE_NO_PAD.encode(b"nonce-value-0002");
+        let handle = thread::spawn(move || {
+            for request in server.incoming_requests() {
+                let method = request.method().clone();
+                let url = request.url().to_string();
+                if method == Method::Get && url == "/acme/cert/order123" {
+                    respond_certificate(request, certificate_body, &nonce);
+                    break;
+                }
+                respond_not_found(request);
+            }
+        });
+
+        let args = AcmeFetchCertArgs {
+            server: base_url,
+            account: account_path.clone(),
+            output: output_path.clone(),
+        };
+        handle_acme_fetch_cert(&args).expect("fetch");
+        handle.join().expect("server thread");
+
+        let downloaded = fs::read_to_string(output_path.as_path()).expect("bundle read");
+        assert_eq!(downloaded, certificate_body);
+
+        let persisted: AcmeAccountState =
+            read_json_file(account_path.as_path()).expect("state persisted");
+        let stored_certificate = persisted
+            .last_order
+            .expect("last order snapshot")
+            .certificate
+            .expect("certificate url");
+        assert_eq!(stored_certificate, certificate_url);
     }
 
     #[test]
