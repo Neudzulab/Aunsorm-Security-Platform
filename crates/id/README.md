@@ -11,6 +11,7 @@ biçiminde URL dostu olarak üretilir.
 - HEAD karmasını baz alan deterministik parmak izi.
 - Monotonik mikro saniye zaman damgası ve atomik sayaç ile çakışmasız üretim.
 - Ortak API ile ortam değişkenlerinden HEAD bilgisini çekme desteği.
+- Çalışma anında namespace geçersiz kılma (`from_env_with_namespace`).
 - Kimliklerin çözümlenmesi ve doğrulanması için `HeadStampedId::parse` yardımı.
 - Üretilen kimliklerin belirli bir HEAD karması ile eşleştiğini doğrulamak için
   `HeadStampedId::matches_head` denetimi.
