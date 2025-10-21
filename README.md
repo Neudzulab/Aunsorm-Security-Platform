@@ -1478,7 +1478,26 @@ aunsorm-cli acme order \
   --account ./acme/account.json \
   --domain www.example.com \
   --output ./acme/order.json
+
+# CSR ile finalize et ve order durumunu güncelle
+aunsorm-cli acme finalize \
+  --server http://localhost:8080 \
+  --account ./acme/account.json \
+  --csr ./acme/www.example.com.csr \
+  --output ./acme/finalize.json
+
+# Sertifika paketini indir (leaf + issuing CA zinciri)
+aunsorm-cli acme fetch-cert \
+  --server http://localhost:8080 \
+  --account ./acme/account.json \
+  --output ./acme/www.example.com.pem
 ```
+
+Prod ortamında otomasyonu uçtan uca bağlamak için `scripts/deploy_gateway_cert.sh`
+betiği ACME hesabını günceller, order/finalize çıktısını kaydeder ve en son
+sertifika paketini gateway profiline kopyalar. Betik, başarıyla indirilen
+sertifikadan sonra opsiyonel reload komutu çalıştırarak (örn. `nginx -s reload`)
+sertifika yenilemesini tamamlayabilir.
 
 ##  Roadmap
 
