@@ -20,7 +20,6 @@ http3-experimental = [
     "dep:h3",
     "dep:h3-quinn",
     "dep:quinn",
-    "dep:rcgen",
     "dep:rustls",
 ]
 
@@ -61,7 +60,7 @@ h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
 postcard = { version = "1.0", features = ["alloc"] }
 quinn = { version = "0.11.7", default-features = false, features = ["runtime-tokio", "rustls"], optional = true }
-rcgen = { version = "0.12", optional = true }
+rcgen = { version = "0.12", features = ["x509-parser"] }
 rustls = { version = "0.22", optional = true }
 x509-parser = { version = "0.16", features = ["verify"] }
 

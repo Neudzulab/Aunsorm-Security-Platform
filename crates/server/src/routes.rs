@@ -82,6 +82,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/acme/new-account", post(acme_new_account))
         .route("/acme/new-order", post(acme_new_order))
         .route("/acme/order/:order_id/finalize", post(acme_finalize_order))
+        .route("/acme/cert/:order_id", get(acme_get_certificate))
         // Security endpoints (media token generation)
         .route("/security/generate-media-token", post(generate_media_token))
         // Blockchain DID verification PoC
@@ -759,6 +760,30 @@ async fn acme_finalize_order(
         Ok(outcome) => {
             let nonce = service.issue_nonce().await;
             acme_finalize_response(outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
+}
+
+async fn acme_get_certificate(
+    Path(order_id): Path<String>,
+    State(state): State<Arc<ServerState>>,
+) -> Response {
+    let service = state.acme();
+    match service.certificate_pem_bundle(&order_id).await {
+        Ok(bundle) => {
+            let nonce = service.issue_nonce().await;
+            let mut response = Response::new(Body::from(bundle));
+            *response.status_mut() = StatusCode::OK;
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("text/plain; charset=utf-8"),
+            );
+            apply_acme_headers(&mut response, &nonce);
+            response
         }
         Err(problem) => {
             let nonce = service.issue_nonce().await;

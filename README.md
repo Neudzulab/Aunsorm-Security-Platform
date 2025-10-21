@@ -613,6 +613,9 @@ aunsorm-server v0.4.5
    ├─ POST   /acme/order/{order_id}/finalize ✅ → CSR finalizasyonu
    │                                       └─ SubjectAltName kapsam doğrulaması + CSR imza kontrolü
    │                                       └─ Sertifika yayın URL'si (`/acme/cert/{order}`) üretimi
+   ├─ GET    /acme/cert/{order_id} ✅      → Sertifika zinciri indirme
+   │                                       └─ İçerik tipi: `text/plain; charset=utf-8`
+   │                                       └─ Leaf + Issuing CA PEM dizisi (finalize sonrası hazır)
    │
    └─ POST   /acme/revoke-cert 📋       → [Planlandı v0.5.0] Certificate revocation
                                            └─ CRL management

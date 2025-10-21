@@ -17,6 +17,9 @@ use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use url::Url;
+use x509_parser::{
+    certificate::X509Certificate, extensions::GeneralName, pem::parse_x509_pem, prelude::FromDer,
+};
 
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::fabric::{
@@ -445,6 +448,54 @@ async fn acme_directory_and_order_flow() {
         finalized.certificate.as_deref(),
         Some(expected_certificate.as_str())
     );
+
+    let certificate_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/acme/cert/{order_id}"))
+                .body(Body::empty())
+                .expect("certificate request"),
+        )
+        .await
+        .expect("certificate response");
+    assert_eq!(certificate_response.status(), StatusCode::OK);
+    let certificate_nonce = certificate_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("certificate nonce header")
+        .to_str()
+        .expect("nonce str");
+    assert!(!certificate_nonce.is_empty());
+    let content_type = certificate_response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .expect("content-type header")
+        .to_str()
+        .expect("content-type str");
+    assert_eq!(content_type, "text/plain; charset=utf-8");
+    let certificate_body = to_bytes(certificate_response.into_body(), usize::MAX)
+        .await
+        .expect("certificate body");
+    let certificate_text = String::from_utf8(certificate_body.to_vec()).expect("pem text");
+    let begin_markers = certificate_text
+        .matches("-----BEGIN CERTIFICATE-----")
+        .count();
+    assert_eq!(
+        begin_markers, 2,
+        "chain should contain leaf and issuer certificates"
+    );
+    let (_, pem) = parse_x509_pem(certificate_text.as_bytes()).expect("leaf pem");
+    let (_, leaf) = X509Certificate::from_der(&pem.contents).expect("leaf certificate");
+    let san_extension = leaf
+        .subject_alternative_name()
+        .expect("subjectAltName lookup should succeed")
+        .expect("san extension should exist");
+    let names = &san_extension.value.general_names;
+    assert!(names
+        .iter()
+        .any(|name| { matches!(name, GeneralName::DNSName(value) if *value == "example.com") }));
 }
 
 #[allow(clippy::too_many_lines)]

@@ -1,7 +1,9 @@
 #![allow(clippy::module_name_repetitions)]
 
+use std::borrow::ToOwned;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -11,6 +13,10 @@ use base64::Engine as _;
 use ed25519_dalek::{Signature as Ed25519Signature, VerifyingKey as Ed25519VerifyingKey};
 use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256VerifyingKey};
 use rand_core::{OsRng, RngCore};
+use rcgen::{
+    BasicConstraints, Certificate, CertificateParams, CertificateSigningRequest, DnType,
+    ExtendedKeyUsagePurpose, IsCa, KeyUsagePurpose, SerialNumber, PKCS_ED25519,
+};
 use rsa::pkcs1v15::{Signature as RsaSignature, VerifyingKey as RsaVerifyingKey};
 use rsa::{BigUint, RsaPublicKey};
 use serde::{Deserialize, Serialize};
@@ -33,7 +39,6 @@ use crate::error::ServerError;
 
 const ORDER_EXPIRATION: Duration = Duration::hours(8);
 
-#[derive(Debug)]
 pub struct AcmeService {
     endpoints: AcmeEndpoints,
     directory: DirectoryResponse,
@@ -41,8 +46,23 @@ pub struct AcmeService {
     nonces: Mutex<NonceState>,
     accounts: Mutex<AccountStore>,
     orders: Mutex<HashMap<String, AcmeOrder>>,
+    ca_certificate: Certificate,
+    ca_pem: String,
+    issued_certificates: Mutex<HashMap<String, StoredCertificate>>,
     next_account: AtomicU64,
     next_order: AtomicU64,
+}
+
+impl fmt::Debug for AcmeService {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AcmeService")
+            .field("endpoints", &self.endpoints)
+            .field("directory", &self.directory)
+            .field("terms_of_service", &self.terms_of_service)
+            .field("next_account", &self.next_account.load(Ordering::SeqCst))
+            .field("next_order", &self.next_order.load(Ordering::SeqCst))
+            .finish_non_exhaustive()
+    }
 }
 
 impl AcmeService {
@@ -70,6 +90,7 @@ impl AcmeService {
         let website = endpoints.base.join("docs").ok().map(|url| url.to_string());
 
         let directory = DirectoryResponse::new(&endpoints, terms.clone(), website);
+        let (ca_certificate, ca_pem) = generate_acme_ca(&endpoints.base)?;
 
         Ok(Self {
             endpoints,
@@ -78,6 +99,9 @@ impl AcmeService {
             nonces: Mutex::new(NonceState::default()),
             accounts: Mutex::new(AccountStore::default()),
             orders: Mutex::new(HashMap::new()),
+            ca_certificate,
+            ca_pem,
+            issued_certificates: Mutex::new(HashMap::new()),
             next_account: AtomicU64::new(0),
             next_order: AtomicU64::new(0),
         })
@@ -380,9 +404,13 @@ impl AcmeService {
             .map_err(|err| AcmeProblem::malformed(format!("CSR ayrıştırılamadı: {err}")))?;
         csr.verify_signature()
             .map_err(|err| AcmeProblem::malformed(format!("CSR imzası doğrulanamadı: {err}")))?;
+        let mut signing_request =
+            CertificateSigningRequest::from_der(&csr_bytes).map_err(|err| {
+                AcmeProblem::malformed(format!("CSR imzalama isteği ayrıştırılamadı: {err}"))
+            })?;
         let csr_identifiers = collect_csr_identifiers(&csr)?;
 
-        let response = {
+        let (response, not_before, not_after) = {
             let mut orders = self.orders.lock().await;
             let order = orders
                 .get_mut(order_id)
@@ -405,8 +433,14 @@ impl AcmeService {
                 order.status = OrderStatus::Valid;
                 order.certificate = Some(certificate_url.clone());
             }
-            order.to_response()
+            let not_before = order.not_before;
+            let not_after = order.not_after;
+            let response = order.to_response();
+            (response, not_before, not_after)
         };
+
+        self.issue_certificate_if_needed(order_id, &mut signing_request, not_before, not_after)
+            .await?;
 
         Ok(FinalizeOrderOutcome {
             response,
@@ -414,10 +448,128 @@ impl AcmeService {
         })
     }
 
+    async fn issue_certificate_if_needed(
+        &self,
+        order_id: &str,
+        csr: &mut CertificateSigningRequest,
+        not_before: Option<OffsetDateTime>,
+        not_after: Option<OffsetDateTime>,
+    ) -> Result<(), AcmeProblem> {
+        if self.issued_certificates.lock().await.contains_key(order_id) {
+            return Ok(());
+        }
+
+        let now = OffsetDateTime::now_utc();
+        let start = not_before.unwrap_or(now - Duration::hours(1));
+        let end = not_after.unwrap_or(now + Duration::days(90));
+        csr.params.not_before = start;
+        csr.params.not_after = end;
+        csr.params.is_ca = IsCa::NoCa;
+
+        if !csr
+            .params
+            .key_usages
+            .iter()
+            .any(|usage| matches!(usage, KeyUsagePurpose::DigitalSignature))
+        {
+            csr.params
+                .key_usages
+                .push(KeyUsagePurpose::DigitalSignature);
+        }
+        if !csr
+            .params
+            .key_usages
+            .iter()
+            .any(|usage| matches!(usage, KeyUsagePurpose::KeyEncipherment))
+        {
+            csr.params.key_usages.push(KeyUsagePurpose::KeyEncipherment);
+        }
+        if !csr
+            .params
+            .extended_key_usages
+            .iter()
+            .any(|usage| matches!(usage, ExtendedKeyUsagePurpose::ServerAuth))
+        {
+            csr.params
+                .extended_key_usages
+                .push(ExtendedKeyUsagePurpose::ServerAuth);
+        }
+        csr.params.use_authority_key_identifier_extension = true;
+        csr.params.serial_number = Some(random_serial_number());
+
+        let leaf = csr
+            .serialize_pem_with_signer(&self.ca_certificate)
+            .map_err(|err| {
+                AcmeProblem::server_internal(format!("Sertifika imzalanamadı: {err}"))
+            })?;
+        let stored = StoredCertificate::new(leaf, self.ca_pem.clone());
+        let mut issued = self.issued_certificates.lock().await;
+        if issued.contains_key(order_id) {
+            return Ok(());
+        }
+        issued.insert(order_id.to_owned(), stored);
+        drop(issued);
+        Ok(())
+    }
+
+    pub async fn certificate_pem_bundle(&self, order_id: &str) -> Result<String, AcmeProblem> {
+        let status = self
+            .orders
+            .lock()
+            .await
+            .get(order_id)
+            .map(|order| order.status)
+            .ok_or_else(|| AcmeProblem::unauthorized("Order bulunamadı"))?;
+        if !matches!(status, OrderStatus::Valid) {
+            return Err(AcmeProblem::order_not_ready(
+                "Order henüz valid durumda değil",
+            ));
+        }
+
+        let stored = self
+            .issued_certificates
+            .lock()
+            .await
+            .get(order_id)
+            .cloned()
+            .ok_or_else(|| AcmeProblem::order_not_ready("Order için sertifika yayınlanmadı"))?;
+        Ok(stored.as_pem_bundle())
+    }
+
     #[must_use]
     pub fn terms_of_service(&self) -> Option<&str> {
         self.terms_of_service.as_deref()
     }
+}
+
+fn generate_acme_ca(base: &Url) -> Result<(Certificate, String), ServerError> {
+    let host = base
+        .host_str()
+        .map_or_else(|| "aunsorm.local".to_owned(), ToOwned::to_owned);
+    let mut params = CertificateParams::new(vec![format!("Aunsorm ACME Issuing CA ({host})")]);
+    params.alg = &PKCS_ED25519;
+    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+    params.extended_key_usages.clear();
+    params.subject_alt_names.clear();
+    let now = OffsetDateTime::now_utc();
+    params.not_before = now - Duration::days(1);
+    params.not_after = now + Duration::days(365 * 5);
+    params.serial_number = Some(random_serial_number());
+    params
+        .distinguished_name
+        .push(DnType::OrganizationName, "Aunsorm Security Platform");
+    params.distinguished_name.push(
+        DnType::CommonName,
+        format!("Aunsorm ACME Issuing CA ({host})"),
+    );
+
+    let certificate = Certificate::from_params(params)
+        .map_err(|err| ServerError::Configuration(format!("ACME CA oluşturulamadı: {err}")))?;
+    let pem = certificate.serialize_pem().map_err(|err| {
+        ServerError::Configuration(format!("ACME CA PEM üretimi başarısız: {err}"))
+    })?;
+    Ok((certificate, pem))
 }
 
 #[derive(Debug, Clone)]
@@ -624,6 +776,43 @@ impl AcmeOrder {
             certificate: self.certificate.clone(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+struct StoredCertificate {
+    leaf_pem: String,
+    issuer_chain: Vec<String>,
+}
+
+impl StoredCertificate {
+    fn new(leaf_pem: String, issuer_pem: String) -> Self {
+        Self {
+            leaf_pem,
+            issuer_chain: vec![issuer_pem],
+        }
+    }
+
+    fn as_pem_bundle(&self) -> String {
+        let mut bundle = String::new();
+        append_pem_block(&mut bundle, &self.leaf_pem);
+        for certificate in &self.issuer_chain {
+            append_pem_block(&mut bundle, certificate);
+        }
+        bundle
+    }
+}
+
+fn append_pem_block(target: &mut String, pem: &str) {
+    target.push_str(pem);
+    if !pem.ends_with('\n') {
+        target.push('\n');
+    }
+}
+
+fn random_serial_number() -> SerialNumber {
+    let mut bytes = [0_u8; 16];
+    OsRng.fill_bytes(&mut bytes);
+    SerialNumber::from(bytes.to_vec())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -847,6 +1036,14 @@ impl AcmeProblem {
         Self::new(
             StatusCode::UNAUTHORIZED,
             "urn:ietf:params:acme:error:unauthorized",
+            detail,
+        )
+    }
+
+    fn order_not_ready(detail: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::NOT_FOUND,
+            "urn:ietf:params:acme:error:orderNotReady",
             detail,
         )
     }
