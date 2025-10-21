@@ -47,7 +47,8 @@ Aunsorm Cryptography Suite/
 │   │   ├── GET /acme/directory ✅ - ACME directory keşfi ve meta bilgisi
 │   │   ├── GET /acme/new-nonce ✅ - Replay-Nonce üretimi (JWS koruması için)
 │   │   ├── POST /acme/new-account ✅ - Hesap kaydı (JWK doğrulamalı)
-│   │   └── POST /acme/new-order ✅ - Sertifika order oluşturma
+│   │   ├── POST /acme/new-order ✅ - Sertifika order oluşturma
+│   │   └── POST /acme/order/:order_id/finalize ✅ - CSR doğrulama ve sertifika URL'si üretimi
 │   ├── acme/                          # ACME istemcisi (directory/register/order CLI) 🚧
 │   ├── id/                            # Head-stamped ID kütüphanesi ve testler 🚧
 │   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅
@@ -609,9 +610,9 @@ aunsorm-server v0.4.5
    ├─ POST   /acme/challenge/{id} 📋    → [Planlandı v0.5.0] Challenge validation
    │                                       └─ HTTP-01, DNS-01 verification
    │
-   ├─ POST   /acme/finalize/{order_id} 📋 → [Planlandı v0.5.0] Certificate finalization
-   │                                       └─ CSR processing + X.509 issuance
-   │                                       └─ Integration: `aunsorm-x509` CA signing
+   ├─ POST   /acme/order/{order_id}/finalize ✅ → CSR finalizasyonu
+   │                                       └─ SubjectAltName kapsam doğrulaması + CSR imza kontrolü
+   │                                       └─ Sertifika yayın URL'si (`/acme/cert/{order}`) üretimi
    │
    └─ POST   /acme/revoke-cert 📋       → [Planlandı v0.5.0] Certificate revocation
                                            └─ CRL management
@@ -639,7 +640,7 @@ aunsorm-server v0.4.5
 - ✅ **Transparency Logging:** Merkle tree based audit trail
 - ✅ **HTTP/3 QUIC Datagrams:** Experimental low-latency telemetry streaming
 - ✅ **HEAD-Stamped IDs:** Git commit SHA tabanlı benzersiz kimlik üretimi (server + CLI akışları)
-- 🚧 **ACME Protocol:** `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` üretimde; authorization/challenge/finalize/revoke akışları v0.5.0'da tamamlanacak
+- 🚧 **ACME Protocol:** `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order`, `POST /acme/order/:order_id/finalize` üretimde; authorization/challenge/revoke akışları v0.5.0'da tamamlanacak
 - ✅ **Production Ready:** Async/await, structured logging, OpenTelemetry
 
 **Hızlı Başlangıç:**

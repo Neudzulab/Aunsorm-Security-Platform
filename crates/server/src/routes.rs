@@ -35,7 +35,7 @@ use aunsorm_mdm::{
     PolicyDocument,
 };
 
-use crate::acme::{AcmeProblem, NewAccountOutcome, NewOrderOutcome};
+use crate::acme::{AcmeProblem, FinalizeOrderOutcome, NewAccountOutcome, NewOrderOutcome};
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
 use crate::fabric::{FabricDidError, FabricDidVerificationRequest};
@@ -81,6 +81,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/acme/new-nonce", get(acme_new_nonce))
         .route("/acme/new-account", post(acme_new_account))
         .route("/acme/new-order", post(acme_new_order))
+        .route("/acme/order/:order_id/finalize", post(acme_finalize_order))
         // Security endpoints (media token generation)
         .route("/security/generate-media-token", post(generate_media_token))
         // Blockchain DID verification PoC
@@ -609,6 +610,15 @@ fn acme_order_response(outcome: NewOrderOutcome, nonce: &str) -> Response {
     response
 }
 
+fn acme_finalize_response(outcome: FinalizeOrderOutcome, nonce: &str) -> Response {
+    let mut response = (StatusCode::OK, Json(outcome.response)).into_response();
+    apply_acme_headers(&mut response, nonce);
+    if let Ok(value) = HeaderValue::from_str(&outcome.location) {
+        response.headers_mut().insert(header::LOCATION, value);
+    }
+    response
+}
+
 async fn acme_directory(State(state): State<Arc<ServerState>>) -> Response {
     let service = state.acme();
     let document = service.directory_document();
@@ -704,6 +714,51 @@ async fn acme_new_order(State(state): State<Arc<ServerState>>, request: Request<
         Ok(outcome) => {
             let nonce = service.issue_nonce().await;
             acme_order_response(outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
+}
+
+async fn acme_finalize_order(
+    Path(order_id): Path<String>,
+    State(state): State<Arc<ServerState>>,
+    request: Request<Body>,
+) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
+    }
+
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    match service.handle_finalize_order(&order_id, jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_finalize_response(outcome, &nonce)
         }
         Err(problem) => {
             let nonce = service.issue_nonce().await;

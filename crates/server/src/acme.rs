@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum::http::StatusCode;
@@ -20,6 +21,9 @@ use time::{Duration, OffsetDateTime};
 use tokio::sync::Mutex;
 use tracing::info;
 use url::{ParseError, Url};
+use x509_parser::certification_request::X509CertificationRequest;
+use x509_parser::extensions::{GeneralName, ParsedExtension};
+use x509_parser::prelude::FromDer;
 
 use aunsorm_acme::{
     AccountContact, AcmeJws, IdentifierKind, OrderIdentifier, OrderIdentifierError, ReplayNonce,
@@ -299,6 +303,7 @@ impl AcmeService {
             expires,
             authorizations,
             finalize,
+            certificate: None,
         };
         let response = order.to_response();
         let account_for_log = order.account_id.clone();
@@ -310,6 +315,100 @@ impl AcmeService {
         info!(order_id = %order_id, account = %account_for_log, "ACME order oluşturuldu");
 
         Ok(NewOrderOutcome {
+            response,
+            location: order_url,
+        })
+    }
+
+    #[allow(clippy::significant_drop_tightening)] // Mutex guard intentionally spans full finalize update for atomicity
+    pub async fn handle_finalize_order(
+        &self,
+        order_id: &str,
+        jws: AcmeJws,
+    ) -> Result<FinalizeOrderOutcome, AcmeProblem> {
+        let finalize_url = self
+            .endpoints
+            .order_finalize_url(order_id)
+            .map_err(|err| {
+                AcmeProblem::server_internal(format!("Finalize URL'i oluşturulamadı: {err}"))
+            })?
+            .to_string();
+        let order_url = self
+            .endpoints
+            .order_url(order_id)
+            .map_err(|err| {
+                AcmeProblem::server_internal(format!("Order URL'i oluşturulamadı: {err}"))
+            })?
+            .to_string();
+        let certificate_url = self
+            .endpoints
+            .certificate_url(order_id)
+            .map_err(|err| {
+                AcmeProblem::server_internal(format!("Certificate URL'i oluşturulamadı: {err}"))
+            })?
+            .to_string();
+
+        let header = parse_protected_header(&jws.protected)?;
+        if header.url != finalize_url {
+            return Err(AcmeProblem::malformed(
+                "protected header içindeki url finalize uç noktasını göstermeli",
+            ));
+        }
+        let kid = header
+            .kid
+            .as_deref()
+            .ok_or_else(|| AcmeProblem::malformed("finalize isteği kid alanı içermeli"))?;
+        if header.jwk.is_some() {
+            return Err(AcmeProblem::malformed(
+                "finalize isteği JWK taşıyamaz; mevcut hesabın kid'i kullanılmalıdır",
+            ));
+        }
+
+        self.consume_nonce(&header.nonce).await?;
+
+        let accounts = self.accounts.lock().await;
+        let account = accounts
+            .get_by_kid(kid)
+            .ok_or_else(|| AcmeProblem::unauthorized("Hesap bulunamadı"))?;
+        verify_signature(&account.key, &jws)?;
+        drop(accounts);
+
+        let finalize_payload = parse_finalize_payload(&jws.payload)?;
+        let csr_bytes = decode_base64(&finalize_payload.csr)
+            .map_err(|_| AcmeProblem::malformed("CSR base64url olarak çözülemedi"))?;
+        let (_, csr) = X509CertificationRequest::from_der(&csr_bytes)
+            .map_err(|err| AcmeProblem::malformed(format!("CSR ayrıştırılamadı: {err}")))?;
+        csr.verify_signature()
+            .map_err(|err| AcmeProblem::malformed(format!("CSR imzası doğrulanamadı: {err}")))?;
+        let csr_identifiers = collect_csr_identifiers(&csr)?;
+
+        let response = {
+            let mut orders = self.orders.lock().await;
+            let order = orders
+                .get_mut(order_id)
+                .ok_or_else(|| AcmeProblem::unauthorized("Order bulunamadı"))?;
+            if order.account_id != kid {
+                return Err(AcmeProblem::unauthorized(
+                    "Order belirtilen hesapla ilişkili değil",
+                ));
+            }
+            if OffsetDateTime::now_utc() > order.expires {
+                return Err(AcmeProblem::malformed("Order süresi doldu"));
+            }
+            ensure_identifiers_covered(&csr_identifiers, &order.identifiers)?;
+
+            if matches!(order.status, OrderStatus::Valid) {
+                if order.certificate.is_none() {
+                    order.certificate = Some(certificate_url.clone());
+                }
+            } else {
+                order.status = OrderStatus::Valid;
+                order.certificate = Some(certificate_url.clone());
+            }
+            order.to_response()
+        };
+
+        Ok(FinalizeOrderOutcome {
             response,
             location: order_url,
         })
@@ -333,6 +432,7 @@ struct AcmeEndpoints {
     account_base: Url,
     order_base: Url,
     authz_base: Url,
+    certificate_base: Url,
 }
 
 impl AcmeEndpoints {
@@ -348,6 +448,7 @@ impl AcmeEndpoints {
             account_base: base.join("acme/account/")?,
             order_base: base.join("acme/order/")?,
             authz_base: base.join("acme/authz/")?,
+            certificate_base: base.join("acme/cert/")?,
         })
     }
 
@@ -364,11 +465,15 @@ impl AcmeEndpoints {
     }
 
     fn order_finalize_url(&self, id: &str) -> Result<Url, ParseError> {
-        self.order_url(id)?.join("finalize")
+        self.order_base.join(&format!("{id}/finalize"))
     }
 
     fn authorization_url(&self, order_id: &str, index: usize) -> Result<Url, ParseError> {
         self.authz_base.join(&format!("{order_id}-{index:02}"))
+    }
+
+    fn certificate_url(&self, order_id: &str) -> Result<Url, ParseError> {
+        self.certificate_base.join(order_id)
     }
 }
 
@@ -499,6 +604,7 @@ struct AcmeOrder {
     expires: OffsetDateTime,
     authorizations: Vec<String>,
     finalize: String,
+    certificate: Option<String>,
 }
 
 impl AcmeOrder {
@@ -515,6 +621,7 @@ impl AcmeOrder {
             expires: self.expires,
             not_before: self.not_before,
             not_after: self.not_after,
+            certificate: self.certificate.clone(),
         }
     }
 }
@@ -522,12 +629,14 @@ impl AcmeOrder {
 #[derive(Debug, Clone, Copy)]
 enum OrderStatus {
     Pending,
+    Valid,
 }
 
 impl OrderStatus {
     const fn as_str(self) -> &'static str {
         match self {
             Self::Pending => "pending",
+            Self::Valid => "valid",
         }
     }
 }
@@ -606,6 +715,12 @@ pub struct NewOrderOutcome {
     pub location: String,
 }
 
+#[derive(Debug)]
+pub struct FinalizeOrderOutcome {
+    pub response: OrderResponse,
+    pub location: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct OrderResponse {
     status: &'static str,
@@ -626,6 +741,8 @@ pub struct OrderResponse {
         with = "time::serde::rfc3339::option"
     )]
     not_after: Option<OffsetDateTime>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    certificate: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -791,6 +908,11 @@ struct IdentifierPayload {
 }
 
 #[derive(Debug, Deserialize)]
+struct IncomingFinalizePayload {
+    csr: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct OkpJwk {
     kty: String,
     crv: String,
@@ -836,6 +958,14 @@ fn parse_new_order_payload(encoded: &str) -> Result<IncomingNewOrderPayload, Acm
     })
 }
 
+fn parse_finalize_payload(encoded: &str) -> Result<IncomingFinalizePayload, AcmeProblem> {
+    let bytes =
+        decode_base64(encoded).map_err(|_| AcmeProblem::malformed("payload base64 çözülemedi"))?;
+    serde_json::from_slice(&bytes).map_err(|err| {
+        AcmeProblem::malformed(format!("finalize payload JSON ayrıştırılamadı: {err}"))
+    })
+}
+
 fn normalize_contacts(values: &[String]) -> Result<Vec<String>, AcmeProblem> {
     values
         .iter()
@@ -878,6 +1008,93 @@ fn convert_identifiers(payload: &[IdentifierPayload]) -> Result<Vec<OrderIdentif
             ))),
         })
         .collect()
+}
+
+#[derive(Default)]
+struct CsrIdentifiers {
+    dns: HashSet<String>,
+    ips: HashSet<IpAddr>,
+}
+
+fn collect_csr_identifiers(
+    csr: &X509CertificationRequest<'_>,
+) -> Result<CsrIdentifiers, AcmeProblem> {
+    let mut identifiers = CsrIdentifiers::default();
+    let mut saw_san = false;
+    if let Some(extensions) = csr.requested_extensions() {
+        for extension in extensions {
+            if let ParsedExtension::SubjectAlternativeName(san) = extension {
+                saw_san = true;
+                for general in &san.general_names {
+                    match general {
+                        GeneralName::DNSName(value) => {
+                            identifiers.dns.insert(normalize_dns_name(value));
+                        }
+                        GeneralName::IPAddress(raw) => {
+                            let ip = parse_csr_ip_address(raw)?;
+                            identifiers.ips.insert(ip);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    if !saw_san {
+        return Err(AcmeProblem::malformed(
+            "CSR SubjectAltName uzantısı içermeli",
+        ));
+    }
+
+    Ok(identifiers)
+}
+
+fn ensure_identifiers_covered(
+    csr_identifiers: &CsrIdentifiers,
+    order_identifiers: &[OrderIdentifier],
+) -> Result<(), AcmeProblem> {
+    for identifier in order_identifiers {
+        match identifier {
+            OrderIdentifier::Dns(value) => {
+                if !csr_identifiers.dns.contains(value.as_str()) {
+                    return Err(AcmeProblem::malformed(format!(
+                        "CSR SubjectAltName {value} değerini içermiyor"
+                    )));
+                }
+            }
+            OrderIdentifier::Ip(addr) => {
+                if !csr_identifiers.ips.contains(addr) {
+                    return Err(AcmeProblem::malformed(format!(
+                        "CSR SubjectAltName IP {addr} değerini içermiyor"
+                    )));
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn normalize_dns_name(value: &str) -> String {
+    let trimmed = value.trim().trim_end_matches('.');
+    trimmed.to_ascii_lowercase()
+}
+
+fn parse_csr_ip_address(bytes: &[u8]) -> Result<IpAddr, AcmeProblem> {
+    match bytes.len() {
+        4 => Ok(IpAddr::V4(Ipv4Addr::new(
+            bytes[0], bytes[1], bytes[2], bytes[3],
+        ))),
+        16 => {
+            let mut raw = [0_u8; 16];
+            raw.copy_from_slice(bytes);
+            Ok(IpAddr::V6(Ipv6Addr::from(raw)))
+        }
+        _ => Err(AcmeProblem::malformed(
+            "CSR SubjectAltName IPAddress alanı 4 veya 16 bayt olmalıdır",
+        )),
+    }
 }
 
 fn parse_account_key(alg: &str, jwk: Value) -> Result<(AccountKey, String), AcmeProblem> {

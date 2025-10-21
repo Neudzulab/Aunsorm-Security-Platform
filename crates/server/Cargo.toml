@@ -63,6 +63,8 @@ postcard = { version = "1.0", features = ["alloc"] }
 quinn = { version = "0.11.7", default-features = false, features = ["runtime-tokio", "rustls"], optional = true }
 rcgen = { version = "0.12", optional = true }
 rustls = { version = "0.22", optional = true }
+x509-parser = { version = "0.16", features = ["verify"] }
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }
+rcgen = "0.12"
