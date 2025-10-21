@@ -43,6 +43,7 @@ const AACM_D: f64 = 1.55595;
 #[allow(clippy::unreadable_literal)]
 const AACM_E: f64 = 1.35684;
 
+use crate::acme::AcmeService;
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::error::ServerError;
 use crate::fabric::FabricDidRegistry;
@@ -751,6 +752,7 @@ pub struct ServerState {
     transparency_ledger: TransparencyLedger,
     mdm: MdmDirectory,
     fabric: FabricDidRegistry,
+    acme: AcmeService,
     entropy_salt: [u8; 32],
     entropy_counter: StdMutex<u64>,
 }
@@ -795,6 +797,7 @@ impl ServerState {
         )?;
         let mdm = default_mdm_directory()?;
         let fabric = FabricDidRegistry::poc()?;
+        let acme = AcmeService::new(&issuer)?;
         let mut entropy_salt = [0_u8; 32];
         OsRng.fill_bytes(&mut entropy_salt);
         let oauth_clients = Arc::new(default_oauth_clients());
@@ -815,6 +818,7 @@ impl ServerState {
             transparency_ledger,
             mdm,
             fabric,
+            acme,
             entropy_salt,
             entropy_counter: StdMutex::new(0),
         })
@@ -850,6 +854,10 @@ impl ServerState {
 
     pub fn oauth_client(&self, client_id: &str) -> Option<&OAuthClient> {
         self.oauth_clients.get(client_id)
+    }
+
+    pub const fn acme(&self) -> &AcmeService {
+        &self.acme
     }
 
     pub const fn strict(&self) -> bool {

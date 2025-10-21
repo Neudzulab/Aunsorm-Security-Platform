@@ -44,8 +44,11 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /id/verify-head 🚧 - Head damgalı kimlik doğrulama
 │   │   ├── POST /blockchain/fabric/did/verify 🚧 - Hyperledger Fabric DID doğrulama PoC'u
 │   │   ├── GET /http3/capabilities 🚧 - HTTP/3 PoC introspeksiyonu (`http3-experimental`)
-│   │   └── ACME endpoints 📋 [Planlandı v0.5.0] - Let's Encrypt otomasyonu (`/acme/directory`, `/acme/new-account`, `/acme/new-order`)
-│   ├── acme/                          # ACME istemcisi ve otomasyon altyapısı 📋 [Planlandı v0.5.0]
+│   │   ├── GET /acme/directory ✅ - ACME directory keşfi ve meta bilgisi
+│   │   ├── GET /acme/new-nonce ✅ - Replay-Nonce üretimi (JWS koruması için)
+│   │   ├── POST /acme/new-account ✅ - Hesap kaydı (JWK doğrulamalı)
+│   │   └── POST /acme/new-order ✅ - Sertifika order oluşturma
+│   ├── acme/                          # ACME istemcisi ve otomasyon altyapısı 🚧
 │   ├── id/                            # Head-stamped ID kütüphanesi ve testler 🚧
 │   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅
 │   ├── kms/                           # Anahtar yönetimi hizmeti adaptörleri ✅
@@ -583,22 +586,22 @@ aunsorm-server v0.4.5
 │  ├─ Max wire size: 1350 bytes
 │  └─ Feature flag: `http3-experimental`
 │
-└─ 🔜 ACME Protocol (RFC 8555)
-   ├─ GET    /acme/directory 📋         → [Planlandı v0.5.0] ACME directory discovery
-   │                                       └─ `aunsorm-acme` crate hazır (directory parser)
-   │                                       └─ Output: newNonce, newAccount, newOrder URLs
+└─ ✅ ACME Protocol (RFC 8555)
+   ├─ GET    /acme/directory ✅         → ACME directory discovery
+   │                                       └─ `aunsorm-acme` crate ile meta + endpoint keşfi
+   │                                       └─ Output: newNonce, newAccount, newOrder URL'leri
    │
-   ├─ HEAD   /acme/new-nonce 📋         → [Planlandı v0.5.0] Nonce generation
-   │                                       └─ Replay-Nonce header generation
-   │                                       └─ NonceManager hazır (in-memory + SQLite)
+   ├─ GET    /acme/new-nonce ✅         → Replay-Nonce üretimi
+   │                                       └─ Base64url nonce, yeniden kullanım korumalı
+   │                                       └─ Nonce havuzu (in-memory) + JWS entegrasyonu
    │
-   ├─ POST   /acme/new-account 📋       → [Planlandı v0.5.0] Account creation
-   │                                       └─ JWS signature verification (JwsSigner hazır)
-   │                                       └─ Account key registration
+   ├─ POST   /acme/new-account ✅       → Hesap oluşturma
+   │                                       └─ Ed25519/ES256/RS256 JWS doğrulaması
+   │                                       └─ ACME account store + Location header
    │
-   ├─ POST   /acme/new-order 📋         → [Planlandı v0.5.0] Certificate order
-   │                                       └─ Domain validation workflow
-   │                                       └─ Challenge generation (http-01, dns-01)
+   ├─ POST   /acme/new-order ✅         → Sertifika order başlangıcı
+   │                                       └─ DNS/IP identifier doğrulaması (IDNA destekli)
+   │                                       └─ Autorization/Finalize URL üretimi
    │
    ├─ POST   /acme/authz/{id} 📋        → [Planlandı v0.5.0] Authorization status
    │                                       └─ Challenge status polling
@@ -617,7 +620,7 @@ aunsorm-server v0.4.5
 > **📌 NOT:** Bu ağaçta gösterilen her komut ve endpoint, ilerleyen sürümlerde **daha fazla özellik ve parametre** ile genişletilecektir.
 > 
 > **🔜 GELECEK ENDPOINT'LER:**
-> - **v0.5.0 (Q1 2026):** ACME Protocol endpoints (RFC 8555) - `aunsorm-acme` crate hazır, 8 endpoint entegrasyonu bekliyor
+> - **v0.5.0 (Q1 2026):** ACME Protocol tamamlayıcı uçları (RFC 8555) - Authorization/Challenge/Finalize/Revoke akışları için 4 endpoint entegrasyonu planlandı
 > - **v0.6.0 (Q2 2026):** WebTransport API - Bidirectional HTTP/3 QUIC streams, production-grade datagram hardening
 > - **v0.7.0 (Q3 2026):** Blockchain integration endpoints - Transparency log anchoring to public chains
 > Detaylı kullanım ve tüm parametreler için:
@@ -636,7 +639,7 @@ aunsorm-server v0.4.5
 - ✅ **Transparency Logging:** Merkle tree based audit trail
 - ✅ **HTTP/3 QUIC Datagrams:** Experimental low-latency telemetry streaming
 - ✅ **HEAD-Stamped IDs:** Git commit SHA tabanlı benzersiz kimlik üretimi (server + CLI akışları)
-- 📋 **ACME Protocol:** Let's Encrypt uyumlu otomatik sertifika yönetimi (RFC 8555, `aunsorm-acme` crate hazır, v0.5.0'da entegre edilecek)
+- 🚧 **ACME Protocol:** `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` üretimde; authorization/challenge/finalize/revoke akışları v0.5.0'da tamamlanacak
 - ✅ **Production Ready:** Async/await, structured logging, OpenTelemetry
 
 **Hızlı Başlangıç:**
@@ -999,7 +1002,7 @@ Detaylı döküman: [`docs/src/architecture/http3-quic.md`](docs/src/architectur
 - 🎯 **CI/CD Integration:** Git commit SHA tracking for artifacts
 - ✅ **Monotonic Timestamps:** Collision-free ID generation
 
-#### v0.5.0 (Q1 2026) - **Let's Encrypt ACME Client + Server Endpoints**
+#### v0.5.0 (Q1 2026) - **Let's Encrypt ACME Challenge Automation**
 
 **CLI (aunsorm-cli acme):**
 - 🚀 **Otomatik Sertifika Yönetimi:** Hiçbir manuel işlem gerektirmeden
@@ -1009,13 +1012,10 @@ Detaylı döküman: [`docs/src/architecture/http3-quic.md`](docs/src/architectur
 - 🔄 **Zero-Downtime:** Kesintisiz sertifika rotation
 
 **Server API (aunsorm-server /acme/*):**
-- 🔌 **ACME Protocol Endpoints:** RFC 8555 compliant server implementation
-- 📋 **Directory Discovery:** GET /acme/directory → newNonce, newAccount, newOrder
-- 🔐 **Account Management:** POST /acme/new-account → ACME account creation
-- � **Order Management:** POST /acme/new-order → Certificate order workflow
-- ✅ **Authorization:** Challenge validation (HTTP-01, DNS-01, TLS-ALPN-01)
-- 🔄 **Certificate Lifecycle:** Issue, revoke, renew operations
-- �📊 **Monitoring:** Prometheus metrics ve alerting
+- ✅ **Core Onboarding:** `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` (v0.4.x)
+- 🚧 **Authorization:** Challenge validation (HTTP-01, DNS-01, TLS-ALPN-01)
+- 🚧 **Finalize & Revoke:** CSR işleme, sertifika yayınlama ve iptal akışları
+- 📊 **Monitoring:** Prometheus metrikleri ve alerting entegrasyonu
 
 ```bash
 # CLI: ACME ile Let's Encrypt sertifikası al (v0.5.0)
@@ -1032,8 +1032,8 @@ curl http://localhost:8080/acme/directory
 
 **TAMAMEN BAĞIMSIZ:** Certbot, acme.sh veya başka hiçbir araca ihtiyaç yok!
 
-> **📦 Not:** `aunsorm-acme` crate (directory parser, nonce manager, JWS signing) mevcut ve test edilmiştir. 
-> v0.5.0'da CLI komutları ve Server endpoint'leri eklenecektir.
+> **📦 Not:** `aunsorm-acme` crate (directory parser, nonce manager, JWS signing) mevcut ve test edilmiştir.
+> Sunucu tarafında onboarding uçları (directory/new-nonce/new-account/new-order) hazır; v0.5.0'da CLI komutları ve kalan authorization/finalize/revoke endpoint'leri tamamlanacaktır.
 
 ## 🔥 Neden Aunsorm?
 
