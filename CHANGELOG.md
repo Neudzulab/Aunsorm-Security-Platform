@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `aunsorm-server` ACME servisi: `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` uçları JWS doğrulaması ve nonce/account/order yönetimiyle yayınlandı.
 - ACME onboarding entegrasyon testi (`acme_happy_path_flow`) directory → new-nonce → new-account → new-order senaryosunu doğruluyor.
+- `aunsorm-cli acme` komutları: directory keşfi (`acme directory`), hesap kaydı (`acme register`) ve order oluşturma (`acme order`) akışları state dosyası yönetimi ve JSON çıktısı desteğiyle eklendi.
 - VibeCO v0.7.0 uyumu için README, PLAN ve PROJECT_SUMMARY dosyalarına açıklayıcı başlık blokları eklendi.
 - ACME hesap anahtarları için RFC 7638 uyumlu JWK thumbprint yardımcıları (Ed25519, ES256, RS256).
 - ACME `newOrder` identifier doğrulaması artık IDNA normalizasyonu ile uluslararası alan adlarını destekliyor.
