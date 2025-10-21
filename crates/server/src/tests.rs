@@ -3,9 +3,13 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::body::{to_bytes, Body};
-use axum::http::{Request, StatusCode};
+use axum::http::{header, Request, StatusCode};
 use tower::util::ServiceExt;
 
+use aunsorm_acme::{
+    AccountContact, Ed25519AccountKey, KeyBinding, NewAccountRequest, NewOrderRequest,
+    OrderIdentifier, ReplayNonce, REPLAY_NONCE_HEADER,
+};
 use aunsorm_jwt::{Ed25519KeyPair, Jwk};
 use aunsorm_mdm::{DeviceCertificatePlan, DeviceRecord, PolicyDocument};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -46,6 +50,43 @@ struct RandomNumberPayload {
     min: u64,
     max: u64,
     entropy: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AcmeDirectoryPayload {
+    #[serde(rename = "newNonce")]
+    nonce: String,
+    #[serde(rename = "newAccount")]
+    account: String,
+    #[serde(rename = "newOrder")]
+    order: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TestAccountResponseBody {
+    status: String,
+    contact: Vec<String>,
+    #[serde(rename = "orders")]
+    _orders: String,
+    #[serde(rename = "termsOfServiceAgreed")]
+    terms_of_service_agreed: bool,
+    kid: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TestOrderResponseBody {
+    status: String,
+    identifiers: Vec<TestOrderIdentifierBody>,
+    authorizations: Vec<String>,
+    #[serde(rename = "finalize")]
+    _finalize: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TestOrderIdentifierBody {
+    #[serde(rename = "type")]
+    ty: String,
+    value: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -125,6 +166,189 @@ fn setup_state() -> Arc<ServerState> {
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))
+}
+
+#[tokio::test]
+async fn acme_directory_and_order_flow() {
+    let state = setup_state();
+    let app = build_router(Arc::clone(&state));
+
+    // Directory discovery returns fully qualified endpoints.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/acme/directory")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let replay = response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("nonce header present")
+        .to_str()
+        .expect("nonce str");
+    assert!(!replay.is_empty(), "nonce must not be empty");
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body bytes");
+    let directory: AcmeDirectoryPayload = serde_json::from_slice(&body).expect("directory json");
+    assert_eq!(directory.nonce, state.acme().new_nonce_url().as_str());
+    assert_eq!(directory.account, state.acme().new_account_url().as_str());
+    assert_eq!(directory.order, state.acme().new_order_url().as_str());
+
+    // Fetch a nonce for new-account.
+    let nonce_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/acme/new-nonce")
+                .body(Body::empty())
+                .expect("nonce request"),
+        )
+        .await
+        .expect("nonce response");
+    assert_eq!(nonce_response.status(), StatusCode::OK);
+    let account_nonce = nonce_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("nonce header")
+        .to_str()
+        .expect("nonce str");
+    let account_nonce = ReplayNonce::parse(account_nonce).expect("valid nonce value");
+
+    // Create a new account with Ed25519 key.
+    let key = Ed25519AccountKey::from_seed([7_u8; 32]);
+    let account_payload = NewAccountRequest::builder()
+        .contact(AccountContact::email("security@example.com").expect("contact"))
+        .terms_of_service_agreed(true)
+        .build();
+    let account_jws = key
+        .sign_json(
+            &account_payload,
+            &account_nonce,
+            state.acme().new_account_url(),
+            KeyBinding::Jwk,
+        )
+        .expect("jws");
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/acme/new-account")
+                .header(header::CONTENT_TYPE, "application/jose+json")
+                .body(Body::from(
+                    serde_json::to_vec(&account_jws).expect("serialize"),
+                ))
+                .expect("account request"),
+        )
+        .await
+        .expect("account response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let account_nonce = response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("account nonce header")
+        .to_str()
+        .expect("nonce str");
+    assert!(!account_nonce.is_empty());
+    let location = response
+        .headers()
+        .get(header::LOCATION)
+        .expect("location header")
+        .to_str()
+        .expect("location str")
+        .to_owned();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("account body");
+    let account: TestAccountResponseBody = serde_json::from_slice(&body).expect("account json");
+    assert_eq!(account.status, "valid");
+    assert!(account.terms_of_service_agreed);
+    assert_eq!(
+        account.contact,
+        vec!["mailto:security@example.com".to_string()]
+    );
+    assert_eq!(account.kid, location);
+
+    // Fetch another nonce for new-order.
+    let nonce_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/acme/new-nonce")
+                .body(Body::empty())
+                .expect("nonce request"),
+        )
+        .await
+        .expect("nonce response");
+    let order_nonce = nonce_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("order nonce header")
+        .to_str()
+        .expect("nonce str");
+    let order_nonce = ReplayNonce::parse(order_nonce).expect("valid nonce value");
+
+    let order_request = NewOrderRequest::builder()
+        .identifier(OrderIdentifier::dns("example.com").expect("dns"))
+        .build()
+        .expect("order build");
+    let order_jws = key
+        .sign_json(
+            &order_request,
+            &order_nonce,
+            state.acme().new_order_url(),
+            KeyBinding::Kid(&account.kid),
+        )
+        .expect("order jws");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/acme/new-order")
+                .header(header::CONTENT_TYPE, "application/jose+json")
+                .body(Body::from(
+                    serde_json::to_vec(&order_jws).expect("serialize"),
+                ))
+                .expect("order request"),
+        )
+        .await
+        .expect("order response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let order_nonce_header = response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("order nonce header")
+        .to_str()
+        .expect("nonce str");
+    assert!(!order_nonce_header.is_empty());
+    let order_location = response
+        .headers()
+        .get(header::LOCATION)
+        .expect("location header")
+        .to_str()
+        .expect("location str")
+        .to_owned();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("order body");
+    let order: TestOrderResponseBody = serde_json::from_slice(&body).expect("order json");
+    assert_eq!(order.status, "pending");
+    assert_eq!(order.identifiers.len(), 1);
+    assert_eq!(order.identifiers[0].ty, "dns");
+    assert_eq!(order.identifiers[0].value, "example.com");
+    assert_eq!(order.authorizations.len(), 1);
+    assert!(order_location.contains("/acme/order/"));
 }
 
 #[allow(clippy::too_many_lines)]

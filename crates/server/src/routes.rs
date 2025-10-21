@@ -4,13 +4,12 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-#[cfg(feature = "http3-experimental")]
-use axum::body::Body;
-use axum::extract::{Path, State};
-use axum::http::{header, HeaderValue, StatusCode};
+use axum::body::{to_bytes, Body};
+use axum::extract::{Path, Request, State};
+use axum::http::{header, HeaderName, HeaderValue, StatusCode};
 #[cfg(feature = "http3-experimental")]
 use axum::middleware::{self, Next};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use base64::{
@@ -28,6 +27,7 @@ use tokio::signal;
 use tokio::signal::unix::{signal as unix_signal, SignalKind};
 use tracing::{info, warn};
 
+use aunsorm_acme::AcmeJws;
 use aunsorm_core::transparency::TransparencyRecord;
 use aunsorm_jwt::{Audience, Claims, JwtError, VerificationOptions};
 use aunsorm_mdm::{
@@ -35,6 +35,7 @@ use aunsorm_mdm::{
     PolicyDocument,
 };
 
+use crate::acme::{AcmeProblem, NewAccountOutcome, NewOrderOutcome};
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
 use crate::fabric::{FabricDidError, FabricDidVerificationRequest};
@@ -75,6 +76,11 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/id/generate", post(generate_id))
         .route("/id/parse", post(parse_id))
         .route("/id/verify-head", post(verify_head))
+        // ACME protocol endpoints
+        .route("/acme/directory", get(acme_directory))
+        .route("/acme/new-nonce", get(acme_new_nonce))
+        .route("/acme/new-account", post(acme_new_account))
+        .route("/acme/new-order", post(acme_new_order))
         // Security endpoints (media token generation)
         .route("/security/generate-media-token", post(generate_media_token))
         // Blockchain DID verification PoC
@@ -544,6 +550,166 @@ async fn exchange_token(
         token_type: "Bearer",
         expires_in: state.token_ttl().as_secs(),
     }))
+}
+
+const APPLICATION_JOSE_JSON: &str = "application/jose+json";
+
+fn is_jose_content_type(headers: &axum::http::HeaderMap) -> bool {
+    headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(';')
+                .next()
+                .is_some_and(|mime| mime.trim().eq_ignore_ascii_case(APPLICATION_JOSE_JSON))
+        })
+}
+
+fn apply_acme_headers(response: &mut Response, nonce: &str) {
+    let replay_name = HeaderName::from_static("replay-nonce");
+    let value = HeaderValue::from_str(nonce).expect("nonce header değeri geçerli olmalı");
+    response.headers_mut().insert(replay_name, value);
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+}
+
+fn acme_problem_response(problem: &AcmeProblem, nonce: &str) -> Response {
+    let mut response = (problem.status(), Json(problem.body())).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/problem+json"),
+    );
+    apply_acme_headers(&mut response, nonce);
+    response
+}
+
+fn acme_account_response(outcome: NewAccountOutcome, nonce: &str) -> Response {
+    let mut response = (outcome.status, Json(outcome.response)).into_response();
+    apply_acme_headers(&mut response, nonce);
+    if let Ok(value) = HeaderValue::from_str(&outcome.location) {
+        response.headers_mut().insert(header::LOCATION, value);
+    }
+    if let Some(link) = outcome.link_terms {
+        let formatted = format!("<{link}>; rel=\"terms-of-service\"");
+        if let Ok(value) = HeaderValue::from_str(&formatted) {
+            response.headers_mut().insert(header::LINK, value);
+        }
+    }
+    response
+}
+
+fn acme_order_response(outcome: NewOrderOutcome, nonce: &str) -> Response {
+    let mut response = (StatusCode::CREATED, Json(outcome.response)).into_response();
+    apply_acme_headers(&mut response, nonce);
+    if let Ok(value) = HeaderValue::from_str(&outcome.location) {
+        response.headers_mut().insert(header::LOCATION, value);
+    }
+    response
+}
+
+async fn acme_directory(State(state): State<Arc<ServerState>>) -> Response {
+    let service = state.acme();
+    let document = service.directory_document();
+    let nonce = service.issue_nonce().await;
+    let mut response = (StatusCode::OK, Json(document)).into_response();
+    apply_acme_headers(&mut response, &nonce);
+    response
+}
+
+async fn acme_new_nonce(State(state): State<Arc<ServerState>>) -> Response {
+    let service = state.acme();
+    let nonce = service.issue_nonce().await;
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::OK;
+    apply_acme_headers(&mut response, &nonce);
+    response
+}
+
+async fn acme_new_account(
+    State(state): State<Arc<ServerState>>,
+    request: Request<Body>,
+) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
+    }
+
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    match service.handle_new_account(jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_account_response(outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
+}
+
+async fn acme_new_order(State(state): State<Arc<ServerState>>, request: Request<Body>) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
+    }
+
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    match service.handle_new_order(jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_order_response(outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

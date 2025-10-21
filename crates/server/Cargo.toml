@@ -32,11 +32,16 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 sha2 = { workspace = true }
 hkdf = { workspace = true }
+aunsorm-acme = { path = "../acme" }
 aunsorm-jwt = { path = "../jwt" }
 aunsorm-core = { path = "../core" }
 aunsorm-mdm = { path = "../mdm" }
 aunsorm-id = { path = "../id" }
 ed25519-dalek = { version = "2", features = ["std"] }
+p256 = { version = "0.13", features = ["ecdsa"] }
+rsa = { workspace = true }
+signature = { version = "2", default-features = false, features = ["std"] }
+url = { workspace = true }
 zeroize = { workspace = true }
 rand_core = { workspace = true }
 hex = { workspace = true }

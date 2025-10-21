@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `aunsorm-server` ACME servisi: `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` uçları JWS doğrulaması ve nonce/account/order yönetimiyle yayınlandı.
+- ACME onboarding entegrasyon testi (`acme_happy_path_flow`) directory → new-nonce → new-account → new-order senaryosunu doğruluyor.
 - VibeCO v0.7.0 uyumu için README, PLAN ve PROJECT_SUMMARY dosyalarına açıklayıcı başlık blokları eklendi.
 - ACME hesap anahtarları için RFC 7638 uyumlu JWK thumbprint yardımcıları (Ed25519, ES256, RS256).
 - ACME `newOrder` identifier doğrulaması artık IDNA normalizasyonu ile uluslararası alan adlarını destekliyor.
@@ -45,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/random/number` artık tam `u64` aralığını destekleyerek yüksek üst limitlerde hata vermeden deterministik reddetme örneklemesini uyguluyor.
 
 ### Documentation
+- README ACME roadmap anlatımı, yayınlanan onboarding uçlarını ve v0.5.0 için kalan authorization/finalize/revoke planını yansıtacak şekilde güncellendi.
 - README mimari ağacı VibeCO formatıyla yeniden yazıldı; endpoint durum etiketleri ve servis ağaç disiplini notları güncellendi.
 - PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.
 - Hyperledger Fabric DID doğrulama planı (`docs/src/operations/blockchain-integration.md`) ve uyumluluk kontrol listesi güncellemeleri.

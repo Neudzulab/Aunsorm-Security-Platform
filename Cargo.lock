@@ -480,6 +480,7 @@ dependencies = [
 name = "aunsorm-server"
 version = "0.4.5"
 dependencies = [
+ "aunsorm-acme",
  "aunsorm-core",
  "aunsorm-id",
  "aunsorm-jwt",
@@ -497,15 +498,18 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "p256",
  "postcard",
  "quinn",
  "rand_core 0.6.4",
  "rcgen 0.12.1",
+ "rsa",
  "rusqlite",
  "rustls 0.22.4",
  "serde",
  "serde_json",
  "sha2",
+ "signature",
  "thiserror 1.0.69",
  "time",
  "tokio",
@@ -513,6 +517,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "url",
  "zeroize",
 ]
 
