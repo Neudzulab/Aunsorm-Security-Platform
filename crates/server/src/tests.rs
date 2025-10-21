@@ -16,6 +16,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use url::Url;
 
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::fabric::{
@@ -25,6 +26,7 @@ use crate::fabric::{
 use crate::routes::build_router;
 use crate::state::ServerState;
 use ed25519_dalek::Signer;
+use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
 
 #[derive(Debug, Deserialize)]
 struct TransparencyTree {
@@ -78,8 +80,14 @@ struct TestOrderResponseBody {
     status: String,
     identifiers: Vec<TestOrderIdentifierBody>,
     authorizations: Vec<String>,
-    #[serde(rename = "finalize")]
-    _finalize: String,
+    finalize: String,
+    #[serde(rename = "expires")]
+    _expires: String,
+    #[serde(rename = "notBefore")]
+    _not_before: Option<String>,
+    #[serde(rename = "notAfter")]
+    _not_after: Option<String>,
+    certificate: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -349,6 +357,94 @@ async fn acme_directory_and_order_flow() {
     assert_eq!(order.identifiers[0].value, "example.com");
     assert_eq!(order.authorizations.len(), 1);
     assert!(order_location.contains("/acme/order/"));
+    let finalize_endpoint = order.finalize.clone();
+    assert!(order.certificate.is_none());
+
+    // Fetch nonce for finalize request.
+    let nonce_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/acme/new-nonce")
+                .body(Body::empty())
+                .expect("nonce request"),
+        )
+        .await
+        .expect("nonce response");
+    let finalize_nonce = nonce_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("finalize nonce header")
+        .to_str()
+        .expect("nonce str");
+    let finalize_nonce = ReplayNonce::parse(finalize_nonce).expect("valid finalize nonce");
+
+    // Build CSR covering the identifier.
+    let mut params = CertificateParams::new(vec!["example.com".to_string()]);
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, "example.com");
+    params.distinguished_name = dn;
+    let certificate = Certificate::from_params(params).expect("certificate params");
+    let csr_der = certificate.serialize_request_der().expect("csr der");
+    let csr_b64 = URL_SAFE_NO_PAD.encode(&csr_der);
+
+    let finalize_url = Url::parse(&finalize_endpoint).expect("finalize url");
+    let finalize_payload = json!({ "csr": csr_b64 });
+    let finalize_jws = key
+        .sign_json(
+            &finalize_payload,
+            &finalize_nonce,
+            &finalize_url,
+            KeyBinding::Kid(&account.kid),
+        )
+        .expect("finalize jws");
+
+    let finalize_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(finalize_url.path())
+                .header(header::CONTENT_TYPE, "application/jose+json")
+                .body(Body::from(
+                    serde_json::to_vec(&finalize_jws).expect("serialize"),
+                ))
+                .expect("finalize request"),
+        )
+        .await
+        .expect("finalize response");
+    assert_eq!(finalize_response.status(), StatusCode::OK);
+    let finalize_nonce_header = finalize_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("nonce header")
+        .to_str()
+        .expect("nonce str");
+    assert!(!finalize_nonce_header.is_empty());
+    let finalize_location = finalize_response
+        .headers()
+        .get(header::LOCATION)
+        .expect("location header")
+        .to_str()
+        .expect("location str");
+    assert_eq!(finalize_location, order_location);
+    let body = to_bytes(finalize_response.into_body(), usize::MAX)
+        .await
+        .expect("finalize body");
+    let finalized: TestOrderResponseBody = serde_json::from_slice(&body).expect("finalized json");
+    assert_eq!(finalized.status, "valid");
+    assert_eq!(finalized.finalize, finalize_endpoint);
+    let order_id = order_location
+        .trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .expect("order id");
+    let expected_certificate = format!("https://issuer/acme/cert/{order_id}");
+    assert_eq!(
+        finalized.certificate.as_deref(),
+        Some(expected_certificate.as_str())
+    );
 }
 
 #[allow(clippy::too_many_lines)]
