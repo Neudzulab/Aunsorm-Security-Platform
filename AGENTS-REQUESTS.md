@@ -158,12 +158,12 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [x] 🔄 In Progress
+- [ ] 🔄 In Progress
 - [ ] ✅ Done
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- CLI tarafında `aunsorm-cli acme directory/register/order` komutları yayınlandı; hesap state dosyası ve order JSON çıktıları sağlanıyor. Challenge doğrulama + finalize/revoke akışı takip eden sprintte planlanıyor.
+- _(Güncelleme bekleniyor)_
 
 ---
 
