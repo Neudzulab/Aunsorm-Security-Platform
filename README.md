@@ -48,7 +48,7 @@ Aunsorm Cryptography Suite/
 │   │   ├── GET /acme/new-nonce ✅ - Replay-Nonce üretimi (JWS koruması için)
 │   │   ├── POST /acme/new-account ✅ - Hesap kaydı (JWK doğrulamalı)
 │   │   └── POST /acme/new-order ✅ - Sertifika order oluşturma
-│   ├── acme/                          # ACME istemcisi ve otomasyon altyapısı 🚧
+│   ├── acme/                          # ACME istemcisi (directory/register/order CLI) 🚧
 │   ├── id/                            # Head-stamped ID kütüphanesi ve testler 🚧
 │   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅
 │   ├── kms/                           # Anahtar yönetimi hizmeti adaptörleri ✅
@@ -1005,11 +1005,10 @@ Detaylı döküman: [`docs/src/architecture/http3-quic.md`](docs/src/architectur
 #### v0.5.0 (Q1 2026) - **Let's Encrypt ACME Challenge Automation**
 
 **CLI (aunsorm-cli acme):**
-- 🚀 **Otomatik Sertifika Yönetimi:** Hiçbir manuel işlem gerektirmeden
-- 🌍 **Let's Encrypt Entegrasyonu:** Ücretsiz, güvenilir SSL/TLS sertifikaları
-- ♻️ **Auto-Renewal:** 30 gün kala otomatik yenileme
-- 🎯 **Domain Validation:** HTTP-01, DNS-01, TLS-ALPN-01
-- 🔄 **Zero-Downtime:** Kesintisiz sertifika rotation
+- ✅ **Directory keşfi:** `acme directory --json` ile ACME meta verilerini doğrula
+- ✅ **Hesap kaydı & order oluşturma:** `acme register` + `acme order` akışı
+- 🚧 **Challenge doğrulama:** HTTP-01, DNS-01, TLS-ALPN-01 otomasyonu
+- 🚧 **Finalize & yenileme:** CSR işleme, sertifika yayınlama ve otomatik yenileme
 
 **Server API (aunsorm-server /acme/*):**
 - ✅ **Core Onboarding:** `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` (v0.4.x)
@@ -1018,14 +1017,24 @@ Detaylı döküman: [`docs/src/architecture/http3-quic.md`](docs/src/architectur
 - 📊 **Monitoring:** Prometheus metrikleri ve alerting entegrasyonu
 
 ```bash
-# CLI: ACME ile Let's Encrypt sertifikası al (v0.5.0)
-aunsorm-cli acme certify --domain example.com \
-  --validation http-01 --webroot /var/www/html
+# CLI: Directory keşfi (JSON çıktısı isteğe bağlı)
+aunsorm-cli acme directory --server http://localhost:8080 --json
 
-# CLI: Otomatik renewal (cron ile)
-aunsorm-cli acme renew --check-all --days-before 30
+# CLI: ACME hesabı oluştur (state dosyası kayıt altına alınır)
+aunsorm-cli acme register \
+  --server http://localhost:8080 \
+  --account ./acme/account.json \
+  --email admin@example.com \
+  --accept-terms
 
-# Server: ACME directory endpoint (v0.5.0)
+# CLI: Yeni sertifika order'ı aç ve yanıtı kaydet
+aunsorm-cli acme order \
+  --server http://localhost:8080 \
+  --account ./acme/account.json \
+  --domain www.example.com \
+  --output ./acme/order.json
+
+# Server: ACME directory endpoint (JSON gövdesi)
 curl http://localhost:8080/acme/directory
 # Response: {"newNonce":"...","newAccount":"...","newOrder":"..."}
 ```
@@ -1033,7 +1042,7 @@ curl http://localhost:8080/acme/directory
 **TAMAMEN BAĞIMSIZ:** Certbot, acme.sh veya başka hiçbir araca ihtiyaç yok!
 
 > **📦 Not:** `aunsorm-acme` crate (directory parser, nonce manager, JWS signing) mevcut ve test edilmiştir.
-> Sunucu tarafında onboarding uçları (directory/new-nonce/new-account/new-order) hazır; v0.5.0'da CLI komutları ve kalan authorization/finalize/revoke endpoint'leri tamamlanacaktır.
+> Sunucu tarafında onboarding uçları (directory/new-nonce/new-account/new-order) ve CLI `acme directory/register/order` komutları hazır; challenge doğrulaması ile finalize/revoke akışları v0.5.0'da tamamlanacaktır.
 
 ## 🔥 Neden Aunsorm?
 
@@ -1439,18 +1448,25 @@ aunsorm-cli x509 ca sign-server --ca-cert /etc/pki/root-ca.crt \
   --algorithm rsa2048
 ```
 
-### 2. Let's Encrypt Automation (v0.5.0)
-Production domain'ler için otomatik SSL:
+### 2. ACME Onboarding (v0.4.x önizleme)
+Önce hesap oluştur, ardından order başlat:
 ```bash
-# İlk kurulum
-aunsorm-cli acme register --email admin@example.com
+# ACME directory bilgisini doğrula
+aunsorm-cli acme directory --server http://localhost:8080 --json
 
-# Sertifika al
-aunsorm-cli acme certify --domain www.example.com \
-  --validation http-01 --webroot /var/www/html
+# Hesap kaydı (state dosyası ./acme/account.json altında tutulur)
+aunsorm-cli acme register \
+  --server http://localhost:8080 \
+  --account ./acme/account.json \
+  --email admin@example.com \
+  --accept-terms
 
-# Cron ile otomatik renewal
-0 0 * * * /usr/local/bin/aunsorm-cli acme renew --check-all
+# Order oluştur ve yanıtı kaydet (challenge doğrulaması sonraki sprintte)
+aunsorm-cli acme order \
+  --server http://localhost:8080 \
+  --account ./acme/account.json \
+  --domain www.example.com \
+  --output ./acme/order.json
 ```
 
 ##  Roadmap

@@ -17,12 +17,23 @@ use base64::{
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use hkdf::Hkdf;
+use http::{header::LOCATION, HeaderMap, HeaderName, HeaderValue, StatusCode};
+use rand::rngs::OsRng;
+use rand::RngCore;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use sha2::Sha256;
 use thiserror::Error;
+use ureq::{Agent, Error as UreqError};
+use url::Url;
 use zeroize::Zeroizing;
 
+use aunsorm_acme::{
+    AccountContact, AccountContactError, AcmeDirectory, AcmeDirectoryError, AcmeJws,
+    Ed25519AccountKey, JwsError, KeyBinding, NewAccountRequest, NewNonceRequester, NewOrderError,
+    NewOrderRequest, NonceError, NonceManager, NonceManagerError, NonceRequestError, ReplayNonce,
+    REPLAY_NONCE_HEADER,
+};
 use aunsorm_core::{
     calib_from_text, coord32_derive, derive_seed64_and_pdk, salts::Salts, Calibration, KdfInfo,
     KdfPreset, KdfProfile, SessionRatchet, SessionRatchetState,
@@ -99,6 +110,9 @@ enum Commands {
     /// X.509 işlemleri
     #[command(subcommand)]
     X509(X509Commands),
+    /// ACME otomasyon komutları
+    #[command(subcommand)]
+    Acme(AcmeCommands),
 }
 
 #[derive(Subcommand)]
@@ -210,6 +224,67 @@ enum X509Commands {
     /// CA otomasyon komutları
     #[command(subcommand)]
     Ca(X509CaCommands),
+}
+
+#[derive(Subcommand)]
+enum AcmeCommands {
+    /// ACME directory belgesini keşfet ve özeti göster
+    Directory(AcmeDirectoryArgs),
+    /// ACME hesabı oluştur veya mevcut hesabı sorgula
+    Register(AcmeRegisterArgs),
+    /// Yeni bir ACME order'ı başlat
+    Order(AcmeOrderArgs),
+}
+
+#[derive(Args)]
+struct AcmeDirectoryArgs {
+    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    #[arg(long, default_value = "http://localhost:8080")]
+    server: String,
+    /// Directory çıktısını JSON olarak yazdır
+    #[arg(long)]
+    json: bool,
+    /// Directory JSON çıktısını dosyaya kaydet
+    #[arg(long, value_name = "PATH")]
+    output: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct AcmeRegisterArgs {
+    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    #[arg(long, default_value = "http://localhost:8080")]
+    server: String,
+    /// Hesap durum dosyası (anahtar + meta bilgiler)
+    #[arg(long, value_name = "PATH")]
+    account: PathBuf,
+    /// ACME hesabı için e-posta adresi
+    #[arg(long = "email", value_name = "EMAIL")]
+    email: Vec<String>,
+    /// ACME hesabı için iletişim URI'si (ör. `mailto:dest@example.com` veya `tel:+905551234567`)
+    #[arg(long = "contact", value_name = "URI")]
+    contact: Vec<String>,
+    /// Hizmet şartlarını kabul et
+    #[arg(long)]
+    accept_terms: bool,
+    /// Sadece mevcut hesabı döndürmeyi talep et
+    #[arg(long)]
+    only_existing: bool,
+}
+
+#[derive(Args)]
+struct AcmeOrderArgs {
+    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    #[arg(long, default_value = "http://localhost:8080")]
+    server: String,
+    /// Hesap durum dosyası (anahtar + meta bilgiler)
+    #[arg(long, value_name = "PATH")]
+    account: PathBuf,
+    /// Order'da kullanılacak DNS alan adı (birden çok kez verilebilir)
+    #[arg(long = "domain", value_name = "DNS", required = true)]
+    domains: Vec<String>,
+    /// Order yanıtını JSON olarak dosyaya kaydet
+    #[arg(long, value_name = "PATH")]
+    output: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -1064,6 +1139,30 @@ enum CliError {
     MissingBundle(PathBuf),
     #[error("CA bundle profili uyuşmuyor: bundle={expected} | profil={actual}")]
     BundleProfileMismatch { expected: String, actual: String },
+    #[error("ACME directory ayrıştırma hatası: {0}")]
+    AcmeDirectory(#[from] AcmeDirectoryError),
+    #[error("ACME iletişim bilgisi hatası: {0}")]
+    AcmeContact(#[from] AccountContactError),
+    #[error("ACME order isteği hatası: {0}")]
+    AcmeOrder(#[from] NewOrderError),
+    #[error("ACME nonce yöneticisi hatası: {0}")]
+    AcmeNonce(#[from] NonceManagerError),
+    #[error("ACME Replay-Nonce hatası: {0}")]
+    AcmeNonceValue(#[from] NonceError),
+    #[error("ACME JWS hatası: {0}")]
+    AcmeJws(#[from] JwsError),
+    #[error("ACME HTTP hatası: {message}")]
+    AcmeHttp { message: String },
+    #[error("ACME sunucusu problem döndürdü ({status} {problem_type}): {detail}")]
+    AcmeProblem {
+        status: u16,
+        problem_type: String,
+        detail: String,
+    },
+    #[error("ACME hesap durumu geçersiz: {0}")]
+    AcmeState(String),
+    #[error("Geçersiz URL: {0}")]
+    InvalidUrl(String),
 }
 
 type CliResult<T> = Result<T, CliError>;
@@ -1465,6 +1564,7 @@ fn run(cli: Cli) -> CliResult<()> {
         Commands::Pq(command) => handle_pq(command, strict_ctx),
         Commands::Jwt(command) => handle_jwt(command),
         Commands::X509(command) => handle_x509(command),
+        Commands::Acme(command) => handle_acme(command),
     }
 }
 
@@ -2854,6 +2954,581 @@ fn handle_x509_ca_sign_server(args: &X509CaSignServerArgs) -> CliResult<()> {
     Ok(())
 }
 
+fn handle_acme(command: AcmeCommands) -> CliResult<()> {
+    match command {
+        AcmeCommands::Directory(args) => handle_acme_directory(&args),
+        AcmeCommands::Register(args) => handle_acme_register(&args),
+        AcmeCommands::Order(args) => handle_acme_order(&args),
+    }
+}
+
+fn handle_acme_directory(args: &AcmeDirectoryArgs) -> CliResult<()> {
+    let mut client = AcmeClient::new(&args.server)?;
+    let discovery = client.fetch_directory()?;
+    let DirectoryDiscovery {
+        directory,
+        raw_json,
+    } = discovery;
+
+    println!(
+        "acme directory: newNonce={} | newAccount={} | newOrder={} | revokeCert={} | keyChange={}",
+        directory.new_nonce,
+        directory.new_account,
+        directory.new_order,
+        directory.revoke_cert,
+        directory.key_change,
+    );
+    if let Some(meta) = &directory.meta {
+        if let Some(tos) = &meta.terms_of_service {
+            println!("  termsOfService={tos}");
+        }
+        if let Some(website) = &meta.website {
+            println!("  website={website}");
+        }
+        if !meta.caa_identities.is_empty() {
+            println!("  caaIdentities={}", meta.caa_identities.join(", "));
+        }
+        println!(
+            "  externalAccountRequired={}",
+            if meta.external_account_required {
+                "true"
+            } else {
+                "false"
+            }
+        );
+    }
+    if !directory.additional_endpoints.is_empty() {
+        println!("  ek uç noktalar:");
+        for (name, url) in &directory.additional_endpoints {
+            println!("    - {name} -> {url}");
+        }
+    }
+
+    if args.json || args.output.is_some() {
+        let value: Value = serde_json::from_str(&raw_json)?;
+        if args.json {
+            let pretty = serde_json::to_string_pretty(&value)?;
+            println!("{pretty}");
+        }
+        if let Some(path) = &args.output {
+            write_json_pretty(path, &value)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn handle_acme_register(args: &AcmeRegisterArgs) -> CliResult<()> {
+    let mut client = AcmeClient::new(&args.server)?;
+    let (mut state, key, newly_created) = load_or_create_account_state(&args.account)?;
+    if newly_created {
+        println!(
+            "acme register: yeni hesap anahtarı oluşturuldu -> {}",
+            args.account.display()
+        );
+    }
+
+    let contacts = build_acme_contacts(args)?;
+    if contacts.is_empty() {
+        return Err(CliError::MissingParam("email/contact"));
+    }
+
+    let mut builder = NewAccountRequest::builder();
+    for contact in contacts {
+        builder = builder.contact(contact);
+    }
+    if args.accept_terms {
+        builder = builder.agree_to_terms();
+    }
+    if args.only_existing {
+        builder = builder.query_existing();
+    }
+    let payload: NewAccountRequest = builder.build();
+
+    let nonce = client.next_nonce()?;
+    let new_account_url = client.new_account_url().clone();
+    let jws = key.sign_json(&payload, &nonce, &new_account_url, KeyBinding::Jwk)?;
+    let response = client.post_jose(&new_account_url, &jws)?;
+    if response.status != StatusCode::CREATED && response.status != StatusCode::OK {
+        return Err(CliError::AcmeHttp {
+            message: format!("ACME new-account beklenmeyen durum: {}", response.status),
+        });
+    }
+
+    let account: AccountResponseBody = serde_json::from_str(&response.body)?;
+    state.update_from_account_response(&account);
+    save_account_state(&args.account, &state)?;
+
+    let location = response
+        .headers
+        .get(LOCATION)
+        .and_then(|value| value.to_str().ok())
+        .map_or_else(|| account.kid.clone(), String::from);
+    let contacts_summary = if account.contact.is_empty() {
+        "(yok)".to_string()
+    } else {
+        account.contact.join(", ")
+    };
+    println!(
+        "acme register: status={} | location={} | orders={} | contacts={} | tos={} | created_at={}",
+        account.status,
+        location,
+        account.orders,
+        contacts_summary,
+        if account.terms_of_service_agreed {
+            "kabul"
+        } else {
+            "bekleniyor"
+        },
+        account.created_at,
+    );
+    println!("  durum dosyası: {}", args.account.display());
+
+    Ok(())
+}
+
+fn handle_acme_order(args: &AcmeOrderArgs) -> CliResult<()> {
+    let mut client = AcmeClient::new(&args.server)?;
+    let (mut state, key) = load_account_state(&args.account)?;
+    let kid = state
+        .kid
+        .as_deref()
+        .ok_or_else(|| CliError::AcmeState("hesap dosyasında kid alanı bulunamadı".to_string()))?;
+
+    let order_request = NewOrderRequest::for_dns_names(&args.domains)?;
+    let nonce = client.next_nonce()?;
+    let new_order_url = client.new_order_url().clone();
+    let jws = key.sign_json(&order_request, &nonce, &new_order_url, KeyBinding::Kid(kid))?;
+    let response = client.post_jose(&new_order_url, &jws)?;
+    if response.status != StatusCode::CREATED {
+        return Err(CliError::AcmeHttp {
+            message: format!("ACME new-order beklenmeyen durum: {}", response.status),
+        });
+    }
+
+    let order: OrderResponseBody = serde_json::from_str(&response.body)?;
+    let location = response
+        .headers
+        .get(LOCATION)
+        .and_then(|value| value.to_str().ok())
+        .map_or_else(|| order.finalize.clone(), String::from);
+
+    state.record_last_order(location.clone(), &order);
+    save_account_state(&args.account, &state)?;
+
+    if let Some(path) = &args.output {
+        write_response_json(path, &response.body)?;
+    }
+
+    println!(
+        "acme order: status={} | location={} | identifiers={} | expires={}",
+        order.status,
+        location,
+        order.identifiers.len(),
+        order.expires,
+    );
+    if !order.identifiers.is_empty() {
+        println!("  identifiers:");
+        for item in &order.identifiers {
+            println!("    - {} = {}", item.ty, item.value);
+        }
+    }
+    if let Some(not_before) = &order.not_before {
+        println!("  notBefore={not_before}");
+    }
+    if let Some(not_after) = &order.not_after {
+        println!("  notAfter={not_after}");
+    }
+    if !order.authorizations.is_empty() {
+        println!("  authorizations:");
+        for auth in &order.authorizations {
+            println!("    - {auth}");
+        }
+    }
+    println!("  finalize={}", order.finalize);
+    println!("  durum dosyası: {}", args.account.display());
+    if let Some(path) = &args.output {
+        println!("  order JSON: {}", path.display());
+    }
+
+    Ok(())
+}
+
+fn build_acme_contacts(args: &AcmeRegisterArgs) -> CliResult<Vec<AccountContact>> {
+    let mut contacts = Vec::new();
+    for email in &args.email {
+        contacts.push(AccountContact::email(email)?);
+    }
+    for uri in &args.contact {
+        contacts.push(AccountContact::from_uri(uri)?);
+    }
+    Ok(contacts)
+}
+
+fn load_or_create_account_state(
+    path: &Path,
+) -> CliResult<(AcmeAccountState, Ed25519AccountKey, bool)> {
+    if path.exists() {
+        let state: AcmeAccountState = read_json_file(path)?;
+        let key = state.account_key()?;
+        Ok((state, key, false))
+    } else {
+        ensure_parent_dir(path)?;
+        let (state, key) = AcmeAccountState::generate_ed25519();
+        save_account_state(path, &state)?;
+        Ok((state, key, true))
+    }
+}
+
+fn load_account_state(path: &Path) -> CliResult<(AcmeAccountState, Ed25519AccountKey)> {
+    if !path.exists() {
+        return Err(CliError::AcmeState(format!(
+            "hesap dosyası bulunamadı: {}",
+            path.display()
+        )));
+    }
+    let state: AcmeAccountState = read_json_file(path)?;
+    let key = state.account_key()?;
+    Ok((state, key))
+}
+
+fn save_account_state(path: &Path, state: &AcmeAccountState) -> CliResult<()> {
+    write_json_pretty(path, state)
+}
+
+fn write_response_json(path: &Path, body: &str) -> CliResult<()> {
+    let value: Value = serde_json::from_str(body)?;
+    write_json_pretty(path, &value)
+}
+
+struct DirectoryDiscovery {
+    directory: AcmeDirectory,
+    raw_json: String,
+}
+
+struct HttpResponse {
+    status: StatusCode,
+    headers: HeaderMap,
+    body: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AccountResponseBody {
+    status: String,
+    contact: Vec<String>,
+    orders: String,
+    #[serde(rename = "termsOfServiceAgreed")]
+    terms_of_service_agreed: bool,
+    kid: String,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OrderResponseBody {
+    status: String,
+    identifiers: Vec<OrderIdentifierBody>,
+    authorizations: Vec<String>,
+    finalize: String,
+    expires: String,
+    #[serde(rename = "notBefore")]
+    not_before: Option<String>,
+    #[serde(rename = "notAfter")]
+    not_after: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OrderIdentifierBody {
+    #[serde(rename = "type")]
+    ty: String,
+    value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProblemResponseBody {
+    #[serde(rename = "type")]
+    problem_type: String,
+    detail: String,
+    status: u16,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AcmeOrderSnapshot {
+    location: String,
+    status: String,
+    finalize: String,
+    expires: String,
+    #[serde(rename = "notBefore", default)]
+    not_before: Option<String>,
+    #[serde(rename = "notAfter", default)]
+    not_after: Option<String>,
+    identifiers: Vec<AcmeOrderIdentifierSnapshot>,
+    authorizations: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AcmeOrderIdentifierSnapshot {
+    #[serde(rename = "type")]
+    ty: String,
+    value: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum AcmeAccountAlgorithm {
+    Ed25519,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AcmeAccountState {
+    algorithm: AcmeAccountAlgorithm,
+    #[serde(rename = "privateKey")]
+    private_key: String,
+    #[serde(default)]
+    kid: Option<String>,
+    #[serde(default)]
+    orders: Option<String>,
+    #[serde(default)]
+    contacts: Vec<String>,
+    #[serde(rename = "createdAt", default)]
+    created_at: Option<String>,
+    #[serde(rename = "termsOfServiceAgreed", default)]
+    terms_of_service_agreed: bool,
+    #[serde(default)]
+    last_order: Option<AcmeOrderSnapshot>,
+}
+
+impl AcmeAccountState {
+    fn generate_ed25519() -> (Self, Ed25519AccountKey) {
+        let mut seed = Zeroizing::new([0_u8; 32]);
+        OsRng.fill_bytes(seed.as_mut());
+        let key = Ed25519AccountKey::from_bytes(&seed);
+        let encoded = URL_SAFE_NO_PAD.encode(seed.as_slice());
+        let state = Self {
+            algorithm: AcmeAccountAlgorithm::Ed25519,
+            private_key: encoded,
+            kid: None,
+            orders: None,
+            contacts: Vec::new(),
+            created_at: None,
+            terms_of_service_agreed: false,
+            last_order: None,
+        };
+        (state, key)
+    }
+
+    fn account_key(&self) -> CliResult<Ed25519AccountKey> {
+        match self.algorithm {
+            AcmeAccountAlgorithm::Ed25519 => {
+                let decoded = Zeroizing::new(URL_SAFE_NO_PAD.decode(self.private_key.trim())?);
+                if decoded.len() != 32 {
+                    return Err(CliError::InvalidLength {
+                        context: "acme account key",
+                        expected: 32,
+                        actual: decoded.len(),
+                    });
+                }
+                let mut seed = Zeroizing::new([0_u8; 32]);
+                seed.copy_from_slice(&decoded);
+                Ok(Ed25519AccountKey::from_bytes(&seed))
+            }
+        }
+    }
+
+    fn update_from_account_response(&mut self, response: &AccountResponseBody) {
+        self.kid = Some(response.kid.clone());
+        self.orders = Some(response.orders.clone());
+        self.contacts.clone_from(&response.contact);
+        self.created_at = Some(response.created_at.clone());
+        self.terms_of_service_agreed = response.terms_of_service_agreed;
+    }
+
+    fn record_last_order(&mut self, location: String, response: &OrderResponseBody) {
+        let identifiers = response
+            .identifiers
+            .iter()
+            .map(|item| AcmeOrderIdentifierSnapshot {
+                ty: item.ty.clone(),
+                value: item.value.clone(),
+            })
+            .collect();
+        self.last_order = Some(AcmeOrderSnapshot {
+            location,
+            status: response.status.clone(),
+            finalize: response.finalize.clone(),
+            expires: response.expires.clone(),
+            not_before: response.not_before.clone(),
+            not_after: response.not_after.clone(),
+            identifiers,
+            authorizations: response.authorizations.clone(),
+        });
+    }
+}
+
+struct AcmeClient {
+    agent: Agent,
+    directory_url: Url,
+    new_account_url: Url,
+    new_order_url: Url,
+    nonce_manager: NonceManager<NewNonceTransport>,
+}
+
+#[derive(Clone)]
+struct NewNonceTransport {
+    agent: Agent,
+}
+
+impl NewNonceRequester for NewNonceTransport {
+    fn request_new_nonce(&self, url: &Url) -> Result<HeaderMap, NonceRequestError> {
+        let response = self
+            .agent
+            .get(url.as_str())
+            .call()
+            .map_err(NonceRequestError::transport)?;
+
+        let mut headers = HeaderMap::new();
+        if let Some(value) = response.header(REPLAY_NONCE_HEADER) {
+            let header_value =
+                HeaderValue::from_str(value).map_err(NonceRequestError::transport)?;
+            headers.insert(HeaderName::from_static("replay-nonce"), header_value);
+        }
+        Ok(headers)
+    }
+}
+
+impl AcmeClient {
+    fn new(server: &str) -> CliResult<Self> {
+        let base = Url::parse(server).map_err(|err| CliError::InvalidUrl(err.to_string()))?;
+        let directory_url = base
+            .join("acme/directory")
+            .map_err(|err| CliError::InvalidUrl(err.to_string()))?;
+        let new_nonce_url = base
+            .join("acme/new-nonce")
+            .map_err(|err| CliError::InvalidUrl(err.to_string()))?;
+        let new_account_url = base
+            .join("acme/new-account")
+            .map_err(|err| CliError::InvalidUrl(err.to_string()))?;
+        let new_order_url = base
+            .join("acme/new-order")
+            .map_err(|err| CliError::InvalidUrl(err.to_string()))?;
+
+        let agent = Agent::new();
+        let nonce_transport = NewNonceTransport {
+            agent: agent.clone(),
+        };
+        let nonce_manager = NonceManager::new(nonce_transport, new_nonce_url);
+
+        Ok(Self {
+            agent,
+            directory_url,
+            new_account_url,
+            new_order_url,
+            nonce_manager,
+        })
+    }
+
+    const fn new_account_url(&self) -> &Url {
+        &self.new_account_url
+    }
+
+    const fn new_order_url(&self) -> &Url {
+        &self.new_order_url
+    }
+
+    fn next_nonce(&mut self) -> CliResult<ReplayNonce> {
+        Ok(self.nonce_manager.pop_or_fetch()?)
+    }
+
+    fn fetch_directory(&mut self) -> CliResult<DirectoryDiscovery> {
+        let directory_url = self.directory_url.clone();
+        let response = self.get(&directory_url)?;
+        let directory = AcmeDirectory::from_json_slice(response.body.as_bytes())?;
+        Ok(DirectoryDiscovery {
+            directory,
+            raw_json: response.body,
+        })
+    }
+
+    fn post_jose(&mut self, url: &Url, payload: &AcmeJws) -> CliResult<HttpResponse> {
+        let json = serde_json::to_string(payload)?;
+        let request = self
+            .agent
+            .post(url.as_str())
+            .set("Content-Type", "application/jose+json");
+        self.map_response(request.send_string(&json))
+    }
+
+    fn get(&mut self, url: &Url) -> CliResult<HttpResponse> {
+        self.map_response(self.agent.get(url.as_str()).call())
+    }
+
+    fn map_response(
+        &mut self,
+        result: Result<ureq::Response, UreqError>,
+    ) -> CliResult<HttpResponse> {
+        match result {
+            Ok(response) => {
+                let headers = header_map_from_response(&response)?;
+                self.absorb_nonce(&headers)?;
+                let status = status_from_code(response.status())?;
+                let body = response.into_string()?;
+                Ok(HttpResponse {
+                    status,
+                    headers,
+                    body,
+                })
+            }
+            Err(UreqError::Status(status, response)) => {
+                let headers = header_map_from_response(&response)?;
+                self.absorb_nonce(&headers)?;
+                let body = response.into_string()?;
+                if let Ok(problem) = serde_json::from_str::<ProblemResponseBody>(&body) {
+                    return Err(CliError::AcmeProblem {
+                        status: problem.status,
+                        problem_type: problem.problem_type,
+                        detail: problem.detail,
+                    });
+                }
+                Err(CliError::AcmeHttp {
+                    message: format!("HTTP {status} yanıtı: {body}"),
+                })
+            }
+            Err(err) => Err(CliError::AcmeHttp {
+                message: err.to_string(),
+            }),
+        }
+    }
+
+    fn absorb_nonce(&mut self, headers: &HeaderMap) -> CliResult<()> {
+        let _ = self.nonce_manager.absorb_response(headers)?;
+        Ok(())
+    }
+}
+
+fn header_map_from_response(response: &ureq::Response) -> CliResult<HeaderMap> {
+    let mut headers = HeaderMap::new();
+    for name in response.headers_names() {
+        let header_name =
+            HeaderName::from_bytes(name.as_bytes()).map_err(|err| CliError::AcmeHttp {
+                message: format!("HTTP başlığı geçersiz ({name}): {err}"),
+            })?;
+        for value in response.all(&name) {
+            let header_value =
+                HeaderValue::from_bytes(value.as_bytes()).map_err(|err| CliError::AcmeHttp {
+                    message: format!("HTTP başlık değeri geçersiz ({name}): {err}"),
+                })?;
+            headers.append(header_name.clone(), header_value);
+        }
+    }
+    Ok(headers)
+}
+
+fn status_from_code(code: u16) -> CliResult<StatusCode> {
+    StatusCode::from_u16(code).map_err(|err| CliError::AcmeHttp {
+        message: format!("HTTP durum kodu geçersiz: {err}"),
+    })
+}
+
 #[derive(Serialize, Deserialize)]
 struct MetadataFile {
     metadata: SessionMetadata,
@@ -3309,6 +3984,43 @@ mod tests {
     use aunsorm_packet::{AeadAlgorithm, HeaderKem, HeaderProfile, HeaderSalts};
     use serde_json::json;
     use tempfile::{tempdir, NamedTempFile};
+
+    #[test]
+    fn acme_account_state_roundtrip_key() {
+        let (state, key) = AcmeAccountState::generate_ed25519();
+        assert!(matches!(state.algorithm, AcmeAccountAlgorithm::Ed25519));
+        let restored = state.account_key().expect("account key");
+        assert_eq!(
+            restored.verifying_key().as_bytes(),
+            key.verifying_key().as_bytes()
+        );
+        assert_eq!(
+            state.private_key.len(),
+            URL_SAFE_NO_PAD.encode([0_u8; 32]).len()
+        );
+    }
+
+    #[test]
+    fn load_or_create_account_state_persists_file() {
+        let dir = tempdir().expect("dir");
+        let path = dir.path().join("account.json");
+
+        let (_state, key, created) = load_or_create_account_state(&path).expect("create");
+        assert!(created);
+        assert!(path.exists());
+        let raw = fs::read_to_string(&path).expect("raw");
+        assert!(raw.contains("privateKey"));
+
+        drop(key);
+        let (loaded_state, loaded_key, created_again) =
+            load_or_create_account_state(&path).expect("reload");
+        assert!(!created_again);
+        let derived = loaded_state.account_key().expect("derived");
+        assert_eq!(
+            derived.verifying_key().as_bytes(),
+            loaded_key.verifying_key().as_bytes()
+        );
+    }
 
     #[test]
     fn pq_status_marks_default_algorithms_available() {

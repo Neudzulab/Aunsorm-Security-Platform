@@ -11,22 +11,27 @@ default = []
 aes-siv = ["aunsorm-packet/aes-siv"]
 
 [dependencies]
-clap = { workspace = true }
-thiserror = { workspace = true }
-base64 = { workspace = true }
-hkdf = { workspace = true }
-sha2 = { workspace = true }
-serde_json = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
-hex = { workspace = true }
-aunsorm-jwt = { path = "../jwt", features = ["sqlite", "kms"] }
+aunsorm-acme = { path = "../acme" }
 aunsorm-core = { path = "../core" }
+aunsorm-jwt = { path = "../jwt", features = ["sqlite", "kms"] }
+aunsorm-kms = { path = "../kms" }
 aunsorm-packet = { path = "../packet" }
 aunsorm-pqc = { path = "../pqc" }
 aunsorm-x509 = { path = "../x509" }
-aunsorm-kms = { path = "../kms" }
-zeroize = { workspace = true }
+base64 = { workspace = true }
+clap = { workspace = true }
+hex = { workspace = true }
+hkdf = { workspace = true }
+http = "0.2"
 humantime = "2"
+rand = { version = "0.8", features = ["std"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+ureq = { version = "2.9" }
+url = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
