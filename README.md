@@ -1008,7 +1008,7 @@ Detaylı döküman: [`docs/src/architecture/http3-quic.md`](docs/src/architectur
 - ✅ **Directory keşfi:** `acme directory --json` ile ACME meta verilerini doğrula
 - ✅ **Hesap kaydı & order oluşturma:** `acme register` + `acme order` akışı
 - 🚧 **Challenge doğrulama:** HTTP-01, DNS-01, TLS-ALPN-01 otomasyonu
-- 🚧 **Finalize & yenileme:** CSR işleme, sertifika yayınlama ve otomatik yenileme
+- 🚧 **Finalize & yenileme:** CSR finalize (`acme finalize`) hazır; otomatik yenileme sırada
 
 **Server API (aunsorm-server /acme/*):**
 - ✅ **Core Onboarding:** `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` (v0.4.x)
@@ -1034,6 +1034,13 @@ aunsorm-cli acme order \
   --domain www.example.com \
   --output ./acme/order.json
 
+# CLI: Mevcut order'ı CSR ile finalize et ve sonucu kaydet
+aunsorm-cli acme finalize \
+  --server http://localhost:8080 \
+  --account ./acme/account.json \
+  --csr ./acme/example.csr \
+  --output ./acme/order-finalized.json
+
 # Server: ACME directory endpoint (JSON gövdesi)
 curl http://localhost:8080/acme/directory
 # Response: {"newNonce":"...","newAccount":"...","newOrder":"..."}
@@ -1042,7 +1049,7 @@ curl http://localhost:8080/acme/directory
 **TAMAMEN BAĞIMSIZ:** Certbot, acme.sh veya başka hiçbir araca ihtiyaç yok!
 
 > **📦 Not:** `aunsorm-acme` crate (directory parser, nonce manager, JWS signing) mevcut ve test edilmiştir.
-> Sunucu tarafında onboarding uçları (directory/new-nonce/new-account/new-order) ve CLI `acme directory/register/order` komutları hazır; challenge doğrulaması ile finalize/revoke akışları v0.5.0'da tamamlanacaktır.
+> Sunucu tarafında onboarding uçları (directory/new-nonce/new-account/new-order) ve CLI `acme directory/register/order/finalize` komutları hazır; challenge doğrulaması ile sunucu tarafı finalize/revoke akışları v0.5.0'da tamamlanacaktır.
 
 ## 🔥 Neden Aunsorm?
 
