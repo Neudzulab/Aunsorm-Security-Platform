@@ -24,6 +24,7 @@ hex = { workspace = true }
 hkdf = { workspace = true }
 http = "0.2"
 humantime = "2"
+pem = "3"
 rand = { version = "0.8", features = ["std"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -37,3 +38,4 @@ zeroize = { workspace = true }
 tempfile = "3"
 assert_cmd = "2"
 predicates = "3"
+tiny_http = "0.12"
