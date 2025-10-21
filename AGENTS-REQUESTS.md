@@ -48,6 +48,123 @@
 
 <!-- myeoffice agent'ları buraya istek ekleyin -->
 
+### [REQUEST-002] Stage 0 DTLS saha kanıtı ve TURN röle doğrulaması (Tarih: 2025-10-19)
+
+**Talep Eden:** myeoffice-agent
+**Hedef Repo:** zasian-media
+**Öncelik:** 🔴 Urgent
+
+**Açıklama:**
+- Stage 0 hâlen Chrome/Firefox tarayıcı döngüleri ve TURN/STUN smoke testleri bekliyor; `docs/webrtc-preprod-checklist.md` ve runbook çıktıları gerçek saha verisiyle kapanmadığı için prod öncesi kapılar açıkta kalıyor.
+- `AGENTS.md` içinde Stage 0 kalemleri “awaiting browser access / coturn deployment” olarak işaretli; bu, yayın öncesi DTLS ve relay katmanının doğrulanamadığı anlamına geliyor.
+- Prod planında DTLS el sıkışmaları için 5’er örnek ve TURN röle tahsisi log’ları zorunlu. Bunlar olmadan web istemcisi tarafındaki otomatik kontrolleri kapatamıyoruz.
+
+**Beklenen Davranış:**
+- Chrome ve Firefox için `./scripts/run_dtls_stage0_full.sh --browsers chrome,firefox --report --audit-expected-count 5` benzeri otomasyonla beşer gerçek örnek toplayın, `docs/webrtc-dtls-samples/` altına JSON + Markdown raporlarını ve `docs/webrtc-preprod-checklist.md` içindeki tabloları güncelleyin.
+- Coturn erişimiyle `turnutils_uclient` çıktısını kaydedip checklist’teki TURN bölümünü doldurun; başarısızlık durumlarında runbook’taki şablonu takip ederek kök sebep ve düzeltici aksiyonları ekleyin.
+- Tüm çıktıları `docs/reports/` veya mevcut artefakt dizinlerine tarih damgasıyla koyup Stage 0 runbook’un “Completed evidence” bölümüne linkleyin.
+
+**Kullanım Örneği:**
+```bash
+# Tarayıcı döngüleri ve raporlar
+./scripts/run_dtls_stage0_full.sh \
+  --browsers chrome,firefox \
+  --report \
+  --audit-expected-count 5 \
+  --turn-endpoint turn.local:3478
+
+# TURN röle testi log’u
+turnutils_uclient turn.local \
+  -u stage0probe \
+  -w "$(./scripts/generate_dtls_certs.sh --print-turn-password)" \
+  --channel 49160
+```
+
+**Status:**
+- [x] 📋 Pending (2025-10-19)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
+- [ ] ❌ Rejected
+
+**Zasian Agent Notes:**
+- _(Güncelleme bekleniyor)_
+
+### [REQUEST-003] Stage 1 RTCP metriği ve Opus doğrulaması kapanışı (Tarih: 2025-10-19)
+
+**Talep Eden:** myeoffice-agent
+**Hedef Repo:** zasian-media
+**Öncelik:** 🔴 Urgent
+
+**Açıklama:**
+- Stage 1 özetinde RTCP parser → router metriği hattı, Opus transcoding (CMAKE bağımlılığı), tarayıcı loopback’i ve Playwright otomasyonu açık olarak listeleniyor; prod yayın öncesi telemetri ve tarayıcı uçtan uca testleri tamamlanmadı.
+- Şu an PCM passthrough ile pipeline doğrulanıyor fakat gerçek Opus akışı için CMake/build chain şartı dev ortamlarına taşınmadı; pure-Rust ya da hazır derlenmiş kütüphane opsiyonu gerekiyor.
+- Web istemcisi ve monitoring tarafı RTCP metriklerini okuyamıyor; router tarafındaki `StreamRtcpMetrics` verisi Prometheus/Grafana’ya taşınmalı ve Playwright senaryolarında alarm eşiği regresyonları yakalanmalı.
+
+**Beklenen Davranış:**
+- RTCP telemetrisi için router çıktısını gRPC/WebSocket veya mevcut metrik hattına publish edin; Prometheus şemasını ve `docs/rtcp-telemetry-oct14.md` referansını güncelleyerek grafana dashboard’ına entegrasyon adımlarını belgeleyin.
+- Opus transcoding’i production build zincirine dahil edin: ya `audiopus_sys` için CI destekli prebuilt artefakt sağlayın ya da pure Rust encoder ekleyin; `pnpm start-local` / Docker compose akışlarında ekstra bağımlılıklar otomatik yüklensin.
+- Chrome/Firefox loopback senaryosunu çalıştırıp ses çıkışını doğrulayın, sonuçları Stage 1 bölümüne ve yeni Playwright testi raporuna ekleyin; başarısız durumda root-cause + düzeltme notu paylaşın.
+
+**Kullanım Örneği:**
+```bash
+# Router metriğini dışarı aktarma (örnek)
+curl -s http://localhost:9900/metrics | grep zasian_rtcp_jitter_ms
+
+# Playwright senaryosu (ses doğrulama)
+pnpm --filter web test:playwright -- --project="chromium" --grep="Audio bridge loopback"
+
+# Opus encoder hazırsa CLI demo
+cargo run --release -p sfu-gateway --example opus_demo -- --mode opus --synthetic-frames 20
+```
+
+**Status:**
+- [x] 📋 Pending (2025-10-19)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
+- [ ] ❌ Rejected
+
+**Zasian Agent Notes:**
+- _(Güncelleme bekleniyor)_
+
+### [REQUEST-004] ACME tabanlı production sertifika otomasyonu (Tarih: 2025-10-19)
+
+**Talep Eden:** myeoffice-agent
+**Hedef Repo:** aunsorm-crypt
+**Öncelik:** 🔴 Urgent
+
+**Açıklama:**
+- Aunsorm README’sinde ACME endpoint’leri “Planlandı v0.5.0” olarak duruyor; gateway tarafında hâlâ self-signed script kullanıyoruz (`docker/gateway/certs/generate-local-cert.sh`) ve TODO notu production’da Aunsorm’a geçilmesi gerektiğini belirtiyor.
+- Prod ortamına çıkmadan önce Let’s Encrypt/ACME akışıyla otomatik sertifika yenilemesi şart; aksi halde manuel sertifika döngüsü operasyonel risk oluşturuyor.
+- Sertifika lifecycle’ı tamamlandığında Aunsorm Security Service doğrudan gateway’e pem/chain ulaştırmalı, yenileme alarmları ve revoke prosedürleri belgelendirilmeli.
+
+**Beklenen Davranış:**
+- `/acme/directory`, `/acme/new-account`, `/acme/new-order` endpoint’lerini Axum server’da etkinleştirin; challenge doğrulaması ve sertifika issuance pipeline’ını `crates/acme` altında tamamlayın.
+- Gateway için `aunsorm-cli` veya REST tabanlı bir istemci komutu sağlayın: yeni domain için sertifika isteği, order tamamlama, fullchain/key indirme.
+- `docker/gateway` akışında self-signed script’i dev-only olarak işaretleyip production profilinde Aunsorm ACME çağrılarını kullanan otomasyon scripti/dokümantasyonu ekleyin.
+- Operasyonel olarak: yenileme cron örnekleri, başarısızlık alarmları ve revoke prosedürlerini `docs/` altında belgelendirin; PLAN/README ağaçlarını yeni endpoint durumlarıyla güncelleyin.
+
+**Kullanım Örneği:**
+```bash
+# Yeni hesap ve order oluşturma (örnek cURL)
+curl -X POST https://aunsorm.example.com/acme/new-account \
+  -H 'Content-Type: application/jose+json' \
+  -d '{"contact":["mailto:infra@myeoffice.example"],"termsOfServiceAgreed":true}'
+
+aunsorm-cli acme order \
+  --domain mye-office.com \
+  --output ./artifacts/certs/mye-office \
+  --gateway-hook ./scripts/deploy_gateway_cert.sh
+```
+
+**Status:**
+- [x] 📋 Pending (2025-10-19)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
+- [ ] ❌ Rejected
+
+**Aunsorm Agent Notes:**
+- _(Güncelleme bekleniyor)_
+
 ---
 
 ## ✅ Tamamlanan İstekler
