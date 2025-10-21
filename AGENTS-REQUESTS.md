@@ -163,7 +163,7 @@ aunsorm-cli acme order \
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- CLI tarafında `aunsorm-cli acme directory/register/order` komutları yayınlandı; hesap state dosyası ve order JSON çıktıları sağlanıyor. Challenge doğrulama + finalize/revoke akışı takip eden sprintte planlanıyor.
+- CLI tarafında `aunsorm-cli acme directory/register/order/finalize` komutları yayınlandı; hesap state dosyası, order JSON çıktıları ve CSR finalize desteği sağlanıyor. Challenge doğrulama + sunucu tarafı finalize/revoke akışı takip eden sprintte planlanıyor.
 
 ---
 

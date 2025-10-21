@@ -234,6 +234,8 @@ enum AcmeCommands {
     Register(AcmeRegisterArgs),
     /// Yeni bir ACME order'ı başlat
     Order(AcmeOrderArgs),
+    /// Mevcut ACME order'ını CSR ile finalize et
+    Finalize(AcmeFinalizeArgs),
 }
 
 #[derive(Args)]
@@ -283,6 +285,22 @@ struct AcmeOrderArgs {
     #[arg(long = "domain", value_name = "DNS", required = true)]
     domains: Vec<String>,
     /// Order yanıtını JSON olarak dosyaya kaydet
+    #[arg(long, value_name = "PATH")]
+    output: Option<PathBuf>,
+}
+
+#[derive(Args)]
+struct AcmeFinalizeArgs {
+    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    #[arg(long, default_value = "http://localhost:8080")]
+    server: String,
+    /// Hesap durum dosyası (anahtar + meta bilgiler)
+    #[arg(long, value_name = "PATH")]
+    account: PathBuf,
+    /// CSR (PEM veya DER)
+    #[arg(long, value_name = "PATH")]
+    csr: PathBuf,
+    /// Finalize yanıtını JSON olarak dosyaya kaydet
     #[arg(long, value_name = "PATH")]
     output: Option<PathBuf>,
 }
@@ -2959,6 +2977,7 @@ fn handle_acme(command: AcmeCommands) -> CliResult<()> {
         AcmeCommands::Directory(args) => handle_acme_directory(&args),
         AcmeCommands::Register(args) => handle_acme_register(&args),
         AcmeCommands::Order(args) => handle_acme_order(&args),
+        AcmeCommands::Finalize(args) => handle_acme_finalize(&args),
     }
 }
 
@@ -3120,8 +3139,26 @@ fn handle_acme_order(args: &AcmeOrderArgs) -> CliResult<()> {
         write_response_json(path, &response.body)?;
     }
 
+    report_acme_order(
+        "order",
+        &order,
+        &location,
+        &args.account,
+        args.output.as_deref(),
+    );
+
+    Ok(())
+}
+
+fn report_acme_order(
+    action: &str,
+    order: &OrderResponseBody,
+    location: &str,
+    account_path: &Path,
+    output: Option<&Path>,
+) {
     println!(
-        "acme order: status={} | location={} | identifiers={} | expires={}",
+        "acme {action}: status={} | location={} | identifiers={} | expires={}",
         order.status,
         location,
         order.identifiers.len(),
@@ -3146,12 +3183,101 @@ fn handle_acme_order(args: &AcmeOrderArgs) -> CliResult<()> {
         }
     }
     println!("  finalize={}", order.finalize);
-    println!("  durum dosyası: {}", args.account.display());
-    if let Some(path) = &args.output {
+    if let Some(certificate) = &order.certificate {
+        println!("  certificate={certificate}");
+    }
+    println!("  durum dosyası: {}", account_path.display());
+    if let Some(path) = output {
         println!("  order JSON: {}", path.display());
     }
+}
+
+fn handle_acme_finalize(args: &AcmeFinalizeArgs) -> CliResult<()> {
+    let (mut state, key) = load_account_state(&args.account)?;
+    let kid = state
+        .kid
+        .as_deref()
+        .ok_or_else(|| CliError::AcmeState("hesap dosyasında kid alanı bulunamadı".to_string()))?;
+
+    let (order_location, finalize_url) = {
+        let snapshot = state.last_order.as_ref().ok_or_else(|| {
+            CliError::AcmeState("hesap dosyasında finalize edilecek order bulunamadı".to_string())
+        })?;
+        let url =
+            Url::parse(&snapshot.finalize).map_err(|err| CliError::InvalidUrl(err.to_string()))?;
+        (snapshot.location.clone(), url)
+    };
+
+    let csr_der = read_csr_der(&args.csr)?;
+    let csr_encoded = URL_SAFE_NO_PAD.encode(csr_der);
+
+    let mut client = AcmeClient::new(&args.server)?;
+    let nonce = client.next_nonce()?;
+    let request = FinalizeRequest { csr: &csr_encoded };
+    let jws = key.sign_json(&request, &nonce, &finalize_url, KeyBinding::Kid(kid))?;
+    let response = client.post_jose(&finalize_url, &jws)?;
+    if response.status != StatusCode::OK && response.status != StatusCode::CREATED {
+        return Err(CliError::AcmeHttp {
+            message: format!("ACME finalize beklenmeyen durum: {}", response.status),
+        });
+    }
+
+    let order: OrderResponseBody = serde_json::from_str(&response.body)?;
+    if let Some(path) = &args.output {
+        write_response_json(path, &response.body)?;
+    }
+
+    let location = response
+        .headers
+        .get(LOCATION)
+        .and_then(|value| value.to_str().ok())
+        .map_or(order_location, std::string::ToString::to_string);
+    state.record_last_order(location.clone(), &order);
+    save_account_state(&args.account, &state)?;
+
+    report_acme_order(
+        "finalize",
+        &order,
+        &location,
+        &args.account,
+        args.output.as_deref(),
+    );
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct FinalizeRequest<'a> {
+    csr: &'a str,
+}
+
+fn read_csr_der(path: &Path) -> CliResult<Vec<u8>> {
+    let data = fs::read(path)?;
+    if data.is_empty() {
+        return Err(CliError::AcmeState("CSR dosyası boş".to_string()));
+    }
+    let iter = data
+        .iter()
+        .copied()
+        .skip_while(|b| matches!(b, b' ' | b'\t' | b'\r' | b'\n'));
+    let is_pem = iter.clone().take(10).eq("-----BEGIN".bytes());
+    if is_pem {
+        let pem_block = pem::parse(&data)
+            .map_err(|err| CliError::AcmeState(format!("CSR PEM ayrıştırılamadı: {err}")))?;
+        let tag = pem_block.tag().to_owned();
+        let contents = pem_block.into_contents();
+        if tag != "CERTIFICATE REQUEST" && tag != "NEW CERTIFICATE REQUEST" {
+            return Err(CliError::AcmeState(format!(
+                "CSR PEM etiketi geçersiz: {tag}"
+            )));
+        }
+        if contents.is_empty() {
+            return Err(CliError::AcmeState("CSR PEM içeriği boş".to_string()));
+        }
+        Ok(contents)
+    } else {
+        Ok(data)
+    }
 }
 
 fn build_acme_contacts(args: &AcmeRegisterArgs) -> CliResult<Vec<AccountContact>> {
@@ -3235,6 +3361,8 @@ struct OrderResponseBody {
     not_before: Option<String>,
     #[serde(rename = "notAfter")]
     not_after: Option<String>,
+    #[serde(default)]
+    certificate: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3264,6 +3392,8 @@ struct AcmeOrderSnapshot {
     not_after: Option<String>,
     identifiers: Vec<AcmeOrderIdentifierSnapshot>,
     authorizations: Vec<String>,
+    #[serde(default)]
+    certificate: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -3361,6 +3491,7 @@ impl AcmeAccountState {
             not_after: response.not_after.clone(),
             identifiers,
             authorizations: response.authorizations.clone(),
+            certificate: response.certificate.clone(),
         });
     }
 }
@@ -3982,8 +4113,11 @@ where
 mod tests {
     use super::*;
     use aunsorm_packet::{AeadAlgorithm, HeaderKem, HeaderProfile, HeaderSalts};
-    use serde_json::json;
+    use pem::Pem;
+    use serde_json::{json, Value};
+    use std::thread;
     use tempfile::{tempdir, NamedTempFile};
+    use tiny_http::{Header, Method, Request, Response, Server};
 
     #[test]
     fn acme_account_state_roundtrip_key() {
@@ -4020,6 +4154,222 @@ mod tests {
             derived.verifying_key().as_bytes(),
             loaded_key.verifying_key().as_bytes()
         );
+    }
+
+    #[test]
+    fn read_csr_der_accepts_pem() {
+        let file = NamedTempFile::new().expect("pem csr");
+        let der = vec![0x01_u8, 0x02, 0xA5, 0xFF];
+        let pem = Pem::new("CERTIFICATE REQUEST", der.clone());
+        fs::write(file.path(), pem::encode(&pem)).expect("write pem");
+
+        let parsed = read_csr_der(file.path()).expect("csr");
+        assert_eq!(parsed, der);
+    }
+
+    #[test]
+    fn read_csr_der_accepts_der_bytes() {
+        let file = NamedTempFile::new().expect("der csr");
+        let der = vec![0xAA_u8, 0xBB, 0xCC, 0xDD];
+        fs::write(file.path(), &der).expect("write der");
+
+        let parsed = read_csr_der(file.path()).expect("csr");
+        assert_eq!(parsed, der);
+    }
+
+    #[test]
+    fn read_csr_der_rejects_invalid_pem_tag() {
+        let file = NamedTempFile::new().expect("invalid pem");
+        let pem = Pem::new("CERTIFICATE", vec![0x01_u8; 8]);
+        fs::write(file.path(), pem::encode(&pem)).expect("write pem");
+
+        let err = read_csr_der(file.path()).expect_err("should fail");
+        match err {
+            CliError::AcmeState(message) => {
+                assert!(message.contains("etiketi"), "unexpected message: {message}");
+            }
+            other => panic!("unexpected error variant: {other:?}"),
+        }
+    }
+
+    struct FinalizeServerParams {
+        finalize_path: String,
+        expected_csr: String,
+        base_url: String,
+        finalize_url: String,
+        certificate_url: String,
+        order_location: String,
+        nonce0: String,
+        nonce1: String,
+    }
+
+    fn spawn_finalize_server(
+        server: Server,
+        params: FinalizeServerParams,
+    ) -> thread::JoinHandle<()> {
+        let FinalizeServerParams {
+            finalize_path,
+            expected_csr,
+            base_url,
+            finalize_url,
+            certificate_url,
+            order_location,
+            nonce0,
+            nonce1,
+        } = params;
+        thread::spawn(move || {
+            for request in server.incoming_requests() {
+                let method = request.method().clone();
+                let url = request.url().to_string();
+                if method == Method::Get && url == "/acme/new-nonce" {
+                    respond_with_nonce(request, &nonce0);
+                } else if method == Method::Post && url == finalize_path {
+                    respond_finalize(
+                        request,
+                        &expected_csr,
+                        &base_url,
+                        &finalize_url,
+                        &certificate_url,
+                        &order_location,
+                        &nonce1,
+                    );
+                    break;
+                } else {
+                    respond_not_found(request);
+                }
+            }
+        })
+    }
+
+    fn respond_with_nonce(request: Request, nonce: &str) {
+        let mut response = Response::from_string("");
+        response.add_header(Header::from_bytes("Replay-Nonce", nonce).unwrap());
+        request.respond(response).expect("respond nonce");
+    }
+
+    #[allow(clippy::too_many_arguments)] // test helper wires full ACME response fields
+    fn respond_finalize(
+        mut request: Request,
+        expected_csr: &str,
+        base_url: &str,
+        finalize_url: &str,
+        certificate_url: &str,
+        order_location: &str,
+        nonce: &str,
+    ) {
+        let mut body = String::new();
+        request
+            .as_reader()
+            .read_to_string(&mut body)
+            .expect("read finalize body");
+        let envelope: Value = serde_json::from_str(&body).expect("envelope json");
+        let payload_b64 = envelope
+            .get("payload")
+            .and_then(Value::as_str)
+            .expect("payload field");
+        let payload_json = URL_SAFE_NO_PAD.decode(payload_b64).expect("decode payload");
+        let payload: Value = serde_json::from_slice(&payload_json).expect("payload json");
+        let received = payload
+            .get("csr")
+            .and_then(Value::as_str)
+            .expect("csr field");
+        assert_eq!(received, expected_csr);
+
+        let response_body = json!({
+            "status": "valid",
+            "identifiers": [{"type": "dns", "value": "example.com"}],
+            "authorizations": [format!("{base_url}/acme/authz/order123-00")],
+            "finalize": finalize_url,
+            "expires": "2025-11-02T00:00:00Z",
+            "certificate": certificate_url,
+        });
+        let mut response = Response::from_string(response_body.to_string());
+        response.add_header(Header::from_bytes("content-type", "application/json").unwrap());
+        response.add_header(Header::from_bytes("Replay-Nonce", nonce).unwrap());
+        response.add_header(Header::from_bytes("Location", order_location).unwrap());
+        request.respond(response).expect("respond finalize");
+    }
+
+    fn respond_not_found(request: Request) {
+        let response = Response::from_string("not found").with_status_code(404);
+        request.respond(response).expect("respond fallback");
+    }
+
+    #[test]
+    fn handle_acme_finalize_updates_state() {
+        let server = Server::http(("127.0.0.1", 0)).expect("server");
+        let base_url = format!("http://{}", server.server_addr());
+        let order_location = format!("{base_url}/acme/order/order123");
+        let finalize_url = format!("{order_location}/finalize");
+        let certificate_url = format!("{base_url}/acme/cert/order123");
+
+        let account_file = NamedTempFile::new().expect("account");
+        let account_path = account_file.path().to_path_buf();
+        let (mut state, _key) = AcmeAccountState::generate_ed25519();
+        state.kid = Some(format!("{base_url}/acme/account/acct123"));
+        let initial_order = OrderResponseBody {
+            status: "pending".to_string(),
+            identifiers: vec![OrderIdentifierBody {
+                ty: "dns".to_string(),
+                value: "example.com".to_string(),
+            }],
+            authorizations: vec![format!("{}/acme/authz/order123-00", base_url)],
+            finalize: finalize_url.clone(),
+            expires: "2025-11-01T00:00:00Z".to_string(),
+            not_before: None,
+            not_after: None,
+            certificate: None,
+        };
+        state.record_last_order(order_location.clone(), &initial_order);
+        save_account_state(account_file.path(), &state).expect("save state");
+        drop(state);
+
+        let csr_file = NamedTempFile::new().expect("csr");
+        let csr_der = vec![0x10_u8, 0x20, 0x30, 0x40];
+        let csr_pem = Pem::new("CERTIFICATE REQUEST", csr_der.clone());
+        fs::write(csr_file.path(), pem::encode(&csr_pem)).expect("write csr");
+        let expected_csr = URL_SAFE_NO_PAD.encode(&csr_der);
+
+        let output_file = NamedTempFile::new().expect("order json");
+        let output_path = output_file.path().to_path_buf();
+
+        let finalize_path = String::from("/acme/order/order123/finalize");
+        let nonce0 = URL_SAFE_NO_PAD.encode(b"nonce-value-0000");
+        let nonce1 = URL_SAFE_NO_PAD.encode(b"nonce-value-0001");
+        let params = FinalizeServerParams {
+            finalize_path,
+            expected_csr,
+            base_url: base_url.clone(),
+            finalize_url,
+            certificate_url: certificate_url.clone(),
+            order_location: order_location.clone(),
+            nonce0,
+            nonce1,
+        };
+        let handle = spawn_finalize_server(server, params);
+
+        let args = AcmeFinalizeArgs {
+            server: base_url,
+            account: account_path.clone(),
+            csr: csr_file.path().to_path_buf(),
+            output: Some(output_path.clone()),
+        };
+        handle_acme_finalize(&args).expect("finalize");
+
+        handle.join().expect("server thread");
+
+        let updated: AcmeAccountState = read_json_file(account_path.as_path()).expect("state");
+        let snapshot = updated.last_order.expect("last order snapshot");
+        assert_eq!(snapshot.status, "valid");
+        assert_eq!(snapshot.location, order_location);
+        assert_eq!(
+            snapshot.certificate.as_deref(),
+            Some(certificate_url.as_str())
+        );
+
+        let response_json: Value = read_json_file(output_path.as_path()).expect("order json");
+        assert_eq!(response_json["status"], "valid");
+        assert_eq!(response_json["certificate"], certificate_url);
     }
 
     #[test]
