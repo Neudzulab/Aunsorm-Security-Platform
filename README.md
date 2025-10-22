@@ -1390,6 +1390,7 @@ Her sprint tamamlandıkça ilgili maddeler işaretlenecektir. Ajanslar yeni dosy
 - [x] eIDAS/SOC 2 denetim raporu şablonlarını `certifications/` altında yayımla (bkz. [eIDAS Uygunluk Değerlendirme Raporu Şablonu](certifications/eidas_assessment_template.md) ve [SOC 2 Tip II Denetim Raporu Şablonu](certifications/soc2_report_template.md)).
 - [x] FATF Travel Rule uyumluluğu için zincir üstü izleme ve raporlama entegrasyon stratejisini oluştur. (Bkz. [FATF Travel Rule Entegrasyon Stratejisi](docs/src/operations/blockchain-integration.md#fatf-travel-rule-entegrasyon-stratejisi))
 - [x] Müşteri başına saklama/anahtar silme politikalarını blockchain katmanıyla eşleyip operasyonel runbook'a ekle (bkz. [Müşteri Bazlı Saklama ve Anahtar İmha Runbook'u](docs/src/operations/blockchain-integration.md#m%C3%BC%C5%9Fteri-bazl%C4%B1-saklama-ve-anahtar-imha-runbooku)).
+  - `tests/data/blockchain/retention_policy_audit.json` fixture'ı ve `blockchain_retention_audit` testi, PolicyStore sürümlerinin `AuditAssetRegistry` ve `kms_key_destroyed` log'larıyla aynı `calibration_ref` değerini kullandığını CI'da doğrular.
 
 ## Test, Fuzz ve Benchmark Çalıştırma
 

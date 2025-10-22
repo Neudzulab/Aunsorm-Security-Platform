@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Retention policy audit fixtures and regression tests ensuring PolicyStore
+  sürümleri, `AuditAssetRegistry` kayıtları ve `kms_key_destroyed` olaylarıyla
+  kronolojik olarak zincirleniyor.
 - `aunsorm-server` ACME servisi: `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` uçları JWS doğrulaması ve nonce/account/order yönetimiyle yayınlandı.
 - ACME finalize akışı: `POST /acme/order/{order_id}/finalize` CSR SubjectAltName kapsamını doğrulayıp sertifika URL'si yayınlar.
 - ACME sertifika zinciri yayını: `GET /acme/cert/{order_id}` finalize edilmiş order için PEM formatında leaf + issuer zinciri döner.
@@ -55,6 +58,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/random/number` artık tam `u64` aralığını destekleyerek yüksek üst limitlerde hata vermeden deterministik reddetme örneklemesini uyguluyor.
 
 ### Documentation
+- README ACME roadmap anlatımı, yayınlanan onboarding uçlarını ve v0.5.0 için kalan authorization/finalize/revoke planını yansıtacak şekilde güncellendi.
+- README mimari ağacı VibeCO formatıyla yeniden yazıldı; endpoint durum etiketleri ve servis ağaç disiplini notları güncellendi.
+- PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.
+- Hyperledger Fabric DID doğrulama planı (`docs/src/operations/blockchain-integration.md`) ve uyumluluk kontrol listesi güncellemeleri.
+- README HTTP/3 service tree and discovery section updated with `GET /http3/capabilities` usage examples.
+- `crates/server/AGENTS.md` now requires README + CHANGELOG updates whenever a new HTTP endpoint is introduced.
+- HTTP/3 operations runbook extended with activation/rollback steps, observability checks, and incident feedback SLA’ları.
+- Yeni ACME gateway otomasyon rehberi (`docs/src/operations/acme-gateway-automation.md`) cron senaryoları, hata yakalama ipuçları ve dağıtım komutlarıyla yayımlandı.
+- New blockchain innovation guide (`docs/src/innovation/blockchain.md`) and compliance checklist cross-referencing CI artefaktları ve regülasyon maddeleri.
+- Agent charter and sprint intake guide aligned with the revizyon kilidi policy (`docs/src/operations/agent-charters.md`).
+- OAuth PKCE uçları için OpenAPI 3.1 şeması ve redirect URI kayıt rehberi (`docs/src/operations/oauth-openapi.md`).
+- Blockchain retention runbook documented CI fixtures linking policy versions to on-chain anchors (`docs/src/innovation/blockchain.md`, `docs/src/operations/blockchain-integration.md`).
 - README ACME roadmap anlatımı, yayınlanan onboarding uçlarını ve v0.5.0 için kalan authorization/finalize/revoke planını yansıtacak şekilde güncellendi.
 - README mimari ağacı VibeCO formatıyla yeniden yazıldı; endpoint durum etiketleri ve servis ağaç disiplini notları güncellendi.
 - PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.

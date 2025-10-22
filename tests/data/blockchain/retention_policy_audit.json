@@ -1,0 +1,56 @@
+[
+  {
+    "org_scope": "vasp:europe:de:001",
+    "retention_policy_version": "ret-2024.06-r5",
+    "policy_hash": "599f2ed8dcf4a64ccf57fa11b6cb54e29c137ab0083c7a639cb5dc09f1f937c6",
+    "calibration_ref": "cal-2024-06-bridge-015",
+    "travel_rule_bundle": "tr-2024-06-bridge-104",
+    "kms_destroy_event": {
+      "network": "quorum-istanbul",
+      "tx": "0x2d9e118f4c2c4bf6aafb8e1b6d55a9f5b3e40c3c1d88f6d8920abc2e1a9d4d51",
+      "block": 10508,
+      "timestamp_ms": 1717933605000,
+      "reason": "post-rotation purge"
+    },
+    "audit_asset": {
+      "tx": "0x5d1f1b9c28b5d4216be0f0c755bc7c1342f6b0bf8347f9d12a0b5d5fc85183f2",
+      "block": 10512,
+      "timestamp_ms": 1717933905000,
+      "calibration_ref": "cal-2024-06-bridge-015",
+      "retention_policy_version": "ret-2024.06-r5",
+      "travel_rule_bundle": "tr-2024-06-bridge-104"
+    },
+    "fabric_retention_anchor": {
+      "channel": "ops.retention",
+      "tx": "c04f5ae5d3f1a8c53d6f2a9482df0834a84c10b3ee75dd5c6fa97a5ab2b45dc1",
+      "block": 522
+    }
+  },
+  {
+    "org_scope": "vasp:apac:sg:014",
+    "retention_policy_version": "ret-2024.07-r2",
+    "policy_hash": "b9f0a8c77b6fc5ba89e25a6337d96dc8feed3c5f267b04b287a4ec3e766fcd5f",
+    "calibration_ref": "cal-2024-07-bridge-021",
+    "travel_rule_bundle": "tr-2024-07-bridge-208",
+    "kms_destroy_event": {
+      "network": "quorum-istanbul",
+      "tx": "0x71ae9c84d157bf28ea4df1a6c96f8f5ad01e5d2c17244b8be9ef5b57d3f6b8d2",
+      "block": 10642,
+      "timestamp_ms": 1718622005000,
+      "reason": "compromised endpoint rotation"
+    },
+    "audit_asset": {
+      "tx": "0x8cc3d732f3b02652bc629b2312ab9da47cebb6ba1cc403c53afc7bf99a1dc77e",
+      "block": 10649,
+      "timestamp_ms": 1718622305000,
+      "calibration_ref": "cal-2024-07-bridge-021",
+      "retention_policy_version": "ret-2024.07-r2",
+      "travel_rule_bundle": "tr-2024-07-bridge-208"
+    },
+    "fabric_retention_anchor": {
+      "channel": "ops.retention",
+      "tx": "a4d19e4cb5f47b0c8d3662f515dd32cbb1a9764df0bb6a4a1c5d58a1ccac4f50",
+      "block": 618
+    }
+  }
+]

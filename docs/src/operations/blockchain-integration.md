@@ -336,6 +336,16 @@ için izlenebilir kılınmasını amaçlar.
   `docs/src/operations/blockchain-integration.md` bu bölüm aracılığıyla
   güncel tutulur.
 
+### Denetim İzleri ve Test Artefaktları
+- `tests/data/blockchain/retention_policy_audit.json` veri kümesi, PolicyStore
+  sürümlerinin `AuditAssetRegistry::mint` çağrıları ve `kms_key_destroyed`
+  olaylarıyla aynı `calibration_ref` üzerinden bağlandığını gösterir.
+- `tests/blockchain/retention_audit.rs` modülü ve
+  `tests/tests/blockchain_retention_audit.rs` entegrasyon testi, `SHA-256`
+  tabanlı policy hash türetimini doğrular; KMS imha olaylarının Quorum mint
+  kayıtlarından önce geldiğini ve Travel Rule paketlerinin benzersiz olduğunu
+  CI seviyesinde garanti eder.
+
 ## Test ve Regresyon
 - `fabric_did_verification_succeeds` testi, imza doğrulamasının ve ledger
   doğrulamasının mutlu yolu kapsar.
