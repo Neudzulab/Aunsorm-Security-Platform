@@ -19,6 +19,8 @@ pub enum AcmeDirectoryError {
     },
     #[error("`{field}` alanı string tipinde olmalı")]
     InvalidUrlType { field: String },
+    #[error("`{field}` alanı HTTPS kullanmalıdır (mevcut şema: {scheme})")]
+    InsecureUrl { field: String, scheme: String },
     #[error("`meta.{field}` alanı beklenen türde değil")]
     InvalidMetaField { field: &'static str },
 }
@@ -155,10 +157,12 @@ fn parse_required_url(
 ) -> Result<Url, AcmeDirectoryError> {
     match object.get(key) {
         Some(Value::String(value)) => {
-            Url::parse(value).map_err(|source| AcmeDirectoryError::InvalidUrl {
+            let url = Url::parse(value).map_err(|source| AcmeDirectoryError::InvalidUrl {
                 field: key.to_owned(),
                 source,
-            })
+            })?;
+            ensure_https(&url, key)?;
+            Ok(url)
         }
         Some(_) => Err(AcmeDirectoryError::InvalidUrlType {
             field: key.to_owned(),
@@ -173,18 +177,28 @@ fn parse_optional_url(
 ) -> Result<Option<Url>, AcmeDirectoryError> {
     match object.get(key) {
         Some(Value::String(value)) => {
-            Url::parse(value)
-                .map(Some)
-                .map_err(|source| AcmeDirectoryError::InvalidUrl {
-                    field: key.to_owned(),
-                    source,
-                })
+            let url = Url::parse(value).map_err(|source| AcmeDirectoryError::InvalidUrl {
+                field: key.to_owned(),
+                source,
+            })?;
+            ensure_https(&url, key)?;
+            Ok(Some(url))
         }
         Some(_) => Err(AcmeDirectoryError::InvalidUrlType {
             field: key.to_owned(),
         }),
         None => Ok(None),
     }
+}
+
+fn ensure_https(url: &Url, field: &str) -> Result<(), AcmeDirectoryError> {
+    if url.scheme() != "https" {
+        return Err(AcmeDirectoryError::InsecureUrl {
+            field: field.to_owned(),
+            scheme: url.scheme().to_owned(),
+        });
+    }
+    Ok(())
 }
 
 fn parse_meta(
@@ -346,6 +360,25 @@ mod tests {
         match error {
             AcmeDirectoryError::InvalidUrlType { field } => {
                 assert_eq!(field, "newNonce".to_owned());
+            }
+            other => panic!("beklenmeyen hata: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_non_https_endpoints() {
+        let json = br#"{
+            "newNonce": "http://example.com/new-nonce",
+            "newAccount": "https://example.com/new-account",
+            "newOrder": "https://example.com/new-order",
+            "revokeCert": "https://example.com/revoke",
+            "keyChange": "https://example.com/key-change"
+        }"#;
+        let error = AcmeDirectory::from_json_slice(json).unwrap_err();
+        match error {
+            AcmeDirectoryError::InsecureUrl { field, scheme } => {
+                assert_eq!(field, "newNonce".to_owned());
+                assert_eq!(scheme, "http".to_owned());
             }
             other => panic!("beklenmeyen hata: {other:?}"),
         }
