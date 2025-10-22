@@ -12,6 +12,7 @@ use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use ed25519_dalek::{Signature as Ed25519Signature, VerifyingKey as Ed25519VerifyingKey};
 use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256VerifyingKey};
+use pem::Pem;
 use rand_core::{OsRng, RngCore};
 use rcgen::{
     BasicConstraints, Certificate, CertificateParams, CertificateSigningRequest, DnType,
@@ -130,6 +131,11 @@ impl AcmeService {
     #[must_use]
     pub const fn new_order_url(&self) -> &Url {
         &self.endpoints.new_order
+    }
+
+    #[must_use]
+    pub const fn revoke_cert_url(&self) -> &Url {
+        &self.endpoints.revoke_cert
     }
 
     pub async fn issue_nonce(&self) -> String {
@@ -603,12 +609,13 @@ impl AcmeService {
         csr.params.use_authority_key_identifier_extension = true;
         csr.params.serial_number = Some(random_serial_number());
 
-        let leaf = csr
-            .serialize_pem_with_signer(&self.ca_certificate)
+        let leaf_der = csr
+            .serialize_der_with_signer(&self.ca_certificate)
             .map_err(|err| {
                 AcmeProblem::server_internal(format!("Sertifika imzalanamadı: {err}"))
             })?;
-        let stored = StoredCertificate::new(leaf, self.ca_pem.clone());
+        let leaf_pem = pem::encode(&Pem::new("CERTIFICATE", leaf_der.clone()));
+        let stored = StoredCertificate::new(leaf_pem, leaf_der, self.ca_pem.clone());
         let mut issued = self.issued_certificates.lock().await;
         if issued.contains_key(order_id) {
             return Ok(());
@@ -639,7 +646,77 @@ impl AcmeService {
             .get(order_id)
             .cloned()
             .ok_or_else(|| AcmeProblem::order_not_ready("Order için sertifika yayınlanmadı"))?;
+        if stored.is_revoked() {
+            return Err(AcmeProblem::unauthorized("Sertifika iptal edildi"));
+        }
         Ok(stored.as_pem_bundle())
+    }
+
+    pub async fn revoke_certificate(&self, jws: AcmeJws) -> Result<RevokeCertOutcome, AcmeProblem> {
+        let header = parse_protected_header(&jws.protected)?;
+        if header.url != self.endpoints.revoke_cert.as_str() {
+            return Err(AcmeProblem::malformed(
+                "protected header içindeki url revoke-cert uç noktasını göstermeli",
+            ));
+        }
+        if header.jwk.is_some() {
+            return Err(AcmeProblem::malformed("revokeCert isteği JWK içeremez"));
+        }
+        let kid = header
+            .kid
+            .ok_or_else(|| AcmeProblem::malformed("revokeCert isteği kid alanı içermeli"))?;
+
+        let accounts_guard = self.accounts.lock().await;
+        let account = accounts_guard
+            .get_by_kid(&kid)
+            .ok_or_else(AcmeProblem::account_does_not_exist)?;
+        let account_id = account.location.clone();
+        let key = account.key.clone();
+        drop(accounts_guard);
+
+        self.consume_nonce(&header.nonce).await?;
+        verify_signature(&key, &jws)?;
+
+        let payload = parse_revoke_payload(&jws.payload)?;
+        if let Some(reason) = payload.reason {
+            validate_revocation_reason(reason)?;
+        }
+        let certificate_der = decode_base64(&payload.certificate).map_err(|_| {
+            AcmeProblem::malformed("certificate değeri base64url olarak çözülemedi")
+        })?;
+
+        let orders_guard = self.orders.lock().await;
+        let mut issued_guard = self.issued_certificates.lock().await;
+        let (order_id_key, stored) = issued_guard
+            .iter_mut()
+            .find(|(_, cert)| cert.matches_der(&certificate_der))
+            .ok_or_else(|| {
+                AcmeProblem::malformed("Sertifika mevcut ACME order kayıtlarıyla eşleşmedi")
+            })?;
+        let order = orders_guard
+            .get(order_id_key)
+            .ok_or_else(|| AcmeProblem::server_internal("Order kaydı bulunamadı"))?;
+        if order.account_id != account_id {
+            return Err(AcmeProblem::unauthorized(
+                "Sertifika belirtilen hesapla ilişkili değil",
+            ));
+        }
+        if stored.is_revoked() {
+            return Err(AcmeProblem::already_revoked(
+                "Sertifika daha önce iptal edildi",
+            ));
+        }
+        let record = stored.set_revoked(payload.reason);
+        let order_id = order_id_key.clone();
+        drop(issued_guard);
+        drop(orders_guard);
+
+        info!(%kid, order_id = %order_id, reason = ?record.reason, "ACME sertifika iptal edildi");
+
+        Ok(RevokeCertOutcome {
+            revoked_at: record.revoked_at,
+            reason: record.reason,
+        })
     }
 
     #[must_use]
@@ -887,14 +964,18 @@ impl AcmeOrder {
 #[derive(Debug, Clone)]
 struct StoredCertificate {
     leaf_pem: String,
+    leaf_der: Vec<u8>,
     issuer_chain: Vec<String>,
+    revocation: Option<RevocationRecord>,
 }
 
 impl StoredCertificate {
-    fn new(leaf_pem: String, issuer_pem: String) -> Self {
+    fn new(leaf_pem: String, leaf_der: Vec<u8>, issuer_pem: String) -> Self {
         Self {
             leaf_pem,
+            leaf_der,
             issuer_chain: vec![issuer_pem],
+            revocation: None,
         }
     }
 
@@ -906,6 +987,29 @@ impl StoredCertificate {
         }
         bundle
     }
+
+    fn matches_der(&self, candidate: &[u8]) -> bool {
+        self.leaf_der == candidate
+    }
+
+    const fn is_revoked(&self) -> bool {
+        self.revocation.is_some()
+    }
+
+    fn set_revoked(&mut self, reason: Option<u8>) -> RevocationRecord {
+        let record = RevocationRecord {
+            revoked_at: OffsetDateTime::now_utc(),
+            reason,
+        };
+        self.revocation = Some(record);
+        record
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RevocationRecord {
+    revoked_at: OffsetDateTime,
+    reason: Option<u8>,
 }
 
 fn append_pem_block(target: &mut String, pem: &str) {
@@ -1020,6 +1124,12 @@ pub struct OrderLookupOutcome {
 pub struct FinalizeOrderOutcome {
     pub response: OrderResponse,
     pub location: String,
+}
+
+#[derive(Debug)]
+pub struct RevokeCertOutcome {
+    pub revoked_at: OffsetDateTime,
+    pub reason: Option<u8>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1160,6 +1270,14 @@ impl AcmeProblem {
         )
     }
 
+    fn already_revoked(detail: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::OK,
+            "urn:ietf:params:acme:error:alreadyRevoked",
+            detail,
+        )
+    }
+
     pub(crate) fn server_internal(detail: impl Into<String>) -> Self {
         Self::new(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1222,6 +1340,13 @@ struct IncomingFinalizePayload {
 }
 
 #[derive(Debug, Deserialize)]
+struct IncomingRevokePayload {
+    certificate: String,
+    #[serde(default)]
+    reason: Option<u8>,
+}
+
+#[derive(Debug, Deserialize)]
 struct OkpJwk {
     kty: String,
     crv: String,
@@ -1275,6 +1400,14 @@ fn parse_finalize_payload(encoded: &str) -> Result<IncomingFinalizePayload, Acme
     })
 }
 
+fn parse_revoke_payload(encoded: &str) -> Result<IncomingRevokePayload, AcmeProblem> {
+    let bytes =
+        decode_base64(encoded).map_err(|_| AcmeProblem::malformed("payload base64 çözülemedi"))?;
+    serde_json::from_slice(&bytes).map_err(|err| {
+        AcmeProblem::malformed(format!("revokeCert payload JSON ayrıştırılamadı: {err}"))
+    })
+}
+
 fn ensure_post_as_get_payload(payload: &str) -> Result<(), AcmeProblem> {
     if payload.is_empty() {
         return Ok(());
@@ -1297,6 +1430,16 @@ fn ensure_post_as_get_payload(payload: &str) -> Result<(), AcmeProblem> {
     Err(AcmeProblem::malformed(
         "POST-as-GET isteği boş payload içermelidir",
     ))
+}
+
+fn validate_revocation_reason(reason: u8) -> Result<(), AcmeProblem> {
+    if reason <= 10 {
+        Ok(())
+    } else {
+        Err(AcmeProblem::malformed(
+            "revokeCert reason değeri 0 ile 10 arasında olmalıdır",
+        ))
+    }
 }
 
 fn normalize_contacts(values: &[String]) -> Result<Vec<String>, AcmeProblem> {

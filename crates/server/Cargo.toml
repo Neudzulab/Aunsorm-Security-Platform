@@ -63,6 +63,7 @@ quinn = { version = "0.11.7", default-features = false, features = ["runtime-tok
 rcgen = { version = "0.12", features = ["x509-parser"] }
 rustls = { version = "0.22", optional = true }
 x509-parser = { version = "0.16", features = ["verify"] }
+pem = "3"
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }
