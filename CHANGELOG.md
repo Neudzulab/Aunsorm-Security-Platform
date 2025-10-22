@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `aunsorm-server` güvenlik servisine `POST /security/jwt-verify` endpoint'i eklendi;
+  Zasian medya token'larını imza/claim kontrolleriyle doğrulayıp payload veya hata
+  mesajı döndürüyor ve kayıtlı olmayan `jti` değerlerini reddediyor.
 - Retention policy audit fixtures and regression tests ensuring PolicyStore
   sürümleri, `AuditAssetRegistry` kayıtları ve `kms_key_destroyed` olaylarıyla
   kronolojik olarak zincirleniyor.

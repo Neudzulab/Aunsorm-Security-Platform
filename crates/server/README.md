@@ -35,7 +35,8 @@ EXTERNAL kalibrasyon bağlamını zorunlu kılan JWT üretimini ve JTI tabanlı 
 │  └─ GET    /mdm/cert-plan/{device_id} ✅ → Cihaza özel sertifika dağıtım planı
 │
 ├─ 🎫 Media Access Tokens
-│  └─ POST   /security/generate-media-token ✅ → Zasian medya köprüsü için JWT
+│  ├─ POST   /security/generate-media-token ✅ → Zasian medya köprüsü için JWT
+│  └─ POST   /security/jwt-verify ✅         → JWT doğrula ve payload/hata bilgisi döndür
 │
 ├─ 🔍 Transparency & Audit
 │  └─ GET    /transparency/tree ✅      → Merkle tree şeffaflık kaydı

@@ -14,7 +14,7 @@ use aunsorm_jwt::{Ed25519KeyPair, Jwk};
 use aunsorm_mdm::{DeviceCertificatePlan, DeviceRecord, PolicyDocument};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use time::{Duration as TimeDuration, OffsetDateTime};
 use url::Url;
@@ -56,6 +56,23 @@ struct RandomNumberPayload {
     min: u64,
     max: u64,
     entropy: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct MediaTokenResponseBody {
+    token: String,
+    #[serde(rename = "roomId")]
+    room_id: String,
+    identity: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct JwtVerifyResponseBody {
+    valid: bool,
+    #[serde(default)]
+    payload: Option<Value>,
+    #[serde(default)]
+    error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1741,6 +1758,143 @@ async fn fabric_did_verification_rejects_tampered_anchor() {
     assert!(error
         .error_description
         .contains("block_hash ledger kaydıyla eşleşmiyor"));
+}
+
+#[tokio::test]
+async fn jwt_verify_endpoint_accepts_valid_token() {
+    let state = setup_state();
+    let app = build_router(Arc::clone(&state));
+
+    let token_payload = json!({
+        "roomId": "room-hall-1",
+        "identity": "participant-42",
+        "participantName": "Test User",
+        "metadata": { "role": "speaker" }
+    });
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/generate-media-token")
+                .header("content-type", "application/json")
+                .body(Body::from(token_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("token response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("token body");
+    let token_body: MediaTokenResponseBody = serde_json::from_slice(&body).expect("token json");
+    assert_eq!(token_body.room_id, "room-hall-1");
+    assert_eq!(token_body.identity, "participant-42");
+
+    let verify_payload = json!({ "token": token_body.token });
+    let verify_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwt-verify")
+                .header("content-type", "application/json")
+                .body(Body::from(verify_payload.to_string()))
+                .expect("verify request"),
+        )
+        .await
+        .expect("verify response");
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let verify_body = to_bytes(verify_response.into_body(), usize::MAX)
+        .await
+        .expect("verify body");
+    let verify: JwtVerifyResponseBody = serde_json::from_slice(&verify_body).expect("verify json");
+    assert!(verify.valid);
+    assert!(verify.error.is_none());
+    let claims = verify.payload.expect("payload");
+    assert_eq!(
+        claims.get("issuer").and_then(|value| value.as_str()),
+        Some(state.issuer())
+    );
+    assert_eq!(
+        claims.get("audience").and_then(|value| value.as_str()),
+        Some("zasian-media")
+    );
+    assert_eq!(
+        claims.get("subject").and_then(|value| value.as_str()),
+        Some("participant-42")
+    );
+    assert_eq!(
+        claims.get("roomId").and_then(|value| value.as_str()),
+        Some("room-hall-1")
+    );
+    assert_eq!(
+        claims
+            .get("participantName")
+            .and_then(|value| value.as_str()),
+        Some("Test User")
+    );
+    assert!(claims
+        .get("jwt_id")
+        .and_then(|value| value.as_str())
+        .is_some());
+}
+
+#[tokio::test]
+async fn jwt_verify_endpoint_rejects_tampered_token() {
+    let state = setup_state();
+    let app = build_router(Arc::clone(&state));
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/generate-media-token")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "roomId": "room-compromised",
+                        "identity": "intruder"
+                    })
+                    .to_string(),
+                ))
+                .expect("token request"),
+        )
+        .await
+        .expect("token response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("token body");
+    let token_body: MediaTokenResponseBody = serde_json::from_slice(&body).expect("token json");
+
+    let mut tampered = token_body.token;
+    let last = tampered.pop().expect("token char");
+    let replacement = if last == 'A' { 'B' } else { 'A' };
+    tampered.push(replacement);
+
+    let verify_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwt-verify")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "token": tampered }).to_string()))
+                .expect("verify request"),
+        )
+        .await
+        .expect("verify response");
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let verify_body = to_bytes(verify_response.into_body(), usize::MAX)
+        .await
+        .expect("verify body");
+    let verify: JwtVerifyResponseBody = serde_json::from_slice(&verify_body).expect("verify json");
+    assert!(!verify.valid);
+    assert!(verify.payload.is_none());
+    let error = verify.error.expect("error");
+    assert!(error.contains("imzası"));
 }
 
 #[allow(dead_code)]
