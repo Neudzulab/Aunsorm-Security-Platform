@@ -255,12 +255,15 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [ ] 🔄 In Progress
-- [ ] ✅ Done
+- [x] 🔄 In Progress (2025-10-20 – ACME servis ve istemci entegrasyonu başlatıldı)
+- [x] ✅ Done (2025-10-22 – commit d166ddd0e48dcb3c237ecd7a82a00e94d461cf11)
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- _(Güncelleme bekleniyor)_
+- ✅ `crates/server/src/routes.rs` ve `crates/server/src/acme.rs`: `/acme/*` endpoint'leri nonce yönetimi, hesap/order akışları ve CSR imzalama ile yayında.
+- ✅ `crates/cli/src/main.rs`: `aunsorm-cli acme directory|register|order|finalize|fetch-cert` komutları durum dosyası yönetimi ve JSON çıktı seçenekleriyle eklendi.
+- ✅ `scripts/deploy_gateway_cert.sh`: gateway dağıtımı için register→order→finalize→fetch zincirini otomatikleştiriyor; README sunucu ağacı üretim durumuyla güncellendi.
+- ✅ `docs/src/operations/acme-gateway-automation.md`: cron yenileme, alarm ve revoke prosedürleri runbook olarak belgelendi.
 
 ---
 
