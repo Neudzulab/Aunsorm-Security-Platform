@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-cli acme` komutları: directory keşfi (`acme directory`), hesap kaydı (`acme register`) ve order oluşturma (`acme order`) akışları state dosyası yönetimi ve JSON çıktısı desteğiyle eklendi.
 - `aunsorm-cli acme finalize` komutu: CSR dosyasından finalize isteği gönderip order durumunu state dosyasında günceller.
 - `aunsorm-cli acme fetch-cert` komutu: finalize edilmiş order için PEM zincirini indirip belirtilen dosyaya yazar.
+- `aunsorm-cli acme revoke` komutu: yayınlanan sertifika zincirini RFC 5280 reason kodlarıyla iptal eder ve state dosyası
+  üzerinden hesap takibini sürdürür.
 - `scripts/deploy_gateway_cert.sh` betiği: ACME kayıt/order/finalize akışını zincirleyip sertifikayı gateway dağıtımı için otomatikleştirir.
 - VibeCO v0.7.0 uyumu için README, PLAN ve PROJECT_SUMMARY dosyalarına açıklayıcı başlık blokları eklendi.
 - ACME hesap anahtarları için RFC 7638 uyumlu JWK thumbprint yardımcıları (Ed25519, ES256, RS256).
@@ -67,6 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README ACME roadmap anlatımı, yayınlanan onboarding uçlarını ve v0.5.0 için kalan authorization/finalize/revoke planını yansıtacak şekilde güncellendi.
 - README mimari ağacı VibeCO formatıyla yeniden yazıldı; endpoint durum etiketleri ve servis ağaç disiplini notları güncellendi.
 - PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.
+- README ve `docs/src/operations/acme-gateway-automation.md` ACME sertifika iptali (`acme revoke`) ve operasyonel geri dönüş
+  prosedürlerini içerecek şekilde genişletildi.
 - Hyperledger Fabric DID doğrulama planı (`docs/src/operations/blockchain-integration.md`) ve uyumluluk kontrol listesi güncellemeleri.
 - README HTTP/3 service tree and discovery section updated with `GET /http3/capabilities` usage examples.
 - `crates/server/AGENTS.md` now requires README + CHANGELOG updates whenever a new HTTP endpoint is introduced.

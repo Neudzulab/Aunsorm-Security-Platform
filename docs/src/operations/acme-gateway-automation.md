@@ -128,6 +128,34 @@ Cron betiği aşağıdaki kontrollerle izlenmelidir:
 - Sertifika indirme hatalarında (`acme fetch-cert`) genellikle order finalize
   edilmemiş demektir; finalize çıktısı gözden geçirilmelidir.
 
+## Sertifika İptali ve Acil Durumlar
+
+Planlı key rollover veya anahtar sızıntısı durumlarında yayınlanan sertifikayı
+ACME üzerinden iptal etmek gerekir. İptal işlemi, `acme revoke` komutu ile kid
+bağlantılı hesap anahtarından imzalı bir JWS göndererek yapılır.
+
+```bash
+aunsorm-cli acme revoke \
+  --server https://aunsorm.example.com \
+  --account /etc/aunsorm/acme/account.json \
+  --certificate /etc/aunsorm/tls/gateway-fullchain.pem \
+  --reason 1
+```
+
+- `--certificate` argümanı PEM veya DER dosyasını kabul eder; PEM bundle içinde
+  birden fazla sertifika varsa ilk leaf otomatik seçilir.
+- `--reason` değeri RFC 5280 CRL reason kodunu belirtir (`0`=unspecified,
+  `1`=keyCompromise, `4`=superseded, vb.). Parametre verilmezse sebep alanı
+  boş bırakılır.
+- Komut `status=revoked` yanıtını döndürdükten sonra gateway servisi mevcut
+  sertifikayı derhal devre dışı bırakmalı ve yeni bir order/finalize akışı
+  tetiklenmelidir.
+
+İptal sonrası yeni sertifika üretmek için aynı account dosyasıyla `deploy_gateway_cert.sh`
+betiği yeniden çağrılabilir. Revocation kayıtları operasyon günlüğüne ve SIEM
+kanallarına aktarılmalı, açılan incident kayıtları `revokedAt` zaman damgası ile
+eşlenmelidir.
+
 ## İlgili Kaynaklar
 
 - `README.md` → “ACME Onboarding” bölümü, CLI akışına dair hızlı başlangıç

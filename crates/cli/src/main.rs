@@ -239,6 +239,9 @@ enum AcmeCommands {
     /// Son ACME order'ı için sertifika paketini indir
     #[command(name = "fetch-cert")]
     FetchCert(AcmeFetchCertArgs),
+    /// Yayınlanan sertifika zincirini iptal et
+    #[command(name = "revoke")]
+    Revoke(AcmeRevokeArgs),
 }
 
 #[derive(Args)]
@@ -319,6 +322,26 @@ struct AcmeFetchCertArgs {
     /// Sertifika paketinin yazılacağı dosya yolu (`-` stdout'a yazar)
     #[arg(long, value_name = "PATH")]
     output: PathBuf,
+}
+
+#[derive(Args)]
+struct AcmeRevokeArgs {
+    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    #[arg(long, default_value = "http://localhost:8080")]
+    server: String,
+    /// Hesap durum dosyası (anahtar + meta bilgiler)
+    #[arg(long, value_name = "PATH")]
+    account: PathBuf,
+    /// İptal edilecek sertifika (PEM veya DER; bundle ise ilk leaf kullanılır)
+    #[arg(long, value_name = "PATH")]
+    certificate: PathBuf,
+    /// Opsiyonel CRL reason kodu (0-10 arası, RFC 5280)
+    #[arg(
+        long,
+        value_name = "CODE",
+        value_parser = clap::value_parser!(u8).range(0..=10)
+    )]
+    reason: Option<u8>,
 }
 
 #[derive(Args)]
@@ -2995,6 +3018,7 @@ fn handle_acme(command: AcmeCommands) -> CliResult<()> {
         AcmeCommands::Order(args) => handle_acme_order(&args),
         AcmeCommands::Finalize(args) => handle_acme_finalize(&args),
         AcmeCommands::FetchCert(args) => handle_acme_fetch_cert(&args),
+        AcmeCommands::Revoke(args) => handle_acme_revoke(&args),
     }
 }
 
@@ -3299,9 +3323,55 @@ fn handle_acme_fetch_cert(args: &AcmeFetchCertArgs) -> CliResult<()> {
     Ok(())
 }
 
+fn handle_acme_revoke(args: &AcmeRevokeArgs) -> CliResult<()> {
+    let (state, key) = load_account_state(&args.account)?;
+    let kid = state
+        .kid
+        .as_deref()
+        .ok_or_else(|| CliError::AcmeState("hesap dosyasında kid alanı bulunamadı".to_string()))?;
+
+    let certificate_der = read_certificate_der(&args.certificate)?;
+    let encoded = URL_SAFE_NO_PAD.encode(certificate_der);
+
+    let mut client = AcmeClient::new(&args.server)?;
+    let nonce = client.next_nonce()?;
+    let revoke_url = client.revoke_cert_url().clone();
+    let request = RevokeRequest {
+        certificate: encoded.as_str(),
+        reason: args.reason,
+    };
+    let jws = key.sign_json(&request, &nonce, &revoke_url, KeyBinding::Kid(kid))?;
+    let response = client.post_jose(&revoke_url, &jws)?;
+    if response.status != StatusCode::OK {
+        return Err(CliError::AcmeHttp {
+            message: format!("ACME revoke-cert beklenmeyen durum: {}", response.status),
+        });
+    }
+
+    let payload: RevokeResponseBody = serde_json::from_str(&response.body)?;
+    let reason = payload
+        .reason
+        .map_or_else(|| "(yok)".to_string(), |value| value.to_string());
+    println!(
+        "acme revoke: status={} | revoked_at={} | reason={}",
+        payload.status, payload.revoked_at, reason
+    );
+    println!("  certificate: {}", args.certificate.display());
+    println!("  account: {}", args.account.display());
+
+    Ok(())
+}
+
 #[derive(Serialize)]
 struct FinalizeRequest<'a> {
     csr: &'a str,
+}
+
+#[derive(Serialize)]
+struct RevokeRequest<'a> {
+    certificate: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<u8>,
 }
 
 fn read_csr_der(path: &Path) -> CliResult<Vec<u8>> {
@@ -3326,6 +3396,35 @@ fn read_csr_der(path: &Path) -> CliResult<Vec<u8>> {
         }
         if contents.is_empty() {
             return Err(CliError::AcmeState("CSR PEM içeriği boş".to_string()));
+        }
+        Ok(contents)
+    } else {
+        Ok(data)
+    }
+}
+
+fn read_certificate_der(path: &Path) -> CliResult<Vec<u8>> {
+    let data = fs::read(path)?;
+    if data.is_empty() {
+        return Err(CliError::AcmeState("Sertifika dosyası boş".to_string()));
+    }
+    let iter = data
+        .iter()
+        .copied()
+        .skip_while(|b| matches!(b, b' ' | b'\t' | b'\r' | b'\n'));
+    let is_pem = iter.clone().take(10).eq("-----BEGIN".bytes());
+    if is_pem {
+        let blocks = pem::parse_many(&data)
+            .map_err(|err| CliError::AcmeState(format!("Sertifika PEM ayrıştırılamadı: {err}")))?;
+        let certificate = blocks
+            .into_iter()
+            .find(|block| block.tag() == "CERTIFICATE")
+            .ok_or_else(|| {
+                CliError::AcmeState("PEM içeriğinde CERTIFICATE bloğu bulunamadı".to_string())
+            })?;
+        let contents = certificate.into_contents();
+        if contents.is_empty() {
+            return Err(CliError::AcmeState("Sertifika PEM içeriği boş".to_string()));
         }
         Ok(contents)
     } else {
@@ -3423,6 +3522,15 @@ struct OrderIdentifierBody {
     #[serde(rename = "type")]
     ty: String,
     value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct RevokeResponseBody {
+    status: String,
+    #[serde(rename = "revokedAt")]
+    revoked_at: String,
+    #[serde(default)]
+    reason: Option<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3554,6 +3662,7 @@ struct AcmeClient {
     directory_url: Url,
     new_account_url: Url,
     new_order_url: Url,
+    revoke_cert_url: Url,
     nonce_manager: NonceManager<NewNonceTransport>,
 }
 
@@ -3595,6 +3704,9 @@ impl AcmeClient {
         let new_order_url = base
             .join("acme/new-order")
             .map_err(|err| CliError::InvalidUrl(err.to_string()))?;
+        let revoke_cert_url = base
+            .join("acme/revoke-cert")
+            .map_err(|err| CliError::InvalidUrl(err.to_string()))?;
 
         let agent = Agent::new();
         let nonce_transport = NewNonceTransport {
@@ -3607,6 +3719,7 @@ impl AcmeClient {
             directory_url,
             new_account_url,
             new_order_url,
+            revoke_cert_url,
             nonce_manager,
         })
     }
@@ -3617,6 +3730,10 @@ impl AcmeClient {
 
     const fn new_order_url(&self) -> &Url {
         &self.new_order_url
+    }
+
+    const fn revoke_cert_url(&self) -> &Url {
+        &self.revoke_cert_url
     }
 
     fn next_nonce(&mut self) -> CliResult<ReplayNonce> {

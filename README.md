@@ -1021,12 +1021,12 @@ Detaylı döküman: [`docs/src/architecture/http3-quic.md`](docs/src/architectur
 - ✅ **Directory keşfi:** `acme directory --json` ile ACME meta verilerini doğrula
 - ✅ **Hesap kaydı & order oluşturma:** `acme register` + `acme order` akışı
 - 🚧 **Challenge doğrulama:** HTTP-01, DNS-01, TLS-ALPN-01 otomasyonu
-- 🚧 **Finalize & yenileme:** CSR finalize (`acme finalize`) hazır; otomatik yenileme sırada
+- ✅ **Finalize, sertifika indirme ve iptal:** `acme finalize`, `acme fetch-cert`, `acme revoke`
 
 **Server API (aunsorm-server /acme/*):**
 - ✅ **Core Onboarding:** `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order` (v0.4.x)
 - 🚧 **Authorization:** Challenge validation (HTTP-01, DNS-01, TLS-ALPN-01)
-- 🚧 **Finalize & Revoke:** CSR işleme, sertifika yayınlama ve iptal akışları
+- ✅ **Finalize & Revoke:** CSR işleme, sertifika yayınlama ve iptal akışları
 - 📊 **Monitoring:** Prometheus metrikleri ve alerting entegrasyonu
 
 ```bash
@@ -1062,7 +1062,7 @@ curl http://localhost:8080/acme/directory
 **TAMAMEN BAĞIMSIZ:** Certbot, acme.sh veya başka hiçbir araca ihtiyaç yok!
 
 > **📦 Not:** `aunsorm-acme` crate (directory parser, nonce manager, JWS signing) mevcut ve test edilmiştir.
-> Sunucu tarafında onboarding uçları (directory/new-nonce/new-account/new-order) ve CLI `acme directory/register/order/finalize` komutları hazır; challenge doğrulaması ile sunucu tarafı finalize/revoke akışları v0.5.0'da tamamlanacaktır.
+> Sunucu tarafında onboarding uçları (directory/new-nonce/new-account/new-order) hazır; finalize/fetch/revoke akışları CLI `acme finalize`, `acme fetch-cert` ve `acme revoke` komutlarıyla üretime alınabilir. Challenge doğrulaması otomasyonu v0.5.0'da tamamlanacaktır.
 
 ## 🔥 Neden Aunsorm?
 
@@ -1501,6 +1501,13 @@ aunsorm-cli acme fetch-cert \
   --server http://localhost:8080 \
   --account ./acme/account.json \
   --output ./acme/www.example.com.pem
+
+# Sertifikayı iptal et (opsiyonel reason kodu ile)
+aunsorm-cli acme revoke \
+  --server http://localhost:8080 \
+  --account ./acme/account.json \
+  --certificate ./acme/www.example.com.pem \
+  --reason 0
 ```
 
 Prod ortamında otomasyonu uçtan uca bağlamak için `scripts/deploy_gateway_cert.sh`
