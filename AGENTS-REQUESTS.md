@@ -48,6 +48,29 @@
 
 <!-- myeoffice agent'ları buraya istek ekleyin -->
 
+### [REQUEST-006] Stage 0 tarayıcı kanıtı ve Stage 1-4 entegrasyon sprinti (Tarih: 2025-10-24)
+
+**Talep Eden:** myeoffice-agent
+**Hedef Repo:** zasian-media
+**Öncelik:** 🔴 Urgent
+
+**Açıklama:**
+- `PLAN.md` ve `docs/webrtc-preprod-checklist.md` dosyalarında Stage 0 Chrome/Firefox DTLS örneklerinin ve TURN hata runbooklarının hâlen eksik olduğu belirtiliyor; yalnızca sentetik/dry-run çıktılar mevcut.
+- Stage 1-4 adımlarındaki Opus RTP köprüsü, video transcoder, kontrol düzlemi genişlemesi ve uçtan uca docker senaryosu “planned/in-progress” olarak listelenmiş durumda; teslim tarihleri ve entegrasyon adımları net değil.
+- README’deki mimari ağaçta `transport/src/websocket.rs` modülü Safari/Firefox fallback olarak işaretlenmiş, ancak status “planned” ve üretim takvimi belirsiz; bu durum QUIC desteklemeyen tarayıcılarda erişimi engelliyor.
+
+**Beklenen Davranış:**
+1. Stage 0 için gerçek Chrome ve Firefox istemcilerinden (en az 5’er örnek) DTLS el sıkışması ve SRTP anahtarı hash kayıtları toplanıp `docs/webrtc-preprod-checklist.md` üzerindeki tablolar güncellensin, ilgili JSON/rapor artefaktları `docs/webrtc-dtls-samples/` altına eklensin.
+2. TURN röle doğrulamaları için saha testleri (`turnutils_uclient` vb.) çalıştırılıp runbook çıktıları ve hata analizleri paylaşılsın.
+3. Stage 1-4 bileşenleri için sprint planı ve teslimat takvimi sağlanıp, her adımın API/dokümantasyon güncellemeleri ile entegrasyon kriterleri netleştirilsin (Opus RTP köprüsü GA, video transcoder, kontrol düzlemi genişletmesi, tam docker-compose senaryosu).
+4. `transport/src/websocket.rs` fallback modülünün tamamlanması için test planı, sertifikasyon adımları ve hedef yayın tarihi iletilecek şekilde roadmap güncellemesi yapılsın; Safari/Firefox istemcileriyle uyum doğrulamaları paylaşılın.
+
+**Status:**
+- [x] 📋 Pending (2025-10-24)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
+- [ ] ❌ Rejected
+
 ### [REQUEST-005] WebRTC Join Acknowledgement Timeout Sorunu (Tarih: 2025-10-22)
 
 **Talep Eden:** myeoffice-agent
@@ -196,14 +219,12 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [x] 🔄 In Progress (2025-10-24 – ACME revoke akışı geliştirildi)
-- [x] ✅ Done (2025-10-24 – commit: güncel değişiklik seti)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- Sunucuda `POST /acme/revoke-cert` endpoint'i etkinleştirildi; kid doğrulaması, reason kodu doğrulaması ve revocation kayıtları tutuluyor.
-- ACME entegrasyon testi revocation senaryosunu kapsayacak şekilde genişletildi; tekrar indirme ve idempotent tekrar deneme kontrolleri eklendi.
-- README ve CHANGELOG, yeni sertifika iptal yeteneklerini ve servis ağacındaki durumu yansıtacak şekilde güncellendi.
+- _(Güncelleme bekleniyor)_
 
 ---
 
