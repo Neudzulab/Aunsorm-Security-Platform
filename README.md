@@ -33,16 +33,16 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /oauth/token ✅ - Authorization code takası
 │   │   ├── POST /oauth/introspect ✅ - Token doğrulama
 │   │   ├── GET /oauth/transparency ✅ - Şeffaflık günlükleri
-│   │   ├── POST /sfu/context 🚧 - Güvenli medya oturumu başlatma
-│   │   ├── POST /sfu/context/step 🚧 - SFU ratchet adımı ilerletme
+│   │   ├── POST /sfu/context ✅ - Güvenli medya oturumu başlatma
+│   │   ├── POST /sfu/context/step ✅ - SFU ratchet adımı ilerletme
 │   │   ├── POST /security/generate-media-token ✅ - Medya erişim token üretimi
 │   │   ├── POST /mdm/register ✅ - Cihaz kayıt akışı
 │   │   ├── GET /mdm/policy/:platform ✅ - Platform bazlı MDM politikası
 │   │   ├── GET /mdm/cert-plan/:device_id ✅ - Sertifika planı keşfi
-│   │   ├── POST /id/generate 🚧 - Kimlik üretimi (v0.4.5 entegrasyonu tamamlanıyor)
-│   │   ├── POST /id/parse 🚧 - Kimlik çözümleme (v0.4.5 entegrasyonu tamamlanıyor)
-│   │   ├── POST /id/verify-head 🚧 - Head damgalı kimlik doğrulama
-│   │   ├── POST /blockchain/fabric/did/verify 🚧 - Hyperledger Fabric DID doğrulama PoC'u
+│   │   ├── POST /id/generate ✅ - Head damgalı kimlik üretimi
+│   │   ├── POST /id/parse ✅ - Kimlik çözümleme servisi
+│   │   ├── POST /id/verify-head ✅ - Head damgalı kimlik doğrulama
+│   │   ├── POST /blockchain/fabric/did/verify ✅ - Hyperledger Fabric DID doğrulama PoC'u
 │   │   ├── GET /http3/capabilities 🚧 - HTTP/3 PoC introspeksiyonu (`http3-experimental`)
 │   │   ├── GET /acme/directory ✅ - ACME directory keşfi ve meta bilgisi
 │   │   ├── GET /acme/new-nonce ✅ - Replay-Nonce üretimi (JWS koruması için)
@@ -53,11 +53,11 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /acme/order/:order_id/finalize ✅ - CSR doğrulama ve sertifika URL'si üretimi
 │   │   └── POST /acme/revoke-cert ✅ - Sertifika iptali (kid doğrulamalı ACME hesabı)
 │   ├── acme/                          # ACME istemcisi (directory/register/order CLI) ✅
-│   ├── id/                            # Head-stamped ID kütüphanesi ve testler 🚧
+│   ├── id/                            # Head-stamped ID kütüphanesi ve testler ✅
 │   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅
 │   ├── kms/                           # Anahtar yönetimi hizmeti adaptörleri ✅
 │   ├── x509/                          # Sertifika otoritesi (CA) bileşenleri ✅
-│   ├── mdm/                           # Mobil cihaz yönetimi hizmetleri 🚧
+│   ├── mdm/                           # Mobil cihaz yönetimi hizmetleri ✅
 │   └── wasm/                          # WebAssembly hedefleri 📋 [Planlandı]
 ├── docs/
 │   ├── src/                           # Operasyon, mimari, inovasyon dokümanları
@@ -559,7 +559,7 @@ aunsorm-server v0.4.5
 │  └─ GET    /metrics ✅                → Prometheus metrics (opsiyonel)
 │
 ├─ ⛓️ Blockchain DID Doğrulama (Hyperledger Fabric PoC)
-│  └─ POST   /blockchain/fabric/did/verify 🚧 → Fabric ağına çapalanmış DID kanıtını doğrula
+│  └─ POST   /blockchain/fabric/did/verify ✅ → Fabric ağına çapalanmış DID kanıtını doğrula
 │                                             └─ Input: did, channel, proof{challenge(base64url), signature(base64url), block_hash(hex), transaction_id, timestamp_ms}
 │                                             └─ Output: ledger_anchor, verification_method, audit(clock_skew)
 │                                             └─ Saat sapması limiti: ≤ 30 saniye, Ed25519 imza doğrulaması
@@ -1009,10 +1009,10 @@ Detaylı döküman: [`docs/src/architecture/http3-quic.md`](docs/src/architectur
 
 ### 🎯 Yakında Gelecek Özellikler
 
-#### v0.4.5 (Q4 2025) - ID Generation Service
-- 📋 **HEAD-Stamped IDs:** `aunsorm-id` crate server entegrasyonu
-- 🔗 **3 REST Endpoints:** /id/generate, /id/parse, /id/verify-head
-- 🎯 **CI/CD Integration:** Git commit SHA tracking for artifacts
+#### v0.4.5 (Q4 2025) - ID Generation Service (Tamamlandı)
+- ✅ **HEAD-Stamped IDs:** `aunsorm-id` crate server entegrasyonu
+- ✅ **3 REST Endpoints:** /id/generate, /id/parse, /id/verify-head
+- ✅ **CI/CD Integration:** Git commit SHA tracking for artifacts
 - ✅ **Monotonic Timestamps:** Collision-free ID generation
 
 #### v0.5.0 (Q1 2026) - **Let's Encrypt ACME Challenge Automation**
