@@ -77,6 +77,100 @@ const DEFAULT_TOKEN_KEY = 'aunsorm.oauth.access_token';
 const DEFAULT_CODE_VERIFIER_LENGTH = 64;
 const DEFAULT_STATE_LENGTH = 32;
 
+const LOOPBACK_HOSTNAME_ALIASES = new Set([
+  'localhost',
+  'localhost.localdomain',
+  'localhost6',
+  'localhost6.localdomain6',
+  'ip6-localhost',
+  'ip6-loopback',
+]);
+
+function normaliseHostname(value: string): string {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function isLoopbackIpv4(candidate: string): boolean {
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(candidate)) {
+    return false;
+  }
+
+  const segments = candidate.split('.').map((segment) => Number.parseInt(segment, 10));
+  if (segments.length !== 4 || segments.some((segment) => Number.isNaN(segment) || segment < 0 || segment > 255)) {
+    return false;
+  }
+
+  if (segments[0] === 127) {
+    return true;
+  }
+
+  return segments.every((segment) => segment === 0);
+}
+
+function decodeHexIpv4Mapped(mapped: string): string | undefined {
+  const segments = mapped.split(':').filter((segment) => segment.length > 0);
+  if (segments.length !== 2) {
+    return undefined;
+  }
+
+  if (!segments.every((segment) => /^[0-9a-f]{1,4}$/i.test(segment))) {
+    return undefined;
+  }
+
+  const [high, low] = segments;
+  const highValue = Number.parseInt(high, 16);
+  const lowValue = Number.parseInt(low, 16);
+  if (Number.isNaN(highValue) || Number.isNaN(lowValue)) {
+    return undefined;
+  }
+
+  const bytes = [
+    (highValue >> 8) & 0xff,
+    highValue & 0xff,
+    (lowValue >> 8) & 0xff,
+    lowValue & 0xff,
+  ];
+
+  return bytes.join('.');
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalised = normaliseHostname(hostname);
+  if (!normalised) {
+    return false;
+  }
+
+  if (LOOPBACK_HOSTNAME_ALIASES.has(normalised) || normalised.endsWith('.localhost')) {
+    return true;
+  }
+
+  if (normalised === '::1' || normalised === '0:0:0:0:0:0:0:1') {
+    return true;
+  }
+
+  if (normalised === '::' || normalised === '::0' || normalised === '0:0:0:0:0:0:0:0') {
+    return true;
+  }
+
+  if (normalised.startsWith('::ffff:')) {
+    const mapped = normalised.slice('::ffff:'.length);
+    if (isLoopbackIpv4(mapped)) {
+      return true;
+    }
+    const decoded = decodeHexIpv4Mapped(mapped);
+    if (decoded && isLoopbackIpv4(decoded)) {
+      return true;
+    }
+    return false;
+  }
+
+  return isLoopbackIpv4(normalised);
+}
+
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
 }
@@ -209,8 +303,9 @@ function parseUrl(baseUrl: string): string {
     throw new Error('baseUrl is required.');
   }
   const url = new URL(trimmed);
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && url.hostname === 'localhost')) {
-    throw new Error('baseUrl must use HTTPS (HTTP is only allowed for localhost).');
+  const isHttpLoopback = url.protocol === 'http:' && isLoopbackHostname(url.hostname);
+  if (url.protocol !== 'https:' && !isHttpLoopback) {
+    throw new Error('baseUrl must use HTTPS (HTTP is only allowed for loopback hosts).');
   }
   url.pathname = stripTrailingSlash(url.pathname);
   return url.toString().replace(/\/+$/, '');
