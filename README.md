@@ -36,6 +36,7 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /sfu/context ✅ - Güvenli medya oturumu başlatma
 │   │   ├── POST /sfu/context/step ✅ - SFU ratchet adımı ilerletme
 │   │   ├── POST /security/generate-media-token ✅ - Medya erişim token üretimi
+│   │   ├── POST /security/jwt-verify ✅ - Zasian JWT doğrulama ve payload dökümü
 │   │   ├── POST /mdm/register ✅ - Cihaz kayıt akışı
 │   │   ├── GET /mdm/policy/:platform ✅ - Platform bazlı MDM politikası
 │   │   ├── GET /mdm/cert-plan/:device_id ✅ - Sertifika planı keşfi
@@ -547,9 +548,12 @@ aunsorm-server v0.4.5
 │  └─ GET    /mdm/cert-plan/{device_id} ✅ → Sertifika dağıtım planı
 │
 ├─ 🎫 Media Access Tokens
-│  └─ POST   /security/generate-media-token ✅ → Zasian medya köprüsü için JWT üret
-│                                              └─ Input: roomId, identity, participantName?, metadata?
-│                                              └─ Output: token, ttlSeconds, bridgeUrl, issuedAt, expiresAt
+│  ├─ POST   /security/generate-media-token ✅ → Zasian medya köprüsü için JWT üret
+│  │                                            └─ Input: roomId, identity, participantName?, metadata?
+│  │                                            └─ Output: token, ttlSeconds, bridgeUrl, issuedAt, expiresAt
+│  └─ POST   /security/jwt-verify ✅         → JWT doğrula, payload + hata mesajı döndür
+│                                              └─ Input: token (string)
+│                                              └─ Output: { valid: boolean, payload?: Claims, error?: string }
 │
 ├─ 🔍 Transparency & Audit
 │  └─ GET    /transparency/tree ✅      → Merkle tree audit log

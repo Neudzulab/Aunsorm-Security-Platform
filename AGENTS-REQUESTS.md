@@ -120,10 +120,13 @@ curl -X POST http://localhost:4200/security/jwt-verify \
 ```
 
 **Status:**
-- [ ] 📋 Pending (Bekleniyor)
-- [ ] 🔄 In Progress (Yapılıyor) 
-- [ ] ✅ Done (Tamamlandı)
+- [x] 📋 Pending (2025-10-19)
+- [x] 🔄 In Progress (2025-10-21 – Stage 1 smoke automation wiring)
 - [ ] ❌ Rejected (Reddedildi)
+- [x] ✅ Done (2025-10-24 – commit 4422aad63511a29894d57521dd2c0352038cd218)
+
+**Zasian Agent Notes:**
+- ✅ `/security/jwt-verify` endpoint yayınlandı; token imza/claim doğrulaması ve JTI defteri kontrolü ile `valid`/`error` yanıtları sağlanıyor. (commit 4422aad63511a29894d57521dd2c0352038cd218)
 
 ### [REQUEST-007] WebRTC Join Acknowledgement Timeout Sorunu (Tarih: 2025-10-22)
 

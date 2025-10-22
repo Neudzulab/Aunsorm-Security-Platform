@@ -89,8 +89,9 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/acme/order/:order_id/finalize", post(acme_finalize_order))
         .route("/acme/cert/:order_id", get(acme_get_certificate))
         .route("/acme/revoke-cert", post(acme_revoke_certificate))
-        // Security endpoints (media token generation)
+        // Security endpoints (media token operations)
         .route("/security/generate-media-token", post(generate_media_token))
+        .route("/security/jwt-verify", post(verify_media_token))
         // Blockchain DID verification PoC
         .route("/blockchain/fabric/did/verify", post(verify_fabric_did));
 
@@ -1814,6 +1815,8 @@ async fn verify_head(
 // Security: Media Token Generation
 // ========================================
 
+const ZASIAN_MEDIA_AUDIENCE: &str = "zasian-media";
+
 #[derive(Debug, Deserialize)]
 struct MediaTokenRequest {
     #[serde(rename = "roomId")]
@@ -1863,7 +1866,7 @@ async fn generate_media_token(
     let mut claims = Claims {
         subject: Some(payload.identity.clone()),
         issuer: Some(state.issuer().to_owned()),
-        audience: Some(Audience::Single("zasian-media".to_owned())),
+        audience: Some(Audience::Single(ZASIAN_MEDIA_AUDIENCE.to_owned())),
         ..Default::default()
     };
 
@@ -1910,7 +1913,12 @@ async fn generate_media_token(
         .ok_or_else(|| ApiError::server_error("JTI üretilemedi"))?;
 
     state
-        .record_token(&jti, exp, claims.subject.as_deref(), Some("zasian-media"))
+        .record_token(
+            &jti,
+            exp,
+            claims.subject.as_deref(),
+            Some(ZASIAN_MEDIA_AUDIENCE),
+        )
         .await
         .map_err(|err| {
             warn!(jti = %jti, error = %err, "Token kaydı başarısız (JWT yine de kullanılabilir)");
@@ -1928,6 +1936,117 @@ async fn generate_media_token(
         room_id: payload.room_id,
         identity: payload.identity,
     }))
+}
+
+#[derive(Debug, Deserialize)]
+struct JwtVerifyRequest {
+    token: String,
+}
+
+#[derive(Debug, Serialize)]
+struct JwtVerifyResponse {
+    valid: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    payload: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+impl JwtVerifyResponse {
+    #[allow(clippy::missing_const_for_fn)] // serde_json::Value cannot be constructed in const context
+    fn valid(payload: Value) -> Self {
+        Self {
+            valid: true,
+            payload: Some(payload),
+            error: None,
+        }
+    }
+
+    #[allow(clippy::missing_const_for_fn)] // serde_json::Value allocation requires runtime context
+    fn invalid(message: impl Into<String>) -> Self {
+        Self {
+            valid: false,
+            payload: None,
+            error: Some(message.into()),
+        }
+    }
+}
+
+fn map_jwt_error_message(err: &JwtError) -> String {
+    match err {
+        JwtError::Expired => "Token süresi dolmuş".to_owned(),
+        JwtError::NotYetValid => "Token henüz geçerli değil".to_owned(),
+        JwtError::IssuedInFuture => "Token gelecekte düzenlenmiş".to_owned(),
+        JwtError::Signature => "Token imzası doğrulanamadı".to_owned(),
+        JwtError::UnsupportedAlgorithm(alg) => {
+            format!("Desteklenmeyen algoritma: {alg}")
+        }
+        JwtError::UnknownKey(kid) => format!("Bilinmeyen anahtar kimliği: {kid}"),
+        JwtError::MissingKeyId => "Token key id (kid) alanı eksik".to_owned(),
+        JwtError::MissingJti => "Token jti alanı eksik".to_owned(),
+        JwtError::ClaimMismatch("aud") => "Token beklenen hedef için geçerli değil".to_owned(),
+        JwtError::ClaimMismatch("iss") => "Token issuer değeri beklenenle eşleşmiyor".to_owned(),
+        JwtError::ClaimMismatch("sub") => "Token subject değeri beklenenle eşleşmiyor".to_owned(),
+        JwtError::ClaimMismatch(other) => {
+            format!("Claim uyuşmazlığı: {other}")
+        }
+        JwtError::InvalidClaim(name, msg) => {
+            format!("Geçersiz claim {name}: {msg}")
+        }
+        JwtError::Replay => "Token yeniden kullanımı tespit edildi".to_owned(),
+        JwtError::Serde(_) => "Token claim'leri çözümlenemedi".to_owned(),
+        JwtError::Base64(_) => "Token base64 kodu çözülemedi".to_owned(),
+        JwtError::Malformed => "Token biçimi geçersiz".to_owned(),
+        JwtError::TimeConversion => "Token zaman alanları çözümlenemedi".to_owned(),
+        _ => format!("Token doğrulanamadı: {err}"),
+    }
+}
+
+async fn verify_media_token(
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<JwtVerifyRequest>,
+) -> Result<Json<JwtVerifyResponse>, ApiError> {
+    let token = payload.token.trim();
+    if token.is_empty() {
+        return Err(ApiError::invalid_request("token alanı boş olamaz"));
+    }
+    let token = token.to_owned();
+    let options = VerificationOptions {
+        issuer: Some(state.issuer().to_owned()),
+        audience: Some(ZASIAN_MEDIA_AUDIENCE.to_owned()),
+        require_jti: true,
+        ..VerificationOptions::default()
+    };
+    match state.verifier().verify(&token, &options) {
+        Ok(claims) => {
+            let jti = claims
+                .jwt_id
+                .clone()
+                .ok_or_else(|| ApiError::server_error("Token jti alanı okunamadı"))?;
+            let active = state
+                .is_token_active(&jti, SystemTime::now())
+                .await
+                .map_err(|err| {
+                    ApiError::server_error(format!("Token kayıt durumu doğrulanamadı: {err}"))
+                })?;
+            if !active {
+                return Ok(Json(JwtVerifyResponse::invalid(
+                    "Token kayıtlı değil veya süresi dolmuş",
+                )));
+            }
+            let payload_value = serde_json::to_value(&claims).map_err(|err| {
+                ApiError::server_error(format!("Token claim'leri serileştirilemedi: {err}"))
+            })?;
+            Ok(Json(JwtVerifyResponse::valid(payload_value)))
+        }
+        Err(err @ (JwtError::Io(_) | JwtError::JtiStore(_))) => Err(ApiError::server_error(
+            format!("Token doğrulama servisi hatası: {err}"),
+        )),
+        Err(err) => {
+            let message = map_jwt_error_message(&err);
+            Ok(Json(JwtVerifyResponse::invalid(message)))
+        }
+    }
 }
 
 const TIMESTAMP_FALLBACK: &str = "1970-01-01T00:00:00.000Z";
