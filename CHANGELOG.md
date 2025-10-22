@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ACME `newOrder` identifier doğrulaması artık IDNA normalizasyonu ile uluslararası alan adlarını destekliyor.
 - ACME `newAccount` isteği builder'ı e-posta/telefon URI doğrulaması ve
   `externalAccountBinding` yapısı için zorunlu alan kontrolleri ekledi.
+- ACME hesap anahtarları için Ed25519, ES256 ve RS256 üretim yardımcıları; RNG
+  enjeksiyonunu destekleyerek CLI ve sunucu entegrasyonları için hazır anahtar
+  üretimi sağlar.
 - `HeadIdGenerator::from_env_with_namespace` yardımıyla HEAD-stamped ID jeneratörleri çalışma anında namespace geçersiz kılmayı
   destekler hale geldi.
 - Hyperledger Fabric DID doğrulama PoC'u için `POST /blockchain/fabric/did/verify` endpoint'i ve `FabricDidRegistry` PoC kayıt deposu.

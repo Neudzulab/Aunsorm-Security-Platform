@@ -9,6 +9,7 @@ use p256::ecdsa::{
 };
 use p256::elliptic_curve;
 use p256::SecretKey as P256SecretKey;
+use rand_core::{CryptoRng, OsRng, RngCore};
 use rsa::errors::Error as RsaError;
 use rsa::pkcs1v15::SigningKey as RsaSigningKey;
 use rsa::traits::PublicKeyParts;
@@ -93,6 +94,21 @@ impl fmt::Debug for Ed25519AccountKey {
 impl Ed25519AccountKey {
     /// ACME JWS başlığında kullanılacak algoritma adı.
     pub const ALGORITHM: &'static str = "EdDSA";
+
+    /// Varsayılan işletim sistemi RNG'sini kullanarak yeni hesap anahtarı üretir.
+    #[must_use]
+    pub fn generate() -> Self {
+        let mut rng = OsRng;
+        Self::generate_with_rng(&mut rng)
+    }
+
+    /// Harici RNG kullanarak yeni hesap anahtarı üretir.
+    #[must_use]
+    pub fn generate_with_rng(rng: &mut (impl CryptoRng + RngCore)) -> Self {
+        Self {
+            signing_key: SigningKey::generate(rng),
+        }
+    }
 
     /// 32 baytlık gizli anahtardan yeni hesap anahtarı oluşturur.
     #[must_use]
@@ -223,6 +239,20 @@ impl fmt::Debug for EcdsaP256AccountKey {
 impl EcdsaP256AccountKey {
     /// ACME JWS başlığında kullanılacak algoritma adı.
     pub const ALGORITHM: &'static str = "ES256";
+
+    /// Varsayılan işletim sistemi RNG'si ile yeni ECDSA hesap anahtarı üretir.
+    #[must_use]
+    pub fn generate() -> Self {
+        let mut rng = OsRng;
+        Self::generate_with_rng(&mut rng)
+    }
+
+    /// Harici RNG ile yeni ECDSA hesap anahtarı üretir.
+    #[must_use]
+    pub fn generate_with_rng(rng: &mut (impl CryptoRng + RngCore)) -> Self {
+        let signing_key = P256SigningKey::random(rng);
+        Self { signing_key }
+    }
 
     /// Doğrudan `p256` gizli anahtarından hesap anahtarı oluşturur.
     #[must_use]
@@ -357,6 +387,32 @@ impl fmt::Debug for RsaAccountKey {
 impl RsaAccountKey {
     /// ACME JWS başlığında kullanılacak algoritma adı.
     pub const ALGORITHM: &'static str = "RS256";
+    const DEFAULT_MODULUS_BITS: usize = 2048;
+
+    /// Varsayılan modül uzunluğunda RSA hesap anahtarı üretir.
+    ///
+    /// # Errors
+    ///
+    /// Rastgele sayı üretimi veya asal üretim başarısız olursa `JwsError::InvalidRsaKey`
+    /// döner.
+    pub fn generate() -> Result<Self, JwsError> {
+        let mut rng = OsRng;
+        Self::generate_with_rng(Self::DEFAULT_MODULUS_BITS, &mut rng)
+    }
+
+    /// Harici RNG ve belirtilen modül uzunluğunu kullanarak RSA hesap anahtarı üretir.
+    ///
+    /// # Errors
+    ///
+    /// Rastgele sayı üretimi veya asal üretimi sırasında hata oluşursa
+    /// `JwsError::InvalidRsaKey` döndürülür.
+    pub fn generate_with_rng(
+        bits: usize,
+        rng: &mut (impl CryptoRng + RngCore),
+    ) -> Result<Self, JwsError> {
+        let private_key = RsaPrivateKey::new(rng, bits)?;
+        Self::new(private_key)
+    }
 
     /// RSA özel anahtarından hesap anahtarı oluşturur.
     ///
@@ -551,6 +607,65 @@ mod tests {
 
     fn sample_url() -> Url {
         Url::parse("https://acme.example/new-account").unwrap()
+    }
+
+    #[test]
+    fn ed25519_generate_with_rng_produces_signing_key() {
+        let mut rng = ChaCha20Rng::from_seed([99_u8; 32]);
+        let key = Ed25519AccountKey::generate_with_rng(&mut rng);
+        let payload = b"{}";
+        let signed = key
+            .sign_payload(payload, &sample_nonce(), &sample_url(), KeyBinding::Jwk)
+            .expect("ed25519 signature");
+        assert!(!signed.signature.is_empty());
+    }
+
+    #[test]
+    fn ecdsa_generate_with_rng_signs_payload() {
+        let mut rng = ChaCha20Rng::from_seed([101_u8; 32]);
+        let key = EcdsaP256AccountKey::generate_with_rng(&mut rng);
+        let payload = br#"{"resource":"newOrder"}"#;
+        let signed = key
+            .sign_payload(payload, &sample_nonce(), &sample_url(), KeyBinding::Jwk)
+            .expect("ecdsa signature");
+
+        let signature_bytes = URL_SAFE_NO_PAD
+            .decode(signed.signature.as_bytes())
+            .expect("signature decode");
+        let signature = P256Signature::try_from(signature_bytes.as_slice()).unwrap();
+        let verifying_key = key.verifying_key();
+        let signing_input = format!("{}.{}", signed.protected, signed.payload);
+        signature::Verifier::verify(&verifying_key, signing_input.as_bytes(), &signature)
+            .expect("ecdsa verify");
+    }
+
+    #[test]
+    fn rsa_generate_with_rng_signs_payload() {
+        let mut rng = ChaCha20Rng::from_seed([103_u8; 32]);
+        let key = RsaAccountKey::generate_with_rng(1024, &mut rng).expect("rsa generate");
+        let signed = key
+            .sign_payload(b"{}", &sample_nonce(), &sample_url(), KeyBinding::Jwk)
+            .expect("rsa signature");
+
+        let signature_bytes = URL_SAFE_NO_PAD
+            .decode(signed.signature.as_bytes())
+            .expect("signature decode");
+        let signature = RsaSignature::try_from(signature_bytes.as_slice()).expect("rsa sig");
+        let signing_input = format!("{}.{}", signed.protected, signed.payload);
+        signature::Verifier::verify(&key.verifying_key(), signing_input.as_bytes(), &signature)
+            .expect("rsa verify");
+    }
+
+    #[test]
+    fn rsa_generate_uses_default_modulus_size() {
+        let key = RsaAccountKey::generate().expect("rsa generate");
+        let modulus_bits = key.verifying_key().as_ref().n().bits();
+        assert!(
+            modulus_bits >= RsaAccountKey::DEFAULT_MODULUS_BITS,
+            "expected at least {} bits, got {}",
+            RsaAccountKey::DEFAULT_MODULUS_BITS,
+            modulus_bits
+        );
     }
 
     #[test]
