@@ -186,11 +186,27 @@ describe('AunsormOAuthClient', () => {
     expect(store.getItem('aunsorm.oauth.code_verifier')).toBeNull();
   });
 
-  it('supports localhost HTTP base URLs for development', () => {
+  it('supports HTTP base URLs for loopback hosts during development', () => {
     expect(
       () =>
         new AunsormOAuthClient({
           baseUrl: 'http://localhost:5173',
+          randomSource: deterministicRandom,
+        }),
+    ).not.toThrow();
+
+    expect(
+      () =>
+        new AunsormOAuthClient({
+          baseUrl: 'http://127.0.0.1:8080',
+          randomSource: deterministicRandom,
+        }),
+    ).not.toThrow();
+
+    expect(
+      () =>
+        new AunsormOAuthClient({
+          baseUrl: 'http://[::1]:8443',
           randomSource: deterministicRandom,
         }),
     ).not.toThrow();
