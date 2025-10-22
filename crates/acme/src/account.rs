@@ -428,7 +428,10 @@ fn normalize_tel(value: &str) -> Result<String, AccountContactError> {
             continue;
         }
 
-        if ch.is_ascii_alphabetic() || matches!(ch, '-' | '.' | '(' | ')' | ';' | '=' | ',') {
+        // RFC 3966 DTMF dizileri `*` ve `#` karakterlerini destekler; bunları kabul et.
+        if ch.is_ascii_alphabetic()
+            || matches!(ch, '-' | '.' | '(' | ')' | ';' | '=' | ',' | '*' | '#')
+        {
             continue;
         }
 
@@ -527,6 +530,20 @@ mod tests {
         let contact = AccountContact::telephone("+1-555-0100;ext=200").expect("geçerli telefon");
         assert_eq!(contact.kind(), AccountContactKind::Telephone);
         assert_eq!(contact.uri(), "tel:+1-555-0100;ext=200");
+    }
+
+    #[test]
+    fn telephone_contact_accepts_dtmf_symbols() {
+        let contact = AccountContact::telephone("+1-555-0100#").expect("DTMF karakterleri desteklenmeli");
+        assert_eq!(contact.kind(), AccountContactKind::Telephone);
+        assert_eq!(contact.uri(), "tel:+1-555-0100#");
+    }
+
+    #[test]
+    fn telephone_contact_allows_service_codes() {
+        let contact = AccountContact::telephone("*123#").expect("servis kodu desteklenmeli");
+        assert_eq!(contact.kind(), AccountContactKind::Telephone);
+        assert_eq!(contact.uri(), "tel:*123#");
     }
 
     #[test]
