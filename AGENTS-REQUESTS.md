@@ -196,12 +196,14 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [ ] 🔄 In Progress
-- [ ] ✅ Done
+- [x] 🔄 In Progress (2025-10-24 – ACME revoke akışı geliştirildi)
+- [x] ✅ Done (2025-10-24 – commit: güncel değişiklik seti)
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- _(Güncelleme bekleniyor)_
+- Sunucuda `POST /acme/revoke-cert` endpoint'i etkinleştirildi; kid doğrulaması, reason kodu doğrulaması ve revocation kayıtları tutuluyor.
+- ACME entegrasyon testi revocation senaryosunu kapsayacak şekilde genişletildi; tekrar indirme ve idempotent tekrar deneme kontrolleri eklendi.
+- README ve CHANGELOG, yeni sertifika iptal yeteneklerini ve servis ağacındaki durumu yansıtacak şekilde güncellendi.
 
 ---
 

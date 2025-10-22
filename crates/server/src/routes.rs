@@ -37,6 +37,7 @@ use aunsorm_mdm::{
 
 use crate::acme::{
     AcmeProblem, FinalizeOrderOutcome, NewAccountOutcome, NewOrderOutcome, OrderLookupOutcome,
+    RevokeCertOutcome,
 };
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
@@ -87,6 +88,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         .route("/acme/order/:order_id", post(acme_order_status))
         .route("/acme/order/:order_id/finalize", post(acme_finalize_order))
         .route("/acme/cert/:order_id", get(acme_get_certificate))
+        .route("/acme/revoke-cert", post(acme_revoke_certificate))
         // Security endpoints (media token generation)
         .route("/security/generate-media-token", post(generate_media_token))
         // Blockchain DID verification PoC
@@ -633,6 +635,26 @@ fn acme_order_status_response(outcome: OrderLookupOutcome, nonce: &str) -> Respo
     response
 }
 
+fn acme_revoke_response(outcome: &RevokeCertOutcome, nonce: &str) -> Response {
+    #[derive(Serialize)]
+    struct Body {
+        status: &'static str,
+        #[serde(rename = "revokedAt", with = "time::serde::rfc3339")]
+        revoked_at: OffsetDateTime,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<u8>,
+    }
+
+    let body = Body {
+        status: "revoked",
+        revoked_at: outcome.revoked_at,
+        reason: outcome.reason,
+    };
+    let mut response = (StatusCode::OK, Json(body)).into_response();
+    apply_acme_headers(&mut response, nonce);
+    response
+}
+
 async fn acme_directory(State(state): State<Arc<ServerState>>) -> Response {
     let service = state.acme();
     let document = service.directory_document();
@@ -842,6 +864,50 @@ async fn acme_get_certificate(
             );
             apply_acme_headers(&mut response, &nonce);
             response
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
+}
+
+async fn acme_revoke_certificate(
+    State(state): State<Arc<ServerState>>,
+    request: Request<Body>,
+) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
+    }
+
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    match service.revoke_certificate(jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_revoke_response(&outcome, &nonce)
         }
         Err(problem) => {
             let nonce = service.issue_nonce().await;

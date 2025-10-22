@@ -16,6 +16,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
+use time::{Duration as TimeDuration, OffsetDateTime};
 use url::Url;
 use x509_parser::{
     certificate::X509Certificate, extensions::GeneralName, pem::parse_x509_pem, prelude::FromDer,
@@ -98,6 +99,23 @@ struct TestOrderIdentifierBody {
     #[serde(rename = "type")]
     ty: String,
     value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AcmeProblemResponse {
+    #[serde(rename = "type")]
+    problem_type: String,
+    detail: String,
+    status: u16,
+}
+
+#[derive(Debug, Deserialize)]
+struct RevokeCertResponseBody {
+    status: String,
+    #[serde(rename = "revokedAt", with = "time::serde::rfc3339")]
+    revoked_at: OffsetDateTime,
+    #[serde(default)]
+    reason: Option<u8>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -612,6 +630,146 @@ async fn acme_directory_and_order_flow() {
     assert!(names
         .iter()
         .any(|name| { matches!(name, GeneralName::DNSName(value) if *value == "example.com") }));
+
+    let nonce_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/acme/new-nonce")
+                .body(Body::empty())
+                .expect("nonce request"),
+        )
+        .await
+        .expect("nonce response");
+    let revoke_nonce = nonce_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("revoke nonce header")
+        .to_str()
+        .expect("nonce str");
+    let revoke_nonce = ReplayNonce::parse(revoke_nonce).expect("revoke nonce parse");
+
+    let certificate_b64 = URL_SAFE_NO_PAD.encode(&pem.contents);
+    let revoke_payload = json!({
+        "certificate": certificate_b64,
+        "reason": 1u8,
+    });
+    let revoke_jws = key
+        .sign_json(
+            &revoke_payload,
+            &revoke_nonce,
+            state.acme().revoke_cert_url(),
+            KeyBinding::Kid(&account.kid),
+        )
+        .expect("revoke jws");
+    let revoke_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/acme/revoke-cert")
+                .header(header::CONTENT_TYPE, "application/jose+json")
+                .body(Body::from(
+                    serde_json::to_vec(&revoke_jws).expect("serialize"),
+                ))
+                .expect("revoke request"),
+        )
+        .await
+        .expect("revoke response");
+    assert_eq!(revoke_response.status(), StatusCode::OK);
+    let revoke_nonce_header = revoke_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("revoke nonce header")
+        .to_str()
+        .expect("nonce str");
+    assert!(!revoke_nonce_header.is_empty());
+    let revoke_body = to_bytes(revoke_response.into_body(), usize::MAX)
+        .await
+        .expect("revoke body");
+    let revoke: RevokeCertResponseBody = serde_json::from_slice(&revoke_body).expect("revoke json");
+    assert_eq!(revoke.status, "revoked");
+    assert_eq!(revoke.reason, Some(1));
+    assert!(revoke.revoked_at >= OffsetDateTime::now_utc() - TimeDuration::minutes(5));
+
+    let revoked_fetch = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!("/acme/cert/{order_id}"))
+                .body(Body::empty())
+                .expect("revoked certificate request"),
+        )
+        .await
+        .expect("revoked certificate response");
+    assert_eq!(revoked_fetch.status(), StatusCode::UNAUTHORIZED);
+    let revoked_problem = to_bytes(revoked_fetch.into_body(), usize::MAX)
+        .await
+        .expect("revoked problem body");
+    let revoked_error: AcmeProblemResponse =
+        serde_json::from_slice(&revoked_problem).expect("revoked problem json");
+    assert_eq!(
+        revoked_error.problem_type,
+        "urn:ietf:params:acme:error:unauthorized"
+    );
+    assert_eq!(revoked_error.status, StatusCode::UNAUTHORIZED.as_u16());
+    assert!(!revoked_error.detail.is_empty());
+
+    let nonce_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/acme/new-nonce")
+                .body(Body::empty())
+                .expect("nonce request"),
+        )
+        .await
+        .expect("nonce response");
+    let retry_nonce = nonce_response
+        .headers()
+        .get(REPLAY_NONCE_HEADER)
+        .expect("retry nonce header")
+        .to_str()
+        .expect("nonce str");
+    let retry_nonce = ReplayNonce::parse(retry_nonce).expect("retry nonce parse");
+
+    let second_revoke_jws = key
+        .sign_json(
+            &revoke_payload,
+            &retry_nonce,
+            state.acme().revoke_cert_url(),
+            KeyBinding::Kid(&account.kid),
+        )
+        .expect("second revoke jws");
+    let second_revoke = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/acme/revoke-cert")
+                .header(header::CONTENT_TYPE, "application/jose+json")
+                .body(Body::from(
+                    serde_json::to_vec(&second_revoke_jws).expect("serialize"),
+                ))
+                .expect("second revoke request"),
+        )
+        .await
+        .expect("second revoke response");
+    assert_eq!(second_revoke.status(), StatusCode::OK);
+    let second_body = to_bytes(second_revoke.into_body(), usize::MAX)
+        .await
+        .expect("second revoke body");
+    let second_problem: AcmeProblemResponse =
+        serde_json::from_slice(&second_body).expect("second revoke json");
+    assert_eq!(
+        second_problem.problem_type,
+        "urn:ietf:params:acme:error:alreadyRevoked"
+    );
+    assert_eq!(second_problem.status, StatusCode::OK.as_u16());
+    assert!(!second_problem.detail.is_empty());
 }
 
 #[allow(clippy::too_many_lines)]

@@ -50,7 +50,8 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /acme/new-order ✅ - Sertifika order oluşturma
 │   │   ├── POST /acme/account/:account_id ✅ - POST-as-GET hesap durumu sorgusu
 │   │   ├── POST /acme/order/:order_id ✅ - POST-as-GET order durumu sorgusu
-│   │   └── POST /acme/order/:order_id/finalize ✅ - CSR doğrulama ve sertifika URL'si üretimi
+│   │   ├── POST /acme/order/:order_id/finalize ✅ - CSR doğrulama ve sertifika URL'si üretimi
+│   │   └── POST /acme/revoke-cert ✅ - Sertifika iptali (kid doğrulamalı ACME hesabı)
 │   ├── acme/                          # ACME istemcisi (directory/register/order CLI) ✅
 │   ├── id/                            # Head-stamped ID kütüphanesi ve testler 🚧
 │   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅
@@ -625,7 +626,7 @@ aunsorm-server v0.4.5
    │                                       └─ İçerik tipi: `text/plain; charset=utf-8`
    │                                       └─ Leaf + Issuing CA PEM dizisi (finalize sonrası hazır)
    │
-   └─ POST   /acme/revoke-cert 📋       → [Planlandı v0.5.0] Certificate revocation
+   └─ POST   /acme/revoke-cert ✅       → Sertifika iptali (ACME hesabı kid doğrulaması ve reason kaydı)
                                            └─ CRL management
 ```
 
