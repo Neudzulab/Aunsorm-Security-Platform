@@ -13,6 +13,8 @@ kullanılacaktır.
 - ACME directory JSON belgelerini güçlü tiplerle ayrıştırır.
 - Zorunlu uç noktaların (newNonce, newAccount, newOrder, revokeCert,
   keyChange) varlığını doğrular.
+- Zorunlu uç noktaların HTTPS üzerinden yayımlandığını doğrular, yanlış
+  yapılandırılmış HTTP şemalarını reddeder.
 - Opsiyonel uç noktalar ve meta alanlarını saklar, bilinmeyen uç
   noktaları deterministik sırada raporlar.
 - Hatalı URL veya meta alanlarında ayrıntılı hata mesajları üretir.
