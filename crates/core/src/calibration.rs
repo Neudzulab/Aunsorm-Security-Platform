@@ -86,12 +86,19 @@ pub struct CalibrationRange {
 
 impl CalibrationRange {
     fn new(start: u16, length: u16, step: u16) -> Self {
-        let end = start.saturating_add(length.max(1));
-        Self {
-            start,
-            end,
-            step: step.max(1),
+        let step = step.max(1);
+        let mut end = start.saturating_add(length.max(1));
+        if end > start {
+            let span = end - start;
+            let remainder = span % step;
+            if remainder != 0 {
+                end = end.saturating_sub(remainder);
+                if end < start {
+                    end = start;
+                }
+            }
         }
+        Self { start, end, step }
     }
 
     /// Verilen değerin aralık içerisinde kalıp kalmadığını kontrol eder.
@@ -459,6 +466,23 @@ fn validate_note_text(raw_note_text: &str, normalized_note_text: &str) -> Result
 mod tests {
     use super::*;
     use crate::{KdfPreset, KdfProfile};
+
+    #[test]
+    fn calibration_range_new_aligns_to_step_grid() {
+        let range = CalibrationRange::new(100, 17, 6);
+        assert_eq!(range.start, 100);
+        assert_eq!(range.step, 6);
+        assert_eq!(range.end, 112);
+        assert!(range.is_step_aligned(range.end));
+    }
+
+    #[test]
+    fn calibration_range_new_saturating_additions_collapse_to_start() {
+        let start = u16::MAX - 5;
+        let range = CalibrationRange::new(start, 1024, 50);
+        assert_eq!(range.start, start);
+        assert_eq!(range.end, start);
+    }
 
     #[test]
     fn calibration_is_deterministic() {
