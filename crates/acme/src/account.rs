@@ -534,7 +534,8 @@ mod tests {
 
     #[test]
     fn telephone_contact_accepts_dtmf_symbols() {
-        let contact = AccountContact::telephone("+1-555-0100#").expect("DTMF karakterleri desteklenmeli");
+        let contact =
+            AccountContact::telephone("+1-555-0100#").expect("DTMF karakterleri desteklenmeli");
         assert_eq!(contact.kind(), AccountContactKind::Telephone);
         assert_eq!(contact.uri(), "tel:+1-555-0100#");
     }
