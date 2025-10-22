@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/random/number` artık tam `u64` aralığını destekleyerek yüksek üst limitlerde hata vermeden deterministik reddetme örneklemesini uyguluyor.
 - ACME account telephone normalization now accepts DTMF digits (`*`, `#`) so service codes and keypad suffixes parse correctly.
 - ACME directory parser artık `newNonce`/`newAccount`/`newOrder`/`revokeCert`/`keyChange` uç noktaları için HTTPS dışı URL'leri reddederek yanlış yapılandırmalardan kaynaklanan güvensiz istekleri engelliyor.
+- ACME directory parser bilinmeyen/ek uç noktaları da HTTPS zorunluluğuna tabi tutarak directory belgelerindeki HTTP şemalı linkleri reddediyor.
 
 ### Documentation
 - README ACME roadmap anlatımı, yayınlanan onboarding uçlarını ve v0.5.0 için kalan authorization/finalize/revoke planını yansıtacak şekilde güncellendi.
