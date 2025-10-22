@@ -158,12 +158,14 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [ ] 🔄 In Progress
-- [ ] ✅ Done
+- [x] 🔄 In Progress (2025-10-22 - ACME otomasyon doğrulaması tamamlandı)
+- [x] ✅ Done (2025-10-22 - commit: docs: finalize ACME automation status)
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- _(Güncelleme bekleniyor)_
+- `crates/acme` ve sunucu ACME uçları production hazır olarak etiketlendi; README mimari ağacı güncellendi.
+- `aunsorm-cli acme` komutları ve `scripts/deploy_gateway_cert.sh` betiğiyle uçtan uca sertifika yenileme doğrulandı.
+- Dokümantasyon taraması ve entegrasyon testleri sonrası `cargo fmt --all`, `cargo clippy --all-targets --all-features`, `cargo test --all-features` çalıştırıldı (tamamı başarılı).
 
 ---
 
