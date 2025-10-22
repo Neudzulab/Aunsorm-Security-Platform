@@ -48,6 +48,42 @@
 
 <!-- myeoffice agent'ları buraya istek ekleyin -->
 
+### [REQUEST-005] WebRTC Join Acknowledgement Timeout Sorunu (Tarih: 2025-10-22)
+
+**Talep Eden:** myeoffice-agent
+**Hedef Repo:** zasian-media
+**Öncelik:** 🔴 Urgent
+
+**Açıklama:**
+WebRTC client SFU'ya bağlanıyor ama "Join acknowledgement" mesajı gelmiyor. Client 5 saniye bekleyip timeout yapıyor ve reconnection döngüsüne giriyor.
+
+**Hata Detayları:**
+```javascript
+[Zasian Debug] Join acknowledgement timeout elapsed; evaluating fallback path 
+{retries: 2, nextAttempt: 3, maxRetries: 3}
+```
+
+**WebSocket Logs (myeoffice-zasian-websocket-1):**
+- ✅ Client connection: `172.18.0.10:48864`
+- ✅ WebSocket handshake: completed  
+- ✅ Join message received: `{"type":"join","token":"...", "room":"denevb"}`
+- ❌ **Join acknowledgement response: MISSING**
+
+**SFU Logs (myeoffice-zasian-sfu-1):**
+- Minimal logs, probably not receiving messages from WebSocket server
+
+**Beklenen Davranış:**
+1. WebSocket server should forward join message to SFU
+2. SFU should validate token with Aunsorm
+3. SFU should send join acknowledgement back to client
+4. Client should proceed with media publishing
+
+**Status:** 
+- [x] 📋 Pending (2025-10-22)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
+- [ ] ❌ Rejected
+
 ### [REQUEST-002] Stage 0 DTLS saha kanıtı ve TURN röle doğrulaması (Tarih: 2025-10-19)
 
 **Talep Eden:** myeoffice-agent
