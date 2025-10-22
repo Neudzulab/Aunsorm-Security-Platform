@@ -22,6 +22,7 @@ ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 signature = { version = "2", default-features = false, features = ["std"] }
 zeroize = { workspace = true }
 time = { version = "0.3", features = ["formatting", "macros", "serde"] }
+rand_core = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = "1"

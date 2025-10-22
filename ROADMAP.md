@@ -122,7 +122,7 @@
   - [x] Directory endpoint parsing
   - [x] Nonce management
 - [x] JWS (JSON Web Signature) signing
-  - [ ] Account key generation (RSA/ECDSA)
+- [x] Account key generation (RSA/ECDSA)
   
 - [ ] Domain validation handlers
   - [ ] HTTP-01: Web server challenge response
