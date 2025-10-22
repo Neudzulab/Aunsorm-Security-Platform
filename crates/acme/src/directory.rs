@@ -285,6 +285,7 @@ fn collect_additional_endpoints(
                 field: key.clone(),
                 source,
             })?;
+            ensure_https(&parsed, key)?;
             additional.insert(key.clone(), parsed);
         }
     }
@@ -378,6 +379,26 @@ mod tests {
         match error {
             AcmeDirectoryError::InsecureUrl { field, scheme } => {
                 assert_eq!(field, "newNonce".to_owned());
+                assert_eq!(scheme, "http".to_owned());
+            }
+            other => panic!("beklenmeyen hata: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn additional_endpoints_reject_non_https() {
+        let json = br#"{
+            "newNonce": "https://example.com/new-nonce",
+            "newAccount": "https://example.com/new-account",
+            "newOrder": "https://example.com/new-order",
+            "revokeCert": "https://example.com/revoke",
+            "keyChange": "https://example.com/key-change",
+            "extraChallenge": "http://example.com/challenge"
+        }"#;
+        let error = AcmeDirectory::from_json_slice(json).unwrap_err();
+        match error {
+            AcmeDirectoryError::InsecureUrl { field, scheme } => {
+                assert_eq!(field, "extraChallenge".to_owned());
                 assert_eq!(scheme, "http".to_owned());
             }
             other => panic!("beklenmeyen hata: {other:?}"),

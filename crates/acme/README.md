@@ -15,8 +15,9 @@ kullanılacaktır.
   keyChange) varlığını doğrular.
 - Zorunlu uç noktaların HTTPS üzerinden yayımlandığını doğrular, yanlış
   yapılandırılmış HTTP şemalarını reddeder.
-- Opsiyonel uç noktalar ve meta alanlarını saklar, bilinmeyen uç
-  noktaları deterministik sırada raporlar.
+- Opsiyonel uç noktalar ve meta alanlarını saklar; bilinmeyen uç
+  noktaları deterministik sırada raporlar ve HTTPS dışı şemaları
+  reddeder.
 - Hatalı URL veya meta alanlarında ayrıntılı hata mesajları üretir.
 - Replay-Nonce başlıklarını doğrular ve kapasite kontrollü FIFO havuzunda
   saklar.
