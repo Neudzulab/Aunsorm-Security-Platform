@@ -1492,9 +1492,17 @@ async fn random_number_endpoint_returns_entropy() {
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
-    let body = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("body");
+    let (parts, body) = response.into_parts();
+    let cache_control = parts
+        .headers
+        .get(header::CACHE_CONTROL)
+        .expect("cache-control header");
+    assert_eq!(cache_control, "no-store, no-cache, must-revalidate");
+    let pragma = parts.headers.get(header::PRAGMA).expect("pragma header");
+    assert_eq!(pragma, "no-cache");
+    let expires = parts.headers.get(header::EXPIRES).expect("expires header");
+    assert_eq!(expires, "0");
+    let body = to_bytes(body, usize::MAX).await.expect("body");
     let payload: RandomNumberPayload = serde_json::from_slice(&body).expect("random json");
     assert!((0..=100).contains(&payload.value));
     assert_eq!(payload.min, 0);
@@ -1515,9 +1523,17 @@ async fn random_number_endpoint_returns_entropy() {
         .await
         .expect("response");
     assert_eq!(response2.status(), StatusCode::OK);
-    let body2 = to_bytes(response2.into_body(), usize::MAX)
-        .await
-        .expect("body");
+    let (parts2, body2) = response2.into_parts();
+    let cache_control2 = parts2
+        .headers
+        .get(header::CACHE_CONTROL)
+        .expect("cache-control header");
+    assert_eq!(cache_control2, "no-store, no-cache, must-revalidate");
+    let pragma2 = parts2.headers.get(header::PRAGMA).expect("pragma header");
+    assert_eq!(pragma2, "no-cache");
+    let expires2 = parts2.headers.get(header::EXPIRES).expect("expires header");
+    assert_eq!(expires2, "0");
+    let body2 = to_bytes(body2, usize::MAX).await.expect("body");
     let payload2: RandomNumberPayload = serde_json::from_slice(&body2).expect("random json");
     assert!((15..=5000).contains(&payload2.value));
     assert_eq!(payload2.min, 15);
@@ -1553,9 +1569,17 @@ async fn random_number_endpoint_returns_entropy() {
         .await
         .expect("response");
     assert_eq!(response4.status(), StatusCode::OK);
-    let body4 = to_bytes(response4.into_body(), usize::MAX)
-        .await
-        .expect("body");
+    let (parts4, body4) = response4.into_parts();
+    let cache_control4 = parts4
+        .headers
+        .get(header::CACHE_CONTROL)
+        .expect("cache-control header");
+    assert_eq!(cache_control4, "no-store, no-cache, must-revalidate");
+    let pragma4 = parts4.headers.get(header::PRAGMA).expect("pragma header");
+    assert_eq!(pragma4, "no-cache");
+    let expires4 = parts4.headers.get(header::EXPIRES).expect("expires header");
+    assert_eq!(expires4, "0");
+    let body4 = to_bytes(body4, usize::MAX).await.expect("body");
     let payload4: RandomNumberPayload = serde_json::from_slice(&body4).expect("random json");
     assert!((high_min..=high_max).contains(&payload4.value));
     assert_eq!(payload4.min, high_min);
