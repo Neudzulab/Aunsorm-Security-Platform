@@ -36,7 +36,11 @@
   - `certifications/soc2_report_template.md` dosyası, Quorum `AuditAssetRegistry` metaverilerinin Trust Services Criteria matrisleri ile ilişkilendirildiği denetim adımlarını tanımlar.
 - [x] FATF Travel Rule uyumluluğu için zincir üstü işlem izleme ve raporlama entegrasyonlarını değerlendir.
   - Travel Rule veri eşlemesi, TravelRuleBridge mimarisi ve raporlama mil taşları [`docs/src/operations/blockchain-integration.md`](../operations/blockchain-integration.md#fatf-travel-rule-entegrasyon-stratejisi) bölümünde planlandı.
-- [ ] Müşteri başına saklama politikaları ve anahtar silme prosedürleri için denetim izlerini Blockchain katmanıyla ilişkilendir.
+- [x] Müşteri başına saklama politikaları ve anahtar silme prosedürleri için denetim izlerini Blockchain katmanıyla ilişkilendir.
+  - `tests/data/blockchain/retention_policy_audit.json` ve eşlik eden belge, PolicyStore sürümlerinin `AuditAssetRegistry` ve
+    `kms_key_destroyed` log'larıyla aynı `calibration_ref` üzerinden bağlandığını gösteren deterministik örnekler sağladı.
+  - `tests/blockchain/retention_audit.rs` modülü ile `blockchain_retention_audit` testi, policy hash türetimini ve kronolojik
+    sıralamayı doğrulayarak runbook kontrollerinin CI'da otomatikleşmesini sağlıyor.
 
 ## Test Kaynakları ve Operasyonel Artefaktlar
 - **Mock Ledger:** `tests/blockchain/mock_ledger.rs` dosyası testler için deterministik bir blokzincir arayüzü sunar.
