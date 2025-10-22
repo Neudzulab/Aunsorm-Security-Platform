@@ -836,6 +836,10 @@ curl "http://localhost:8080/random/number?min=50"
 # {"value":78,"min":50,"max":100,"entropy":"m3n4o5..."}
 ```
 
+> **Not:** Sunucu yanıtları `Cache-Control: no-store, no-cache, must-revalidate`,
+> `Pragma: no-cache` ve `Expires: 0` başlıklarını içerir. Böylece ara proxy'ler
+> veya tarayıcı cache'leri kriptografik entropiyi tekrar kullanmaz.
+
 **Validasyon:**
 - `min ≤ max` (aksi halde `400 Bad Request`)
 - `max ≤ u64::MAX/2` (güvenlik limiti)

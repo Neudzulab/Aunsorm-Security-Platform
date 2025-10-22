@@ -988,7 +988,7 @@ struct RandomNumberResponse {
 async fn random_number(
     State(state): State<Arc<ServerState>>,
     axum::extract::Query(params): axum::extract::Query<RandomNumberQuery>,
-) -> Result<Json<RandomNumberResponse>, ApiError> {
+) -> Result<Response, ApiError> {
     let min = params.min;
     let max = params.max;
 
@@ -1000,12 +1000,23 @@ async fn random_number(
     }
 
     let (value, entropy) = state.random_value_with_proof(min, max);
-    Ok(Json(RandomNumberResponse {
+    let mut response = Json(RandomNumberResponse {
         value,
         min,
         max,
         entropy: hex_encode(entropy),
-    }))
+    })
+    .into_response();
+
+    let headers = response.headers_mut();
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    );
+    headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
+
+    Ok(response)
 }
 
 #[derive(Debug, Deserialize)]

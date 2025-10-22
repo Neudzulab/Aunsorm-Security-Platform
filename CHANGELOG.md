@@ -55,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `invalid_scope` errors when clients use unauthorized values.
 - Randomness API's entropy mapper now performs branchless constant-time rejection sampling to harden the `/random/number`
   endpoint against timing analysis.
+- `/random/number` yanıtları artık `Cache-Control: no-store, no-cache, must-revalidate`,
+  `Pragma: no-cache` ve `Expires: 0` başlıklarını göndererek kriptografik sonuçların
+  ara cache katmanlarında saklanmasını engelliyor.
 - `/id/generate` endpoint'i, namespace doğrulama hatalarında artık `invalid_request` döndürerek misconfiguration ile istemci
   hatalarını ayırt ediyor ve HEAD bilgisi için `from_env_with_namespace` yardımcısını kullanıyor.
 

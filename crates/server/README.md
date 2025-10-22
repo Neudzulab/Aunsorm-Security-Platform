@@ -205,6 +205,9 @@ curl "http://localhost:8080/random/number?min=100&max=50"
 - `min` (optional, default: 0): Minimum value (inclusive)
 - `max` (optional, default: 100): Maximum value (inclusive)
 - Validation: `min ≤ max` and `max ≤ u64::MAX/2`
+- Cache-Control: Yanıtlar `Cache-Control: no-store, no-cache, must-revalidate`,
+  `Pragma: no-cache` ve `Expires: 0` başlıklarıyla gelir; ara proxy'lerin ve
+  istemci caching mekanizmalarının entropiyi tekrar kullanmasını engeller.
 
 ### 3. SFU E2EE Session
 ```bash
