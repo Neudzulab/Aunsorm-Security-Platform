@@ -48,6 +48,83 @@
 
 <!-- myeoffice agent'ları buraya istek ekleyin -->
 
+### [REQUEST-008] JWT Token Validation Endpoint Eklenmesi (Tarih: 2025-10-23)
+
+**Talep Eden:** myeoffice-agent  
+**Hedef Repo:** aunsorm-crypt
+**Öncelik:** 🔴 Urgent
+
+**Açıklama:**
+Zasian Media Server, JWT token validation için `/security/jwt-verify` endpoint'ini arıyor ama Aunsorm Security Service'te bu endpoint mevcut değil. Bu yüzden WebRTC join işlemi "Authentication failed: Aunsorm returned status: 404 Not Found" hatası veriyor.
+
+**Mevcut Endpoints:**
+- ✅ `/security/generate-media-token` (token oluşturma) - MEVCUT
+- ❌ `/security/jwt-verify` (token doğrulama) - EKSİK
+
+**Hata Detayları:**
+```
+[Zasian WebRTC] Server error: Authentication failed: Aunsorm returned status: 404 Not Found
+```
+
+**Zasian'ın Beklediği API:**
+```rust
+// Zasian'dan Aunsorm'a giden istek
+POST http://aunsorm-server:4200/security/jwt-verify
+Content-Type: application/json
+
+{
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+**Beklenen Response:**
+```json
+{
+  "valid": true,
+  "payload": {
+    "sub": "user_id",
+    "roomId": "room-wo", 
+    "identity": "dsdfdd",
+    "exp": 1732233441
+  }
+}
+```
+
+**Veya hata durumunda:**
+```json
+{
+  "valid": false,
+  "error": "Token expired"
+}
+```
+
+**Beklenen Davranış:**
+1. `/security/jwt-verify` POST endpoint'ini Aunsorm routes.rs'e ekleyin
+2. Gelen JWT token'ı parse edin ve signature doğrulayın  
+3. Token valid ise payload'ı döndürün
+4. Token invalid ise error mesajıyla birlikte `valid: false` döndürün
+5. Zasian'ın WebRTC join flow'u başarılı olsun
+
+**Integration Test:**
+```bash
+# Aunsorm'dan token al
+TOKEN=$(curl -X POST http://localhost:4200/security/generate-media-token \
+  -H "Content-Type: application/json" \
+  -d '{"roomId":"test-room","identity":"test-user","participantName":"Test"}' \
+  | jq -r '.token')
+
+# Token'ı validate et  
+curl -X POST http://localhost:4200/security/jwt-verify \
+  -H "Content-Type: application/json" \
+  -d "{\"token\":\"$TOKEN\"}"
+```
+
+**Status:**
+- [ ] 📋 Pending (Bekleniyor)
+- [ ] 🔄 In Progress (Yapılıyor) 
+- [ ] ✅ Done (Tamamlandı)
+- [ ] ❌ Rejected (Reddedildi)
+
 ### [REQUEST-007] WebRTC Join Acknowledgement Timeout Sorunu (Tarih: 2025-10-22)
 
 **Talep Eden:** myeoffice-agent
@@ -255,15 +332,12 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [x] 🔄 In Progress (2025-10-20 – ACME servis ve istemci entegrasyonu başlatıldı)
-- [x] ✅ Done (2025-10-22 – commit d166ddd0e48dcb3c237ecd7a82a00e94d461cf11)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- ✅ `crates/server/src/routes.rs` ve `crates/server/src/acme.rs`: `/acme/*` endpoint'leri nonce yönetimi, hesap/order akışları ve CSR imzalama ile yayında.
-- ✅ `crates/cli/src/main.rs`: `aunsorm-cli acme directory|register|order|finalize|fetch-cert` komutları durum dosyası yönetimi ve JSON çıktı seçenekleriyle eklendi.
-- ✅ `scripts/deploy_gateway_cert.sh`: gateway dağıtımı için register→order→finalize→fetch zincirini otomatikleştiriyor; README sunucu ağacı üretim durumuyla güncellendi.
-- ✅ `docs/src/operations/acme-gateway-automation.md`: cron yenileme, alarm ve revoke prosedürleri runbook olarak belgelendi.
+- _(Güncelleme bekleniyor)_
 
 ---
 
