@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ACME `newOrder` identifier doğrulaması artık IDNA normalizasyonu ile uluslararası alan adlarını destekliyor.
 - ACME `newAccount` isteği builder'ı e-posta/telefon URI doğrulaması ve
   `externalAccountBinding` yapısı için zorunlu alan kontrolleri ekledi.
+- ACME authorization veri modelleri: Authorization/Challenge JSON belgeleri
+  HTTP-01/DNS-01/TLS-ALPN-01 türlerini doğrulayıp token formatını denetler.
 - ACME hesap anahtarları için Ed25519, ES256 ve RS256 üretim yardımcıları; RNG
   enjeksiyonunu destekleyerek CLI ve sunucu entegrasyonları için hazır anahtar
   üretimi sağlar.

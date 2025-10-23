@@ -30,6 +30,9 @@ kullanılacaktır.
   zaman aralığı (`notBefore`/`notAfter`) içeren builder sağlar.
 - `newOrder` identifier doğrulaması IDNA normalizasyonu sayesinde
   uluslararası alan adlarını ve wildcard kombinasyonlarını destekler.
+- ACME authorization kaynaklarını ayrıştırır; HTTP-01/DNS-01/TLS-ALPN-01
+  challenge girdilerini RFC 8555 kurallarıyla doğrular ve token
+  değerlerini güvenli biçimde doğrular.
 - Ed25519, ECDSA P-256 ve RSA (RS256) hesap anahtarlarıyla ACME JWS
   (`protected`, `payload`, `signature`) üretir; `kid` veya JWK tabanlı
   başlık bağlamını destekler.
