@@ -314,6 +314,35 @@ impl NewAccountRequestBuilder {
         self
     }
 
+    /// URI metninden iletişim girdisi ekler.
+    ///
+    /// # Errors
+    ///
+    /// URI `mailto:` veya `tel:` şemasına uymadığında ya da doğrulamadan
+    /// geçmediğinde `AccountContactError` döndürür.
+    pub fn try_contact_uri(self, uri: &str) -> Result<Self, AccountContactError> {
+        let contact = AccountContact::from_uri(uri)?;
+        Ok(self.contact(contact))
+    }
+
+    /// Birden fazla URI metninden iletişim girdisi ekler.
+    ///
+    /// # Errors
+    ///
+    /// Sağlanan URI değerlerinden biri geçersiz olduğunda
+    /// `AccountContactError` döndürür.
+    pub fn try_contacts_uri<I, S>(mut self, uris: I) -> Result<Self, AccountContactError>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        for uri in uris {
+            let contact = AccountContact::from_uri(uri.as_ref())?;
+            self.contact.push(contact);
+        }
+        Ok(self)
+    }
+
     /// Hizmet şartlarının kabul edildiğini işaretler.
     #[must_use]
     pub const fn agree_to_terms(mut self) -> Self {
@@ -618,5 +647,39 @@ mod tests {
         let request = NewAccountRequest::builder().build();
         let value = serde_json::to_value(&request).expect("serileştirme");
         assert_eq!(value, json!({}));
+    }
+
+    #[test]
+    fn builder_accepts_contact_uri_helpers() {
+        let request = NewAccountRequest::builder()
+            .try_contact_uri("mailto:Admin@Exämple.com")
+            .expect("e-posta URI doğrulanmalı")
+            .try_contact_uri("tel:+1-555-0100;ext=200")
+            .expect("telefon URI doğrulanmalı")
+            .agree_to_terms()
+            .build();
+
+        assert_eq!(request.contacts().len(), 2);
+        assert_eq!(
+            request.contacts()[0].uri(),
+            "mailto:Admin@xn--exmple-cua.com"
+        );
+        assert_eq!(request.contacts()[1].uri(), "tel:+1-555-0100;ext=200");
+    }
+
+    #[test]
+    fn builder_contact_uri_propagates_error() {
+        let err = NewAccountRequest::builder()
+            .try_contact_uri("mailto:not an email")
+            .unwrap_err();
+        assert!(matches!(err, AccountContactError::InvalidEmail { .. }));
+    }
+
+    #[test]
+    fn builder_contacts_uri_propagates_error() {
+        let err = NewAccountRequest::builder()
+            .try_contacts_uri(["mailto:admin@example.com", "tel:not-a-valid-number"])
+            .unwrap_err();
+        assert!(matches!(err, AccountContactError::InvalidTelephone { .. }));
     }
 }
