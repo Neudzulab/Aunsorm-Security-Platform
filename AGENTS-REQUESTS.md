@@ -48,66 +48,6 @@
 
 <!-- myeoffice agent'ları buraya istek ekleyin -->
 
-### [REQUEST-009] Zasian WebSocket Join Acknowledgement Eksik (Tarih: 2025-10-23)
-
-**Talep Eden:** myeoffice-agent
-**Hedef Repo:** zasian-media
-**Öncelik:** 🔴 Urgent
-
-**Açıklama:**
-Zasian WebSocket server join işlemini başarıyla tamamlıyor ancak client'a `joined` event göndermediği için client timeout yaşıyor.
-
-**Mevcut Durum Analizi:**
-```
-✅ JOIN message alınıyor: {"type":"join","token":"...","room":"deneme","identity":"fffdsdfdd"}
-✅ Token doğrulama: 🔐 Token verified: identity=fffdsdfdd, roomId=deneme
-✅ Router kayıt: 📝 Registered subscriber in Router: peer=fffdsdfdd, room=deneme  
-✅ Join tamamlama: ✅ Join completed: peer=fffdsdfdd, room=deneme
-❌ EKSIK: Client'a joined event response gönderilmiyor!
-```
-
-**Client-Side Timeout Hatası:**
-```javascript
-[Zasian Debug] Join acknowledgement timeout elapsed; evaluating fallback path 
-{retries: 0, nextAttempt: 1, maxRetries: 3}
-[Zasian] Join acknowledgement was not received within 5s. Yeniden bağlanma denemesi 1/3 planlandı.
-```
-
-**Beklenen Davranış:** 
-Join completion sonrası client'a şu formatta response gönderilmeli:
-```json
-{
-  "type": "joined",
-  "participantId": "fffdsdfdd", 
-  "peers": [...existing_room_participants...]
-}
-```
-
-**Etki:** 
-- ❌ Client 5 saniye timeout yapıyor
-- ❌ Retry mechanism devreye giriyor (1/3, 2/3, 3/3)
-- ❌ `zasianParticipantId` null kalıyor
-- ❌ WebRTC publish `participantId missing` hatası veriyor
-- ❌ User experience ciddi şekilde etkileniyor
-
-**Debug Info:**
-- Server logs: `2025-10-23T00:40:13.476627Z INFO ✅ Join completed: peer=fffdsdfdd, room=deneme`
-- Next message: `PUBLISH` request 65ms sonra (client retry nedeniyle)
-- Missing: `joined` event with participant details
-
-**Status:** 
-- [x] 📋 Pending (2025-10-23)
-- [x] 🔄 In Progress (2025-10-23 – Join acknowledgement implementation)
-- [x] ✅ Done (2025-10-23 – ServerMessage::Joined implemented, Docker restart needed)
-- [ ] ❌ Rejected
-
-**Zasian Agent Notes:**
-- ✅ `ServerMessage::Joined` struct implemented (line 133-142 in websocket_server.rs)
-- ✅ Join acknowledgement response sending added (line 688-697)
-- ✅ Test coverage included for joined event validation
-- ✅ Participant broadcast also working for existing room members
-- 🔄 Waiting for Docker restart to activate the fix
-
 ### [REQUEST-008] JWT Verify Endpoint Eksik (Tarih: 2025-10-22)
 
 **Talep Eden:** myeoffice-agent
@@ -398,6 +338,66 @@ aunsorm-cli acme order \
 ## ✅ Tamamlanan İstekler
 
 <!-- Tamamlanan istekler buraya taşınır -->
+
+### [REQUEST-009] Zasian WebSocket Join Acknowledgement Eksik (Tarih: 2025-10-23)
+
+**Talep Eden:** myeoffice-agent
+**Hedef Repo:** zasian-media
+**Öncelik:** 🔴 Urgent
+
+**Açıklama:**
+Zasian WebSocket server join işlemini başarıyla tamamlıyor ancak client'a `joined` event göndermediği için client timeout yaşıyor.
+
+**Mevcut Durum Analizi:**
+```
+✅ JOIN message alınıyor: {"type":"join","token":"...","room":"deneme","identity":"fffdsdfdd"}
+✅ Token doğrulama: 🔐 Token verified: identity=fffdsdfdd, roomId=deneme
+✅ Router kayıt: 📝 Registered subscriber in Router: peer=fffdsdfdd, room=deneme
+✅ Join tamamlama: ✅ Join completed: peer=fffdsdfdd, room=deneme
+❌ EKSIK: Client'a joined event response gönderilmiyor!
+```
+
+**Client-Side Timeout Hatası:**
+```javascript
+[Zasian Debug] Join acknowledgement timeout elapsed; evaluating fallback path
+{retries: 0, nextAttempt: 1, maxRetries: 3}
+[Zasian] Join acknowledgement was not received within 5s. Yeniden bağlanma denemesi 1/3 planlandı.
+```
+
+**Beklenen Davranış:**
+Join completion sonrası client'a şu formatta response gönderilmeli:
+```json
+{
+  "type": "joined",
+  "participantId": "fffdsdfdd",
+  "peers": [...existing_room_participants...]
+}
+```
+
+**Etki:**
+- ❌ Client 5 saniye timeout yapıyor
+- ❌ Retry mechanism devreye giriyor (1/3, 2/3, 3/3)
+- ❌ `zasianParticipantId` null kalıyor
+- ❌ WebRTC publish `participantId missing` hatası veriyor
+- ❌ User experience ciddi şekilde etkileniyor
+
+**Debug Info:**
+- Server logs: `2025-10-23T00:40:13.476627Z INFO ✅ Join completed: peer=fffdsdfdd, room=deneme`
+- Next message: `PUBLISH` request 65ms sonra (client retry nedeniyle)
+- Missing: `joined` event with participant details
+
+**Status:**
+- [x] 📋 Pending (2025-10-23)
+- [x] 🔄 In Progress (2025-10-23 – Join acknowledgement implementation)
+- [x] ✅ Done (2025-10-24 – ServerMessage::Joined deployed, Docker restart completed)
+- [ ] ❌ Rejected
+
+**Zasian Agent Notes:**
+- ✅ `ServerMessage::Joined` struct implemented (line 133-142 in websocket_server.rs)
+- ✅ Join acknowledgement response sending added (line 688-697)
+- ✅ Test coverage included for joined event validation
+- ✅ Participant broadcast also working for existing room members
+- ✅ Docker services restart executed (2025-10-24 – joined event confirmed in logs)
 
 ---
 
