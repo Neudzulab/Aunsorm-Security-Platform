@@ -379,12 +379,14 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [ ] 🔄 In Progress
-- [ ] ✅ Done
+- [x] 🔄 In Progress (2025-10-20 – ACME onboarding servisi yayına alındı)
+- [x] ✅ Done (2025-10-23 – commit d166ddd)
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- _(Güncelleme bekleniyor)_
+- ✅ `aunsorm-server` ACME uçları (directory, nonce, account, order, finalize, POST-as-GET, cert fetch, revoke) `7fef890`, `a82b9aa`, `0570d00`, `fe3ebfd`, `cbb9ba4` commitleriyle tamamlandı.
+- ✅ `aunsorm-cli acme` komutları ve gateway otomasyon betiği (`scripts/deploy_gateway_cert.sh`) commit `d166ddd` ile yayınlandı.
+- ✅ Operasyon dokümantasyonu (`docs/src/operations/acme-gateway-automation.md`) ve README mimari ağacı ACME durumu ile senkronlandı.
 
 ---
 
