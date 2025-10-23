@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `aunsorm-server` HTTP hizmetine `tower-http` TraceLayer katmanı eklenerek
+  her isteğin başlangıcı/yanıtı milisaniye gecikmesiyle stdout log'larına
+  aktarılır.
+- Docker Compose `compose.yaml` reçetesi: kalıcı `AUNSORM_JTI_DB` volume'ü,
+  healthcheck ve varsayılan `RUST_LOG`/strict yapılandırmasıyla konteyner
+  dağıtımlarını tek komutla başlatır.
 - `aunsorm-server` güvenlik servisine `POST /security/jwt-verify` endpoint'i eklendi;
   Zasian medya token'larını imza/claim kontrolleriyle doğrulayıp payload veya hata
   mesajı döndürüyor ve kayıtlı olmayan `jti` değerlerini reddediyor.

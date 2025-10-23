@@ -25,7 +25,11 @@ use time::OffsetDateTime;
 use tokio::signal;
 #[cfg(unix)]
 use tokio::signal::unix::{signal as unix_signal, SignalKind};
-use tracing::{info, warn};
+use tower_http::trace::{
+    DefaultMakeSpan, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer,
+};
+use tower_http::LatencyUnit;
+use tracing::{info, warn, Level};
 
 use aunsorm_acme::AcmeJws;
 use aunsorm_core::transparency::TransparencyRecord;
@@ -115,8 +119,23 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         ))
     };
 
+    let trace_layer = TraceLayer::new_for_http()
+        .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+        .on_request(DefaultOnRequest::new().level(Level::INFO))
+        .on_response(
+            DefaultOnResponse::new()
+                .level(Level::INFO)
+                .latency_unit(LatencyUnit::Millis),
+        )
+        .on_failure(
+            DefaultOnFailure::new()
+                .level(Level::ERROR)
+                .latency_unit(LatencyUnit::Millis),
+        );
+
     router
         .route("/random/number", get(random_number))
+        .layer(trace_layer)
         .with_state(state)
 }
 

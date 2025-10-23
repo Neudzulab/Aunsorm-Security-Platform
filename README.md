@@ -697,6 +697,15 @@ curl "http://localhost:8080/random/number?min=1&max=1000"
 curl -I http://localhost:8080/health
 # Alt-Svc: h3=":8080"; ma=86400
 
+# Docker Compose ile (kalıcı JTI deposu + log takibi)
+docker compose build aunsorm-server
+docker compose up -d aunsorm-server
+docker compose logs -f aunsorm-server
+
+# Sağlık kontrolü ve rastgele sayı isteği
+curl http://localhost:8080/health
+curl http://localhost:8080/random/number
+
 # OAuth2 PKCE Flow (RFC 6749 + RFC 7636)
 
 > Web entegrasyon ekipleri için `apps/web/lib/oauth-client.ts` içinde
@@ -705,6 +714,12 @@ curl -I http://localhost:8080/health
 > `/oauth/token` değişimi bu yardımcı ile otomatikleştirilebilir. Ayrıntılı
 > kullanım rehberi için [`docs/src/operations/oauth-web-integration.md`](docs/src/operations/oauth-web-integration.md)
 > belgesine bakın.
+
+> ℹ️ `compose.yaml`, `/srv/data/jti.sqlite` dosyasını kalıcı bir Docker volume'üne
+> eşleyerek JTI kayıtlarının container yeniden başlasa bile korunmasını sağlar.
+> `TraceLayer` tabanlı HTTP telemetri, her isteğin başlangıç/yanıtını ve
+> milisaniye cinsinden gecikmeyi `RUST_LOG` çıktısına yazar; `docker compose logs -f`
+> ile canlı olarak izlenebilir.
 
 ```typescript
 // Proje yapınıza göre import yolunu uyarlayın.
