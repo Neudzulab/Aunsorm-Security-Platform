@@ -656,7 +656,7 @@ aunsorm-server v0.4.5
 - ✅ **Transparency Logging:** Merkle tree based audit trail
 - ✅ **HTTP/3 QUIC Datagrams:** Experimental low-latency telemetry streaming
 - ✅ **HEAD-Stamped IDs:** Git commit SHA tabanlı benzersiz kimlik üretimi (server + CLI akışları)
-- 🚧 **ACME Protocol:** `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order`, `POST /acme/account/:account_id`, `POST /acme/order/:order_id`, `POST /acme/order/:order_id/finalize` üretimde; authorization/challenge/revoke akışları v0.5.0'da tamamlanacak
+- 🚧 **ACME Protocol:** `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order`, `POST /acme/account/:account_id`, `POST /acme/order/:order_id`, `POST /acme/order/:order_id/finalize` üretimde; authorization/challenge/revoke akışları v0.5.0'da tamamlanacak. ACME crate'i authorization/challenge JSON modellerini (HTTP-01/DNS-01/TLS-ALPN-01) ayrıştırıp token doğrulaması yapacak şekilde genişletildi.
 - ✅ **Production Ready:** Async/await, structured logging, OpenTelemetry
 
 **Hızlı Başlangıç:**

@@ -3,6 +3,7 @@
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
 mod account;
+mod authorization;
 mod directory;
 mod jws;
 mod nonce;
@@ -11,6 +12,10 @@ mod order;
 pub use account::{
     AccountContact, AccountContactError, AccountContactKind, ExternalAccountBinding,
     ExternalAccountBindingError, NewAccountRequest, NewAccountRequestBuilder,
+};
+pub use authorization::{
+    Authorization, AuthorizationError, AuthorizationStatus, Challenge, ChallengeError,
+    ChallengeKind, ChallengeStatus,
 };
 pub use directory::{AcmeDirectory, AcmeDirectoryError, AcmeDirectoryMeta, KnownEndpoint};
 pub use jws::{
