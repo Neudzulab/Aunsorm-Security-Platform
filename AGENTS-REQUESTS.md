@@ -48,6 +48,130 @@
 
 <!-- myeoffice agent'ları buraya istek ekleyin -->
 
+### [REQUEST-009] Zasian WebSocket Join Acknowledgement Eksik (Tarih: 2025-10-23)
+
+**Talep Eden:** myeoffice-agent
+**Hedef Repo:** zasian-media
+**Öncelik:** 🔴 Urgent
+
+**Açıklama:**
+Zasian WebSocket server join işlemini başarıyla tamamlıyor ancak client'a `joined` event göndermediği için client timeout yaşıyor.
+
+**Mevcut Durum Analizi:**
+```
+✅ JOIN message alınıyor: {"type":"join","token":"...","room":"deneme","identity":"fffdsdfdd"}
+✅ Token doğrulama: 🔐 Token verified: identity=fffdsdfdd, roomId=deneme
+✅ Router kayıt: 📝 Registered subscriber in Router: peer=fffdsdfdd, room=deneme  
+✅ Join tamamlama: ✅ Join completed: peer=fffdsdfdd, room=deneme
+❌ EKSIK: Client'a joined event response gönderilmiyor!
+```
+
+**Client-Side Timeout Hatası:**
+```javascript
+[Zasian Debug] Join acknowledgement timeout elapsed; evaluating fallback path 
+{retries: 0, nextAttempt: 1, maxRetries: 3}
+[Zasian] Join acknowledgement was not received within 5s. Yeniden bağlanma denemesi 1/3 planlandı.
+```
+
+**Beklenen Davranış:** 
+Join completion sonrası client'a şu formatta response gönderilmeli:
+```json
+{
+  "type": "joined",
+  "participantId": "fffdsdfdd", 
+  "peers": [...existing_room_participants...]
+}
+```
+
+**Etki:** 
+- ❌ Client 5 saniye timeout yapıyor
+- ❌ Retry mechanism devreye giriyor (1/3, 2/3, 3/3)
+- ❌ `zasianParticipantId` null kalıyor
+- ❌ WebRTC publish `participantId missing` hatası veriyor
+- ❌ User experience ciddi şekilde etkileniyor
+
+**Debug Info:**
+- Server logs: `2025-10-23T00:40:13.476627Z INFO ✅ Join completed: peer=fffdsdfdd, room=deneme`
+- Next message: `PUBLISH` request 65ms sonra (client retry nedeniyle)
+- Missing: `joined` event with participant details
+
+**Status:** 
+- [x] 📋 Pending (2025-10-23)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
+- [ ] ❌ Rejected
+
+### [REQUEST-008] JWT Verify Endpoint Eksik (Tarih: 2025-10-22)
+
+**Talep Eden:** myeoffice-agent
+**Hedef Repo:** aunsorm-crypt
+**Öncelik:** 🔴 Urgent
+
+**Açıklama:**
+WebRTC join flow'da Zasian SFU token validation yaparken `/security/jwt-verify` endpoint'ine request atıyor ama Aunsorm'da bu endpoint mevcut değil. Bu yüzden WebRTC join acknowledgement timeout oluyor.
+
+**Hata Detayları:**
+```bash
+# Zasian SFU → Aunsorm
+curl -X POST http://aunsorm-server:4200/security/jwt-verify \
+  -H "Content-Type: application/json" \
+  -d '{"token":"eyJ..."}'
+
+# Response: 404 Not Found
+```
+
+**Mevcut Durum:**
+- ✅ Token generation: `/security/generate-media-token` (WORKING)
+- ❌ Token validation: `/security/jwt-verify` (MISSING)
+
+**Beklenen Davranış:**
+`POST /security/jwt-verify` endpoint'ini implement edin:
+
+```typescript
+// Request
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+
+// Response (valid)
+{
+  "valid": true,
+  "payload": {
+    "sub": "user123",
+    "roomId": "room-123", 
+    "identity": "participant-name",
+    "exp": 1729612345,
+    "iat": 1729611345
+  }
+}
+
+// Response (invalid)
+{
+  "valid": false,
+  "error": "Token expired"
+}
+```
+
+**Kullanım Senaryosu:**
+1. Zasian WebSocket server receives join message with token
+2. Zasian calls Aunsorm `/security/jwt-verify` for validation  
+3. If valid, Zasian sends join acknowledgement to client
+4. WebRTC media flow starts
+
+**Status:** 
+- [x] 📋 Pending (2025-10-22)
+- [x] 🔄 In Progress (2025-10-23)
+- [x] ✅ Done (2025-10-23 - JWT verify endpoint implemented in Aunsorm)
+- [ ] ❌ Rejected
+
+**Aunsorm Agent Notes:**
+- ✅ `POST /security/jwt-verify` endpoint implemented in aunsorm-server
+- ✅ Input: `{ "token": "string" }`  
+- ✅ Output: `{ "valid": boolean, "payload"?: Claims, "error"?: string }`
+- ✅ JWT signature validation with Ed25519 public keys
+- ✅ Expiry and issuer validation included
+- ✅ Production-ready implementation in `crates/server/src/routes/security.rs`
+
 ### [REQUEST-007] WebRTC Join Acknowledgement Timeout Sorunu (Tarih: 2025-10-22)
 
 **Talep Eden:** myeoffice-agent
