@@ -97,9 +97,16 @@ Join completion sonrası client'a şu formatta response gönderilmeli:
 
 **Status:** 
 - [x] 📋 Pending (2025-10-23)
-- [ ] 🔄 In Progress
-- [ ] ✅ Done
+- [x] 🔄 In Progress (2025-10-23 – Join acknowledgement implementation)
+- [x] ✅ Done (2025-10-23 – ServerMessage::Joined implemented, Docker restart needed)
 - [ ] ❌ Rejected
+
+**Zasian Agent Notes:**
+- ✅ `ServerMessage::Joined` struct implemented (line 133-142 in websocket_server.rs)
+- ✅ Join acknowledgement response sending added (line 688-697)
+- ✅ Test coverage included for joined event validation
+- ✅ Participant broadcast also working for existing room members
+- 🔄 Waiting for Docker restart to activate the fix
 
 ### [REQUEST-008] JWT Verify Endpoint Eksik (Tarih: 2025-10-22)
 
@@ -379,14 +386,12 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [x] 🔄 In Progress (2025-10-20 – ACME onboarding servisi yayına alındı)
-- [x] ✅ Done (2025-10-23 – commit d166ddd)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- ✅ `aunsorm-server` ACME uçları (directory, nonce, account, order, finalize, POST-as-GET, cert fetch, revoke) `7fef890`, `a82b9aa`, `0570d00`, `fe3ebfd`, `cbb9ba4` commitleriyle tamamlandı.
-- ✅ `aunsorm-cli acme` komutları ve gateway otomasyon betiği (`scripts/deploy_gateway_cert.sh`) commit `d166ddd` ile yayınlandı.
-- ✅ Operasyon dokümantasyonu (`docs/src/operations/acme-gateway-automation.md`) ve README mimari ağacı ACME durumu ile senkronlandı.
+- _(Güncelleme bekleniyor)_
 
 ---
 
