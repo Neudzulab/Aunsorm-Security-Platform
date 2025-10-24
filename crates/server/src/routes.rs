@@ -1243,7 +1243,7 @@ struct HealthResponse {
 }
 
 async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse { 
+    Json(HealthResponse {
         status: "ok",
         service: "aunsorm"
     })
