@@ -52,7 +52,26 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /acme/account/:account_id ✅ - POST-as-GET hesap durumu sorgusu
 │   │   ├── POST /acme/order/:order_id ✅ - POST-as-GET order durumu sorgusu
 │   │   ├── POST /acme/order/:order_id/finalize ✅ - CSR doğrulama ve sertifika URL'si üretimi
-│   │   └── POST /acme/revoke-cert ✅ - Sertifika iptali (kid doğrulamalı ACME hesabı)
+│   │   ├── POST /acme/revoke-cert ✅ - Sertifika iptali (kid doğrulamalı ACME hesabı)
+│   │   └── OAuth 2.0 ek uçlar 📋 [Planlandı v0.5.x] - Standart kapsamını genişletme takibi
+│   │       ├── POST /oauth/token (grant_type=refresh_token) 📋 [Planlandı v0.5.0] - Refresh token döngüsü ve rotation (RFC 6749 §6)
+│   │       ├── POST /oauth/token (grant_type=client_credentials) 📋 [Planlandı v0.5.0] - Confidential client M2M erişimi (RFC 6749 §4.4)
+│   │       ├── POST /oauth/revoke 📋 [Planlandı v0.5.0] - Token iptali ve oturum sonlandırma (RFC 7009)
+│   │       ├── POST /oauth/device/code 📋 [Planlandı v0.5.1] - Device Authorization Grant kod üretimi (RFC 8628)
+│   │       ├── POST /oauth/device/activate 📋 [Planlandı v0.5.1] - Device code doğrulama ve kullanıcı onayı (RFC 8628)
+│   │       ├── GET /.well-known/oauth-authorization-server 📋 [Planlandı v0.5.1] - Authorization Server Metadata (RFC 8414)
+│   │       ├── POST /oauth/register 📋 [Planlandı v0.5.1] - Dinamik istemci kaydı ve metadata yönetimi (RFC 7591/7592)
+│   │       ├── POST /oauth/par 📋 [Planlandı v0.5.2] - Pushed Authorization Requests ile hassas parametre koruması (RFC 9126)
+│   │       ├── POST /oauth/token/exchange 📋 [Planlandı v0.5.2] - Token Exchange senaryoları (RFC 8693)
+│   │       ├── OAuth client kimlik doğrulama güçlendirmesi 📋 [Planlandı v0.5.2] - Mutual TLS (RFC 8705) ve Private Key JWT (RFC 7521/7523)
+│   │       ├── OIDC ID token üretimi 📋 [Planlandı v0.5.3] - Access token'dan ayrı OpenID Connect ID token akışı
+│   │       └── DPoP desteği 📋 [Planlandı v0.5.3] - Proof-of-possession Bearer token koruması (RFC 9449)
+│   │   └── OAuth 3.0 deneysel uçlar 🔮 [Taslak v0.7.x] - HTTP/3 + Web3 uyumlu yetkilendirme planı
+│   │       ├── POST /oauth3/handshake 🔮 [Taslak v0.7.0] - QUIC üstünden istemci-başlatıcılı doğrulama el sıkışması
+│   │       ├── POST /oauth3/wallet-authorize 🔮 [Taslak v0.7.0] - Web3 cüzdan imzalı yetkilendirme talebi (EIP-4361 uyumlu)
+│   │       ├── POST /oauth3/token 🔮 [Taslak v0.7.1] - DID temelli kanıtlarla erişim belirteci üretimi
+│   │       ├── GET /.well-known/oauth3-configuration 🔮 [Taslak v0.7.1] - HTTP/3 endpoint keşfi ve QUIC parametreleri
+│   │       └── POST /oauth3/revoke 🔮 [Taslak v0.7.2] - Zincir içi audit trail ile token iptali ve cüzdan bildirimleri
 │   ├── acme/                          # ACME istemcisi (directory/register/order CLI) ✅
 │   ├── id/                            # Head-stamped ID kütüphanesi ve testler ✅
 │   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅
