@@ -1239,10 +1239,14 @@ async fn jwks(State(state): State<Arc<ServerState>>) -> Json<aunsorm_jwt::Jwks> 
 #[derive(Debug, Serialize)]
 struct HealthResponse {
     status: &'static str,
+    service: &'static str,
 }
 
 async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse { status: "ok" })
+    Json(HealthResponse { 
+        status: "ok",
+        service: "aunsorm"
+    })
 }
 
 async fn metrics(State(state): State<Arc<ServerState>>) -> Result<Response, ApiError> {
