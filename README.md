@@ -66,6 +66,12 @@ Aunsorm Cryptography Suite/
 │   │       ├── OAuth client kimlik doğrulama güçlendirmesi 📋 [Planlandı v0.5.2] - Mutual TLS (RFC 8705) ve Private Key JWT (RFC 7521/7523)
 │   │       ├── OIDC ID token üretimi 📋 [Planlandı v0.5.3] - Access token'dan ayrı OpenID Connect ID token akışı
 │   │       └── DPoP desteği 📋 [Planlandı v0.5.3] - Proof-of-possession Bearer token koruması (RFC 9449)
+│   │   └── OAuth 3.0 deneysel uçlar 🔮 [Taslak v0.7.x] - HTTP/3 + Web3 uyumlu yetkilendirme planı
+│   │       ├── POST /oauth3/handshake 🔮 [Taslak v0.7.0] - QUIC üstünden istemci-başlatıcılı doğrulama el sıkışması
+│   │       ├── POST /oauth3/wallet-authorize 🔮 [Taslak v0.7.0] - Web3 cüzdan imzalı yetkilendirme talebi (EIP-4361 uyumlu)
+│   │       ├── POST /oauth3/token 🔮 [Taslak v0.7.1] - DID temelli kanıtlarla erişim belirteci üretimi
+│   │       ├── GET /.well-known/oauth3-configuration 🔮 [Taslak v0.7.1] - HTTP/3 endpoint keşfi ve QUIC parametreleri
+│   │       └── POST /oauth3/revoke 🔮 [Taslak v0.7.2] - Zincir içi audit trail ile token iptali ve cüzdan bildirimleri
 │   ├── acme/                          # ACME istemcisi (directory/register/order CLI) ✅
 │   ├── id/                            # Head-stamped ID kütüphanesi ve testler ✅
 │   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅

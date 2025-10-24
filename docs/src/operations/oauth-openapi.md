@@ -62,6 +62,21 @@ desteklenmeyecek akışları ifade eder.
 | Legacy Implicit Flow | RFC 6749 §4.2 | ❌ | OAuth Security BCP (RFC 9700) nedeniyle desteklenmeyecek. |
 | Resource Owner Password Grant | RFC 6749 §4.3 | ❌ | RFC 6819 tehdit modeli gereği uygulamaya alınmayacak. |
 
+## OAuth 3.0 Taslak Yol Haritası
+
+HTTP/3 taşıma katmanı ve Web3 kimlik kanıtları ile uyumlu olacak yeni nesil
+yetkilendirme akışlarını `🔮` işareti ile roadmap'te takip ediyoruz. Bu
+özellikler RFC düzeyinde çalışmaları devam eden taslaklara dayandığından
+başlangıçta deneysel sürümlerde yayınlanacaktır.
+
+| Yetkinlik | Taslak / Referans | Durum | Not |
+| --- | --- | --- | --- |
+| QUIC tabanlı OAuth handshake | IETF OAuth 3.0 taslak çalışma metni | 🔮 [Taslak v0.7.0] | `/oauth3/handshake` ile HTTP/3 (QUIC) üstünde güvenli el sıkışması. |
+| Web3 cüzdan yetkilendirmesi | EIP-4361, CAIP-122 | 🔮 [Taslak v0.7.0] | `/oauth3/wallet-authorize` uç noktası cüzdan imzalarını doğrulayacak. |
+| DID kanıtlı erişim belirteci | W3C DID Core, OAuth Token Exchange | 🔮 [Taslak v0.7.1] | `/oauth3/token` DID temelli kanıtları içerecek şekilde genişletilecek. |
+| OAuth 3.0 metadata keşfi | IETF OAuth metadata draft | 🔮 [Taslak v0.7.1] | `/.well-known/oauth3-configuration` ile HTTP/3 parametreleri paylaşılacak. |
+| Zincir içi token iptali | Hyperledger Fabric entegrasyonu | 🔮 [Taslak v0.7.2] | `/oauth3/revoke` işlemleri blockchain audit trail oluşturacak. |
+
 Bu tablo README mimari ağacı ve ROADMAP ile eş zamanlı güncellenecektir. Yeni
 uçların OpenAPI şemasına eklenmesi, implementasyon commit'iyle aynı sprintte
 tamamlanacaktır.
