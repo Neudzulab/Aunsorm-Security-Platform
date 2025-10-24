@@ -35,6 +35,37 @@ clients.insert(
 );
 ```
 
+## Özellik Kapsamı ve Plan
+
+Aşağıdaki tablo, OAuth 2.0 çekirdek özellikleri ile tamamlayıcı RFC'lerin
+Aunsorm sunucusundaki durumunu özetler. `✅` üretimde, `📋` README mimari
+ağacında planlandığı tarihle birlikte izlenir; `❌` ise güvenlik gerekçesiyle
+desteklenmeyecek akışları ifade eder.
+
+| Özellik | RFC / BCP | Durum | Not |
+| --- | --- | --- | --- |
+| Authorization Code + PKCE | RFC 6749 §4.1, RFC 7636 | ✅ | `/oauth/begin-auth` + `/oauth/token` uçları üretimde. |
+| Bearer Token Introspection | RFC 7662 | ✅ | `/oauth/introspect` aktif; JTI deposu strict kipte kalıcı. |
+| JWKS Yayını | RFC 7517 | ✅ | `/oauth/jwks.json` Ed25519 anahtarları döndürüyor. |
+| Şeffaflık Günlüğü | Proje içi | ✅ | `/oauth/transparency` token ve anahtar olaylarını raporluyor. |
+| Refresh Token Grant | RFC 6749 §6 | 📋 [v0.5.0] | README ağacında refresh token döngüsü planlandı (grant_type=refresh_token). |
+| Client Credentials Grant | RFC 6749 §4.4 | 📋 [v0.5.0] | Makine-makine erişimi için `/oauth/token` iyileştirilecek. |
+| Token Revocation | RFC 7009 | 📋 [v0.5.0] | `/oauth/revoke` endpoint'i planlandı. |
+| Device Authorization Grant | RFC 8628 | 📋 [v0.5.1] | `/oauth/device/code` ve `/oauth/device/activate` uçları planlandı. |
+| Authorization Server Metadata | RFC 8414 | 📋 [v0.5.1] | `/.well-known/oauth-authorization-server` servisi eklenecek. |
+| Dynamic Client Registration | RFC 7591 / RFC 7592 | 📋 [v0.5.1] | `/oauth/register` ile otomasyon hedefleniyor. |
+| Token Exchange | RFC 8693 | 📋 [v0.5.2] | `/oauth/token/exchange` çalışma alanına alındı. |
+| Pushed Authorization Requests | RFC 9126 | 📋 [v0.5.2] | `/oauth/par` hassas parametre taşıma için planlandı. |
+| Client Auth Hardening | RFC 8705, RFC 7521/7523 | 📋 [v0.5.2] | Mutual TLS ve Private Key JWT desteği roadmap'te. |
+| DPoP | RFC 9449 | 📋 [v0.5.3] | Proof-of-possession doğrulaması eklenerek token çalınması önlenecek. |
+| ID Token Üretimi | OpenID Connect Core | 📋 [v0.5.3] | Access token'dan ayrı OIDC ID token takibi başlatılacak. |
+| Legacy Implicit Flow | RFC 6749 §4.2 | ❌ | OAuth Security BCP (RFC 9700) nedeniyle desteklenmeyecek. |
+| Resource Owner Password Grant | RFC 6749 §4.3 | ❌ | RFC 6819 tehdit modeli gereği uygulamaya alınmayacak. |
+
+Bu tablo README mimari ağacı ve ROADMAP ile eş zamanlı güncellenecektir. Yeni
+uçların OpenAPI şemasına eklenmesi, implementasyon commit'iyle aynı sprintte
+tamamlanacaktır.
+
 Sunucu tarafında kayıt altına alınmayan bir `redirect_uri` değeri ile
 `/oauth/begin-auth` çağrıldığında yanıt `400 Bad Request` ve
 hata kodu `invalid_redirect_uri` olacaktır.
