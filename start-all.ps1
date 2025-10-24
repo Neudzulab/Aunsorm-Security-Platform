@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 #
 # Aunsorm Microservices Start Script
-# Builds and starts all 13 microservices
+# Builds and starts all 14 microservices
 #
 
 param(
@@ -57,6 +57,7 @@ Services:
   Blockchain:       :50020
   E2EE Service:     :50021
   Metrics:          :50022
+  CLI Gateway:      :50023
 
 Examples:
   ./start-all.ps1           # Smart start (build if needed)
@@ -177,6 +178,7 @@ $Services = @{
     "blockchain-service" = "aunsorm-blockchain:local"
     "e2ee-service" = "aunsorm-e2ee:local"
     "metrics-service" = "aunsorm-metrics:local"
+    "cli-gateway" = "aunsorm-cli-gateway:local"
 }
 
 # Check which services need building

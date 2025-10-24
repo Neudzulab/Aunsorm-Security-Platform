@@ -9,7 +9,7 @@ Aunsorm v0.4.5 itibariyle **mikroservis mimarisine** geçmiştir. Tüm işlevsel
 ### 🔧 Teknoloji Stack
 - **Container Orchestration:** Docker Compose
 - **Network:** Bridge network (`aunsorm-network`)
-- **Port Range:** 50010-50022 (13 servis)
+- **Port Range:** 50010-50023 (14 servis)
 - **Base Image:** `rustlang/rust:nightly`
 - **Binary:** `aunsorm-server` (her servis farklı portla çalışır)
 
@@ -20,7 +20,7 @@ Aunsorm v0.4.5 itibariyle **mikroservis mimarisine** geçmiştir. Tüm işlevsel
 | **Gateway** | 50010 | `Dockerfile.gateway` | `aunsorm-gateway:local` | API Gateway ve routing | - |
 | **Auth** | 50011 | `Dockerfile.auth` | `aunsorm-auth:local` | OAuth2/JWT authentication | `aunsorm-auth-data` |
 | **Crypto** | 50012 | `Dockerfile.crypto` | `aunsorm-crypto:local` | AEAD encryption/decryption | - |
-| **X509** | 50013 | `Dockerfile.x509` | `aunsorm-x509:local` | Certificate Authority | - |
+| **X509** | 50013 | `Dockerfile.x509` | `aunsorm-x509:local` | Certificate Authority + Self-signed | - |
 | **KMS** | 50014 | `Dockerfile.kms` | `aunsorm-kms:local` | Key Management Service | - |
 | **MDM** | 50015 | `Dockerfile.mdm` | `aunsorm-mdm:local` | Mobile Device Management | `aunsorm-mdm-data` |
 | **ID** | 50016 | `Dockerfile.id` | `aunsorm-id:local` | HEAD-stamped ID generation | - |
@@ -30,6 +30,7 @@ Aunsorm v0.4.5 itibariyle **mikroservis mimarisine** geçmiştir. Tüm işlevsel
 | **Blockchain** | 50020 | `Dockerfile.blockchain` | `aunsorm-blockchain:local` | DID verification PoC | - |
 | **E2EE** | 50021 | `Dockerfile.e2ee` | `aunsorm-e2ee:local` | E2EE media streaming | `aunsorm-e2ee-data` |
 | **Metrics** | 50022 | `Dockerfile.metrics` | `aunsorm-metrics:local` | Prometheus monitoring | - |
+| **CLI Gateway** | 50023 | `Dockerfile.cli-gateway` | `aunsorm-cli-gateway:local` | REST API for CLI commands | - |
 
 ## 🚀 Hızlı Başlangıç
 
@@ -94,9 +95,15 @@ X509_SERVICE_URL=http://x509-service:50013
 - **Bağımlılık:** Yok (base service)
 
 ### 📜 X509 Service (50013)
-- **Sorumluluğu:** Certificate Authority operations
-- **Özellikler:** Root/Intermediate CA, server certificates
+- **Sorumluluğu:** Certificate Authority operations + Self-signed certificates
+- **Özellikler:** 
+  - Root/Intermediate CA management
+  - **Self-signed certificates** (development/testing)
+  - Server certificates (production)
+  - Client certificates (mutual TLS)
+  - **DTLS certificates** (CoAP/IoT)
 - **Algoritma:** Ed25519, RSA-2048/4096
+- **Use Cases:** Development, private CA, self-signed, DTLS, mTLS
 
 ### 🗝️ KMS Service (50014)
 - **Sorumluluğu:** Key management ve HSM integration
@@ -117,6 +124,7 @@ X509_SERVICE_URL=http://x509-service:50013
 - **Sorumluluğu:** Let's Encrypt protocol (RFC 8555)
 - **Volume:** ACME account/order state
 - **Endpoints:** Directory, nonce, account, order, finalize
+- **Use Cases:** Production DTLS certificates, **publicly trusted certificates**
 
 ### 🛡️ PQC Service (50018)
 - **Sorumluluğu:** Post-Quantum Cryptography
@@ -212,6 +220,13 @@ Gateway servisi otomatik load balancing yapabilir (future enhancement).
 ### 1. Yeni Servis için Port Seç
 Sıradaki available port: **50023**
 
+### 💡 Potansiyel Yeni Servisler
+| Servis | Port | Açıklama | Durum |
+|--------|------|----------|-------|
+| **CLI Gateway** | 50023 | REST API for CLI commands | 📋 Planlandı |
+| **WebUI** | 50024 | Web-based management UI | 🔮 Gelecek |
+| **Notification** | 50025 | Push/Email notifications | 🔮 Gelecek |
+
 ### 2. Dockerfile Oluştur
 ```dockerfile
 # Dockerfile.new-service
@@ -291,12 +306,123 @@ docker stats
 docker-compose top
 ```
 
-## 📚 İlgili Belgeler
+## � DTLS Sertifika Yönetimi
+
+### Production (Publicly Trusted) - ACME Service
+```bash
+# 1. ACME directory keşfi
+curl http://localhost:50017/acme/directory
+
+# 2. Account oluştur
+curl -X POST http://localhost:50017/acme/new-account \
+  -H "Content-Type: application/jose+json" \
+  -d '{"contact":["mailto:admin@example.com"],"termsOfServiceAgreed":true}'
+
+# 3. DTLS server için domain sertifikası order et
+curl -X POST http://localhost:50017/acme/new-order \
+  -H "Content-Type: application/jose+json" \
+  -d '{"identifiers":[{"type":"dns","value":"dtls-server.example.com"}]}'
+
+# 4. Challenge doğrulama ve finalize
+# (DNS-01 veya HTTP-01 challenge çözümü gerekli)
+```
+
+### Development/Testing - X509 Service
+
+#### Option 1: Self-Signed (Hızlı Test)
+```bash
+# Self-signed DTLS sertifikası oluştur (CA olmadan)
+aunsorm-cli x509 self-signed \
+  --hostname dtls-test.local \
+  --cert-out dtls-self-signed.crt \
+  --key-out dtls-self-signed.key \
+  --algorithm rsa2048 \
+  --days 365 \
+  --extended-key-usage "serverAuth,clientAuth"
+```
+
+#### Option 2: Private CA (Organizasyon İçi)
+```bash
+# 1. Root CA oluştur (bir kez)
+aunsorm-cli x509 ca init --profile ca-profile.yaml \
+  --cert-out dtls-root-ca.crt --key-out dtls-root-ca.key \
+  --algorithm rsa2048
+
+# 2. DTLS server sertifikası imzala
+aunsorm-cli x509 ca sign-server \
+  --ca-cert dtls-root-ca.crt --ca-key dtls-root-ca.key \
+  --hostname dtls-server.local \
+  --cert-out dtls-server.crt --key-out dtls-server.key \
+  --algorithm rsa2048 \
+  --extended-key-usage "serverAuth,clientAuth"
+
+# 3. Client sertifikası (mutual TLS için)
+aunsorm-cli x509 ca sign-client \
+  --ca-cert dtls-root-ca.crt --ca-key dtls-root-ca.key \
+  --client-name "DTLS Client 001" \
+  --cert-out dtls-client.crt --key-out dtls-client.key \
+  --algorithm rsa2048
+```
+
+### API Endpoints
+```bash
+# X509 Service - Direct API
+POST http://localhost:50013/ca/sign-server
+{
+  "hostname": "dtls-server.example.com",
+  "algorithm": "rsa2048", 
+  "extended_key_usage": ["serverAuth", "clientAuth"],
+  "subject_alt_names": ["DNS:dtls-server.example.com", "IP:192.168.1.100"]
+}
+
+# ACME Service - Let's Encrypt compatible
+POST http://localhost:50017/acme/new-order
+{
+  "identifiers": [
+    {"type": "dns", "value": "dtls-server.example.com"}
+  ]
+}
+```
+
+## � Gelecek Özellikler
+
+### CLI Gateway Service (Port 50023) - Planlandı
+**aunsorm-cli** komutlarını REST API olarak sunan mikroservis:
+
+```bash
+# Mevcut CLI kullanımı
+aunsorm-cli encrypt --input data.txt --output encrypted.bin
+
+# Gelecek API kullanımı  
+curl -X POST http://localhost:50023/cli/encrypt \
+  -F "input=@data.txt" \
+  -H "Authorization: Bearer jwt-token"
+```
+
+**Avantajlar:**
+- 🌐 Web/mobile uygulamalardan CLI erişimi
+- 🔐 JWT tabanlı yetkilendirme
+- 📊 Komut logları ve audit trail
+- 🚀 Remote CLI execution
+- 📦 Batch operations
+
+**Endpoint Örnekleri:**
+```bash
+POST /cli/encrypt        # File encryption
+POST /cli/decrypt        # File decryption  
+POST /cli/x509/ca        # CA operations
+POST /cli/jwt/sign       # JWT signing
+GET  /cli/status         # Command status
+GET  /cli/history        # Command history
+```
+
+## �📚 İlgili Belgeler
 
 - [README.md](README.md) - Genel proje dokümantasyonu
 - [AGENTS.md](AGENTS.md) - Ajan sorumlulukları ve koordinasyon
 - [compose.yaml](compose.yaml) - Docker Compose konfigürasyonu
 - [crates/server/README.md](crates/server/README.md) - Server implementation detayları
+- [crates/cli/README.md](crates/cli/README.md) - CLI tool documentation
 
 ---
 

@@ -28,6 +28,7 @@ services:
       - blockchain-service
       - e2ee-service
       - metrics-service
+      - cli-gateway
     restart: unless-stopped
 
   # Auth Service - JWT/OAuth (Port 50011)
@@ -182,6 +183,28 @@ services:
       - "50022:50022"
     networks:
       - aunsorm-network
+    restart: unless-stopped
+
+  # CLI Gateway Service - REST API for CLI commands (Port 50023)
+  cli-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.cli-gateway
+    image: aunsorm-cli-gateway:local
+    ports:
+      - "50023:50023"
+    networks:
+      - aunsorm-network
+    depends_on:
+      - auth-service
+      - crypto-service
+      - x509-service
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50023
+      - SERVICE_MODE=cli-gateway
+      - CLI_MAX_FILE_SIZE=100MB
+      - CLI_TIMEOUT=300s
+      - AUTH_SERVICE_URL=http://auth-service:50011
     restart: unless-stopped
 
 volumes:
