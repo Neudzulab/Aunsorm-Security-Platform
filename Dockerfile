@@ -37,8 +37,8 @@ RUN useradd --system --uid 10001 aunsorm
 WORKDIR /srv
 RUN install -d -o aunsorm -g aunsorm /srv/data
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-server
-ENV AUNSORM_LISTEN=0.0.0.0:8080
+ENV AUNSORM_LISTEN=0.0.0.0:4200
 ENV RUST_LOG=info
 USER aunsorm
-EXPOSE 8080
+EXPOSE 4200
 ENTRYPOINT ["aunsorm-server"]
