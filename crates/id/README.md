@@ -15,6 +15,8 @@ biçiminde URL dostu olarak üretilir.
 - Kimliklerin çözümlenmesi ve doğrulanması için `HeadStampedId::parse` yardımı.
 - Üretilen kimliklerin belirli bir HEAD karması ile eşleştiğini doğrulamak için
   `HeadStampedId::matches_head` denetimi.
+- HEAD parmak izine doğrudan erişim için `HeadIdGenerator::head_fingerprint_bytes`
+  ve `HeadStampedId::fingerprint_bytes` yardımcıları.
 - Opsiyonel `serde` özelliği ile kimlikleri JSON stringleri olarak serileştirip
   tekrar çözümlenebilir hale getirme.
 

@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-server` HTTP hizmetine `tower-http` TraceLayer katmanı eklenerek
   her isteğin başlangıcı/yanıtı milisaniye gecikmesiyle stdout log'larına
   aktarılır.
+- `aunsorm-id` HEAD parmak izini ham byte dizisi olarak döndüren
+  `HeadIdGenerator::head_fingerprint_bytes` ve `HeadStampedId::fingerprint_bytes`
+  yardımcılarını sağlayarak ikili doğrulama ve anahtar materyali karşılaştırma
+  senaryolarını kolaylaştırıyor.
 - Docker Compose `compose.yaml` reçetesi: kalıcı `AUNSORM_JTI_DB` volume'ü,
   healthcheck ve varsayılan `RUST_LOG`/strict yapılandırmasıyla konteyner
   dağıtımlarını tek komutla başlatır.
