@@ -10,26 +10,25 @@ param(
     [switch]$Help        # Show help
 )
 
-# Colors for output
-$Green = "`e[32m"
-$Yellow = "`e[33m"
-$Red = "`e[31m"
-$Blue = "`e[34m"
-$Reset = "`e[0m"
+# Colors for output (PowerShell compatible)
+function Write-Success($message) { Write-Host $message -ForegroundColor Green }
+function Write-Warning($message) { Write-Host $message -ForegroundColor Yellow }
+function Write-Error($message) { Write-Host $message -ForegroundColor Red }
+function Write-Info($message) { Write-Host $message -ForegroundColor Blue }
 
 function Write-Status {
-    param($Message, $Color = $Green)
-    Write-Host "${Color}[INFO]${Reset} $Message"
+    param($Message, $Color = "Green")
+    Write-Host "[INFO] $Message" -ForegroundColor $Color
 }
 
-function Write-Warning {
+function Write-ScriptWarning {
     param($Message)
-    Write-Host "${Yellow}[WARN]${Reset} $Message"
+    Write-Host "[WARN] $Message" -ForegroundColor Yellow
 }
 
-function Write-Error {
+function Write-ScriptError {
     param($Message)
-    Write-Host "${Red}[ERROR]${Reset} $Message"
+    Write-Host "[ERROR] $Message" -ForegroundColor Red
 }
 
 function Show-Help {
@@ -94,7 +93,7 @@ function Build-Services {
     
     try {
         foreach ($service in $ServicesToBuild) {
-            Write-Status "Building $service..." $Blue
+            Write-Status "Building $service..." "Blue"
             docker-compose build $service
             if ($LASTEXITCODE -ne 0) {
                 Write-Error "Failed to build $service"
@@ -111,7 +110,7 @@ function Build-Services {
 }
 
 function Start-AllServices {
-    Write-Status "Starting all microservices..." $Blue
+    Write-Status "Starting all microservices..." "Blue"
     
     try {
         docker-compose up -d
@@ -139,12 +138,12 @@ function Start-AllServices {
 }
 
 function Stop-AllServices {
-    Write-Status "Stopping services gracefully..." $Yellow
+    Write-Status "Stopping services gracefully..." "Yellow"
     docker-compose down --remove-orphans
 }
 
 function Show-ServiceLogs {
-    Write-Status "Showing service logs (Ctrl+C to exit)..." $Blue
+    Write-Status "Showing service logs (Ctrl+C to exit)..." "Blue"
     docker-compose logs -f --tail=50
 }
 
@@ -154,7 +153,7 @@ if ($Help) {
     exit 0
 }
 
-Write-Host "${Blue}🚀 Aunsorm Microservices Starter${Reset}"
+Write-Host "🚀 Aunsorm Microservices Starter" -ForegroundColor Blue
 Write-Host "═══════════════════════════════════════"
 
 # Check Docker
@@ -193,10 +192,10 @@ if ($Force) {
     foreach ($service in $Services.Keys) {
         $image = $Services[$service]
         if (-not (Test-ImageExists $image)) {
-            Write-Status "Missing image: $image" $Yellow
+            Write-Status "Missing image: $image" "Yellow"
             $ServicesToBuild += $service
         } else {
-            Write-Status "Found image: $image" $Green
+            Write-Status "Found image: $image" "Green"
         }
     }
 }
@@ -219,7 +218,7 @@ if ($Logs) {
     Show-ServiceLogs
 }
 
-Write-Host "`n${Green}✅ All services are running successfully!${Reset}"
-Write-Host "Use ${Blue}docker-compose logs -f${Reset} to view logs"
-Write-Host "Use ${Blue}docker-compose down${Reset} to stop services"
-Write-Host "Use ${Blue}./start-all.ps1 -Help${Reset} for more options"
+Write-Host "`n✅ All services are running successfully!" -ForegroundColor Green
+Write-Host "Use " -NoNewline; Write-Host "docker-compose logs -f" -ForegroundColor Blue -NoNewline; Write-Host " to view logs"
+Write-Host "Use " -NoNewline; Write-Host "docker-compose down" -ForegroundColor Blue -NoNewline; Write-Host " to stop services"
+Write-Host "Use " -NoNewline; Write-Host "./start-all.ps1 -Help" -ForegroundColor Blue -NoNewline; Write-Host " for more options"
