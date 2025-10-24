@@ -218,6 +218,27 @@ impl HeadIdGenerator {
         &self.prefix_hex
     }
 
+    /// HEAD parmak izini ham byte dizisi olarak döner.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aunsorm_id::HeadIdGenerator;
+    ///
+    /// let generator = HeadIdGenerator::with_namespace(
+    ///     "0123456789abcdef0123456789abcdef01234567",
+    ///     "inventory",
+    /// )?;
+    /// let fingerprint = generator.head_fingerprint_bytes();
+    /// assert_eq!(fingerprint.len(), 10);
+    /// assert_ne!(fingerprint, [0_u8; 10]);
+    /// # Ok::<(), aunsorm_id::IdError>(())
+    /// ```
+    #[must_use]
+    pub const fn head_fingerprint_bytes(&self) -> [u8; FINGERPRINT_LEN] {
+        self.fingerprint
+    }
+
     fn next_monotonic_timestamp(&self, candidate: u64) -> u64 {
         let mut last = self.last_timestamp.load(Ordering::SeqCst);
         let mut next = candidate;
@@ -276,6 +297,27 @@ impl HeadStampedId {
     #[must_use]
     pub fn fingerprint_hex(&self) -> String {
         hex::encode(self.head_fingerprint)
+    }
+
+    /// HEAD parmak izini ham byte dizisi olarak döner.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use aunsorm_id::{HeadIdGenerator, IdError};
+    ///
+    /// let generator = HeadIdGenerator::new(
+    ///     "0123456789abcdef0123456789abcdef01234567",
+    /// )?;
+    /// let id = generator.next_id()?;
+    /// let fingerprint = id.fingerprint_bytes();
+    /// assert_eq!(fingerprint.len(), 10);
+    /// assert_ne!(fingerprint, [0_u8; 10]);
+    /// # Ok::<(), IdError>(())
+    /// ```
+    #[must_use]
+    pub const fn fingerprint_bytes(&self) -> [u8; FINGERPRINT_LEN] {
+        self.head_fingerprint
     }
 
     /// Verilen HEAD karmasının bu kimlik ile uyumlu olup olmadığını kontrol eder.
@@ -527,7 +569,8 @@ fn unix_micros(time: SystemTime) -> Result<u64, IdError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_head_id, HeadIdGenerator, IdError, FINGERPRINT_PREFIX_BYTES, PROCESS_ENTROPY,
+        parse_head_id, HeadIdGenerator, IdError, FINGERPRINT_LEN, FINGERPRINT_PREFIX_BYTES,
+        PROCESS_ENTROPY,
     };
     use base64::Engine;
     use sha2::{Digest, Sha256};
@@ -588,6 +631,22 @@ mod tests {
         let ns = "x".repeat(40);
         let err = HeadIdGenerator::with_namespace(HEAD, ns).expect_err("too long");
         assert_eq!(err, IdError::NamespaceTooLong { max: 32 });
+    }
+
+    #[test]
+    fn fingerprint_bytes_exposed_for_generator_and_id() {
+        let generator = HeadIdGenerator::new(HEAD).expect("generator");
+        let expected = {
+            let digest = Sha256::digest(HEAD.as_bytes());
+            let mut out = [0_u8; FINGERPRINT_LEN];
+            out.copy_from_slice(&digest[..FINGERPRINT_LEN]);
+            out
+        };
+
+        assert_eq!(generator.head_fingerprint_bytes(), expected);
+
+        let id = generator.next_id().expect("id");
+        assert_eq!(id.fingerprint_bytes(), expected);
     }
 
     #[test]
