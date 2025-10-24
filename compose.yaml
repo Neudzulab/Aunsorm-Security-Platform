@@ -1,27 +1,139 @@
+name: aunsorm
+
+networks:
+  aunsorm-network:
+    driver: bridge
+
 services:
-  aunsorm-server:
+  # API Gateway - Main entry point
+  gateway:
     build:
       context: .
-      dockerfile: Dockerfile
-    image: aunsorm-server:local
-    environment:
-      AUNSORM_LISTEN: 0.0.0.0:8080
-      AUNSORM_ISSUER: https://aunsorm.local
-      AUNSORM_AUDIENCE: aunsorm-clients
-      AUNSORM_STRICT: "1"
-      AUNSORM_JTI_DB: /srv/data/jti.sqlite
-      RUST_LOG: info,aunsorm_server=info
+      dockerfile: Dockerfile.gateway
+    image: aunsorm-gateway:local
     ports:
-      - "8080:8080"
-    volumes:
-      - aunsorm-server-data:/srv/data
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "--no-verbose", "--timeout=2", "http://127.0.0.1:8080/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      - "50010:50010"
+    networks:
+      - aunsorm-network
+    depends_on:
+      - auth-service
+      - crypto-service
+      - x509-service
+      - kms-service
+      - mdm-service
+      - id-service
+      - acme-service
+      - pqc-service
     restart: unless-stopped
+
+  # Auth Service - JWT/OAuth (Port 50011)
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    image: aunsorm-auth:local
+    env_file:
+      - .env
+    ports:
+      - "50011:50011"
+    volumes:
+      - aunsorm-auth-data:/srv/data
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # Crypto Service - Core cryptography (Port 50012)
+  crypto-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.crypto
+    image: aunsorm-crypto:local
+    ports:
+      - "50012:50012"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # X509 Service - Certificate management (Port 50013)
+  x509-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.x509
+    image: aunsorm-x509:local
+    ports:
+      - "50013:50013"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # KMS Service - Key Management (Port 50014)
+  kms-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.kms
+    image: aunsorm-kms:local
+    ports:
+      - "50014:50014"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # MDM Service - Mobile Device Management (Port 50015)
+  mdm-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.mdm
+    image: aunsorm-mdm:local
+    ports:
+      - "50015:50015"
+    volumes:
+      - aunsorm-mdm-data:/srv/data
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # ID Service - Identity management (Port 50016)
+  id-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.id
+    image: aunsorm-id:local
+    ports:
+      - "50016:50016"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # ACME Service - Let's Encrypt (Port 50017)
+  acme-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.acme
+    image: aunsorm-acme:local
+    ports:
+      - "50017:50017"
+    volumes:
+      - aunsorm-acme-data:/srv/data
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # PQC Service - Post-Quantum Cryptography (Port 50018)
+  pqc-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.pqc
+    image: aunsorm-pqc:local
+    ports:
+      - "50018:50018"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
 volumes:
-  aunsorm-server-data:
+  aunsorm-auth-data:
+    driver: local
+  aunsorm-mdm-data:
+    driver: local
+  aunsorm-acme-data:
     driver: local

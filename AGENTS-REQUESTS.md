@@ -326,16 +326,12 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [x] 🔄 In Progress (2025-10-24 – ACME onboarding uçlarının implementasyonu)
-- [x] ✅ Done (2025-10-24 – ACME sunucusu + CLI otomasyonu + gateway runbook)
+- [ ] 🔄 In Progress
+- [ ] ✅ Done
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- ✅ `crates/server/src/routes.rs` içinde `GET /acme/directory`, `GET /acme/new-nonce`, `POST /acme/new-account`, `POST /acme/new-order`, `POST /acme/order/:id/finalize`, `POST /acme/order/:id` ve `POST /acme/revoke-cert` uçları Axum ile yayınlandı; iş mantığı `AcmeService` (`crates/server/src/acme.rs`) içerisinde nonce havuzu, hesap store'u, order yaşam döngüsü ve PEM zinciri üretimiyle yönetiliyor.
-- ✅ ACME isteği imzalama/analiz modelleri (`aunsorm-acme`) CLI tarafından kullanılıyor; `aunsorm-cli` `acme register|order|finalize|fetch-cert|revoke` komutları JWS doğrulaması ve hesap durumu dosyası güncellemeleriyle tamamlandı.
-- ✅ `scripts/deploy_gateway_cert.sh` betiği register → order → finalize → fetch zincirini otomatikleştirerek gateway dağıtımı için PEM demetini yazıyor ve opsiyonel servis yeniden yüklemesini tetikliyor.
-- ✅ Operasyonel dokümantasyon ve hızlı başlangıç: README’nin ACME endpoint ağacı bölümü `✅` statüsünde, `docs/src/operations/acme-gateway-automation.md` cron/rollback/runbook adımlarını içeriyor.
-- ✅ `crates/server/src/tests.rs::acme_directory_and_order_flow` ve CLI birim testleri ACME onboarding senaryosunu (directory → nonce → new-account → new-order → finalize → fetch → revoke) doğruluyor.
+- _(Güncelleme bekleniyor)_
 
 ---
 
