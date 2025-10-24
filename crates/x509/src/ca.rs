@@ -7,9 +7,12 @@
 //!
 //! ## Usage Example
 //!
-//! ```rust,ignore
-//! use aunsorm_x509::ca::{RootCaParams, ServerCertParams};
+//! ```rust
+//! use aunsorm_x509::ca::{RootCaParams, ServerCertParams, KeyAlgorithm};
+//! use aunsorm_x509::ca::{generate_root_ca, sign_server_cert};
+//! use std::net::IpAddr;
 //!
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // 1. Generate Root CA
 //! let root_params = RootCaParams {
 //!     common_name: "MyeOffice Root CA",
@@ -18,10 +21,12 @@
 //!     validity_days: 3650,
 //!     cps_uris: &[],
 //!     policy_oids: &[],
+//!     key_algorithm: Some(KeyAlgorithm::Ed25519),
 //! };
 //! let root_ca = generate_root_ca(&root_params)?;
 //!
-//! // 2. Sign server certificate
+//! // 2. Sign server certificate  
+//! let localhost_ip: IpAddr = "127.0.0.1".parse()?;
 //! let server_params = ServerCertParams {
 //!     hostname: "localhost",
 //!     org_salt: b"base64-decoded-salt",
@@ -30,9 +35,12 @@
 //!     ca_key_pem: &root_ca.private_key_pem,
 //!     validity_days: 365,
 //!     extra_dns: &["*.localhost".to_owned()],
-//!     extra_ips: &["127.0.0.1".parse()?],
+//!     extra_ips: &[localhost_ip],
+//!     key_algorithm: Some(KeyAlgorithm::Ed25519),
 //! };
 //! let server_cert = sign_server_cert(&server_params)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## CLI Usage
@@ -59,14 +67,10 @@
 
 use std::net::IpAddr;
 
-use pem::Pem;
-use rand_core::OsRng;
 use rcgen::{
     BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
     KeyUsagePurpose, SignatureAlgorithm, SigningKey,
 };
-use rsa::pkcs8::EncodePrivateKey;
-use rsa::RsaPrivateKey;
 use time::{Duration, OffsetDateTime};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
@@ -105,13 +109,19 @@ impl KeyAlgorithm {
 }
 
 fn generate_rsa_keypair(bits: usize) -> Result<KeyPair, X509Error> {
+    // Manual RSA generation gerekiyor - rcgen native RSA generation desteklemiyor
+    use pem::Pem;
+    use rand_core::OsRng;
+    use rsa::{pkcs8::EncodePrivateKey, RsaPrivateKey};
+    
     let mut rng = OsRng;
     let private_key = RsaPrivateKey::new(&mut rng, bits)
         .map_err(|err| X509Error::KeyGeneration(err.to_string()))?;
     let pkcs8 = private_key
         .to_pkcs8_der()
         .map_err(|err| X509Error::KeyGeneration(err.to_string()))?;
-    let pem = Pem::new("PRIVATE KEY", pkcs8.as_bytes());
+    
+    let pem = Pem::new("PRIVATE KEY", pkcs8.as_bytes()); 
     let pem_encoded = pem::encode(&pem);
     KeyPair::from_pkcs8_pem_and_sign_algo(&pem_encoded, &rcgen::PKCS_RSA_SHA256)
         .map_err(|err| X509Error::KeyGeneration(err.to_string()))

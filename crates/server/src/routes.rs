@@ -64,40 +64,152 @@ use aunsorm_id::{parse_head_id, HeadIdGenerator, IdError};
 /// `http3-experimental` özelliği etkinleştirildiğinde `Alt-Svc` başlığı
 /// oluşturulamazsa panikler.
 pub fn build_router(state: Arc<ServerState>) -> Router {
-    let router = Router::new()
-        .route("/oauth/begin-auth", post(begin_auth))
-        .route("/oauth/token", post(exchange_token))
-        .route("/oauth/introspect", post(introspect))
-        .route("/oauth/jwks.json", get(jwks))
-        .route("/oauth/transparency", get(transparency))
+    // Get service mode from environment
+    let service_mode = std::env::var("SERVICE_MODE").ok();
+    println!("🔧 SERVICE_MODE: {:?}", service_mode);
+    
+    // Base routes (available to all services)
+    let mut router = Router::new()
         .route("/health", get(health))
-        .route("/metrics", get(metrics))
-        .route("/sfu/context", post(create_sfu_context))
-        .route("/sfu/context/step", post(next_sfu_step))
-        .route("/mdm/register", post(register_device))
-        .route("/mdm/policy/:platform", get(fetch_policy))
-        .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
-        .route("/transparency/tree", get(transparency_tree))
-        .route("/http3/capabilities", get(http3_capabilities))
-        // ID Generation endpoints (v0.4.5)
-        .route("/id/generate", post(generate_id))
-        .route("/id/parse", post(parse_id))
-        .route("/id/verify-head", post(verify_head))
-        // ACME protocol endpoints
-        .route("/acme/directory", get(acme_directory))
-        .route("/acme/new-nonce", get(acme_new_nonce))
-        .route("/acme/new-account", post(acme_new_account))
-        .route("/acme/new-order", post(acme_new_order))
-        .route("/acme/account/:account_id", post(acme_account_lookup))
-        .route("/acme/order/:order_id", post(acme_order_status))
-        .route("/acme/order/:order_id/finalize", post(acme_finalize_order))
-        .route("/acme/cert/:order_id", get(acme_get_certificate))
-        .route("/acme/revoke-cert", post(acme_revoke_certificate))
-        // Security endpoints (media token operations)
-        .route("/security/generate-media-token", post(generate_media_token))
-        .route("/security/jwt-verify", post(verify_media_token))
-        // Blockchain DID verification PoC
-        .route("/blockchain/fabric/did/verify", post(verify_fabric_did));
+        .route("/metrics", get(metrics));
+        
+    // Add service-specific routes based on SERVICE_MODE
+    match service_mode.as_deref() {
+        Some("auth-service") => {
+            println!("🔧 Building AUTH SERVICE routes");
+            router = router
+                .route("/oauth/begin-auth", post(begin_auth))
+                .route("/oauth/token", post(exchange_token))
+                .route("/oauth/introspect", post(introspect))
+                .route("/oauth/jwks.json", get(jwks))
+                .route("/oauth/transparency", get(transparency));
+        }
+        Some("cli-gateway") => {
+            println!("🔧 Building CLI GATEWAY routes");
+            router = router
+                .route("/cli/encrypt", post(cli_encrypt))
+                .route("/cli/decrypt", post(cli_decrypt))
+                .route("/cli/jwt/sign", post(cli_jwt_sign))
+                .route("/cli/jwt/verify", post(cli_jwt_verify))
+                .route("/cli/x509/ca/init", post(cli_x509_ca_init))
+                .route("/cli/x509/ca/sign-server", post(cli_x509_ca_sign_server))
+                .route("/cli/x509/self-signed", post(cli_x509_self_signed))
+                .route("/cli/status", get(cli_status))
+                .route("/cli/history", get(cli_history));
+        }
+        Some("id-service") => {
+            router = router
+                .route("/id/generate", post(generate_id))
+                .route("/id/parse", post(parse_id))
+                .route("/id/verify-head", post(verify_head));
+        }
+        Some("acme-service") => {
+            router = router
+                .route("/acme/directory", get(acme_directory))
+                .route("/acme/new-nonce", get(acme_new_nonce))
+                .route("/acme/new-account", post(acme_new_account))
+                .route("/acme/new-order", post(acme_new_order))
+                .route("/acme/account/:account_id", post(acme_account_lookup))
+                .route("/acme/order/:order_id", post(acme_order_status))
+                .route("/acme/order/:order_id/finalize", post(acme_finalize_order))
+                .route("/acme/cert/:order_id", get(acme_get_certificate))
+                .route("/acme/revoke-cert", post(acme_revoke_certificate));
+        }
+        Some("gateway") => {
+            // Gateway serves all routes (reverse proxy mode)
+            router = router
+                .route("/oauth/begin-auth", post(begin_auth))
+                .route("/oauth/token", post(exchange_token))
+                .route("/oauth/introspect", post(introspect))
+                .route("/oauth/jwks.json", get(jwks))
+                .route("/oauth/transparency", get(transparency))
+                .route("/sfu/context", post(create_sfu_context))
+                .route("/sfu/context/step", post(next_sfu_step))
+                .route("/mdm/register", post(register_device))
+                .route("/mdm/policy/:platform", get(fetch_policy))
+                .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
+                .route("/transparency/tree", get(transparency_tree))
+                .route("/http3/capabilities", get(http3_capabilities))
+                .route("/id/generate", post(generate_id))
+                .route("/id/parse", post(parse_id))
+                .route("/id/verify-head", post(verify_head))
+                .route("/acme/directory", get(acme_directory))
+                .route("/acme/new-nonce", get(acme_new_nonce))
+                .route("/acme/new-account", post(acme_new_account))
+                .route("/acme/new-order", post(acme_new_order))
+                .route("/acme/account/:account_id", post(acme_account_lookup))
+                .route("/acme/order/:order_id", post(acme_order_status))
+                .route("/acme/order/:order_id/finalize", post(acme_finalize_order))
+                .route("/acme/cert/:order_id", get(acme_get_certificate))
+                .route("/acme/revoke-cert", post(acme_revoke_certificate))
+                .route("/security/generate-media-token", post(generate_media_token))
+                .route("/security/jwt-verify", post(verify_media_token))
+                .route("/blockchain/fabric/did/verify", post(verify_fabric_did))
+                .route("/random/number", get(random_number));
+        }
+        Some("crypto-service") => {
+            router = router
+                .route("/random/number", get(random_number));
+                // TODO: Add crypto-specific endpoints like /encrypt, /decrypt
+        }
+        Some("mdm-service") => {
+            router = router
+                .route("/mdm/register", post(register_device))
+                .route("/mdm/policy/:platform", get(fetch_policy))
+                .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan));
+        }
+        Some("e2ee-service") => {
+            router = router
+                .route("/sfu/context", post(create_sfu_context))
+                .route("/sfu/context/step", post(next_sfu_step));
+        }
+        Some("blockchain-service") => {
+            router = router
+                .route("/blockchain/fabric/did/verify", post(verify_fabric_did));
+        }
+        _ => {
+            // Default: serve all routes (backward compatibility)
+            println!("🔧 Building DEFAULT routes for service_mode: {:?}", service_mode);
+            router = router
+                .route("/oauth/begin-auth", post(begin_auth))
+                .route("/oauth/token", post(exchange_token))
+                .route("/oauth/introspect", post(introspect))
+                .route("/oauth/jwks.json", get(jwks))
+                .route("/oauth/transparency", get(transparency))
+                .route("/sfu/context", post(create_sfu_context))
+                .route("/sfu/context/step", post(next_sfu_step))
+                .route("/mdm/register", post(register_device))
+                .route("/mdm/policy/:platform", get(fetch_policy))
+                .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
+                .route("/transparency/tree", get(transparency_tree))
+                .route("/http3/capabilities", get(http3_capabilities))
+                .route("/id/generate", post(generate_id))
+                .route("/id/parse", post(parse_id))
+                .route("/id/verify-head", post(verify_head))
+                .route("/acme/directory", get(acme_directory))
+                .route("/acme/new-nonce", get(acme_new_nonce))
+                .route("/acme/new-account", post(acme_new_account))
+                .route("/acme/new-order", post(acme_new_order))
+                .route("/acme/account/:account_id", post(acme_account_lookup))
+                .route("/acme/order/:order_id", post(acme_order_status))
+                .route("/acme/order/:order_id/finalize", post(acme_finalize_order))
+                .route("/acme/cert/:order_id", get(acme_get_certificate))
+                .route("/acme/revoke-cert", post(acme_revoke_certificate))
+                .route("/security/generate-media-token", post(generate_media_token))
+                .route("/security/jwt-verify", post(verify_media_token))
+                .route("/blockchain/fabric/did/verify", post(verify_fabric_did))
+                .route("/cli/encrypt", post(cli_encrypt))
+                .route("/cli/decrypt", post(cli_decrypt))
+                .route("/cli/jwt/sign", post(cli_jwt_sign))
+                .route("/cli/jwt/verify", post(cli_jwt_verify))
+                .route("/cli/x509/ca/init", post(cli_x509_ca_init))
+                .route("/cli/x509/ca/sign-server", post(cli_x509_ca_sign_server))
+                .route("/cli/x509/self-signed", post(cli_x509_self_signed))
+                .route("/cli/status", get(cli_status))
+                .route("/cli/history", get(cli_history))
+                .route("/random/number", get(random_number));
+        }
+    }
 
     #[cfg(feature = "http3-experimental")]
     let router = {
@@ -2316,4 +2428,82 @@ async fn verify_fabric_did(
     };
 
     Ok(Json(response))
+}
+
+// ========================================
+// CLI Gateway Endpoints (v0.4.5)
+// ========================================
+
+#[derive(Debug, Serialize)]
+struct CliStatusResponse {
+    service: &'static str,
+    version: &'static str,
+    available_commands: Vec<&'static str>,
+    max_file_size: &'static str,
+    timeout: &'static str,
+}
+
+async fn cli_status() -> Json<CliStatusResponse> {
+    Json(CliStatusResponse {
+        service: "cli-gateway",
+        version: env!("CARGO_PKG_VERSION"),
+        available_commands: vec![
+            "encrypt", "decrypt", "jwt/sign", "jwt/verify", 
+            "x509/ca/init", "x509/ca/sign-server", "x509/self-signed"
+        ],
+        max_file_size: "100MB",
+        timeout: "300s",
+    })
+}
+
+#[derive(Debug, Serialize)]
+struct CliHistoryResponse {
+    commands: Vec<CliCommandHistory>,
+    total: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct CliCommandHistory {
+    id: String,
+    command: String,
+    timestamp: String,
+    status: &'static str,
+    duration_ms: u64,
+}
+
+async fn cli_history() -> Json<CliHistoryResponse> {
+    // Placeholder implementation - real implementation would store command history
+    Json(CliHistoryResponse {
+        commands: vec![],
+        total: 0,
+    })
+}
+
+// Placeholder CLI command handlers
+async fn cli_encrypt() -> Result<Json<serde_json::Value>, ApiError> {
+    Err(ApiError::server_error("CLI encrypt endpoint henüz implement edilmedi"))
+}
+
+async fn cli_decrypt() -> Result<Json<serde_json::Value>, ApiError> {
+    Err(ApiError::server_error("CLI decrypt endpoint henüz implement edilmedi"))
+}
+
+async fn cli_jwt_sign() -> Result<Json<serde_json::Value>, ApiError> {
+    Err(ApiError::server_error("CLI JWT sign endpoint henüz implement edilmedi"))
+}
+
+async fn cli_jwt_verify() -> Result<Json<serde_json::Value>, ApiError> {
+    Err(ApiError::server_error("CLI JWT verify endpoint henüz implement edilmedi"))
+}
+
+async fn cli_x509_ca_init() -> Result<Json<serde_json::Value>, ApiError> {
+    Err(ApiError::server_error("CLI X509 CA init endpoint henüz implement edilmedi"))
+}
+
+async fn cli_x509_ca_sign_server() -> Result<Json<serde_json::Value>, ApiError> {
+    Err(ApiError::server_error("CLI X509 CA sign-server endpoint henüz implement edilmedi"))
+}
+
+async fn cli_x509_self_signed() -> Result<Json<serde_json::Value>, ApiError> {
+    Err(ApiError::server_error("CLI X509 self-signed endpoint henüz implement edilmedi"))
 }

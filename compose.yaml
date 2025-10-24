@@ -30,6 +30,9 @@ services:
       - metrics-service
       - cli-gateway
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50010
+      - SERVICE_MODE=gateway
 
   # Auth Service - JWT/OAuth (Port 50011)
   auth-service:
@@ -46,6 +49,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50011
+      - SERVICE_MODE=auth-service
 
   # Crypto Service - Core cryptography (Port 50012)
   crypto-service:
@@ -58,6 +64,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50012
+      - SERVICE_MODE=crypto-service
 
   # X509 Service - Certificate management (Port 50013)
   x509-service:
@@ -96,18 +105,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-
-  # ID Service - Identity management (Port 50016)
-  id-service:
-    build:
-      context: .
-      dockerfile: Dockerfile.id
-    image: aunsorm-id:local
-    ports:
-      - "50016:50016"
-    networks:
-      - aunsorm-network
-    restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50015
+      - SERVICE_MODE=mdm-service
 
   # ACME Service - Let's Encrypt (Port 50017)
   acme-service:
@@ -122,6 +122,24 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50017
+      - SERVICE_MODE=acme-service
+
+  # ID Service - Identity management (Port 50016)
+  id-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.id
+    image: aunsorm-id:local
+    ports:
+      - "50016:50016"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50016
+      - SERVICE_MODE=id-service
 
   # PQC Service - Post-Quantum Cryptography (Port 50018)
   pqc-service:
