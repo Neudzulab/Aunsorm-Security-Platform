@@ -1,19 +1,22 @@
-name: aunsorm
-
 services:
   aunsorm-server:
     build:
       context: .
       dockerfile: Dockerfile
     image: aunsorm-server:local
-    env_file:
-      - .env
+    environment:
+      AUNSORM_LISTEN: 0.0.0.0:8080
+      AUNSORM_ISSUER: https://aunsorm.local
+      AUNSORM_AUDIENCE: aunsorm-clients
+      AUNSORM_STRICT: "1"
+      AUNSORM_JTI_DB: /srv/data/jti.sqlite
+      RUST_LOG: info,aunsorm_server=info
     ports:
-      - "4200:4200"
+      - "8080:8080"
     volumes:
       - aunsorm-server-data:/srv/data
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--no-verbose", "--timeout=2", "http://127.0.0.1:4200/health"]
+      test: ["CMD", "wget", "--spider", "--no-verbose", "--timeout=2", "http://127.0.0.1:8080/health"]
       interval: 30s
       timeout: 5s
       retries: 3
