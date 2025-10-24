@@ -24,6 +24,10 @@ services:
       - id-service
       - acme-service
       - pqc-service
+      - rng-service
+      - blockchain-service
+      - e2ee-service
+      - metrics-service
     restart: unless-stopped
 
   # Auth Service - JWT/OAuth (Port 50011)
@@ -130,10 +134,62 @@ services:
       - aunsorm-network
     restart: unless-stopped
 
+  # RNG Service - Cryptographic Random Number Generator (Port 50019)
+  rng-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.rng
+    image: aunsorm-rng:local
+    ports:
+      - "50019:50019"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # Blockchain Service - DID verification and Fabric integration (Port 50020)
+  blockchain-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.blockchain
+    image: aunsorm-blockchain:local
+    ports:
+      - "50020:50020"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # E2EE Service - End-to-End Encryption media sessions (Port 50021)
+  e2ee-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2ee
+    image: aunsorm-e2ee:local
+    ports:
+      - "50021:50021"
+    volumes:
+      - aunsorm-e2ee-data:/srv/data
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  # Metrics Service - Prometheus endpoints (Port 50022)
+  metrics-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.metrics
+    image: aunsorm-metrics:local
+    ports:
+      - "50022:50022"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
 volumes:
   aunsorm-auth-data:
     driver: local
   aunsorm-mdm-data:
     driver: local
   aunsorm-acme-data:
+    driver: local
+  aunsorm-e2ee-data:
     driver: local

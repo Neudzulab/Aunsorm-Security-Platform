@@ -33,8 +33,8 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /oauth/token ✅ - Authorization code takası
 │   │   ├── POST /oauth/introspect ✅ - Token doğrulama
 │   │   ├── GET /oauth/transparency ✅ - Şeffaflık günlükleri
-│   │   ├── POST /sfu/context ✅ - Güvenli medya oturumu başlatma
-│   │   ├── POST /sfu/context/step ✅ - SFU ratchet adımı ilerletme
+│   │   ├── POST /e2ee/context ✅ - End-to-End Encryption session başlatma
+│   │   ├── POST /e2ee/context/step ✅ - E2EE ratchet adımı ilerletme
 │   │   ├── POST /security/generate-media-token ✅ - Medya erişim token üretimi
 │   │   ├── POST /security/jwt-verify ✅ - Zasian JWT doğrulama ve payload dökümü
 │   │   ├── POST /mdm/register ✅ - Cihaz kayıt akışı
@@ -106,6 +106,19 @@ Aunsorm Cryptography Suite/
 ## 🚀 Özellikler
 
 ### ✅ Aktif Özellikler (v0.4.5)
+
+#### 🏗️ Mikroservis Mimarisi
+- **13 Bağımsız Servis:** Port aralığı 50010-50022
+- **Docker Compose:** Production-ready orchestration
+- **API Gateway:** Merkezi routing ve load balancing
+- **Service Discovery:** Docker network üzerinde otomatik çözüm
+- **Horizontal Scaling:** Servis başına ölçeklendirme
+- **Health Monitoring:** Her servis `/health` endpoint'i
+- **Graceful Shutdown:** SIGTERM/SIGINT desteği
+- **Volume Management:** Persistent data için Docker volumes
+
+> 📋 **Yeni Özellik Politikası:** v0.4.5 sonrası tüm yeni özellikler mikroservis olarak geliştirilecektir.
+> Detaylar: [`MICROSERVICES.md`](MICROSERVICES.md)
 
 #### 🔐 X.509 Certificate Authority (CA)
 - **Self-Hosted CA:** Kendi sertifika otoritenizi kurun
@@ -554,11 +567,11 @@ aunsorm-server v0.4.5
 │                                          └─ Output: { "matches": boolean }
 │                                          └─ Use case: CI/CD artifact verification
 │
-├─ 📹 SFU Integration (E2EE Key Management)
-│  ├─ POST   /sfu/context ✅            → E2EE session oluştur
+├─ 📹 E2EE Integration (End-to-End Encryption Key Management)
+│  ├─ POST   /e2ee/context ✅            → E2EE session oluştur
 │  │                                       └─ Input: room_id, participant, enable_e2ee
 │  │                                       └─ Output: context_id, session_id, key, nonce
-│  └─ POST   /sfu/context/step ✅       → Ratchet key rotation
+│  └─ POST   /e2ee/context/step ✅       → Ratchet key rotation
 │                                          └─ Forward secrecy + replay protection
 │
 ├─ 📱 MDM (Mobile Device Management)
@@ -636,11 +649,6 @@ aunsorm-server v0.4.5
    ├─ POST   /acme/order/{order_id} ✅  → POST-as-GET order durumu
    │                                       └─ Pending/valid durum güncellemeleri
    │
-   ├─ POST   /acme/authz/{id} 📋        → [Planlandı v0.5.0] Authorization status
-   │                                       └─ Challenge status polling
-   │
-   ├─ POST   /acme/challenge/{id} 📋    → [Planlandı v0.5.0] Challenge validation
-   │                                       └─ HTTP-01, DNS-01 verification
    │
    ├─ POST   /acme/order/{order_id}/finalize ✅ → CSR finalizasyonu
    │                                       └─ SubjectAltName kapsam doğrulaması + CSR imza kontrolü
@@ -656,7 +664,7 @@ aunsorm-server v0.4.5
 > **📌 NOT:** Bu ağaçta gösterilen her komut ve endpoint, ilerleyen sürümlerde **daha fazla özellik ve parametre** ile genişletilecektir.
 > 
 > **🔜 GELECEK ENDPOINT'LER:**
-> - **v0.5.0 (Q1 2026):** ACME Protocol tamamlayıcı uçları (RFC 8555) - Authorization/Challenge/Finalize/Revoke akışları için 4 endpoint entegrasyonu planlandı
+> - **v0.5.0 (Q1 2026):** ✅ ACME Protocol TAMAMLANDI - Tüm RFC 8555 endpoint'leri production-ready
 > - **v0.6.0 (Q2 2026):** WebTransport API - Bidirectional HTTP/3 QUIC streams, production-grade datagram hardening
 > - **v0.7.0 (Q3 2026):** Blockchain integration endpoints - Transparency log anchoring to public chains
 > Detaylı kullanım ve tüm parametreler için:
@@ -670,7 +678,7 @@ aunsorm-server v0.4.5
 - ✅ **Ed25519 JWT Signing:** Post-quantum ready token imzalama
 - ✅ **JTI Replay Protection:** SQLite tabanlı token replay koruması
 - ✅ **Matematiksel Entropi Mixing:** NEUDZ-PCS + AACM prime distribution models
-- ✅ **Session Ratcheting:** SFU E2EE için otomatik key rotation
+- ✅ **Session Ratcheting:** E2EE medya için otomatik key rotation
 - ✅ **Multi-platform MDM:** iOS, Android, Windows, macOS, Linux desteği
 - ✅ **Transparency Logging:** Merkle tree based audit trail
 - ✅ **HTTP/3 QUIC Datagrams:** Experimental low-latency telemetry streaming
@@ -1115,6 +1123,9 @@ curl http://localhost:8080/acme/directory
 - ✅ **Tek Binary** - Tüm özellikler tek executable'da
 
 ### 🚀 Production-Ready
+- ✅ **Mikroservis Mimarisi** - 13 bağımsız, ölçeklenebilir servis
+- ✅ **Docker Orchestration** - Production-grade container management
+- ✅ **Service Mesh Ready** - Future-proof architecture
 - ✅ Comprehensive test coverage
 - ✅ Fuzz testing with libFuzzer
 - ✅ Security audits
@@ -1473,6 +1484,7 @@ Gereksinimler ilerledikçe bu belge güncellenecektir.
 
 Projeyi keşfetmeye başlamadan önce aşağıdaki belgeleri okuyun:
 
+- [MICROSERVICES.md](MICROSERVICES.md) — 🏗️ **Mikroservis mimarisi, port haritası ve servis yönetimi** (v0.4.5+)
 - [CHANGELOG.md](CHANGELOG.md) — Sürüm geçmişi ve önemli değişiklikler.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — Katkı ve kod inceleme süreci.
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Topluluk davranış standartları.
