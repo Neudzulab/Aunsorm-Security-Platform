@@ -103,6 +103,64 @@ Aunsorm Cryptography Suite/
 - Deneme aşamasındaki özellikleri `🚧`, planlanan çalışmaları `📋 [Planlandı vX.Y.Z]`, üretime alınmış servisleri `✅` ile işaretleyin.
 - Yeni endpoint eklediğinizde README, CHANGELOG ve ilgili `AGENTS.md` dosyalarını senkron tutmayı unutmayın.
 
+## 🚀 Quick Start
+
+### 🐳 Docker ile Hızlı Başlangıç
+
+Tüm mikroservisleri tek komutla başlatın:
+
+```powershell
+# PowerShell
+.\start-all.ps1
+```
+
+```bash  
+# Linux/macOS
+chmod +x start-all.ps1
+./start-all.ps1
+```
+
+**Seçenekler:**
+```bash
+.\start-all.ps1           # Akıllı başlatma (gerekirse build eder)
+.\start-all.ps1 -Force    # Zorla yeniden build
+.\start-all.ps1 -Logs     # Başlattıktan sonra logları göster
+.\start-all.ps1 -Help     # Yardım menüsü
+```
+
+**Servis durumu kontrol:**
+```bash
+docker-compose ps               # Tüm servislerin durumu
+curl http://localhost:50010     # Gateway health check
+docker-compose logs -f          # Canlı loglar
+```
+
+**Durdurma:**
+```bash
+docker-compose down             # Servisleri durdur
+docker-compose down -v          # + Volumeleri sil
+```
+
+### 🌐 Mikroservis Endpoints
+
+| Servis | Port | Endpoint |
+|--------|------|----------|
+| Gateway | 50010 | http://localhost:50010 |
+| Auth | 50011 | http://localhost:50011 |
+| Crypto | 50012 | http://localhost:50012 |
+| X509 | 50013 | http://localhost:50013 |
+| KMS | 50014 | http://localhost:50014 |
+| MDM | 50015 | http://localhost:50015 |
+| ID | 50016 | http://localhost:50016 |
+| ACME | 50017 | http://localhost:50017 |
+| PQC | 50018 | http://localhost:50018 |
+| RNG | 50019 | http://localhost:50019 |
+| Blockchain | 50020 | http://localhost:50020 |
+| E2EE | 50021 | http://localhost:50021 |
+| Metrics | 50022 | http://localhost:50022 |
+
+> 📋 **Detaylar:** [`MICROSERVICES.md`](MICROSERVICES.md) - Kapsamlı mikroservis dokümantasyonu
+
 ## 🚀 Özellikler
 
 ### ✅ Aktif Özellikler (v0.4.5)
