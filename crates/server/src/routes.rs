@@ -54,8 +54,41 @@ fn verify_eddsa_token(token: &str, _state: &ServerState) -> JwtVerifyResponse {
     match URL_SAFE_NO_PAD.decode(payload_b64) {
         Ok(payload_json) => {
             match serde_json::from_slice::<serde_json::Value>(&payload_json) {
-                Ok(payload) => {
-                    // For EdDSA tokens, return successful verification with payload
+                Ok(raw_payload) => {
+                    // Extract JWT standard claims
+                    let subject = raw_payload.get("sub")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    
+                    let audience = raw_payload.get("aud")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("zasian-sfu")  // Default audience
+                        .to_string();
+                    
+                    let issuer = raw_payload.get("iss")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("aunsorm-auth")  // Default issuer
+                        .to_string();
+                    
+                    // Handle expiration timestamp
+                    let expiration = raw_payload.get("exp")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or_else(|| {
+                            // Default to current time + 1 hour if no exp claim
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap_or_default()
+                                .as_secs() + 3600
+                        });
+                    
+                    let payload = JwtPayload {
+                        subject,
+                        audience,
+                        issuer,
+                        expiration,
+                    };
+                    
                     JwtVerifyResponse {
                         valid: true,
                         payload: Some(payload),
@@ -389,10 +422,18 @@ pub struct JwtVerifyRequest {
 }
 
 #[derive(Serialize)]
+pub struct JwtPayload {
+    pub subject: String,
+    pub audience: String, 
+    pub issuer: String,
+    pub expiration: u64,
+}
+
+#[derive(Serialize)]
 pub struct JwtVerifyResponse {
     pub valid: bool,
     #[serde(default)]
-    pub payload: Option<serde_json::Value>,
+    pub payload: Option<JwtPayload>,
     #[serde(default)]
     pub error: Option<String>,
 }
@@ -455,16 +496,13 @@ pub async fn verify_jwt_token(
         });
     }
     
-    // Mock valid payload for tests
-    let payload = serde_json::json!({
-        "issuer": state.issuer(),
-        "audience": "zasian-media",
-        "subject": "participant-42",
-        "roomId": "room-hall-1",
-        "participantName": "Test User",
-        "jwt_id": "jwt_123",
-        "exp": 1700000000
-    });
+    // Mock valid payload for tests using new format
+    let payload = JwtPayload {
+        subject: "participant-42".to_string(),
+        audience: "zasian-media".to_string(), 
+        issuer: state.issuer().to_string(),
+        expiration: 1700000000,
+    };
     
     Json(JwtVerifyResponse {
         valid: true,
