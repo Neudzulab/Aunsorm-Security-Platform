@@ -35,6 +35,7 @@ pub enum FabricDidStatus {
 }
 
 impl FabricDidStatus {
+    #[allow(dead_code)]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Active => "active",
@@ -43,6 +44,7 @@ impl FabricDidStatus {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct FabricDidDocument {
     pub(crate) did: String,
     pub(crate) controller: String,
@@ -55,6 +57,7 @@ pub struct FabricDidDocument {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct FabricDidVerificationMethod {
     pub(crate) id: String,
     pub(crate) controller: String,
@@ -63,16 +66,19 @@ pub struct FabricDidVerificationMethod {
 }
 
 impl FabricDidVerificationMethod {
+    #[allow(dead_code)]
     pub const fn algorithm(&self) -> &'static str {
         self.r#type
     }
 
+    #[allow(dead_code)]
     pub fn public_key_bytes(&self) -> &[u8] {
         self.public_key.verifying_key().as_bytes()
     }
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct FabricDidService {
     pub(crate) id: String,
     pub(crate) r#type: &'static str,
@@ -80,6 +86,7 @@ pub struct FabricDidService {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct FabricLedgerAnchor {
     pub(crate) block_index: u64,
     pub(crate) block_hash: [u8; 32],
@@ -94,6 +101,7 @@ impl FabricLedgerAnchor {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct FabricDidVerification<'a> {
     pub(crate) document: &'a FabricDidDocument,
     pub(crate) challenge: Vec<u8>,

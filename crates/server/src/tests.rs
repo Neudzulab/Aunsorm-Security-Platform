@@ -27,7 +27,7 @@ use crate::fabric::{
     canonical_challenge, FABRIC_POC_CHANNEL, FABRIC_POC_DID, FABRIC_POC_KEY_SEED,
     FABRIC_POC_METHOD_ID, FABRIC_POC_TRANSACTION_ID,
 };
-use crate::routes::build_router;
+use crate::build_router;
 use crate::state::ServerState;
 use ed25519_dalek::Signer;
 use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
@@ -217,7 +217,7 @@ fn setup_state() -> Arc<ServerState> {
 #[tokio::test]
 async fn acme_directory_and_order_flow() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
 
     // Directory discovery returns fully qualified endpoints.
     let response = app
@@ -793,7 +793,7 @@ async fn acme_directory_and_order_flow() {
 #[tokio::test]
 async fn pkce_flow_succeeds() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
     let code_verifier = "correcthorsebatterystaplepkce-verifier-000000000000000000000";
     let digest = Sha256::digest(code_verifier.as_bytes());
     let code_challenge = URL_SAFE_NO_PAD.encode(digest);
@@ -960,7 +960,7 @@ struct ErrorResponse {
 #[tokio::test]
 async fn mdm_registration_flow() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
     let payload = json!({
         "device_id": "mdm-device-1",
         "owner": "alice",
@@ -1062,7 +1062,7 @@ async fn mdm_registration_flow() {
 #[tokio::test]
 async fn mdm_rejects_empty_identifiers() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
 
     let response = app
         .clone()
@@ -1104,7 +1104,7 @@ async fn mdm_rejects_empty_identifiers() {
 #[tokio::test]
 async fn mdm_rejects_control_characters_in_platform() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(&state);
 
     let response = app
         .oneshot(
@@ -1141,7 +1141,7 @@ async fn mdm_rejects_control_characters_in_platform() {
 #[tokio::test]
 async fn mdm_policy_returns_not_found_for_unknown_platform() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(&state);
 
     let response = app
         .oneshot(
@@ -1169,7 +1169,7 @@ async fn mdm_policy_returns_not_found_for_unknown_platform() {
 #[tokio::test]
 async fn mdm_certificate_plan_rejects_blank_identifier() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(&state);
 
     let response = app
         .oneshot(
@@ -1197,7 +1197,7 @@ async fn mdm_certificate_plan_rejects_blank_identifier() {
 #[tokio::test]
 async fn transparency_endpoint_returns_snapshot() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
     let response = app
         .oneshot(
             Request::builder()
@@ -1231,7 +1231,7 @@ async fn transparency_endpoint_returns_snapshot() {
 #[tokio::test]
 async fn reject_non_s256_method() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(&state);
     let begin_payload = json!({
         "client_id": "demo-client",
         "redirect_uri": "https://app.example.com/callback",
@@ -1255,7 +1255,7 @@ async fn reject_non_s256_method() {
 #[tokio::test]
 async fn reject_blank_identity_fields() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(&state);
     let verifier = "identity-verifier-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let digest = Sha256::digest(verifier.as_bytes());
     let code_challenge = URL_SAFE_NO_PAD.encode(digest);
@@ -1341,7 +1341,7 @@ async fn reject_blank_identity_fields() {
 #[tokio::test]
 async fn reject_unregistered_redirect_uri() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(&state);
     let verifier = "identity-verifier-redirect-check-aaaaaaaaaaaaaaaaaaaa";
     let digest = Sha256::digest(verifier.as_bytes());
     let code_challenge = URL_SAFE_NO_PAD.encode(digest);
@@ -1375,7 +1375,7 @@ async fn reject_unregistered_redirect_uri() {
 #[tokio::test]
 async fn reject_scope_outside_registration() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(&state);
     let verifier = "identity-verifier-scope-check-aaaaaaaaaaaaaaaaaaaaaa";
     let digest = Sha256::digest(verifier.as_bytes());
     let code_challenge = URL_SAFE_NO_PAD.encode(digest);
@@ -1410,7 +1410,7 @@ async fn reject_scope_outside_registration() {
 #[tokio::test]
 async fn sfu_context_flow() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
     let create_payload = json!({
         "room_id": "zasian-room",
         "participant": "bob",
@@ -1476,7 +1476,7 @@ async fn sfu_context_flow() {
 #[tokio::test]
 async fn sfu_context_step_rejects_unknown() {
     let state = setup_state();
-    let app = build_router(state);
+    let app = build_router(&state);
     let payload = json!({ "context_id": "does-not-exist" });
     let response = app
         .oneshot(
@@ -1495,7 +1495,7 @@ async fn sfu_context_step_rejects_unknown() {
 #[tokio::test]
 async fn random_number_endpoint_returns_entropy() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
 
     // Test 1: Default range (0-100)
     let response = app
@@ -1528,7 +1528,7 @@ async fn random_number_endpoint_returns_entropy() {
     assert!(payload.entropy.chars().all(|ch| ch.is_ascii_hexdigit()));
 
     // Test 2: Custom range (15-5000)
-    let app2 = build_router(Arc::clone(&state));
+    let app2 = build_router(&state);
     let response2 = app2
         .oneshot(
             Request::builder()
@@ -1557,7 +1557,7 @@ async fn random_number_endpoint_returns_entropy() {
     assert_eq!(payload2.max, 5000);
 
     // Test 3: Invalid range (min > max)
-    let app3 = build_router(state);
+    let app3 = build_router(&state);
     let response3 = app3
         .oneshot(
             Request::builder()
@@ -1571,7 +1571,7 @@ async fn random_number_endpoint_returns_entropy() {
     assert_eq!(response3.status(), StatusCode::BAD_REQUEST);
 
     // Test 4: Range near u64::MAX
-    let app4 = build_router(setup_state());
+    let app4 = build_router(&setup_state());
     let high_min = u64::MAX - 10;
     let high_max = u64::MAX;
     let high_uri = format!("/random/number?min={high_min}&max={high_max}");
@@ -1640,7 +1640,7 @@ fn random_distribution_smoke_test() {
 #[tokio::test]
 async fn fabric_did_verification_succeeds() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
     let document = state
         .fabric_registry()
         .document(FABRIC_POC_DID)
@@ -1737,7 +1737,7 @@ async fn fabric_did_verification_rejects_tampered_anchor() {
             "timestamp_ms": timestamp_ms,
         }
     });
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
     let response = app
         .oneshot(
             Request::builder()
@@ -1763,7 +1763,7 @@ async fn fabric_did_verification_rejects_tampered_anchor() {
 #[tokio::test]
 async fn jwt_verify_endpoint_accepts_valid_token() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
 
     let token_payload = json!({
         "roomId": "room-hall-1",
@@ -1844,7 +1844,7 @@ async fn jwt_verify_endpoint_accepts_valid_token() {
 #[tokio::test]
 async fn jwt_verify_endpoint_rejects_tampered_token() {
     let state = setup_state();
-    let app = build_router(Arc::clone(&state));
+    let app = build_router(&state);
 
     let response = app
         .clone()

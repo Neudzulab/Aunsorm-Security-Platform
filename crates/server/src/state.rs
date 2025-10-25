@@ -1365,6 +1365,7 @@ impl ServerState {
     }
 }
 
+#[allow(dead_code)]
 pub const fn auth_ttl() -> Duration {
     AUTH_TTL
 }

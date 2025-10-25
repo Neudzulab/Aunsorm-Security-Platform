@@ -9,7 +9,7 @@ use aunsorm_server::{init_tracing, serve, ServerConfig};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let telemetry = init_tracing("aunsorm-server")?;
-    info!(otel = telemetry.otel_enabled(), "telemetri başlatıldı");
+    info!(otel = telemetry.otel_enabled(), "telemetry initialized");
     let config = ServerConfig::from_env()?;
     serve(config).await?;
     drop(telemetry);

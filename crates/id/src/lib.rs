@@ -728,23 +728,49 @@ mod tests {
     }
 
     #[test]
-    fn env_fallbacks() {
+    fn environment_integration_tests() {
+        // Save current environment state at the start
         let prev_head = std::env::var("AUNSORM_HEAD").ok();
         let prev_vergen = std::env::var("VERGEN_GIT_SHA").ok();
         let prev_namespace = std::env::var("AUNSORM_ID_NAMESPACE").ok();
 
-        std::env::remove_var("AUNSORM_HEAD");
-        std::env::set_var("VERGEN_GIT_SHA", HEAD);
-        std::env::set_var("AUNSORM_ID_NAMESPACE", "ci/Flow");
+        // Test 1: env_fallbacks scenario
+        {
+            // Clear and set test environment for env_fallbacks
+            std::env::remove_var("AUNSORM_HEAD");
+            std::env::remove_var("AUNSORM_ID_NAMESPACE");
+            std::env::set_var("VERGEN_GIT_SHA", HEAD);
+            std::env::set_var("AUNSORM_ID_NAMESPACE", "ci/Flow");
 
-        let generator = HeadIdGenerator::from_env().expect("env");
-        assert_eq!(generator.namespace(), "ci-flow");
-        let expected_prefix = {
-            let digest = Sha256::digest(HEAD.as_bytes());
-            hex::encode(&digest[..FINGERPRINT_PREFIX_BYTES])
-        };
-        assert_eq!(generator.head_prefix(), expected_prefix);
+            let generator = HeadIdGenerator::from_env().expect("env");
+            assert_eq!(generator.namespace(), "ci-flow");
+            let expected_prefix = {
+                let digest = Sha256::digest(HEAD.as_bytes());
+                hex::encode(&digest[..FINGERPRINT_PREFIX_BYTES])
+            };
+            assert_eq!(generator.head_prefix(), expected_prefix);
+        }
 
+        // Test 2: from_env_with_namespace_overrides_request_namespace scenario
+        {
+            // Clear and set test environment for namespace override test
+            std::env::remove_var("AUNSORM_HEAD");
+            std::env::remove_var("VERGEN_GIT_SHA");
+            std::env::remove_var("AUNSORM_ID_NAMESPACE");
+            std::env::set_var("AUNSORM_HEAD", HEAD);
+            std::env::set_var("AUNSORM_ID_NAMESPACE", "default-ns");
+
+            let generator =
+                HeadIdGenerator::from_env_with_namespace("Ops/Delivery").expect("generator");
+            assert_eq!(generator.namespace(), "ops-delivery");
+            let expected_prefix = {
+                let digest = Sha256::digest(HEAD.as_bytes());
+                hex::encode(&digest[..FINGERPRINT_PREFIX_BYTES])
+            };
+            assert_eq!(generator.head_prefix(), expected_prefix);
+        }
+
+        // Restore original environment state at the end
         if let Some(value) = prev_head {
             std::env::set_var("AUNSORM_HEAD", value);
         } else {
@@ -754,35 +780,6 @@ mod tests {
             std::env::set_var("VERGEN_GIT_SHA", value);
         } else {
             std::env::remove_var("VERGEN_GIT_SHA");
-        }
-        if let Some(value) = prev_namespace {
-            std::env::set_var("AUNSORM_ID_NAMESPACE", value);
-        } else {
-            std::env::remove_var("AUNSORM_ID_NAMESPACE");
-        }
-    }
-
-    #[test]
-    fn from_env_with_namespace_overrides_request_namespace() {
-        let prev_head = std::env::var("AUNSORM_HEAD").ok();
-        let prev_namespace = std::env::var("AUNSORM_ID_NAMESPACE").ok();
-
-        std::env::set_var("AUNSORM_HEAD", HEAD);
-        std::env::set_var("AUNSORM_ID_NAMESPACE", "default-ns");
-
-        let generator =
-            HeadIdGenerator::from_env_with_namespace("Ops/Delivery").expect("generator");
-        assert_eq!(generator.namespace(), "ops-delivery");
-        let expected_prefix = {
-            let digest = Sha256::digest(HEAD.as_bytes());
-            hex::encode(&digest[..FINGERPRINT_PREFIX_BYTES])
-        };
-        assert_eq!(generator.head_prefix(), expected_prefix);
-
-        if let Some(value) = prev_head {
-            std::env::set_var("AUNSORM_HEAD", value);
-        } else {
-            std::env::remove_var("AUNSORM_HEAD");
         }
         if let Some(value) = prev_namespace {
             std::env::set_var("AUNSORM_ID_NAMESPACE", value);

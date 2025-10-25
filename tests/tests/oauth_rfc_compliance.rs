@@ -168,7 +168,7 @@ async fn introspect_token(app: &mut Router, token: &str) -> IntrospectResponse {
 #[tokio::test]
 async fn authorization_code_flow_roundtrip() {
     let state = demo_state();
-    let mut app = build_router(state);
+    let mut app = build_router(&state);
     let (begin, verifier) = begin_flow(
         &mut app,
         "alice",
@@ -200,7 +200,7 @@ async fn authorization_code_flow_roundtrip() {
 #[tokio::test]
 async fn pkce_must_use_s256_method() {
     let state = demo_state();
-    let mut app = build_router(state);
+    let mut app = build_router(&state);
     let payload = json!({
         "subject": "alice",
         "code_challenge": pkce_challenge("verifier"),
@@ -216,7 +216,7 @@ async fn pkce_must_use_s256_method() {
 #[tokio::test]
 async fn redirect_uri_must_be_registered_and_https() {
     let state = demo_state();
-    let mut app = build_router(state);
+    let mut app = build_router(&state);
     let payload = json!({
         "subject": "mallory",
         "redirect_uri": "https://evil.example.com/callback",
@@ -233,7 +233,7 @@ async fn redirect_uri_must_be_registered_and_https() {
 #[tokio::test]
 async fn authorization_code_is_single_use() {
     let state = demo_state();
-    let mut app = build_router(state);
+    let mut app = build_router(&state);
     let (begin, verifier) = begin_flow(
         &mut app,
         "carol",
@@ -261,7 +261,7 @@ async fn authorization_code_is_single_use() {
 #[tokio::test]
 async fn state_is_bound_to_authorization_code() {
     let state = demo_state();
-    let mut app = build_router(state.clone());
+    let mut app = build_router(&state.clone());
     let (begin, verifier) = begin_flow(
         &mut app,
         "ivy",
@@ -297,7 +297,7 @@ async fn state_is_bound_to_authorization_code() {
 #[tokio::test]
 async fn invalid_scope_rejected_during_authorization() {
     let state = demo_state();
-    let mut app = build_router(state);
+    let mut app = build_router(&state);
     let payload = json!({
         "subject": "dave",
         "scope": "admin",
@@ -314,7 +314,7 @@ async fn invalid_scope_rejected_during_authorization() {
 #[tokio::test]
 async fn pkce_challenge_must_be_valid_base64url() {
     let state = demo_state();
-    let mut app = build_router(state);
+    let mut app = build_router(&state);
     let payload = json!({
         "subject": "frank",
         "code_challenge": "not-base64!!!",
@@ -330,7 +330,7 @@ async fn pkce_challenge_must_be_valid_base64url() {
 #[tokio::test]
 async fn token_exchange_rejects_mismatched_client_id() {
     let state = demo_state();
-    let mut app = build_router(state);
+    let mut app = build_router(&state);
     let (begin, verifier) = begin_flow(
         &mut app,
         "grace",
@@ -356,7 +356,7 @@ async fn token_exchange_rejects_mismatched_client_id() {
 #[tokio::test]
 async fn token_exchange_rejects_pkce_mismatch() {
     let state = demo_state();
-    let mut app = build_router(state);
+    let mut app = build_router(&state);
     let (begin, _) = begin_flow(
         &mut app,
         "heidi",
@@ -384,7 +384,7 @@ async fn token_exchange_rejects_pkce_mismatch() {
 #[tokio::test]
 async fn missing_required_parameters_return_invalid_request() {
     let state = demo_state();
-    let mut app = build_router(state);
+    let mut app = build_router(&state);
 
     let payload = json!({
         "subject": "erin",
