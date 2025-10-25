@@ -7,6 +7,7 @@ networks:
 services:
   # API Gateway - Main entry point
   gateway:
+    container_name: aun-gateway
     build:
       context: .
       dockerfile: Dockerfile.gateway
@@ -36,6 +37,7 @@ services:
 
   # Auth Service - JWT/OAuth (Port 50011)
   auth-service:
+    container_name: aun-auth-service
     build:
       context: .
       dockerfile: Dockerfile.auth
@@ -55,6 +57,7 @@ services:
 
   # Crypto Service - Core cryptography (Port 50012)
   crypto-service:
+    container_name: aun-crypto-service
     build:
       context: .
       dockerfile: Dockerfile.crypto
@@ -70,6 +73,7 @@ services:
 
   # X509 Service - Certificate management (Port 50013)
   x509-service:
+    container_name: aun-x509-service
     build:
       context: .
       dockerfile: Dockerfile.x509
@@ -82,6 +86,7 @@ services:
 
   # KMS Service - Key Management (Port 50014)
   kms-service:
+    container_name: aun-kms-service
     build:
       context: .
       dockerfile: Dockerfile.kms
@@ -94,6 +99,7 @@ services:
 
   # MDM Service - Mobile Device Management (Port 50015)
   mdm-service:
+    container_name: aun-mdm-service
     build:
       context: .
       dockerfile: Dockerfile.mdm
@@ -111,6 +117,7 @@ services:
 
   # ACME Service - Let's Encrypt (Port 50017)
   acme-service:
+    container_name: aun-acme-service
     build:
       context: .
       dockerfile: Dockerfile.acme
@@ -128,6 +135,7 @@ services:
 
   # ID Service - Identity management (Port 50016)
   id-service:
+    container_name: aun-id-service
     build:
       context: .
       dockerfile: Dockerfile.id
@@ -143,6 +151,7 @@ services:
 
   # PQC Service - Post-Quantum Cryptography (Port 50018)
   pqc-service:
+    container_name: aun-pqc-service
     build:
       context: .
       dockerfile: Dockerfile.pqc
@@ -155,6 +164,7 @@ services:
 
   # RNG Service - Cryptographic Random Number Generator (Port 50019)
   rng-service:
+    container_name: aun-rng-service
     build:
       context: .
       dockerfile: Dockerfile.rng
@@ -167,6 +177,7 @@ services:
 
   # Blockchain Service - DID verification and Fabric integration (Port 50020)
   blockchain-service:
+    container_name: aun-blockchain-service
     build:
       context: .
       dockerfile: Dockerfile.blockchain
@@ -179,6 +190,7 @@ services:
 
   # E2EE Service - End-to-End Encryption media sessions (Port 50021)
   e2ee-service:
+    container_name: aun-e2ee-service
     build:
       context: .
       dockerfile: Dockerfile.e2ee
@@ -193,6 +205,7 @@ services:
 
   # Metrics Service - Prometheus endpoints (Port 50022)
   metrics-service:
+    container_name: aun-metrics-service
     build:
       context: .
       dockerfile: Dockerfile.metrics
@@ -205,6 +218,7 @@ services:
 
   # CLI Gateway Service - REST API for CLI commands (Port 50023)
   cli-gateway:
+    container_name: aun-cli-gateway
     build:
       context: .
       dockerfile: Dockerfile.cli-gateway

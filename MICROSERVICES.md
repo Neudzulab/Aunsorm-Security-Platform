@@ -15,22 +15,22 @@ Aunsorm v0.4.5 itibariyle **mikroservis mimarisine** geçmiştir. Tüm işlevsel
 
 ## 📊 Servis Haritası
 
-| Servis | Port | Dockerfile | Image | Açıklama | Volumes |
-|--------|------|------------|-------|----------|---------|
-| **Gateway** | 50010 | `Dockerfile.gateway` | `aunsorm-gateway:local` | API Gateway ve routing | - |
-| **Auth** | 50011 | `Dockerfile.auth` | `aunsorm-auth:local` | OAuth2/JWT authentication | `aunsorm-auth-data` |
-| **Crypto** | 50012 | `Dockerfile.crypto` | `aunsorm-crypto:local` | AEAD encryption/decryption | - |
-| **X509** | 50013 | `Dockerfile.x509` | `aunsorm-x509:local` | Certificate Authority + Self-signed | - |
-| **KMS** | 50014 | `Dockerfile.kms` | `aunsorm-kms:local` | Key Management Service | - |
-| **MDM** | 50015 | `Dockerfile.mdm` | `aunsorm-mdm:local` | Mobile Device Management | `aunsorm-mdm-data` |
-| **ID** | 50016 | `Dockerfile.id` | `aunsorm-id:local` | HEAD-stamped ID generation | - |
-| **ACME** | 50017 | `Dockerfile.acme` | `aunsorm-acme:local` | Let's Encrypt protocol | `aunsorm-acme-data` |
-| **PQC** | 50018 | `Dockerfile.pqc` | `aunsorm-pqc:local` | Post-Quantum Cryptography | - |
-| **RNG** | 50019 | `Dockerfile.rng` | `aunsorm-rng:local` | Cryptographic RNG | - |
-| **Blockchain** | 50020 | `Dockerfile.blockchain` | `aunsorm-blockchain:local` | DID verification PoC | - |
-| **E2EE** | 50021 | `Dockerfile.e2ee` | `aunsorm-e2ee:local` | E2EE media streaming | `aunsorm-e2ee-data` |
-| **Metrics** | 50022 | `Dockerfile.metrics` | `aunsorm-metrics:local` | Prometheus monitoring | - |
-| **CLI Gateway** | 50023 | `Dockerfile.cli-gateway` | `aunsorm-cli-gateway:local` | REST API for CLI commands | - |
+| Servis | Port | Service Name | Image | Açıklama | Endpoints | Volumes |
+|--------|------|--------------|-------|----------|-----------|---------|
+| **🌐 Gateway** | 50010 | `aun-gateway` | `aunsorm-gateway:local` | Client API Gateway | `/health`, `/metrics`, `/random/*`, `/transparency/*` | - |
+| **🔐 Auth Service** | 50011 | `aun-auth-service` | `aunsorm-auth:local` | OAuth2/JWT authentication | `/oauth/*`, `/security/jwt-verify`, `/security/generate-media-token` | `aun-auth-data` |
+| **🔒 Crypto Service** | 50012 | `aun-crypto-service` | `aunsorm-crypto:local` | AEAD encryption/decryption | `/core/*`, `/crypto/*` | - |
+| **📜 X509 Service** | 50013 | `aun-x509-service` | `aunsorm-x509:local` | Certificate Authority | `/cert/*`, `/x509/*` | - |
+| **🔑 KMS Service** | 50014 | `aun-kms-service` | `aunsorm-kms:local` | Key Management Service | `/kms/*`, `/keys/*` | - |
+| **📱 MDM Service** | 50015 | `aun-mdm-service` | `aunsorm-mdm:local` | Mobile Device Management | `/mdm/*`, `/device/*` | `aun-mdm-data` |
+| **🆔 ID Service** | 50016 | `aun-id-service` | `aunsorm-id:local` | HEAD-stamped ID generation | `/id/*`, `/identity/*` | - |
+| **🔗 ACME Service** | 50017 | `aun-acme-service` | `aunsorm-acme:local` | Let's Encrypt protocol | `/acme/*` | `aun-acme-data` |
+| **🔮 PQC Service** | 50018 | `aun-pqc-service` | `aunsorm-pqc:local` | Post-Quantum Cryptography | `/pqc/*`, `/quantum/*` | - |
+| **🎲 RNG Service** | 50019 | `aun-rng-service` | `aunsorm-rng:local` | Cryptographic RNG | `/random/*` (internal only) | - |
+| **⛓️ Blockchain Service** | 50020 | `aun-blockchain-service` | `aunsorm-blockchain:local` | DID verification PoC | `/blockchain/*` | - |
+| **🔄 E2EE Service** | 50021 | `aun-e2ee-service` | `aunsorm-e2ee:local` | E2EE media streaming | `/sfu/*` | `aun-e2ee-data` |
+| **📊 Metrics Service** | 50022 | `aun-metrics-service` | `aunsorm-metrics:local` | Prometheus monitoring | `/metrics` (aggregated) | - |
+| **⚡ CLI Gateway** | 50023 | `aun-cli-gateway` | `aunsorm-cli-gateway:local` | REST API for CLI commands | `/cli/*` | - |
 
 ## 🚀 Hızlı Başlangıç
 
@@ -54,20 +54,171 @@ docker-compose down
 docker-compose down -v
 ```
 
-## 🌐 Servis Keşfi
+## 🌐 Endpoint Distribution & Service Architecture
 
-### API Gateway (Port 50010)
-Gateway servisi tüm diğer servislere reverse proxy görevi görür:
+Aunsorm mikroservis mimarisi **service-specific routing** kullanır. Her servis sadece kendi sorumlu olduğu endpoint'leri expose eder.
+
+### 🚪 Gateway (Port 50010) - Client Entry Point
+Gateway **external client requests** için ana giriş noktasıdır:
 
 ```bash
-# Health check
-curl http://localhost:50010/health
+# ✅ Gateway endpoint'leri (client-facing)
+curl http://localhost:50010/health              # Health check  
+curl http://localhost:50010/metrics             # System metrics
+curl http://localhost:50010/random/number       # Random number generator
+curl http://localhost:50010/transparency/tree   # Transparency logs
 
-# Gateway üzerinden auth servisi
-curl http://localhost:50010/oauth/jwks.json
+# ❌ Gateway'de JWT/OAuth endpoint'leri YOK 
+curl http://localhost:50010/security/jwt-verify # → 404 Not Found
+```
 
-# Direkt auth servisine erişim
-curl http://localhost:50011/oauth/jwks.json
+### 🔐 Auth Service (Port 50011) - Authentication & JWT
+Auth Service **authentication & token management** için:
+
+```bash
+# ✅ Auth service endpoint'leri
+curl http://localhost:50011/security/jwt-verify           # JWT verification
+curl http://localhost:50011/oauth/begin-auth             # OAuth2 start
+curl http://localhost:50011/oauth/token                  # Token exchange
+curl http://localhost:50011/security/generate-media-token # Media tokens
+
+# ❌ Auth service'te random/transparency endpoint'leri YOK
+curl http://localhost:50011/random/number                # → 404 Not Found
+```
+
+### 📱 Diğer Servisler - Specialized Functions
+Her servis sadece kendi alanındaki endpoint'leri expose eder:
+
+```bash
+# MDM Service (50015)
+curl http://localhost:50015/mdm/register           # Device registration
+curl http://localhost:50015/mdm/policy/ios         # Platform policies
+
+# ACME Service (50017)  
+curl http://localhost:50017/acme/directory         # Let's Encrypt directory
+curl http://localhost:50017/acme/new-nonce         # ACME nonce
+
+# Blockchain Service (50020)
+curl http://localhost:50020/blockchain/fabric/did/verify  # DID verification
+```
+
+### 🔀 Service Communication Patterns
+
+#### Pattern 1: Direct Service Access (External)
+Client → Service (doğrudan port ile)
+
+```bash
+# Client JWT doğrulaması için direkt auth service'e bağlanır
+curl http://localhost:50011/security/jwt-verify -d '{"token":"..."}'
+```
+
+#### Pattern 2: Gateway Entry Point (External)
+Client → Gateway → Internal processing
+
+```bash  
+# Client genel endpoint'ler için gateway'i kullanır
+curl http://localhost:50010/random/number
+curl http://localhost:50010/transparency/tree
+```
+
+#### Pattern 3: Service Discovery (Internal)
+Service → Service (Docker network üzerinde)
+
+```rust
+// ❌ Port hard-coding (kırılgan)
+let auth_url = "http://aun-auth-service:50011/security/jwt-verify";
+
+// ✅ Service discovery (esnek)
+let auth_url = format!("http://{}/security/jwt-verify", 
+    env::var("AUTH_SERVICE_HOST").unwrap_or("aun-auth-service".to_string()));
+
+// 🎯 En iyi pratik: Service ismiyle doğrudan bağlantı
+let auth_url = "http://aun-auth-service/security/jwt-verify";
+```
+
+### 🌐 Service URLs
+
+Servisler arası iletişim için bu URL'leri kullanın:
+
+```bash
+# Service-to-service communication (Docker network içinde)
+http://aun-gateway/health                    # Gateway health check
+http://aun-auth-service/security/jwt-verify  # JWT token verification
+http://aun-crypto-service/rng/random         # Secure random number generation
+http://aun-x509-service/pki/cert-generate    # X.509 certificate generation
+http://aun-kms-service/vault/key-store       # Key management operations
+http://aun-mdm-service/device/register       # Mobile device registration
+http://aun-id-service/identity/create        # Identity generation
+http://aun-acme-service/letsencrypt/order    # Let's Encrypt certificate
+http://aun-pqc-service/quantum/key-gen       # Post-quantum cryptography
+http://aun-rng-service/entropy/collect       # Entropy collection
+http://aun-blockchain-service/did/verify     # DID verification
+http://aun-e2ee-service/media/encrypt        # End-to-end media encryption
+http://aun-metrics-service/prometheus        # Metrics collection
+http://aun-cli-gateway/cli/execute           # CLI command execution
+
+# External client access (localhost ports)
+http://localhost:50010/health                # Gateway health check
+http://localhost:50011/security/jwt-verify   # Direct auth service access
+http://localhost:50012/rng/random            # Direct crypto service access
+http://localhost:50013/pki/cert-generate     # Direct X.509 service access
+http://aun-acme-service/acme/directory       # ACME directory
+http://aun-pqc-service/pqc/keygen            # Post-quantum keygen
+http://aun-blockchain-service/blockchain/did/verify  # DID verification
+http://aun-e2ee-service/sfu/context          # E2EE context
+http://aun-metrics-service/metrics           # Metrics collection
+http://aun-cli-gateway/cli/status            # CLI gateway
+```
+
+### 📍 Port Independence
+
+**Avantajlar:**
+- ✅ Port değişse de kod bozulmaz  
+- ✅ Service discovery otomatik
+- ✅ Load balancer/proxy friendly
+- ✅ Kubernetes ready
+
+**Kullanım:**
+```yaml
+# docker-compose.yml'de environment variables
+environment:
+  - AUTH_SERVICE_URL=http://aun-auth-service
+  - CRYPTO_SERVICE_URL=http://aun-crypto-service
+  # Port numbers belirtmeye gerek yok!
+```
+
+### 🎯 Service Discovery Best Practices
+
+#### ✅ YAPILMASI GEREKENLER
+1. **Container name'leri kullan**: `http://aun-auth-service/endpoint`
+2. **Port'ları hardcode etme**: Docker network otomatik port yönetimi yapar
+3. **Environment variables tercih et**: Daha esnek konfigürasyon
+4. **Health check'leri ekle**: Servis durumunu kontrol et
+
+#### ❌ YAPILMAMASI GEREKENLER  
+1. **IP adresi hardcode**: `http://172.20.0.3:50011` (kırılgan)
+2. **Port hardcode**: `http://service:50011` (gereksiz)
+3. **localhost kullanma**: Container içinde `localhost` = kendi container'ı
+
+#### 💡 Configuration Examples
+
+```rust
+// ✅ En iyi pratik
+pub struct ServiceConfig {
+    auth_service: String,
+    crypto_service: String,
+}
+
+impl Default for ServiceConfig {
+    fn default() -> Self {
+        Self {
+            auth_service: env::var("AUTH_SERVICE_URL")
+                .unwrap_or("http://aun-auth-service".to_string()),
+            crypto_service: env::var("CRYPTO_SERVICE_URL")
+                .unwrap_or("http://aun-crypto-service".to_string()),
+        }
+    }
+}
 ```
 
 ### Servis-to-Servis İletişim

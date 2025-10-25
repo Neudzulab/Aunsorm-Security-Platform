@@ -910,39 +910,104 @@ pub async fn transparency_tree(State(_state): State<Arc<ServerState>>) -> Json<T
 }
 
 pub fn build_router(state: &Arc<ServerState>) -> Router {
-    Router::new()
-        // Health endpoints
+    let service_mode = std::env::var("SERVICE_MODE").ok();
+    tracing::info!("🔧 SERVICE_MODE: {:?}", service_mode);
+    
+    let mut router = Router::new()
+        // Health endpoints (available on all services)
         .route("/health", get(health))
-        .route("/metrics", get(metrics))
-        // Random number endpoint
-        .route("/random/number", get(random_number))
-        // ACME endpoints
-        .route("/acme/directory", get(acme_directory))
-        .route("/acme/new-nonce", get(acme_new_nonce))
-        .route("/acme/new-account", post(acme_new_account))
-        .route("/acme/accounts/:id", post(acme_account_status))
-        .route("/acme/new-order", post(acme_new_order))
-        .route("/acme/order/:id", post(acme_order_status))
-        .route("/acme/orders/:id/finalize", post(acme_finalize_order))
-        // OAuth endpoints
-        .route("/oauth/begin-auth", post(begin_auth))
-        .route("/oauth/token", post(exchange_token))
-        // JWT endpoints  
-        .route("/cli/jwt/verify", post(verify_jwt_token))
-        .route("/security/jwt-verify", post(verify_jwt_token))
-        .route("/security/generate-media-token", post(generate_media_token))
-        // MDM endpoints
-        .route("/mdm/register", post(register_device))
-        .route("/mdm/policy/:platform", get(fetch_policy))
-        .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
-        // Fabric DID endpoints
-        .route("/blockchain/fabric/did/verify", post(verify_fabric_did))
-        // SFU endpoints
-        .route("/sfu/context", post(create_sfu_context))
-        .route("/sfu/context/step", post(next_sfu_step))
-        // Transparency endpoints
-        .route("/transparency/tree", get(transparency_tree))
-        .with_state(state.clone())
+        .route("/metrics", get(metrics));
+
+    // Service-specific routes based on SERVICE_MODE
+    match service_mode.as_deref() {
+        Some("gateway") => {
+            tracing::info!("🌐 Building GATEWAY routes");
+            router = router
+                // Random number endpoint (gateway service)
+                .route("/random/number", get(random_number))
+                // Transparency endpoints (gateway service)
+                .route("/transparency/tree", get(transparency_tree));
+        }
+        Some("auth-service") => {
+            tracing::info!("🔐 Building AUTH SERVICE routes");
+            router = router
+                // OAuth endpoints (auth service)
+                .route("/oauth/begin-auth", post(begin_auth))
+                .route("/oauth/token", post(exchange_token))
+                // JWT endpoints (auth service)
+                .route("/cli/jwt/verify", post(verify_jwt_token))
+                .route("/security/jwt-verify", post(verify_jwt_token))
+                .route("/security/generate-media-token", post(generate_media_token));
+        }
+        Some("acme-service") => {
+            tracing::info!("🔒 Building ACME SERVICE routes");
+            router = router
+                // ACME endpoints (acme service)
+                .route("/acme/directory", get(acme_directory))
+                .route("/acme/new-nonce", get(acme_new_nonce))
+                .route("/acme/new-account", post(acme_new_account))
+                .route("/acme/accounts/:id", post(acme_account_status))
+                .route("/acme/new-order", post(acme_new_order))
+                .route("/acme/order/:id", post(acme_order_status))
+                .route("/acme/orders/:id/finalize", post(acme_finalize_order));
+        }
+        Some("mdm-service") => {
+            tracing::info!("📱 Building MDM SERVICE routes");
+            router = router
+                // MDM endpoints (mdm service)
+                .route("/mdm/register", post(register_device))
+                .route("/mdm/policy/:platform", get(fetch_policy))
+                .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan));
+        }
+        Some("blockchain-service") => {
+            tracing::info!("⛓️ Building BLOCKCHAIN SERVICE routes");
+            router = router
+                // Fabric DID endpoints (blockchain service)
+                .route("/blockchain/fabric/did/verify", post(verify_fabric_did));
+        }
+        Some("sfu-service") => {
+            tracing::info!("📡 Building SFU SERVICE routes");
+            router = router
+                // SFU endpoints (sfu service)
+                .route("/sfu/context", post(create_sfu_context))
+                .route("/sfu/context/step", post(next_sfu_step));
+        }
+        _ => {
+            tracing::info!("🔧 Building DEFAULT routes for service_mode: {:?}", service_mode);
+            // Default: expose all endpoints (backwards compatibility)
+            router = router
+                // Random number endpoint
+                .route("/random/number", get(random_number))
+                // ACME endpoints
+                .route("/acme/directory", get(acme_directory))
+                .route("/acme/new-nonce", get(acme_new_nonce))
+                .route("/acme/new-account", post(acme_new_account))
+                .route("/acme/accounts/:id", post(acme_account_status))
+                .route("/acme/new-order", post(acme_new_order))
+                .route("/acme/order/:id", post(acme_order_status))
+                .route("/acme/orders/:id/finalize", post(acme_finalize_order))
+                // OAuth endpoints
+                .route("/oauth/begin-auth", post(begin_auth))
+                .route("/oauth/token", post(exchange_token))
+                // JWT endpoints  
+                .route("/cli/jwt/verify", post(verify_jwt_token))
+                .route("/security/jwt-verify", post(verify_jwt_token))
+                .route("/security/generate-media-token", post(generate_media_token))
+                // MDM endpoints
+                .route("/mdm/register", post(register_device))
+                .route("/mdm/policy/:platform", get(fetch_policy))
+                .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
+                // Fabric DID endpoints
+                .route("/blockchain/fabric/did/verify", post(verify_fabric_did))
+                // SFU endpoints
+                .route("/sfu/context", post(create_sfu_context))
+                .route("/sfu/context/step", post(next_sfu_step))
+                // Transparency endpoints
+                .route("/transparency/tree", get(transparency_tree));
+        }
+    }
+    
+    router.with_state(state.clone())
 }
 
 /// Starts the aunsorm server with the given configuration.
