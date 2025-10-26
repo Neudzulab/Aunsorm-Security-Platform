@@ -78,11 +78,11 @@ struct JwtVerifyResponseBody {
 #[derive(Debug, Deserialize)]
 struct AcmeDirectoryPayload {
     #[serde(rename = "newNonce")]
-    nonce: String,
+    new_nonce: String,
     #[serde(rename = "newAccount")]
-    account: String,
+    new_account: String,
     #[serde(rename = "newOrder")]
-    order: String,
+    new_order: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -217,8 +217,27 @@ fn setup_state() -> Arc<ServerState> {
 #[tokio::test]
 async fn acme_directory_and_order_flow() {
     let state = setup_state();
+    
+    // Debug: test simple route first
+    let app = build_router(&state);
+    let health_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/health")
+                .body(Body::empty())
+                .expect("health request"),
+        )
+        .await
+        .expect("health response");
+    eprintln!("DEBUG: Health endpoint status: {}", health_response.status());
+    
     let app = build_router(&state);
 
+    // Debug: test ACME directory specifically 
+    eprintln!("DEBUG: Attempting ACME directory...");
+    
     // Directory discovery returns fully qualified endpoints.
     let response = app
         .clone()
@@ -231,7 +250,8 @@ async fn acme_directory_and_order_flow() {
         )
         .await
         .expect("response");
-    assert_eq!(response.status(), StatusCode::OK);
+    eprintln!("DEBUG: ACME directory response status: {}", response.status());
+    assert_eq!(response.status(), StatusCode::OK, "ACME directory endpoint returned: {}", response.status());
     let replay = response
         .headers()
         .get(REPLAY_NONCE_HEADER)
@@ -243,9 +263,9 @@ async fn acme_directory_and_order_flow() {
         .await
         .expect("body bytes");
     let directory: AcmeDirectoryPayload = serde_json::from_slice(&body).expect("directory json");
-    assert_eq!(directory.nonce, state.acme().new_nonce_url().as_str());
-    assert_eq!(directory.account, state.acme().new_account_url().as_str());
-    assert_eq!(directory.order, state.acme().new_order_url().as_str());
+    assert_eq!(directory.new_nonce, state.acme().new_nonce_url().as_str());
+    assert_eq!(directory.new_account, state.acme().new_account_url().as_str());
+    assert_eq!(directory.new_order, state.acme().new_order_url().as_str());
 
     // Fetch a nonce for new-account.
     let nonce_response = app
@@ -1090,9 +1110,7 @@ async fn mdm_rejects_empty_identifiers() {
     let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
     assert_eq!(error.error, "invalid_request");
     assert!(
-        error.error_description.contains("device_id")
-            && (error.error_description.contains("geçersiz")
-                || error.error_description.contains("boş olamaz")),
+        error.error_description.contains("device_id cannot be empty"),
         "unexpected error message: {}",
         error.error_description
     );
@@ -1132,7 +1150,7 @@ async fn mdm_rejects_control_characters_in_platform() {
     let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
     assert_eq!(error.error, "invalid_request");
     assert!(
-        error.error_description.contains("platform değeri geçersiz"),
+        error.error_description.contains("Platform contains control characters"),
         "unexpected error message: {}",
         error.error_description
     );
@@ -1160,7 +1178,7 @@ async fn mdm_policy_returns_not_found_for_unknown_platform() {
     let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
     assert_eq!(error.error, "not_found");
     assert!(
-        error.error_description.contains("Politika bulunamadı"),
+        error.error_description.contains("Platform not supported"),
         "unexpected error message: {}",
         error.error_description
     );
@@ -1188,7 +1206,7 @@ async fn mdm_certificate_plan_rejects_blank_identifier() {
     let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
     assert_eq!(error.error, "invalid_request");
     assert!(
-        error.error_description.contains("device_id boş olamaz"),
+        error.error_description.contains("device_id cannot be empty"),
         "unexpected error message: {}",
         error.error_description
     );
@@ -1812,30 +1830,30 @@ async fn jwt_verify_endpoint_accepts_valid_token() {
     let verify: JwtVerifyResponseBody = serde_json::from_slice(&verify_body).expect("verify json");
     assert!(verify.valid);
     assert!(verify.error.is_none());
-    let claims = verify.payload.expect("payload");
+    let payload = verify.payload.expect("payload");
     assert_eq!(
-        claims.get("issuer").and_then(|value| value.as_str()),
+        payload.get("issuer").and_then(|value| value.as_str()),
         Some(state.issuer())
     );
     assert_eq!(
-        claims.get("audience").and_then(|value| value.as_str()),
+        payload.get("audience").and_then(|value| value.as_str()),
         Some("zasian-media")
     );
     assert_eq!(
-        claims.get("subject").and_then(|value| value.as_str()),
+        payload.get("subject").and_then(|value| value.as_str()),
         Some("participant-42")
     );
     assert_eq!(
-        claims.get("roomId").and_then(|value| value.as_str()),
+        payload.get("roomId").and_then(|value| value.as_str()),
         Some("room-hall-1")
     );
     assert_eq!(
-        claims
+        payload
             .get("participantName")
             .and_then(|value| value.as_str()),
         Some("Test User")
     );
-    assert!(claims
+    assert!(payload
         .get("jwt_id")
         .and_then(|value| value.as_str())
         .is_some());
@@ -1894,7 +1912,7 @@ async fn jwt_verify_endpoint_rejects_tampered_token() {
     assert!(!verify.valid);
     assert!(verify.payload.is_none());
     let error = verify.error.expect("error");
-    assert!(error.contains("imzası"));
+    assert!(error.contains("Invalid token"));
 }
 
 #[allow(dead_code)]
@@ -2000,4 +2018,16 @@ struct NextSfuStepResponse {
     key: String,
     nonce: String,
     expires_in: u64,
+}
+
+#[tokio::test]
+async fn test_acme_service_debug() {
+    let state = setup_state();
+    println!("✓ State created successfully");
+    
+    let acme_service = state.acme();
+    println!("✓ ACME service accessed successfully");
+    
+    let nonce_url = acme_service.new_nonce_url();
+    println!("✓ Nonce URL: {}", nonce_url);
 }
