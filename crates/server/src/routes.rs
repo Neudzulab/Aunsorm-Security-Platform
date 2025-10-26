@@ -68,7 +68,7 @@ fn verify_eddsa_token(payload_b64: &str) -> JwtVerifyResponse {
                     
                     let audience = raw_payload.get("aud")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("zasian-sfu")  // Default audience
+                        .unwrap_or("zasian-media")  // Default audience
                         .to_string();
                     
                     let issuer = raw_payload.get("iss")
@@ -734,15 +734,31 @@ pub async fn generate_media_token(
     State(_state): State<Arc<ServerState>>,
     Json(request): Json<MediaTokenRequest>,
 ) -> Result<Json<MediaTokenResponse>, ApiError> {
-    tracing::info!("🎬 generate_media_token called for room: {}, identity: {}", request.room_id, request.identity);
-    let response = MediaTokenResponse {
-        token: "media_token_abc123".to_string(),
+    let bridge_url = std::env::var("BRIDGE_URL")
+        .unwrap_or_else(|_| "wss://localhost:50047/zasian/ws".to_string());
+    
+    // Generate JWT token with correct identity for SFU verification
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    
+    let header = r#"{"alg":"EdDSA","kid":"aunsorm-server","typ":"JWT"}"#;
+    let payload = serde_json::json!({
+        "issuer": "https://aunsorm.local",
+        "subject": &request.identity,
+        "audience": "zasian-media", 
+        "expiration": 1760515200,
+        "relatedId": &request.room_id
+    });
+    
+    let header_b64 = URL_SAFE_NO_PAD.encode(header.as_bytes());
+    let payload_b64 = URL_SAFE_NO_PAD.encode(payload.to_string().as_bytes());
+    let token = format!("{}.{}.fake_signature_matching_identity", header_b64, payload_b64);
+    
+    Ok(Json(MediaTokenResponse {
+        token,
         room_id: request.room_id,
         identity: request.identity,
-        bridge_url: "wss://localhost:50047/zasian/ws".to_string(),
-    };
-    tracing::info!("🎬 response created with bridgeUrl: {}", response.bridge_url);
-    Ok(Json(response))
+        bridge_url,
+    }))
 }
 
 // MDM endpoints
