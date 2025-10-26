@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, Query, State}, 
     http::{header, HeaderValue, StatusCode}, 
     response::{IntoResponse, Response}, 
-    routing::{get, post}, 
+    routing::{get, head, post}, 
     Json, Router
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -1220,6 +1220,51 @@ pub async fn oauth_transparency(
     })
 }
 
+// ID service endpoints
+#[derive(Deserialize)]
+pub struct IdGenerateRequest {
+    pub namespace: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct IdGenerateResponse {
+    pub id: String,
+    pub namespace: String,
+    #[serde(rename = "headPrefix")]
+    pub head_prefix: String,
+}
+
+pub async fn generate_id(
+    State(_state): State<Arc<ServerState>>,
+    Json(request): Json<IdGenerateRequest>,
+) -> Result<Json<IdGenerateResponse>, ApiError> {
+    use aunsorm_id::HeadIdGenerator;
+    
+    let generator = if let Some(namespace) = request.namespace {
+        HeadIdGenerator::from_env_with_namespace(namespace)
+    } else {
+        HeadIdGenerator::from_env()
+    }.map_err(|e| ApiError::invalid_request(format!("ID generator error: {}", e)))?;
+    
+    let id = generator.next_id()
+        .map_err(|e| ApiError::server_error(format!("ID generation failed: {}", e)))?;
+    
+    Ok(Json(IdGenerateResponse {
+        id: id.as_str().to_string(),
+        namespace: id.namespace().to_string(),
+        head_prefix: id.head_prefix(),
+    }))
+}
+
+// HEAD endpoint for SFU compatibility 
+pub async fn head_generate_id(
+    State(state): State<Arc<ServerState>>,
+) -> Result<Json<IdGenerateResponse>, ApiError> {
+    // Default HEAD request without body
+    let request = IdGenerateRequest { namespace: None };
+    generate_id(State(state), Json(request)).await
+}
+
 // Fabric DID endpoints
 #[derive(Deserialize)]
 pub struct FabricDidRequest {
@@ -1368,7 +1413,10 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/transparency/tree", get(transparency_tree))
                 // Proxy JWT endpoints to auth service
                 .route("/security/jwt-verify", post(proxy_jwt_verify))
-                .route("/security/generate-media-token", post(proxy_media_token));
+                .route("/security/generate-media-token", post(proxy_media_token))
+                // Proxy ID endpoints to id service
+                .route("/id/generate", post(proxy_id_generate))
+                .route("/id/generate", head(proxy_id_generate_head));
         }
         Some("auth-service") => {
             tracing::info!("🔐 Building AUTH SERVICE routes");
@@ -1411,6 +1459,13 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 // Fabric DID endpoints (blockchain service)
                 .route("/blockchain/fabric/did/verify", post(verify_fabric_did));
         }
+        Some("id-service") => {
+            tracing::info!("🆔 Building ID SERVICE routes");
+            router = router
+                // ID endpoints (id service)
+                .route("/id/generate", post(generate_id))
+                .route("/id/generate", head(head_generate_id));
+        }
         Some("sfu-service") => {
             tracing::info!("📡 Building SFU SERVICE routes");
             router = router
@@ -1450,6 +1505,9 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
                 // Fabric DID endpoints
                 .route("/blockchain/fabric/did/verify", post(verify_fabric_did))
+                // ID endpoints
+                .route("/id/generate", post(generate_id))
+                .route("/id/generate", head(head_generate_id))
                 // SFU endpoints
                 .route("/sfu/context", post(create_sfu_context))
                 .route("/sfu/context/step", post(next_sfu_step))
@@ -1526,6 +1584,54 @@ async fn proxy_media_token(
             }
         }
         Err(_) => (StatusCode::BAD_GATEWAY, "Auth service unavailable").into_response(),
+    }
+}
+
+async fn proxy_id_generate(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
+    let client = reqwest::Client::new();
+    match client
+        .post("http://aun-id-service:50016/id/generate")
+        .json(&payload)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status_code = match response.status().as_u16() {
+                200 => StatusCode::OK,
+                400 => StatusCode::BAD_REQUEST,
+                404 => StatusCode::NOT_FOUND,
+                422 => StatusCode::UNPROCESSABLE_ENTITY,
+                500 => StatusCode::INTERNAL_SERVER_ERROR,
+                _ => StatusCode::BAD_GATEWAY,
+            };
+            match response.json::<serde_json::Value>().await {
+                Ok(json) => (status_code, Json(json)).into_response(),
+                Err(_) => (StatusCode::BAD_GATEWAY, "Proxy error").into_response(),
+            }
+        }
+        Err(_) => (StatusCode::BAD_GATEWAY, "ID service unavailable").into_response(),
+    }
+}
+
+async fn proxy_id_generate_head() -> impl IntoResponse {
+    let client = reqwest::Client::new();
+    match client
+        .head("http://aun-id-service:50016/id/generate")
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status_code = match response.status().as_u16() {
+                200 => StatusCode::OK,
+                400 => StatusCode::BAD_REQUEST,
+                404 => StatusCode::NOT_FOUND,
+                422 => StatusCode::UNPROCESSABLE_ENTITY,
+                500 => StatusCode::INTERNAL_SERVER_ERROR,
+                _ => StatusCode::BAD_GATEWAY,
+            };
+            status_code.into_response()
+        }
+        Err(_) => (StatusCode::BAD_GATEWAY, "ID service unavailable").into_response(),
     }
 }
 
