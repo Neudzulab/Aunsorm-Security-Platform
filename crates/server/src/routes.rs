@@ -726,17 +726,12 @@ pub struct MediaTokenResponse {
     #[serde(rename = "roomId")]
     pub room_id: String,
     pub identity: String,
-    #[serde(rename = "bridgeUrl")]
-    pub bridge_url: String,
 }
 
 pub async fn generate_media_token(
     State(_state): State<Arc<ServerState>>,
     Json(request): Json<MediaTokenRequest>,
 ) -> Result<Json<MediaTokenResponse>, ApiError> {
-    let bridge_url = std::env::var("BRIDGE_URL")
-        .unwrap_or_else(|_| "wss://localhost:50047/zasian/ws".to_string());
-    
     // Generate JWT token with correct identity for SFU verification
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     
@@ -757,7 +752,6 @@ pub async fn generate_media_token(
         token,
         room_id: request.room_id,
         identity: request.identity,
-        bridge_url,
     }))
 }
 
