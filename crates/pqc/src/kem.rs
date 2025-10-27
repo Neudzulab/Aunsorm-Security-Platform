@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine as _};
 use zeroize::Zeroizing;
 
@@ -35,6 +37,60 @@ impl KemAlgorithm {
             Self::None => true,
             Self::MlKem768 => cfg!(feature = "kem-mlkem-768"),
             Self::MlKem1024 => cfg!(feature = "kem-mlkem-1024"),
+        }
+    }
+}
+
+fn normalize_algorithm_label(input: &str) -> Option<String> {
+    let mut normalized = String::new();
+    for ch in input.trim().chars() {
+        if ch.is_ascii_whitespace() {
+            continue;
+        }
+        if matches!(ch, '-' | '_') {
+            if normalized.ends_with('-') {
+                continue;
+            }
+            normalized.push('-');
+        } else {
+            normalized.push(ch.to_ascii_lowercase());
+        }
+    }
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+impl FromStr for KemAlgorithm {
+    type Err = PqcError;
+
+    fn from_str(input: &str) -> Result<Self> {
+        let trimmed = input.trim();
+        let Some(normalized) = normalize_algorithm_label(trimmed) else {
+            return Err(PqcError::invalid(
+                "kem algorithm",
+                "value must not be empty",
+            ));
+        };
+
+        let algorithm = match normalized.as_str() {
+            "none" => Self::None,
+            "ml-kem-768" | "mlkem768" | "kyber-768" | "kyber768" => Self::MlKem768,
+            "ml-kem-1024" | "mlkem1024" | "kyber-1024" | "kyber1024" => Self::MlKem1024,
+            _ => {
+                return Err(PqcError::invalid(
+                    "kem algorithm",
+                    format!("unsupported algorithm `{trimmed}`"),
+                ));
+            }
+        };
+
+        if algorithm == Self::None || algorithm.is_available() {
+            Ok(algorithm)
+        } else {
+            Err(PqcError::unavailable(algorithm.name()))
         }
     }
 }
@@ -494,6 +550,7 @@ pub fn decapsulate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn negotiation_falls_back_when_relaxed() {
@@ -535,5 +592,33 @@ mod tests {
         )
         .unwrap();
         assert_eq!(secret.as_slice(), encapsulation.shared_secret());
+    }
+
+    #[test]
+    fn parse_kem_algorithm_from_str() {
+        assert_eq!(
+            KemAlgorithm::from_str(" none ").unwrap(),
+            KemAlgorithm::None
+        );
+
+        let parsed = KemAlgorithm::from_str("ML_KEM_768").unwrap();
+        assert_eq!(parsed, KemAlgorithm::MlKem768);
+
+        match KemAlgorithm::from_str("kyber1024") {
+            Ok(alg) => {
+                assert!(cfg!(feature = "kem-mlkem-1024"));
+                assert_eq!(alg, KemAlgorithm::MlKem1024);
+            }
+            Err(err) => {
+                assert!(
+                    !cfg!(feature = "kem-mlkem-1024"),
+                    "unexpected error when parsing kyber1024: {err}",
+                );
+                assert!(matches!(err, PqcError::Unavailable { .. }));
+            }
+        }
+
+        let err = KemAlgorithm::from_str("unknown-alg").expect_err("unknown algorithm must error");
+        assert!(matches!(err, PqcError::InvalidInput { .. }));
     }
 }
