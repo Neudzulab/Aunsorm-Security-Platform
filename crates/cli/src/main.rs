@@ -68,6 +68,10 @@ use aunsorm_x509::{
     LocalHttpsCertParams as X509LocalHttpsParams, SelfSignedCertParams as X509SelfSignedParams,
     SubjectAltName as X509SubjectAltName,
 };
+use endpoint_validator::{
+    validate, AllowlistedFailure, Auth as EndpointAuth, ValidationOutcome, ValidatorConfig,
+};
+use tokio::runtime::Runtime;
 
 #[derive(Parser)]
 #[command(
@@ -113,6 +117,9 @@ enum Commands {
     /// ACME otomasyon komutları
     #[command(subcommand)]
     Acme(AcmeCommands),
+    /// Uzak API uçlarını doğrula
+    #[command(name = "validate-endpoints")]
+    ValidateEndpoints(EndpointValidatorArgs),
 }
 
 #[derive(Subcommand)]
@@ -342,6 +349,52 @@ struct AcmeRevokeArgs {
         value_parser = clap::value_parser!(u8).range(0..=10)
     )]
     reason: Option<u8>,
+}
+
+#[derive(Args)]
+struct EndpointValidatorArgs {
+    /// Test edilecek API taban URL'si (örn. <https://api.example.com>)
+    #[arg(long, value_name = "URL")]
+    base_url: String,
+    /// Authorization başlığına Bearer token ekle
+    #[arg(long, value_name = "TOKEN")]
+    auth_bearer: Option<String>,
+    /// Authorization başlığına Basic kimlik bilgisi ekle (`kullanici:sifre`)
+    #[arg(long, value_name = "KULLANICI:SIFRE")]
+    auth_basic: Option<String>,
+    /// İsteklere eklenecek ekstra HTTP başlığı (`--header "X-Key: value"`)
+    #[arg(long = "header", value_name = "AD:DEGER")]
+    headers: Vec<String>,
+    /// Keşif sürecine dahil edilecek yol
+    #[arg(long = "seed", value_name = "YOL")]
+    seeds: Vec<String>,
+    /// Aynı anda gönderilecek maksimum istek sayısı
+    #[arg(long, default_value_t = 4)]
+    concurrency: usize,
+    /// Saniye başına istek kotası (ayarlanmazsa sınırsız)
+    #[arg(long)]
+    rate_limit_per_second: Option<u32>,
+    /// POST/PUT/DELETE gibi yıkıcı metodları da çalıştır
+    #[arg(long)]
+    include_destructive: bool,
+    /// Allowlist JSON dosyası (bilinen hatalar)
+    #[arg(long, value_name = "PATH")]
+    allowlist: Option<PathBuf>,
+    /// Markdown rapor dosyası
+    #[arg(long, value_name = "PATH")]
+    markdown_report: Option<PathBuf>,
+    /// JSON sonuç dosyası
+    #[arg(long, value_name = "PATH")]
+    json_output: Option<PathBuf>,
+    /// İstek zaman aşımı (saniye)
+    #[arg(long, default_value_t = 10)]
+    timeout_secs: u64,
+    /// Yeniden deneme sayısı
+    #[arg(long, default_value_t = 2)]
+    retries: usize,
+    /// İlk geri çekilme süresi (ms)
+    #[arg(long, default_value_t = 500)]
+    backoff_ms: u64,
 }
 
 #[derive(Args)]
@@ -1218,8 +1271,12 @@ enum CliError {
     },
     #[error("ACME hesap durumu geçersiz: {0}")]
     AcmeState(String),
+    #[error("geçersiz header değeri: {0}")]
+    InvalidHeader(String),
     #[error("Geçersiz URL: {0}")]
     InvalidUrl(String),
+    #[error("endpoint validator hatası: {0}")]
+    EndpointValidator(String),
 }
 
 type CliResult<T> = Result<T, CliError>;
@@ -1622,6 +1679,7 @@ fn run(cli: Cli) -> CliResult<()> {
         Commands::Jwt(command) => handle_jwt(command),
         Commands::X509(command) => handle_x509(command),
         Commands::Acme(command) => handle_acme(command),
+        Commands::ValidateEndpoints(args) => handle_validate_endpoints(args),
     }
 }
 
@@ -3360,6 +3418,141 @@ fn handle_acme_revoke(args: &AcmeRevokeArgs) -> CliResult<()> {
     println!("  account: {}", args.account.display());
 
     Ok(())
+}
+
+fn handle_validate_endpoints(args: EndpointValidatorArgs) -> CliResult<()> {
+    let EndpointValidatorArgs {
+        base_url,
+        auth_bearer,
+        auth_basic,
+        headers,
+        seeds,
+        concurrency,
+        rate_limit_per_second,
+        include_destructive,
+        allowlist,
+        markdown_report,
+        json_output,
+        timeout_secs,
+        retries,
+        backoff_ms,
+    } = args;
+
+    if auth_bearer.is_some() && auth_basic.is_some() {
+        return Err(CliError::EndpointValidator(
+            "--auth-bearer ve --auth-basic aynı anda kullanılamaz".to_string(),
+        ));
+    }
+
+    let base_url = Url::parse(&base_url).map_err(|err| CliError::InvalidUrl(err.to_string()))?;
+    let mut config = ValidatorConfig::with_base_url(base_url);
+    if let Some(token) = auth_bearer {
+        config.auth = Some(EndpointAuth::Bearer(token));
+    }
+    if let Some(creds) = auth_basic {
+        let (username, password) = creds.split_once(':').ok_or_else(|| {
+            CliError::EndpointValidator(
+                "Basic kimlik bilgisi 'kullanici:sifre' formatında olmalıdır".to_string(),
+            )
+        })?;
+        config.auth = Some(EndpointAuth::Basic {
+            username: username.to_string(),
+            password: password.to_string(),
+        });
+    }
+
+    for header in headers {
+        let (name, value) = parse_header_pair(&header)?;
+        config.additional_headers.push((name, value));
+    }
+
+    config.seed_paths = seeds;
+    config.include_destructive = include_destructive;
+    config.concurrency = concurrency.max(1);
+    config.rate_limit_per_second = rate_limit_per_second;
+    config.timeout = Duration::from_secs(timeout_secs.max(1));
+    config.retries = retries;
+    config.backoff_base = Duration::from_millis(backoff_ms.max(1));
+    if let Some(path) = allowlist {
+        config.allowlist = load_allowlist(&path)?;
+    }
+
+    let runtime = Runtime::new().map_err(|err| {
+        CliError::EndpointValidator(format!("Tokio runtime oluşturulamadı: {err}"))
+    })?;
+    let report = runtime
+        .block_on(validate(config))
+        .map_err(|err| CliError::EndpointValidator(err.to_string()))?;
+
+    if let Some(path) = markdown_report.as_ref() {
+        fs::write(path, report.to_markdown())?;
+    }
+    if let Some(path) = json_output.as_ref() {
+        let json_output = serde_json::to_string_pretty(&report.to_json())?;
+        fs::write(path, json_output)?;
+    }
+
+    let total = report.results.len();
+    let allowlisted = report
+        .results
+        .iter()
+        .filter(|result| matches!(result.outcome, ValidationOutcome::Failure(_)) && result.allowed)
+        .count();
+    let failures = report.failures();
+    println!(
+        "endpoint-validator: {total} kontrol, {} başarısız (allowlist dışı), {allowlisted} allowlist",
+        failures.len()
+    );
+
+    if !failures.is_empty() {
+        for failure in &failures {
+            let status = failure
+                .status
+                .map_or_else(|| "-".to_string(), |value| value.to_string());
+            let latency = failure
+                .latency_ms
+                .map_or_else(|| "-".to_string(), |value| value.to_string());
+            let cause = failure
+                .likely_cause
+                .clone()
+                .unwrap_or_else(|| "neden belirtilmedi".to_string());
+            println!(
+                "- {} {} → status={} latency={}ms | {}",
+                failure.method, failure.path, status, latency, cause
+            );
+            if let Some(suggested) = &failure.suggested_fix {
+                println!("  öneri: {suggested}");
+            }
+            if let Some(excerpt) = &failure.response_excerpt {
+                println!("  örnek: {excerpt}");
+            }
+        }
+        return Err(CliError::EndpointValidator(format!(
+            "{} endpoint hatası bulundu",
+            failures.len()
+        )));
+    }
+
+    println!("Tüm endpoint kontrolleri başarıyla tamamlandı.");
+    Ok(())
+}
+
+fn load_allowlist(path: &Path) -> CliResult<Vec<AllowlistedFailure>> {
+    let data = fs::read(path)?;
+    let mut entries: Vec<AllowlistedFailure> = serde_json::from_slice(&data)?;
+    entries.sort();
+    Ok(entries)
+}
+
+fn parse_header_pair(input: &str) -> CliResult<(HeaderName, HeaderValue)> {
+    let (name, value) = input
+        .split_once(':')
+        .ok_or_else(|| CliError::InvalidHeader(input.to_string()))?;
+    let header_name = HeaderName::from_bytes(name.trim().as_bytes())
+        .map_err(|_| CliError::InvalidHeader(input.to_string()))?;
+    let header_value = HeaderValue::from_str(value.trim())
+        .map_err(|_| CliError::InvalidHeader(input.to_string()))?;
+    Ok((header_name, header_value))
 }
 
 #[derive(Serialize)]
