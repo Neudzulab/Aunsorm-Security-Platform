@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use zeroize::Zeroizing;
 
 use pqcrypto_traits::sign::{DetachedSignature as _, PublicKey as _, SecretKey as _};
@@ -236,6 +238,63 @@ impl SignatureAlgorithm {
                     "SPHINCS+ specification §5 — Parameter set SHAKE-128f-simple",
                 ],
             },
+        }
+    }
+}
+
+fn normalize_algorithm_label(input: &str) -> Option<String> {
+    let mut normalized = String::new();
+    for ch in input.trim().chars() {
+        if ch.is_ascii_whitespace() {
+            continue;
+        }
+        if matches!(ch, '-' | '_') {
+            if normalized.ends_with('-') {
+                continue;
+            }
+            normalized.push('-');
+        } else {
+            normalized.push(ch.to_ascii_lowercase());
+        }
+    }
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(normalized)
+    }
+}
+
+impl FromStr for SignatureAlgorithm {
+    type Err = PqcError;
+
+    fn from_str(input: &str) -> Result<Self> {
+        let trimmed = input.trim();
+        let Some(normalized) = normalize_algorithm_label(trimmed) else {
+            return Err(PqcError::invalid(
+                "signature algorithm",
+                "value must not be empty",
+            ));
+        };
+
+        let algorithm = match normalized.as_str() {
+            "ml-dsa-65" | "mldsa65" | "dilithium5" | "dilithium-5" => Self::MlDsa65,
+            "falcon-512" | "falcon512" => Self::Falcon512,
+            "sphincs+-shake-128f"
+            | "sphincs-shake-128f"
+            | "sphincsplus-shake-128f"
+            | "sphincsplusshake128f" => Self::SphincsShake128f,
+            _ => {
+                return Err(PqcError::invalid(
+                    "signature algorithm",
+                    format!("unsupported algorithm `{trimmed}`"),
+                ));
+            }
+        };
+
+        if algorithm.is_available() {
+            Ok(algorithm)
+        } else {
+            Err(PqcError::unavailable(algorithm.name()))
         }
     }
 }
@@ -737,6 +796,7 @@ fn ensure_available(algorithm: SignatureAlgorithm) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     const MESSAGE: &[u8] = b"Aunsorm PQC test vector";
 
@@ -825,6 +885,46 @@ mod tests {
             &signature,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn parse_signature_algorithm_from_str() {
+        assert_eq!(
+            SignatureAlgorithm::from_str(" ml-dsa-65 ").unwrap(),
+            SignatureAlgorithm::MlDsa65,
+        );
+
+        match SignatureAlgorithm::from_str("falcon512") {
+            Ok(alg) => {
+                assert!(SignatureAlgorithm::Falcon512.is_available());
+                assert_eq!(alg, SignatureAlgorithm::Falcon512);
+            }
+            Err(err) => {
+                assert!(
+                    !SignatureAlgorithm::Falcon512.is_available(),
+                    "unexpected error when parsing falcon512: {err}",
+                );
+                assert!(matches!(err, PqcError::Unavailable { .. }));
+            }
+        }
+
+        match SignatureAlgorithm::from_str("sphincsplus-shake-128f") {
+            Ok(alg) => {
+                assert!(SignatureAlgorithm::SphincsShake128f.is_available());
+                assert_eq!(alg, SignatureAlgorithm::SphincsShake128f);
+            }
+            Err(err) => {
+                assert!(
+                    !SignatureAlgorithm::SphincsShake128f.is_available(),
+                    "unexpected error when parsing sphincs+: {err}",
+                );
+                assert!(matches!(err, PqcError::Unavailable { .. }));
+            }
+        }
+
+        let err =
+            SignatureAlgorithm::from_str("unknown").expect_err("unknown algorithm must error");
+        assert!(matches!(err, PqcError::InvalidInput { .. }));
     }
 
     #[test]
