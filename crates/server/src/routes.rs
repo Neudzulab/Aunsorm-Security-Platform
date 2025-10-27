@@ -6,6 +6,10 @@ use axum::{
     routing::{get, head, post},
     Json, Router,
 };
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use ed25519_dalek::SIGNATURE_LENGTH;
+use hex::decode_to_slice;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -66,15 +70,15 @@ fn map_jwt_error(err: &JwtError) -> String {
 }
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
+use crate::fabric::{FabricDidError, FabricDidVerificationRequest};
 use crate::state::ServerState;
-
-// Helper function for base64url validation
-fn is_valid_base64url(s: &str) -> bool {
-    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-    URL_SAFE_NO_PAD.decode(s).is_ok()
-}
+use crate::transparency::TransparencyEvent as LedgerTransparencyEvent;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
+
+const ZASIAN_MEDIA_AUDIENCE: &str = "zasian-media";
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -619,27 +623,37 @@ pub async fn verify_jwt_token(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<JwtVerifyRequest>,
 ) -> Json<JwtVerifyResponse> {
-    let token = request.token.trim();
-    tracing::info!(
-        "ROUTES.RS: verify_jwt_token called with token length: {}",
-        token.len()
-    );
+    Json(verify_token_for_audience(&state, request.token.trim(), state.audience()).await)
+}
+
+pub async fn verify_media_token(
+    State(state): State<Arc<ServerState>>,
+    Json(request): Json<JwtVerifyRequest>,
+) -> Json<JwtVerifyResponse> {
+    Json(verify_token_for_audience(&state, request.token.trim(), ZASIAN_MEDIA_AUDIENCE).await)
+}
+
+async fn verify_token_for_audience(
+    state: &Arc<ServerState>,
+    token: &str,
+    expected_audience: &str,
+) -> JwtVerifyResponse {
+    tracing::info!("ROUTES.RS: verifying token with expected audience {expected_audience}");
 
     if token.is_empty() {
-        return Json(JwtVerifyResponse {
+        return JwtVerifyResponse {
             valid: false,
             payload: None,
             error: Some("Token is required".to_string()),
-        });
+        };
     }
 
     let verifier = state.verifier().clone();
     let issuer = state.issuer().to_string();
-    let audience = state.audience().to_string();
 
     let options = VerificationOptions {
         issuer: Some(issuer.clone()),
-        audience: Some(audience.clone()),
+        audience: Some(expected_audience.to_owned()),
         require_jti: true,
         ..VerificationOptions::default()
     };
@@ -649,11 +663,11 @@ pub async fn verify_jwt_token(
             let payload_value = match serde_json::to_value(&claims) {
                 Ok(value) => value,
                 Err(err) => {
-                    return Json(JwtVerifyResponse {
+                    return JwtVerifyResponse {
                         valid: false,
                         payload: None,
                         error: Some(format!("Token payload error: {err}")),
-                    });
+                    };
                 }
             };
 
@@ -661,18 +675,18 @@ pub async fn verify_jwt_token(
                 match state.is_token_active(&jti, SystemTime::now()).await {
                     Ok(true) => {}
                     Ok(false) => {
-                        return Json(JwtVerifyResponse {
+                        return JwtVerifyResponse {
                             valid: false,
                             payload: None,
                             error: Some("Token revoked or expired".to_string()),
-                        });
+                        };
                     }
                     Err(err) => {
-                        return Json(JwtVerifyResponse {
+                        return JwtVerifyResponse {
                             valid: false,
                             payload: None,
                             error: Some(format!("Token ledger error: {err}")),
-                        });
+                        };
                     }
                 }
             }
@@ -683,24 +697,24 @@ pub async fn verify_jwt_token(
                     .subject
                     .clone()
                     .unwrap_or_else(|| "unknown".to_string()),
-                audience: audience_to_string(claims.audience.as_ref(), &audience),
+                audience: audience_to_string(claims.audience.as_ref(), expected_audience),
                 issuer: claims.issuer.clone().unwrap_or_else(|| issuer.clone()),
                 expiration: claims.expiration.map_or(0, system_time_to_unix_seconds),
                 related_id,
                 claims: payload_value,
             };
 
-            Json(JwtVerifyResponse {
+            JwtVerifyResponse {
                 valid: true,
                 payload: Some(payload),
                 error: None,
-            })
+            }
         }
-        Err(err) => Json(JwtVerifyResponse {
+        Err(err) => JwtVerifyResponse {
             valid: false,
             payload: None,
             error: Some(map_jwt_error(&err)),
-        }),
+        },
     }
 }
 
@@ -717,6 +731,15 @@ pub struct MediaTokenRequest {
 #[derive(Serialize)]
 pub struct MediaTokenResponse {
     pub token: String,
+    #[serde(rename = "ttlSeconds")]
+    pub ttl_seconds: u64,
+    pub driver: String,
+    #[serde(rename = "bridgeUrl")]
+    pub bridge_url: String,
+    #[serde(rename = "issuedAt")]
+    pub issued_at: String,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: String,
     #[serde(rename = "roomId")]
     pub room_id: String,
     pub identity: String,
@@ -726,67 +749,84 @@ pub async fn generate_media_token(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<MediaTokenRequest>,
 ) -> Result<Json<MediaTokenResponse>, ApiError> {
-    let MediaTokenRequest {
-        room_id,
-        identity,
-        participant_name,
-        metadata,
-    } = request;
+    if request.room_id.trim().is_empty() {
+        return Err(ApiError::invalid_request("roomId boş olamaz"));
+    }
+    if request.identity.trim().is_empty() {
+        return Err(ApiError::invalid_request("identity boş olamaz"));
+    }
+    if request.identity.chars().any(char::is_control) {
+        return Err(ApiError::invalid_request(
+            "identity kontrol karakteri içeremez",
+        ));
+    }
+
+    let participant_name = request
+        .participant_name
+        .clone()
+        .unwrap_or_else(|| request.identity.clone());
 
     let mut claims = Claims::new();
-    claims.issuer = Some(state.issuer().to_string());
-    claims.subject = Some(identity.clone());
-    claims.audience = Some(Audience::Single(state.audience().to_string()));
+    claims.subject = Some(request.identity.clone());
+    claims.issuer = Some(state.issuer().to_owned());
+    claims.audience = Some(Audience::Single(ZASIAN_MEDIA_AUDIENCE.to_owned()));
+    claims.ensure_jwt_id();
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
-    claims.ensure_jwt_id();
     claims
         .extra
-        .insert("roomId".to_string(), Value::String(room_id.clone()));
-    if let Some(name) = participant_name {
-        claims
-            .extra
-            .insert("participantName".to_string(), Value::String(name));
+        .insert("roomId".to_owned(), Value::String(request.room_id.clone()));
+    claims.extra.insert(
+        "participantName".to_owned(),
+        Value::String(participant_name.clone()),
+    );
+    if let Some(metadata_value) = request.metadata.clone() {
+        claims.extra.insert("metadata".to_owned(), metadata_value);
     }
-    if let Some(metadata_value) = metadata {
-        claims.extra.insert("metadata".to_string(), metadata_value);
-    }
-
-    let expires_at = claims
-        .expiration
-        .expect("media token claims must set expiration");
-    let jti = claims
-        .jwt_id
-        .clone()
-        .expect("media token claims must set jti");
 
     let token = state
         .signer()
         .sign(&claims)
-        .map_err(|err| ApiError::server_error(format!("JWT oluşturulamadı: {err}")))?;
+        .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
+    let issued_at = claims.issued_at.unwrap_or_else(|| SystemTime::now());
+    let expires_at = claims
+        .expiration
+        .ok_or_else(|| ApiError::server_error("exp claim is missing"))?;
+    let jti = claims
+        .jwt_id
+        .clone()
+        .ok_or_else(|| ApiError::server_error("JTI üretilemedi"))?;
 
-    if let Err(err) = state
+    state
         .record_token(
             &jti,
             expires_at,
             claims.subject.as_deref(),
-            claims.audience.as_ref().and_then(|aud| match aud {
-                Audience::Single(value) => Some(value.as_str()),
-                Audience::Multiple(values) => values.first().map(String::as_str),
-            }),
+            Some(ZASIAN_MEDIA_AUDIENCE),
         )
         .await
-    {
-        return Err(ApiError::server_error(format!(
-            "Token defteri kaydı başarısız: {err}"
-        )));
-    }
+        .map_err(|err| ApiError::server_error(format!("Token kaydı başarısız: {err}")))?;
+
+    let ttl_seconds = state.token_ttl().as_secs();
+    let bridge_url = std::env::var("ZASIAN_WEBSOCKET_URL")
+        .unwrap_or_else(|_| "wss://localhost:50045/zasian".to_owned());
 
     Ok(Json(MediaTokenResponse {
         token,
-        room_id,
-        identity,
+        ttl_seconds,
+        driver: "zasian".to_owned(),
+        bridge_url,
+        issued_at: format_timestamp(issued_at),
+        expires_at: format_timestamp(expires_at),
+        room_id: request.room_id,
+        identity: request.identity,
     }))
+}
+
+fn format_timestamp(time: SystemTime) -> String {
+    OffsetDateTime::from(time)
+        .format(&Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_owned())
 }
 
 // MDM endpoints
@@ -1022,13 +1062,11 @@ pub async fn fetch_certificate_plan(
 pub struct OAuthBeginRequest {
     pub client_id: String,
     pub redirect_uri: String,
-    #[allow(dead_code)]
     pub code_challenge: String,
     pub code_challenge_method: String,
-    #[allow(dead_code)]
     pub state: Option<String>,
-    #[allow(dead_code)]
     pub scope: Option<String>,
+    pub subject: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1038,54 +1076,140 @@ pub struct OAuthBeginResponse {
     pub expires_in: u64,
 }
 
+fn normalize_scope(
+    scope: Option<&str>,
+    allowed_scopes: &[String],
+) -> Result<Option<String>, ApiError> {
+    let Some(scope_value) = scope else {
+        return Ok(None);
+    };
+    let trimmed = scope_value.trim();
+    if trimmed.is_empty() {
+        return Err(ApiError::invalid_scope("scope cannot be empty"));
+    }
+    let mut normalized = Vec::new();
+    let mut seen = HashSet::new();
+    for token in trimmed.split_whitespace() {
+        if token.chars().any(char::is_control) {
+            return Err(ApiError::invalid_scope(
+                "scope cannot contain control characters",
+            ));
+        }
+        if !allowed_scopes.iter().any(|allowed| allowed == token) {
+            return Err(ApiError::invalid_scope(format!(
+                "scope value not allowed: {token}",
+            )));
+        }
+        if seen.insert(token) {
+            normalized.push(token);
+        }
+    }
+    Ok(Some(normalized.join(" ")))
+}
+
 pub async fn begin_auth(
-    State(_state): State<Arc<ServerState>>,
-    Json(request): Json<OAuthBeginRequest>,
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<OAuthBeginRequest>,
 ) -> Result<Json<OAuthBeginResponse>, ApiError> {
-    if request.code_challenge_method != "S256" {
-        return Err(ApiError::invalid_request("PKCE method only supports S256"));
-    }
-
-    if request.client_id.is_empty() {
-        return Err(ApiError::invalid_request("missing client_id"));
-    }
-
-    if request.redirect_uri.is_empty() {
-        return Err(ApiError::invalid_request("missing redirect_uri"));
-    }
-
-    if !request.redirect_uri.starts_with("https://") {
-        return Err(ApiError::invalid_request("Redirect URI must be HTTPS"));
-    }
-
-    // Validate code_challenge base64url format
-    if !is_valid_base64url(&request.code_challenge) {
+    if payload.code_challenge_method != "S256" {
         return Err(ApiError::invalid_request(
-            "code_challenge must be valid base64url",
+            "PKCE yöntemi yalnızca S256 desteklenir",
         ));
     }
 
-    // Validate scope if provided
-    if let Some(ref scope) = request.scope {
-        if scope == "invalid-scope" {
-            return Err(ApiError::invalid_request("Invalid scope"));
+    if payload.client_id.chars().any(char::is_control) {
+        return Err(ApiError::invalid_request(
+            "client_id kontrol karakteri içeremez",
+        ));
+    }
+    let client_id = payload.client_id.trim();
+    if client_id.is_empty() {
+        return Err(ApiError::invalid_request("client_id boş bırakılamaz"));
+    }
+    let client = state
+        .oauth_client(client_id)
+        .ok_or_else(|| ApiError::invalid_client("client_id kayıtlı değil"))?;
+
+    let redirect_uri = payload.redirect_uri.trim();
+    if redirect_uri.is_empty() {
+        return Err(ApiError::invalid_redirect_uri("redirect_uri gereklidir"));
+    }
+
+    let is_https = redirect_uri.starts_with("https://");
+    let is_localhost = redirect_uri.starts_with("http://localhost")
+        || redirect_uri.starts_with("http://127.0.0.1");
+    if !(is_https || is_localhost) {
+        return Err(ApiError::invalid_redirect_uri(
+            "redirect_uri HTTPS kullanmalıdır (localhost için HTTP izinli)",
+        ));
+    }
+    if !client.allows_redirect(redirect_uri) {
+        return Err(ApiError::invalid_redirect_uri(
+            "redirect_uri kayıtlı istemci için yetkili değil",
+        ));
+    }
+
+    if let Some(state_value) = &payload.state {
+        if state_value.chars().any(char::is_control) {
+            return Err(ApiError::invalid_request(
+                "state kontrol karakteri içeremez",
+            ));
         }
     }
 
+    let normalized_scope = normalize_scope(payload.scope.as_deref(), client.allowed_scopes())?;
+
+    let subject = if let Some(subject) = payload.subject {
+        if subject.chars().any(char::is_control) {
+            return Err(ApiError::invalid_request(
+                "subject kontrol karakteri içeremez",
+            ));
+        }
+        let trimmed = subject.trim();
+        if trimmed.is_empty() {
+            return Err(ApiError::invalid_request("subject cannot be empty"));
+        }
+        trimmed.to_owned()
+    } else {
+        format!("client:{client_id}")
+    };
+
+    if URL_SAFE_NO_PAD
+        .decode(payload.code_challenge.as_bytes())
+        .map(|bytes| bytes.len())
+        .unwrap_or_default()
+        != Sha256::output_size()
+    {
+        return Err(ApiError::invalid_request(
+            "code_challenge value must be base64url encoded SHA-256 output",
+        ));
+    }
+
+    let code = state
+        .register_auth_request(
+            subject,
+            client_id.to_owned(),
+            redirect_uri.to_owned(),
+            payload.state.clone(),
+            normalized_scope,
+            payload.code_challenge,
+        )
+        .await;
+
     Ok(Json(OAuthBeginResponse {
-        code: "auth_code_123".to_string(),
-        state: request.state,
-        expires_in: 300,
+        code,
+        state: payload.state,
+        expires_in: crate::state::auth_ttl().as_secs(),
     }))
 }
 
 #[derive(Deserialize)]
 pub struct OAuthTokenRequest {
     pub grant_type: String,
-    #[allow(dead_code)]
-    pub code: Option<String>,
-    #[allow(dead_code)]
-    pub redirect_uri: Option<String>,
+    pub code: String,
+    pub code_verifier: String,
+    pub client_id: String,
+    pub redirect_uri: String,
 }
 
 #[derive(Serialize)]
@@ -1096,17 +1220,88 @@ pub struct OAuthTokenResponse {
 }
 
 pub async fn exchange_token(
-    State(_state): State<Arc<ServerState>>,
-    Json(request): Json<OAuthTokenRequest>,
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<OAuthTokenRequest>,
 ) -> Result<Json<OAuthTokenResponse>, ApiError> {
-    if request.grant_type != "authorization_code" {
-        return Err(ApiError::invalid_request("Unsupported grant type"));
+    if payload.grant_type != "authorization_code" {
+        return Err(ApiError::invalid_request(
+            "grant_type 'authorization_code' olmalıdır",
+        ));
     }
 
+    if payload.code_verifier.len() < 43 || payload.code_verifier.len() > 128 {
+        return Err(ApiError::invalid_request(
+            "code_verifier uzunluğu 43 ile 128 karakter arasında olmalıdır",
+        ));
+    }
+
+    let auth_request = state
+        .consume_auth_request(&payload.code)
+        .await
+        .ok_or_else(|| ApiError::invalid_grant("Authorization code not found or expired"))?;
+
+    if auth_request.client_id != payload.client_id {
+        return Err(ApiError::invalid_client("client_id eşleşmiyor"));
+    }
+
+    if auth_request.redirect_uri != payload.redirect_uri {
+        return Err(ApiError::invalid_grant("redirect_uri eşleşmiyor"));
+    }
+
+    let digest = Sha256::digest(payload.code_verifier.as_bytes());
+    let expected_challenge = URL_SAFE_NO_PAD.encode(digest);
+    if expected_challenge != auth_request.code_challenge {
+        return Err(ApiError::invalid_grant("PKCE doğrulaması başarısız"));
+    }
+
+    let mut claims = Claims::new();
+    claims.subject = Some(auth_request.subject);
+    claims.issuer = Some(state.issuer().to_owned());
+    claims.audience = Some(Audience::Single(state.audience().to_owned()));
+    claims.ensure_jwt_id();
+    claims.set_issued_now();
+    claims.set_expiration_from_now(state.token_ttl());
+    claims.extra.insert(
+        "client_id".to_string(),
+        Value::String(payload.client_id.clone()),
+    );
+    if let Some(scope) = auth_request.scope {
+        claims
+            .extra
+            .insert("scope".to_string(), Value::String(scope));
+    }
+
+    let access_token = state
+        .signer()
+        .sign(&claims)
+        .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
+    let jti = claims
+        .jwt_id
+        .clone()
+        .ok_or_else(|| ApiError::server_error("JTI üretilemedi"))?;
+    let expires_at = claims
+        .expiration
+        .ok_or_else(|| ApiError::server_error("exp claim is missing"))?;
+    let audience_repr = claims
+        .audience
+        .as_ref()
+        .map(|aud| serde_json::to_string(aud))
+        .transpose()
+        .map_err(|err| ApiError::server_error(format!("audience serileştirilemedi: {err}")))?;
+    state
+        .record_token(
+            &jti,
+            expires_at,
+            claims.subject.as_deref(),
+            audience_repr.as_deref(),
+        )
+        .await
+        .map_err(|err| ApiError::server_error(format!("Token kaydı başarısız: {err}")))?;
+
     Ok(Json(OAuthTokenResponse {
-        access_token: "test_token_123".to_string(),
+        access_token,
         token_type: "Bearer".to_string(),
-        expires_in: 3600,
+        expires_in: state.token_ttl().as_secs(),
     }))
 }
 
@@ -1141,38 +1336,80 @@ pub struct OAuthIntrospectResponse {
 }
 
 pub async fn introspect_token(
-    State(_state): State<Arc<ServerState>>,
+    State(state): State<Arc<ServerState>>,
     Json(request): Json<OAuthIntrospectRequest>,
-) -> Json<OAuthIntrospectResponse> {
-    // For testing, treat "test_token_123" as active, all others as inactive
-    if request.token == "test_token_123" {
-        Json(OAuthIntrospectResponse {
-            active: true,
-            scope: Some("read write".to_string()),
-            client_id: Some("demo-client".to_string()),
-            username: Some("alice".to_string()),
-            token_type: Some("Bearer".to_string()),
-            sub: Some("alice".to_string()),
-            exp: None,
-            iat: None,
-            iss: None,
-            aud: None,
-            jti: None,
-        })
-    } else {
-        Json(OAuthIntrospectResponse {
+) -> Result<Json<OAuthIntrospectResponse>, ApiError> {
+    let token = request.token.trim();
+    if token.is_empty() {
+        return Err(ApiError::invalid_request("token gereklidir"));
+    }
+
+    let options = VerificationOptions {
+        issuer: Some(state.issuer().to_owned()),
+        audience: Some(state.audience().to_owned()),
+        require_jti: true,
+        ..VerificationOptions::default()
+    };
+
+    match state.verifier().verify(token, &options) {
+        Ok(claims) => {
+            let now = SystemTime::now();
+            let jti = claims.jwt_id.clone();
+            let active = if let Some(ref jti_value) = jti {
+                state.is_token_active(jti_value, now).await.map_err(|err| {
+                    ApiError::server_error(format!("Token durumu sorgulanamadı: {err}"))
+                })?
+            } else {
+                false
+            };
+
+            let exp = claims.expiration.map(system_time_to_unix_seconds);
+            let iat = claims.issued_at.map(system_time_to_unix_seconds);
+            let client_id = claims
+                .extra
+                .get("client_id")
+                .and_then(|value| value.as_str())
+                .map(str::to_owned);
+            let scope = claims
+                .extra
+                .get("scope")
+                .and_then(|value| value.as_str())
+                .map(str::to_owned);
+            let aud = claims.audience.as_ref().and_then(|aud| match aud {
+                Audience::Single(value) => Some(value.clone()),
+                Audience::Multiple(values) => values.first().cloned(),
+            });
+
+            Ok(Json(OAuthIntrospectResponse {
+                active,
+                scope,
+                client_id,
+                username: claims.subject.clone(),
+                token_type: Some("Bearer".to_string()),
+                exp,
+                iat,
+                iss: claims.issuer.clone(),
+                aud,
+                sub: claims.subject,
+                jti,
+            }))
+        }
+        Err(JwtError::Expired) => Ok(Json(OAuthIntrospectResponse {
             active: false,
             scope: None,
             client_id: None,
             username: None,
-            token_type: None,
+            token_type: Some("Bearer".to_string()),
             exp: None,
             iat: None,
-            iss: None,
-            aud: None,
+            iss: Some(state.issuer().to_owned()),
+            aud: Some(state.audience().to_owned()),
             sub: None,
             jti: None,
-        })
+        })),
+        Err(err) => Err(ApiError::invalid_request(format!(
+            "Token doğrulanamadı: {err}"
+        ))),
     }
 }
 
@@ -1209,55 +1446,43 @@ pub enum OAuthTransparencyEvent {
 
 pub async fn oauth_transparency(
     State(state): State<Arc<ServerState>>,
-) -> Json<OAuthTransparencyResponse> {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+) -> Result<Json<OAuthTransparencyResponse>, ApiError> {
+    let snapshot = state
+        .transparency_ledger_snapshot()
+        .await
+        .map_err(|err| ApiError::server_error(format!("Şeffaflık günlüğü alınamadı: {err}")))?;
 
-    // Get the actual transparency tree snapshot from the state
-    let snapshot = state.transparency_tree_snapshot().await;
-    let transcript_hash = snapshot
-        .transcript_hash()
-        .expect("transcript hash")
-        .map(hex::encode);
-
-    // Get the server's public key as a JWK
-    let jwk = state.jwks().keys.first().cloned().unwrap_or_else(|| {
-        // Fallback to a dummy JWK if none available
-        Jwk {
-            kid: "test-key".to_string(),
-            kty: "OKP".to_string(),
-            crv: "Ed25519".to_string(),
-            alg: "EdDSA".to_string(),
-            x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
-        }
-    });
-
-    Json(OAuthTransparencyResponse {
-        transcript_hash,
-        entries: vec![
-            OAuthTransparencyEntry {
-                index: 0,
-                timestamp: now - 100,
-                event: OAuthTransparencyEvent::KeyPublished { jwk },
-                hash: "key123".to_string(),
-                previous_hash: None,
-            },
-            OAuthTransparencyEntry {
-                index: 1,
-                timestamp: now,
-                event: OAuthTransparencyEvent::TokenIssued {
-                    jti: "test-jti-123".to_string(),
-                    subject_hash: Some("alice-hash".to_string()),
-                    audience: Some("aunsorm-audience".to_string()),
-                    expires_at: now + 3600,
+    let entries = snapshot
+        .entries
+        .into_iter()
+        .map(|entry| OAuthTransparencyEntry {
+            index: entry.index,
+            timestamp: entry.timestamp,
+            event: match entry.event {
+                LedgerTransparencyEvent::KeyPublished { jwk } => {
+                    OAuthTransparencyEvent::KeyPublished { jwk }
+                }
+                LedgerTransparencyEvent::TokenIssued {
+                    jti,
+                    subject_hash,
+                    audience,
+                    expires_at,
+                } => OAuthTransparencyEvent::TokenIssued {
+                    jti,
+                    subject_hash,
+                    audience,
+                    expires_at,
                 },
-                hash: "abc123".to_string(),
-                previous_hash: Some("key123".to_string()),
             },
-        ],
-    })
+            hash: entry.hash,
+            previous_hash: entry.previous_hash,
+        })
+        .collect();
+
+    Ok(Json(OAuthTransparencyResponse {
+        transcript_hash: snapshot.transcript_hash,
+        entries,
+    }))
 }
 
 // ID service endpoints
@@ -1309,87 +1534,338 @@ pub async fn head_generate_id(
 
 // Fabric DID endpoints
 #[derive(Deserialize)]
-pub struct FabricDidRequest {
+pub struct FabricDidProofPayload {
+    pub challenge: String,
+    pub signature: String,
+    pub block_hash: String,
+    pub transaction_id: String,
+    #[serde(rename = "timestamp_ms")]
+    pub timestamp_ms: u64,
+}
+
+#[derive(Deserialize)]
+pub struct FabricDidVerificationPayload {
     pub did: String,
-    pub anchor: String,
+    pub channel: String,
+    pub proof: FabricDidProofPayload,
 }
 
 #[derive(Serialize)]
-pub struct FabricDidResponse {
-    pub valid: bool,
-    pub message: String,
+pub struct FabricLedgerAnchorResponse {
+    #[serde(rename = "blockIndex")]
+    pub block_index: u64,
+    #[serde(rename = "blockHash")]
+    pub block_hash: String,
+    #[serde(rename = "transactionId")]
+    pub transaction_id: String,
+    #[serde(rename = "timestampMs")]
+    pub timestamp_ms: u64,
+}
+
+#[derive(Serialize)]
+pub struct FabricVerificationMethodResponse {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub ty: String,
+    pub controller: String,
+    #[serde(rename = "publicKeyBase64")]
+    pub public_key_base64: String,
+}
+
+#[derive(Serialize)]
+pub struct FabricVerificationServiceResponse {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub ty: String,
+    pub endpoint: String,
+}
+
+#[derive(Serialize)]
+pub struct FabricVerificationAuditResponse {
+    pub challenge: String,
+    #[serde(rename = "checkedAtMs")]
+    pub checked_at_ms: u64,
+    #[serde(rename = "clockSkewMs")]
+    pub clock_skew_ms: u64,
+}
+
+#[derive(Serialize)]
+pub struct FabricDidVerificationResponse {
+    pub did: String,
+    pub verified: bool,
+    pub controller: String,
+    pub status: String,
+    pub channel: String,
+    #[serde(rename = "mspId")]
+    pub msp_id: String,
+    #[serde(rename = "ledger_anchor")]
+    pub ledger_anchor: FabricLedgerAnchorResponse,
+    #[serde(rename = "verification_method")]
+    pub verification_method: FabricVerificationMethodResponse,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service: Option<FabricVerificationServiceResponse>,
+    pub audit: FabricVerificationAuditResponse,
+}
+
+fn map_fabric_error(error: FabricDidError) -> ApiError {
+    match error {
+        FabricDidError::UnknownDid(did) => {
+            ApiError::invalid_request(format!("bilinmeyen DID: {did}"))
+        }
+        FabricDidError::ChannelMismatch { expected, found } => ApiError::invalid_request(format!(
+            "channel beklenen değeri karşılamıyor: beklenen {expected}, bulundu {found}"
+        )),
+        FabricDidError::BlockHashMismatch { expected, found } => {
+            ApiError::invalid_request(format!(
+                "block_hash ledger kaydıyla eşleşmiyor: beklenen {}, bulundu {}",
+                hex::encode(expected),
+                hex::encode(found)
+            ))
+        }
+        FabricDidError::TransactionMismatch { expected, found } => {
+            ApiError::invalid_request(format!(
+                "transaction_id beklenen değeri karşılamıyor: beklenen {expected}, bulundu {found}"
+            ))
+        }
+        FabricDidError::ChallengeMismatch => {
+            ApiError::invalid_request("challenge canonical biçimle eşleşmiyor")
+        }
+        FabricDidError::SignatureInvalid => ApiError::invalid_request("imza doğrulanamadı"),
+        FabricDidError::Clock(err) => {
+            ApiError::server_error(format!("sistem saati okunamadı: {err}"))
+        }
+        FabricDidError::ClockOverflow => {
+            ApiError::server_error("sistem saati hesaplaması taşma üretti")
+        }
+        FabricDidError::ClockSkew {
+            delta_ms,
+            allowed_ms,
+        } => ApiError::invalid_request(format!(
+            "clock skew çok yüksek: {delta_ms}ms (izin verilen {allowed_ms}ms)"
+        )),
+    }
 }
 
 pub async fn verify_fabric_did(
-    State(_state): State<Arc<ServerState>>,
-    Json(request): Json<FabricDidRequest>,
-) -> Result<Json<FabricDidResponse>, ApiError> {
-    if request.did.is_empty() || request.anchor.is_empty() {
-        return Err(ApiError::invalid_request("DID and anchor are required"));
+    State(state): State<Arc<ServerState>>,
+    Json(payload): Json<FabricDidVerificationPayload>,
+) -> Result<Json<FabricDidVerificationResponse>, ApiError> {
+    let did = payload.did.trim();
+    if did.is_empty() {
+        return Err(ApiError::invalid_request("did boş olamaz"));
+    }
+    let channel = payload.channel.trim();
+    if channel.is_empty() {
+        return Err(ApiError::invalid_request("channel boş olamaz"));
+    }
+    let transaction_id = payload.proof.transaction_id.trim();
+    if transaction_id.is_empty() {
+        return Err(ApiError::invalid_request("transaction_id boş olamaz"));
     }
 
-    // Simulate validation - fail if anchor is "tampered"
-    let valid = !request.anchor.contains("tampered");
+    let challenge = URL_SAFE_NO_PAD
+        .decode(payload.proof.challenge.as_bytes())
+        .map_err(|_| ApiError::invalid_request("challenge base64url çözülemedi"))?;
+    if challenge.is_empty() {
+        return Err(ApiError::invalid_request("challenge boş olamaz"));
+    }
 
-    Ok(Json(FabricDidResponse {
-        valid,
-        message: if valid {
-            "DID verified successfully".to_string()
-        } else {
-            "DID verification failed".to_string()
+    let signature_bytes = URL_SAFE_NO_PAD
+        .decode(payload.proof.signature.as_bytes())
+        .map_err(|_| ApiError::invalid_request("signature base64url çözülemedi"))?;
+    if signature_bytes.len() != SIGNATURE_LENGTH {
+        return Err(ApiError::invalid_request(
+            "signature uzunluğu 64 bayt olmalıdır",
+        ));
+    }
+    let mut signature = [0_u8; SIGNATURE_LENGTH];
+    signature.copy_from_slice(&signature_bytes);
+
+    let mut block_hash = [0_u8; 32];
+    decode_to_slice(payload.proof.block_hash.as_bytes(), &mut block_hash)
+        .map_err(|_| ApiError::invalid_request("block_hash hex formatında olmalıdır"))?;
+
+    let request = FabricDidVerificationRequest {
+        did,
+        channel,
+        block_hash,
+        transaction_id,
+        timestamp_ms: payload.proof.timestamp_ms,
+        challenge: &challenge,
+        signature,
+    };
+
+    let verification = state
+        .fabric_registry()
+        .verify(request)
+        .map_err(map_fabric_error)?;
+
+    let document = verification.document;
+    let anchor = &document.anchor;
+    let method = &document.verification_method;
+    let service = document
+        .service
+        .as_ref()
+        .map(|svc| FabricVerificationServiceResponse {
+            id: svc.id.clone(),
+            ty: svc.r#type.to_owned(),
+            endpoint: svc.endpoint.clone(),
+        });
+    let challenge_b64 = URL_SAFE_NO_PAD.encode(&verification.challenge);
+    let public_key_b64 = URL_SAFE_NO_PAD.encode(method.public_key_bytes());
+
+    let response = FabricDidVerificationResponse {
+        did: document.did.clone(),
+        verified: true,
+        controller: document.controller.clone(),
+        status: document.status.as_str().to_owned(),
+        channel: document.channel.clone(),
+        msp_id: document.msp_id.clone(),
+        ledger_anchor: FabricLedgerAnchorResponse {
+            block_index: anchor.block_index,
+            block_hash: anchor.block_hash_hex(),
+            transaction_id: anchor.transaction_id.clone(),
+            timestamp_ms: anchor.timestamp_ms,
         },
-    }))
+        verification_method: FabricVerificationMethodResponse {
+            id: method.id.clone(),
+            ty: method.algorithm().to_owned(),
+            controller: method.controller.clone(),
+            public_key_base64: public_key_b64,
+        },
+        service,
+        audit: FabricVerificationAuditResponse {
+            challenge: challenge_b64,
+            checked_at_ms: verification.checked_at_ms,
+            clock_skew_ms: verification.clock_skew_ms,
+        },
+    };
+
+    Ok(Json(response))
 }
 
 // SFU Context endpoints
 #[derive(Deserialize)]
-pub struct SfuContextRequest {
-    pub session_id: String,
+pub struct CreateSfuContextRequest {
+    pub room_id: String,
+    pub participant: String,
+    #[serde(default)]
+    pub enable_e2ee: bool,
 }
 
 #[derive(Serialize)]
-pub struct SfuContextResponse {
+pub struct SfuE2eeEnvelope {
+    pub session_id: String,
+    pub message_no: u64,
+    pub key: String,
+    pub nonce: String,
+}
+
+#[derive(Serialize)]
+pub struct CreateSfuContextResponse {
     pub context_id: String,
-    pub status: String,
+    pub room_id: String,
+    pub participant: String,
+    pub expires_in: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub e2ee: Option<SfuE2eeEnvelope>,
 }
 
 pub async fn create_sfu_context(
-    State(_state): State<Arc<ServerState>>,
-    Json(request): Json<SfuContextRequest>,
-) -> Result<Json<SfuContextResponse>, ApiError> {
-    if request.session_id.is_empty() {
-        return Err(ApiError::invalid_request("Session ID is required"));
+    State(state): State<Arc<ServerState>>,
+    Json(request): Json<CreateSfuContextRequest>,
+) -> Result<Json<CreateSfuContextResponse>, ApiError> {
+    if request.room_id.trim().is_empty() {
+        return Err(ApiError::invalid_request("room_id boş olamaz"));
+    }
+    if request.participant.trim().is_empty() {
+        return Err(ApiError::invalid_request("participant boş olamaz"));
     }
 
-    Ok(Json(SfuContextResponse {
-        context_id: format!("ctx_{}", request.session_id),
-        status: "active".to_string(),
+    let provision = state
+        .create_sfu_context(request.room_id, request.participant, request.enable_e2ee)
+        .await
+        .map_err(|err| ApiError::server_error(format!("SFU bağlamı oluşturulamadı: {err}")))?;
+    let now = SystemTime::now();
+    let expires_in = provision
+        .expires_at
+        .duration_since(now)
+        .unwrap_or_default()
+        .as_secs();
+    let e2ee = provision.e2ee.map(|step| SfuE2eeEnvelope {
+        session_id: URL_SAFE_NO_PAD.encode(step.session_id),
+        message_no: step.message_no,
+        key: URL_SAFE_NO_PAD.encode(step.message_secret),
+        nonce: URL_SAFE_NO_PAD.encode(step.nonce),
+    });
+    Ok(Json(CreateSfuContextResponse {
+        context_id: provision.context_id,
+        room_id: provision.room_id,
+        participant: provision.participant,
+        expires_in,
+        e2ee,
     }))
 }
 
 #[derive(Deserialize)]
-pub struct SfuStepRequest {
+pub struct NextSfuStepRequest {
     pub context_id: String,
-    #[allow(dead_code)]
-    pub step: String,
+}
+
+#[derive(Serialize)]
+pub struct NextSfuStepResponse {
+    pub context_id: String,
+    pub room_id: String,
+    pub participant: String,
+    pub session_id: String,
+    pub message_no: u64,
+    pub key: String,
+    pub nonce: String,
+    pub expires_in: u64,
 }
 
 pub async fn next_sfu_step(
-    State(_state): State<Arc<ServerState>>,
-    Json(request): Json<SfuStepRequest>,
-) -> Result<Json<SfuContextResponse>, ApiError> {
-    if request.context_id.is_empty() {
-        return Err(ApiError::invalid_request("Context ID is required"));
+    State(state): State<Arc<ServerState>>,
+    Json(request): Json<NextSfuStepRequest>,
+) -> Result<Json<NextSfuStepResponse>, ApiError> {
+    if request.context_id.trim().is_empty() {
+        return Err(ApiError::invalid_request("context_id boş olamaz"));
     }
 
-    if request.context_id == "unknown" {
-        return Err(ApiError::invalid_request("Unknown context ID"));
-    }
+    let outcome = state
+        .next_sfu_step(&request.context_id)
+        .await
+        .map_err(|err| ApiError::server_error(format!("SFU ratchet adımı üretilemedi: {err}")))?;
 
-    Ok(Json(SfuContextResponse {
-        context_id: request.context_id,
-        status: "updated".to_string(),
-    }))
+    match outcome {
+        crate::state::SfuStepOutcome::NotFound => {
+            Err(ApiError::invalid_request("SFU bağlamı bulunamadı"))
+        }
+        crate::state::SfuStepOutcome::Expired => {
+            Err(ApiError::invalid_grant("SFU bağlamının süresi doldu"))
+        }
+        crate::state::SfuStepOutcome::E2eeDisabled => Err(ApiError::invalid_request(
+            "SFU bağlamı için uçtan uca şifreleme etkin değil",
+        )),
+        crate::state::SfuStepOutcome::Step(step) => {
+            let now = SystemTime::now();
+            let expires_in = step
+                .expires_at
+                .duration_since(now)
+                .unwrap_or_default()
+                .as_secs();
+            Ok(Json(NextSfuStepResponse {
+                context_id: request.context_id,
+                room_id: step.room_id,
+                participant: step.participant,
+                session_id: URL_SAFE_NO_PAD.encode(step.session_id),
+                message_no: step.message_no,
+                key: URL_SAFE_NO_PAD.encode(step.message_secret),
+                nonce: URL_SAFE_NO_PAD.encode(step.nonce),
+                expires_in,
+            }))
+        }
+    }
 }
 
 // Transparency endpoint
@@ -1476,7 +1952,7 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/oauth/transparency", get(oauth_transparency))
                 // JWT endpoints (auth service)
                 .route("/cli/jwt/verify", post(verify_jwt_token))
-                .route("/security/jwt-verify", post(verify_jwt_token))
+                .route("/security/jwt-verify", post(verify_media_token))
                 .route("/security/generate-media-token", post(generate_media_token));
         }
         Some("acme-service") => {
@@ -1547,7 +2023,7 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/oauth/transparency", get(oauth_transparency))
                 // JWT endpoints
                 .route("/cli/jwt/verify", post(verify_jwt_token))
-                .route("/security/jwt-verify", post(verify_jwt_token))
+                .route("/security/jwt-verify", post(verify_media_token))
                 .route("/security/generate-media-token", post(generate_media_token))
                 // MDM endpoints
                 .route("/mdm/register", post(register_device))
