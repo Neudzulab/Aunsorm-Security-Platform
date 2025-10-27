@@ -75,6 +75,7 @@ struct JwtVerifyResponseBody {
     error: Option<String>,
 }
 
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, Deserialize)]
 struct AcmeDirectoryPayload {
     #[serde(rename = "newNonce")]
