@@ -1,20 +1,14 @@
-use std::sync::{Arc, Mutex};
-use std::collections::{HashSet, HashMap};
+use aunsorm_jwt::{Audience, Claims, Jwk, JwtError, VerificationOptions};
 use axum::{
-    extract::{Path, Query, State}, 
-    http::{header, HeaderValue, StatusCode}, 
-    response::{IntoResponse, Response}, 
-    routing::{get, head, post}, 
-    Json, Router
+    extract::{Path, Query, State},
+    http::{header, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
+    routing::{get, head, post},
+    Json, Router,
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use aunsorm_jwt::Jwk;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct JwtHeader {
-    pub alg: String,
-    pub typ: Option<String>,
-}
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // Global registered devices set for testing
 static REGISTERED_DEVICES: Mutex<Option<HashSet<String>>> = Mutex::new(None);
@@ -25,103 +19,54 @@ static ACME_ORDER_STATES: Mutex<Option<HashMap<String, String>>> = Mutex::new(No
 // ACME revoked certificates for testing
 static ACME_REVOKED_CERTIFICATES: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
-fn parse_jwt_header(token: &str) -> Result<JwtHeader, String> {
-    let parts: Vec<&str> = token.split('.').collect();
-    if parts.len() != 3 {
-        return Err("Invalid JWT format - expected 3 parts".to_string());
-    }
-    
-    let header_b64 = parts[0];
-    let header_json = URL_SAFE_NO_PAD
-        .decode(header_b64)
-        .map_err(|_| "JWT header base64 decode error")?;
-    
-    let header: JwtHeader = serde_json::from_slice(&header_json)
-        .map_err(|_| "JWT header JSON parse error")?;
-    
-    Ok(header)
+fn system_time_to_unix_seconds(time: SystemTime) -> u64 {
+    time.duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
-#[allow(clippy::option_if_let_else)]
-fn verify_eddsa_token(payload_b64: &str) -> JwtVerifyResponse {
-    // Parse JWT to extract payload without verification for EdDSA
-    let parts: Vec<&str> = payload_b64.split('.').collect();
-    if parts.len() != 3 {
-        return JwtVerifyResponse {
-            valid: false,
-            payload: None,
-            error: Some("Invalid JWT format".to_string()),
-        };
-    }
-    
-    // Decode payload
-    let payload_b64 = parts[1];
-    match URL_SAFE_NO_PAD.decode(payload_b64) {
-        Ok(payload_json) => {
-            match serde_json::from_slice::<serde_json::Value>(&payload_json) {
-                Ok(raw_payload) => {
-                    // Extract JWT standard claims
-                    let subject = raw_payload.get("sub")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown")
-                        .to_string();
-                    
-                    let audience = raw_payload.get("aud")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("zasian-media")  // Default audience
-                        .to_string();
-                    
-                    let issuer = raw_payload.get("iss")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("aunsorm-auth")  // Default issuer
-                        .to_string();
-                    
-                    // Handle expiration timestamp
-                    let expiration = raw_payload.get("exp")
-                        .and_then(serde_json::Value::as_u64)
-                        .unwrap_or_else(|| {
-                            // Default to current time + 1 hour if no exp claim
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap_or_default()
-                                .as_secs() + 3600
-                        });
-                    
-                    // Extract relatedId if present
-                    let related_id = raw_payload.get("relatedId")
-                        .and_then(|v| v.as_str())
-                        .map(String::from);
-                    
-                let payload = JwtPayload {
-                    subject,
-                    audience,
-                    issuer,
-                    expiration,
-                    related_id,
-                    claims: raw_payload,
-                };                    JwtVerifyResponse {
-                        valid: true,
-                        payload: Some(payload),
-                        error: None,
-                    }
-                }
-                Err(_) => JwtVerifyResponse {
-                    valid: false,
-                    payload: None,
-                    error: Some("JWT payload JSON parse error".to_string()),
-                }
-            }
-        }
-        Err(_) => JwtVerifyResponse {
-            valid: false,
-            payload: None,
-            error: Some("JWT payload base64 decode error".to_string()),
-        }
+fn audience_to_string(audience: Option<&Audience>, fallback: &str) -> String {
+    match audience {
+        Some(Audience::Single(value)) => value.clone(),
+        Some(Audience::Multiple(values)) => values
+            .first()
+            .cloned()
+            .unwrap_or_else(|| fallback.to_string()),
+        None => fallback.to_string(),
     }
 }
-use crate::state::ServerState;
+
+fn extract_related_id(claims: &Value) -> Option<String> {
+    claims
+        .get("relatedId")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
+fn map_jwt_error(err: &JwtError) -> String {
+    match err {
+        JwtError::Signature => "Invalid token signature".to_string(),
+        JwtError::Expired => "Token expired".to_string(),
+        JwtError::NotYetValid => "Token not yet valid".to_string(),
+        JwtError::IssuedInFuture => "Token issued in the future".to_string(),
+        JwtError::MissingJti => "Token missing jti claim".to_string(),
+        JwtError::Replay => "Token replay detected".to_string(),
+        JwtError::UnsupportedAlgorithm(alg) => format!("Unsupported JWT algorithm: {alg}"),
+        JwtError::UnknownKey(kid) => format!("Unknown key id: {kid}"),
+        JwtError::MissingKeyId => "Missing key id".to_string(),
+        JwtError::Malformed | JwtError::Base64(_) => "Invalid token format".to_string(),
+        JwtError::ClaimMismatch(claim) => format!("Claim mismatch: {claim}"),
+        JwtError::InvalidClaim(claim, reason) => format!("Invalid claim {claim}: {reason}"),
+        JwtError::JtiStore(message) => format!("JTI store error: {message}"),
+        JwtError::Io(io) => format!("Token verification I/O error: {io}"),
+        JwtError::Serde(err) => format!("Token payload error: {err}"),
+        JwtError::TimeConversion => "Time conversion error".to_string(),
+        _ => err.to_string(),
+    }
+}
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
+use crate::state::ServerState;
 
 // Helper function for base64url validation
 fn is_valid_base64url(s: &str) -> bool {
@@ -129,14 +74,12 @@ fn is_valid_base64url(s: &str) -> bool {
     URL_SAFE_NO_PAD.decode(s).is_ok()
 }
 use serde::{Deserialize, Serialize};
-
+use serde_json::Value;
 
 #[derive(Serialize)]
 pub struct HealthResponse {
     status: &'static str,
 }
-
-
 
 pub async fn health() -> Json<HealthResponse> {
     Json(HealthResponse { status: "OK" })
@@ -158,7 +101,7 @@ aunsorm_mdm_registered_devices 0
     (
         StatusCode::OK,
         [("content-type", "text/plain; version=0.0.4")],
-        metrics_text
+        metrics_text,
     )
 }
 
@@ -171,8 +114,12 @@ pub struct RandomNumberQuery {
     pub max: u64,
 }
 
-const fn default_min() -> u64 { 0 }
-const fn default_max() -> u64 { 100 }
+const fn default_min() -> u64 {
+    0
+}
+const fn default_max() -> u64 {
+    100
+}
 
 #[derive(Serialize)]
 pub struct RandomNumberResponse {
@@ -190,7 +137,9 @@ pub async fn random_number(
     let max = params.max;
 
     if min > max {
-        return Err(ApiError::invalid_request("min value cannot be greater than max value"));
+        return Err(ApiError::invalid_request(
+            "min value cannot be greater than max value",
+        ));
     }
 
     let (value, entropy) = state.random_value_with_proof(min, max);
@@ -199,10 +148,14 @@ pub async fn random_number(
         min,
         max,
         entropy: hex::encode(entropy),
-    }).into_response();
+    })
+    .into_response();
 
     let headers = response.headers_mut();
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store, no-cache, must-revalidate"));
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    );
     headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
     headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
 
@@ -227,19 +180,23 @@ pub async fn acme_directory(State(state): State<Arc<ServerState>>) -> impl IntoR
         new_account: state.acme().new_account_url().as_str().to_string(),
         new_order: state.acme().new_order_url().as_str().to_string(),
     });
-    
+
     (
-        [(header::HeaderName::from_static("replay-nonce"), HeaderValue::from_static("dGVzdF9ub25jZQ"))],
-        response
+        [(
+            header::HeaderName::from_static("replay-nonce"),
+            HeaderValue::from_static("dGVzdF9ub25jZQ"),
+        )],
+        response,
     )
 }
 
-pub async fn acme_new_nonce(
-    State(_state): State<Arc<ServerState>>,
-) -> impl IntoResponse {
+pub async fn acme_new_nonce(State(_state): State<Arc<ServerState>>) -> impl IntoResponse {
     (
         StatusCode::OK,
-        [(header::HeaderName::from_static("replay-nonce"), HeaderValue::from_static("ZnJlc2hfbm9uY2U"))],
+        [(
+            header::HeaderName::from_static("replay-nonce"),
+            HeaderValue::from_static("ZnJlc2hfbm9uY2U"),
+        )],
     )
 }
 
@@ -275,14 +232,20 @@ pub async fn acme_new_account(
         terms_of_service_agreed: true,
         kid: "https://issuer/acme/accounts/123".to_string(),
     };
-    
+
     (
         StatusCode::CREATED,
         [
-            (header::HeaderName::from_static("replay-nonce"), HeaderValue::from_static("YWNjb3VudF9ub25jZQ")),
-            (header::LOCATION, HeaderValue::from_static("https://issuer/acme/accounts/123")),
+            (
+                header::HeaderName::from_static("replay-nonce"),
+                HeaderValue::from_static("YWNjb3VudF9ub25jZQ"),
+            ),
+            (
+                header::LOCATION,
+                HeaderValue::from_static("https://issuer/acme/accounts/123"),
+            ),
         ],
-        Json(account)
+        Json(account),
     )
 }
 
@@ -298,11 +261,14 @@ pub async fn acme_account_status(
         terms_of_service_agreed: true,
         kid: format!("https://issuer/acme/accounts/{account_id}"),
     };
-    
+
     (
         StatusCode::OK,
-        [(header::HeaderName::from_static("replay-nonce"), HeaderValue::from_static("c3RhdHVzX25vbmNl"))],
-        Json(account)
+        [(
+            header::HeaderName::from_static("replay-nonce"),
+            HeaderValue::from_static("c3RhdHVzX25vbmNl"),
+        )],
+        Json(account),
     )
 }
 
@@ -345,14 +311,20 @@ pub async fn acme_new_order(
         _not_after: None,
         certificate: None,
     };
-    
+
     (
         StatusCode::CREATED,
         [
-            (header::HeaderName::from_static("replay-nonce"), HeaderValue::from_static("b3JkZXJfbm9uY2U")),
-            (header::LOCATION, HeaderValue::from_static("https://issuer/acme/order/1")),
+            (
+                header::HeaderName::from_static("replay-nonce"),
+                HeaderValue::from_static("b3JkZXJfbm9uY2U"),
+            ),
+            (
+                header::LOCATION,
+                HeaderValue::from_static("https://issuer/acme/order/1"),
+            ),
         ],
-        Json(order)
+        Json(order),
     )
 }
 
@@ -367,15 +339,20 @@ pub async fn acme_order_status(
         if states.is_none() {
             *states = Some(HashMap::new());
         }
-        states.as_ref().unwrap().get(&order_id).cloned().unwrap_or_else(|| "pending".to_string())
+        states
+            .as_ref()
+            .unwrap()
+            .get(&order_id)
+            .cloned()
+            .unwrap_or_else(|| "pending".to_string())
     };
-    
+
     let certificate = if status == "valid" {
         Some(format!("https://issuer/acme/cert/{order_id}"))
     } else {
         None
     };
-    
+
     let order = AcmeOrderResponse {
         status,
         identifiers: vec![AcmeOrderIdentifier {
@@ -389,11 +366,14 @@ pub async fn acme_order_status(
         _not_after: None,
         certificate,
     };
-    
+
     (
         StatusCode::OK,
-        [(header::HeaderName::from_static("replay-nonce"), HeaderValue::from_static("b3JkZXJTdGF0dXNOb25jZQ"))],
-        Json(order)
+        [(
+            header::HeaderName::from_static("replay-nonce"),
+            HeaderValue::from_static("b3JkZXJTdGF0dXNOb25jZQ"),
+        )],
+        Json(order),
     )
 }
 
@@ -408,9 +388,12 @@ pub async fn acme_finalize_order(
         if states.is_none() {
             *states = Some(HashMap::new());
         }
-        states.as_mut().unwrap().insert(order_id.clone(), "valid".to_string());
+        states
+            .as_mut()
+            .unwrap()
+            .insert(order_id.clone(), "valid".to_string());
     }
-    
+
     let order = AcmeOrderResponse {
         status: "valid".to_string(),
         identifiers: vec![AcmeOrderIdentifier {
@@ -424,17 +407,20 @@ pub async fn acme_finalize_order(
         _not_after: None,
         certificate: Some(format!("https://issuer/acme/cert/{order_id}")),
     };
-    
+
     (
         StatusCode::OK,
-        [(
-            header::HeaderName::from_static("replay-nonce"), 
-            HeaderValue::from_static("ZmluYWxpemVOb25jZQ")
-        ), (
-            header::LOCATION,
-            HeaderValue::from_str(&format!("https://issuer/acme/order/{order_id}")).unwrap()
-        )],
-        Json(order)
+        [
+            (
+                header::HeaderName::from_static("replay-nonce"),
+                HeaderValue::from_static("ZmluYWxpemVOb25jZQ"),
+            ),
+            (
+                header::LOCATION,
+                HeaderValue::from_str(&format!("https://issuer/acme/order/{order_id}")).unwrap(),
+            ),
+        ],
+        Json(order),
     )
 }
 
@@ -457,7 +443,7 @@ pub async fn acme_get_certificate(
             }
         }
     }
-    
+
     // Check if order is finalized/valid
     {
         let states = ACME_ORDER_STATES.lock().unwrap();
@@ -469,40 +455,48 @@ pub async fn acme_get_certificate(
             return (StatusCode::NOT_FOUND, "Order not found").into_response();
         }
     }
-    
+
     // Generate real X.509 certificate chain using rcgen
     use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
-    
+
     // Create CA certificate
     let mut ca_params = CertificateParams::new(vec!["Test CA".to_string()]);
     ca_params.distinguished_name = DistinguishedName::new();
-    ca_params.distinguished_name.push(DnType::CommonName, "Test CA");
+    ca_params
+        .distinguished_name
+        .push(DnType::CommonName, "Test CA");
     ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
     let ca_cert = Certificate::from_params(ca_params).unwrap();
-    
+
     // Create end-entity certificate
     let mut cert_params = CertificateParams::new(vec!["example.com".to_string()]);
     cert_params.distinguished_name = DistinguishedName::new();
-    cert_params.distinguished_name.push(DnType::CommonName, "example.com");
+    cert_params
+        .distinguished_name
+        .push(DnType::CommonName, "example.com");
     let cert = Certificate::from_params(cert_params).unwrap();
-    
+
     // Sign the end-entity cert with CA
     let cert_pem = cert.serialize_pem_with_signer(&ca_cert).unwrap();
     let ca_pem = ca_cert.serialize_pem().unwrap();
-    
+
     let certificate = format!("{}\n{}", cert_pem, ca_pem);
-    
+
     (
         StatusCode::OK,
-        [(
-            header::HeaderName::from_static("replay-nonce"), 
-            HeaderValue::from_static("Y2VydGlmaWNhdGVOb25jZQ")
-        ), (
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("text/plain; charset=utf-8")
-        )],
-        certificate
-    ).into_response()
+        [
+            (
+                header::HeaderName::from_static("replay-nonce"),
+                HeaderValue::from_static("Y2VydGlmaWNhdGVOb25jZQ"),
+            ),
+            (
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("text/plain; charset=utf-8"),
+            ),
+        ],
+        certificate,
+    )
+        .into_response()
 }
 
 pub async fn acme_revoke_certificate(
@@ -511,21 +505,21 @@ pub async fn acme_revoke_certificate(
 ) -> impl IntoResponse {
     use serde_json::json;
     use time::OffsetDateTime;
-    
+
     // For testing, we'll revoke all current valid orders
     // In reality, we'd parse the certificate from the request to find the order ID
     let mut first_revocation = false;
     let mut already_revoked = false;
-    
+
     {
         let mut revoked = ACME_REVOKED_CERTIFICATES.lock().unwrap();
         if revoked.is_none() {
             *revoked = Some(HashSet::new());
         }
-        
+
         let revoked_set = revoked.as_mut().unwrap();
-        
-        // Get all valid orders 
+
+        // Get all valid orders
         let orders = ACME_ORDER_STATES.lock().unwrap();
         if let Some(orders) = orders.as_ref() {
             for (order_id, status) in orders.iter() {
@@ -543,7 +537,7 @@ pub async fn acme_revoke_certificate(
             }
         }
     }
-    
+
     if already_revoked {
         let error_response = json!({
             "type": "urn:ietf:params:acme:error:alreadyRevoked",
@@ -553,28 +547,28 @@ pub async fn acme_revoke_certificate(
         return (
             StatusCode::OK,
             [(
-                header::HeaderName::from_static("replay-nonce"), 
-                HeaderValue::from_static("cmV2b2tlTm9uY2U")
+                header::HeaderName::from_static("replay-nonce"),
+                HeaderValue::from_static("cmV2b2tlTm9uY2U"),
             )],
-            Json(error_response)
+            Json(error_response),
         );
     }
-    
+
     if first_revocation {
-        // First revocation - return success response  
+        // First revocation - return success response
         let response = json!({
             "status": "revoked",
             "revokedAt": OffsetDateTime::now_utc().format(&time::format_description::well_known::Rfc3339).unwrap(),
             "reason": 1
         });
-        
+
         (
             StatusCode::OK,
             [(
-                header::HeaderName::from_static("replay-nonce"), 
-                HeaderValue::from_static("cmV2b2tlTm9uY2U")
+                header::HeaderName::from_static("replay-nonce"),
+                HeaderValue::from_static("cmV2b2tlTm9uY2U"),
             )],
-            Json(response)
+            Json(response),
         )
     } else {
         // No valid orders found
@@ -586,10 +580,10 @@ pub async fn acme_revoke_certificate(
         (
             StatusCode::BAD_REQUEST,
             [(
-                header::HeaderName::from_static("replay-nonce"), 
-                HeaderValue::from_static("cmV2b2tlTm9uY2U")
+                header::HeaderName::from_static("replay-nonce"),
+                HeaderValue::from_static("cmV2b2tlTm9uY2U"),
             )],
-            Json(error_response)
+            Json(error_response),
         )
     }
 }
@@ -603,7 +597,7 @@ pub struct JwtVerifyRequest {
 #[derive(Serialize)]
 pub struct JwtPayload {
     pub subject: String,
-    pub audience: String, 
+    pub audience: String,
     pub issuer: String,
     pub expiration: u64,
     #[serde(rename = "relatedId", skip_serializing_if = "Option::is_none")]
@@ -625,99 +619,99 @@ pub async fn verify_jwt_token(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<JwtVerifyRequest>,
 ) -> Json<JwtVerifyResponse> {
-    tracing::info!("ROUTES.RS: verify_jwt_token called with token: {}", request.token);
-    if request.token.is_empty() {
+    let token = request.token.trim();
+    tracing::info!(
+        "ROUTES.RS: verify_jwt_token called with token length: {}",
+        token.len()
+    );
+
+    if token.is_empty() {
         return Json(JwtVerifyResponse {
             valid: false,
             payload: None,
             error: Some("Token is required".to_string()),
         });
     }
-    
-    // Check if token is JWT format (has dots) vs simple token
-    if request.token.contains('.') {
-        // JWT token - parse header to check algorithm
-        match parse_jwt_header(&request.token) {
-            Ok(header) => {
-                // Check if algorithm is supported
-                if !["HS256", "RS256", "EdDSA", "ES256", "none"].contains(&header.alg.as_str()) {
+
+    let verifier = state.verifier().clone();
+    let issuer = state.issuer().to_string();
+    let audience = state.audience().to_string();
+
+    let options = VerificationOptions {
+        issuer: Some(issuer.clone()),
+        audience: Some(audience.clone()),
+        require_jti: true,
+        ..VerificationOptions::default()
+    };
+
+    match verifier.verify(token, &options) {
+        Ok(claims) => {
+            let payload_value = match serde_json::to_value(&claims) {
+                Ok(value) => value,
+                Err(err) => {
                     return Json(JwtVerifyResponse {
                         valid: false,
                         payload: None,
-                        error: Some("Unsupported JWT algorithm".to_string()),
+                        error: Some(format!("Token payload error: {err}")),
                     });
                 }
-                
-                // Special handling for EdDSA and none tokens  
-                if header.alg == "EdDSA" || header.alg == "none" {
-                    return Json(verify_eddsa_token(&request.token));
+            };
+
+            if let Some(jti) = claims.jwt_id.clone() {
+                match state.is_token_active(&jti, SystemTime::now()).await {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        return Json(JwtVerifyResponse {
+                            valid: false,
+                            payload: None,
+                            error: Some("Token revoked or expired".to_string()),
+                        });
+                    }
+                    Err(err) => {
+                        return Json(JwtVerifyResponse {
+                            valid: false,
+                            payload: None,
+                            error: Some(format!("Token ledger error: {err}")),
+                        });
+                    }
                 }
-                
-                // For other JWT types, perform signature verification
-                return Json(JwtVerifyResponse {
-                    valid: false,
-                    payload: None,
-                    error: Some("JWT signature verification not implemented".to_string()),
-                });
             }
-            Err(err) => {
-                return Json(JwtVerifyResponse {
-                    valid: false,
-                    payload: None,
-                    error: Some(format!("Invalid token format: {err}")),
-                });
-            }
+
+            let related_id = extract_related_id(&payload_value);
+            let payload = JwtPayload {
+                subject: claims
+                    .subject
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_string()),
+                audience: audience_to_string(claims.audience.as_ref(), &audience),
+                issuer: claims.issuer.clone().unwrap_or_else(|| issuer.clone()),
+                expiration: claims.expiration.map_or(0, system_time_to_unix_seconds),
+                related_id,
+                claims: payload_value,
+            };
+
+            Json(JwtVerifyResponse {
+                valid: true,
+                payload: Some(payload),
+                error: None,
+            })
         }
-    }
-    
-    // Simple token (not JWT) - handle test token
-    if request.token != "media_token_abc123" {
-        return Json(JwtVerifyResponse {
+        Err(err) => Json(JwtVerifyResponse {
             valid: false,
             payload: None,
-            error: Some("Invalid token signature".to_string()),
-        });
+            error: Some(map_jwt_error(&err)),
+        }),
     }
-    
-    // Mock valid payload for tests using new format - include test claims
-    let test_claims = serde_json::json!({
-        "sub": "participant-42",
-        "aud": "zasian-media",
-        "iss": state.issuer(),
-        "exp": 1_700_000_000,
-        "roomId": "room-hall-1",
-        "participantName": "Test User",
-        "jwt_id": "test-jwt-123"
-    });
-    
-    let payload = JwtPayload {
-        subject: "participant-42".to_string(),
-        audience: "zasian-media".to_string(), 
-        issuer: state.issuer().to_string(),
-        expiration: 1_700_000_000,
-        related_id: None, // No related ID for media tokens
-        claims: test_claims,
-    };
-    
-    Json(JwtVerifyResponse {
-        valid: true,
-        payload: Some(payload),
-        error: None,
-    })
 }
 
 #[derive(Deserialize)]
 pub struct MediaTokenRequest {
     #[serde(rename = "roomId")]
-    #[allow(dead_code)]
     pub room_id: String,
-    #[allow(dead_code)]  
     pub identity: String,
     #[serde(rename = "participantName")]
-    #[allow(dead_code)]
     pub participant_name: Option<String>,
-    #[allow(dead_code)]
-    pub metadata: Option<serde_json::Value>,
+    pub metadata: Option<Value>,
 }
 
 #[derive(Serialize)]
@@ -729,29 +723,69 @@ pub struct MediaTokenResponse {
 }
 
 pub async fn generate_media_token(
-    State(_state): State<Arc<ServerState>>,
+    State(state): State<Arc<ServerState>>,
     Json(request): Json<MediaTokenRequest>,
 ) -> Result<Json<MediaTokenResponse>, ApiError> {
-    // Generate JWT token with correct identity for SFU verification
-    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-    
-    let header = r#"{"alg":"EdDSA","kid":"aunsorm-server","typ":"JWT"}"#;
-    let payload = serde_json::json!({
-        "issuer": "https://aunsorm.local",
-        "subject": &request.identity,
-        "audience": "zasian-media", 
-        "expiration": 1760515200,
-        "relatedId": &request.room_id
-    });
-    
-    let header_b64 = URL_SAFE_NO_PAD.encode(header.as_bytes());
-    let payload_b64 = URL_SAFE_NO_PAD.encode(payload.to_string().as_bytes());
-    let token = format!("{}.{}.fake_signature_matching_identity", header_b64, payload_b64);
-    
+    let MediaTokenRequest {
+        room_id,
+        identity,
+        participant_name,
+        metadata,
+    } = request;
+
+    let mut claims = Claims::new();
+    claims.issuer = Some(state.issuer().to_string());
+    claims.subject = Some(identity.clone());
+    claims.audience = Some(Audience::Single(state.audience().to_string()));
+    claims.set_issued_now();
+    claims.set_expiration_from_now(state.token_ttl());
+    claims.ensure_jwt_id();
+    claims
+        .extra
+        .insert("roomId".to_string(), Value::String(room_id.clone()));
+    if let Some(name) = participant_name {
+        claims
+            .extra
+            .insert("participantName".to_string(), Value::String(name));
+    }
+    if let Some(metadata_value) = metadata {
+        claims.extra.insert("metadata".to_string(), metadata_value);
+    }
+
+    let expires_at = claims
+        .expiration
+        .expect("media token claims must set expiration");
+    let jti = claims
+        .jwt_id
+        .clone()
+        .expect("media token claims must set jti");
+
+    let token = state
+        .signer()
+        .sign(&claims)
+        .map_err(|err| ApiError::server_error(format!("JWT oluşturulamadı: {err}")))?;
+
+    if let Err(err) = state
+        .record_token(
+            &jti,
+            expires_at,
+            claims.subject.as_deref(),
+            claims.audience.as_ref().and_then(|aud| match aud {
+                Audience::Single(value) => Some(value.as_str()),
+                Audience::Multiple(values) => values.first().map(String::as_str),
+            }),
+        )
+        .await
+    {
+        return Err(ApiError::server_error(format!(
+            "Token defteri kaydı başarısız: {err}"
+        )));
+    }
+
     Ok(Json(MediaTokenResponse {
         token,
-        room_id: request.room_id,
-        identity: request.identity,
+        room_id,
+        identity,
     }))
 }
 
@@ -823,48 +857,56 @@ pub async fn register_device(
         return Err(ApiError::invalid_request("device_id cannot be empty"));
     }
     if device_id.chars().any(char::is_control) {
-        return Err(ApiError::invalid_request("device_id is invalid - contains control characters"));
+        return Err(ApiError::invalid_request(
+            "device_id is invalid - contains control characters",
+        ));
     }
-    
+
     // Validate owner
     let owner = request.owner.trim();
     if owner.is_empty() {
-        return Err(ApiError::invalid_request("owner is invalid - cannot be empty"));
+        return Err(ApiError::invalid_request(
+            "owner is invalid - cannot be empty",
+        ));
     }
     if owner.chars().any(char::is_control) {
-        return Err(ApiError::invalid_request("owner is invalid - contains control characters"));
+        return Err(ApiError::invalid_request(
+            "owner is invalid - contains control characters",
+        ));
     }
-    
+
     // Validate platform
     if request.platform.is_empty() {
         return Err(ApiError::invalid_request("Platform cannot be empty"));
     }
     if request.platform.chars().any(char::is_control) {
-        return Err(ApiError::invalid_request("Platform contains control characters"));
+        return Err(ApiError::invalid_request(
+            "Platform contains control characters",
+        ));
     }
-    
+
     // Check for duplicate registration
     {
         let mut registered = REGISTERED_DEVICES.lock().unwrap();
         if registered.is_none() {
             *registered = Some(HashSet::new());
         }
-        
+
         let devices = registered.as_mut().unwrap();
         let device_exists = devices.contains(&request.device_id);
         devices.insert(request.device_id.clone());
         drop(registered);
-        
+
         if device_exists {
             return Err(ApiError::invalid_request("Device already registered"));
         }
     }
-    
+
     let now = 1_700_000_000_u64; // Mock timestamp
     let device_id = request.device_id.clone();
     let owner = request.owner.clone();
     let platform = request.platform.clone();
-    
+
     Ok(Json(MdmRegisterResponse {
         device: DeviceRecord {
             device_id: request.device_id,
@@ -903,12 +945,12 @@ pub async fn fetch_policy(
     if platform.is_empty() {
         return Err(ApiError::invalid_request("Platform cannot be empty"));
     }
-    
+
     // Only support iOS for now
     if platform != "ios" {
         return Err(ApiError::not_found("Platform not supported"));
     }
-    
+
     // Return sample policy for iOS
     let rules = vec![
         aunsorm_mdm::PolicyRule {
@@ -930,14 +972,14 @@ pub async fn fetch_policy(
             remediation: None,
         },
     ];
-    
+
     let policy = aunsorm_mdm::PolicyDocument {
         version: "2025.10-ios".to_string(),
         description: "iOS security policy for Aunsorm MDM".to_string(),
         published_at: std::time::SystemTime::now(),
         rules,
     };
-    
+
     Ok(Json(policy))
 }
 
@@ -949,12 +991,12 @@ pub async fn fetch_certificate_plan(
     if device_id.is_empty() {
         return Err(ApiError::invalid_request("device_id cannot be empty"));
     }
-    
+
     // Return 404 for unknown devices
     if device_id == "unknown-device" {
         return Err(ApiError::not_found("Device not found"));
     }
-    
+
     // Create a certificate plan for the device
     let plan = aunsorm_mdm::DeviceCertificatePlan {
         device_id: device_id.to_string(),
@@ -971,7 +1013,7 @@ pub async fn fetch_certificate_plan(
         grace_period_hours: 72,
         next_renewal: 1_234_567_890,
     };
-    
+
     Ok(Json(plan))
 }
 
@@ -1003,31 +1045,33 @@ pub async fn begin_auth(
     if request.code_challenge_method != "S256" {
         return Err(ApiError::invalid_request("PKCE method only supports S256"));
     }
-    
+
     if request.client_id.is_empty() {
         return Err(ApiError::invalid_request("missing client_id"));
     }
-    
+
     if request.redirect_uri.is_empty() {
         return Err(ApiError::invalid_request("missing redirect_uri"));
     }
-    
+
     if !request.redirect_uri.starts_with("https://") {
         return Err(ApiError::invalid_request("Redirect URI must be HTTPS"));
     }
-    
+
     // Validate code_challenge base64url format
     if !is_valid_base64url(&request.code_challenge) {
-        return Err(ApiError::invalid_request("code_challenge must be valid base64url"));
+        return Err(ApiError::invalid_request(
+            "code_challenge must be valid base64url",
+        ));
     }
-    
+
     // Validate scope if provided
     if let Some(ref scope) = request.scope {
         if scope == "invalid-scope" {
             return Err(ApiError::invalid_request("Invalid scope"));
         }
     }
-    
+
     Ok(Json(OAuthBeginResponse {
         code: "auth_code_123".to_string(),
         state: request.state,
@@ -1058,7 +1102,7 @@ pub async fn exchange_token(
     if request.grant_type != "authorization_code" {
         return Err(ApiError::invalid_request("Unsupported grant type"));
     }
-    
+
     Ok(Json(OAuthTokenResponse {
         access_token: "test_token_123".to_string(),
         token_type: "Bearer".to_string(),
@@ -1152,9 +1196,7 @@ pub struct OAuthTransparencyEntry {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OAuthTransparencyEvent {
     #[allow(dead_code)]
-    KeyPublished {
-        jwk: Jwk,
-    },
+    KeyPublished { jwk: Jwk },
     TokenIssued {
         jti: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -1172,14 +1214,14 @@ pub async fn oauth_transparency(
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     // Get the actual transparency tree snapshot from the state
     let snapshot = state.transparency_tree_snapshot().await;
     let transcript_hash = snapshot
         .transcript_hash()
         .expect("transcript hash")
         .map(hex::encode);
-    
+
     // Get the server's public key as a JWK
     let jwk = state.jwks().keys.first().cloned().unwrap_or_else(|| {
         // Fallback to a dummy JWK if none available
@@ -1191,16 +1233,14 @@ pub async fn oauth_transparency(
             x: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_string(),
         }
     });
-    
+
     Json(OAuthTransparencyResponse {
         transcript_hash,
         entries: vec![
             OAuthTransparencyEntry {
                 index: 0,
                 timestamp: now - 100,
-                event: OAuthTransparencyEvent::KeyPublished {
-                    jwk,
-                },
+                event: OAuthTransparencyEvent::KeyPublished { jwk },
                 hash: "key123".to_string(),
                 previous_hash: None,
             },
@@ -1239,16 +1279,18 @@ pub async fn generate_id(
     Json(request): Json<IdGenerateRequest>,
 ) -> Result<Json<IdGenerateResponse>, ApiError> {
     use aunsorm_id::HeadIdGenerator;
-    
+
     let generator = if let Some(namespace) = request.namespace {
         HeadIdGenerator::from_env_with_namespace(namespace)
     } else {
         HeadIdGenerator::from_env()
-    }.map_err(|e| ApiError::invalid_request(format!("ID generator error: {}", e)))?;
-    
-    let id = generator.next_id()
+    }
+    .map_err(|e| ApiError::invalid_request(format!("ID generator error: {}", e)))?;
+
+    let id = generator
+        .next_id()
         .map_err(|e| ApiError::server_error(format!("ID generation failed: {}", e)))?;
-    
+
     Ok(Json(IdGenerateResponse {
         id: id.as_str().to_string(),
         namespace: id.namespace().to_string(),
@@ -1256,7 +1298,7 @@ pub async fn generate_id(
     }))
 }
 
-// HEAD endpoint for SFU compatibility 
+// HEAD endpoint for SFU compatibility
 pub async fn head_generate_id(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<IdGenerateResponse>, ApiError> {
@@ -1285,13 +1327,17 @@ pub async fn verify_fabric_did(
     if request.did.is_empty() || request.anchor.is_empty() {
         return Err(ApiError::invalid_request("DID and anchor are required"));
     }
-    
+
     // Simulate validation - fail if anchor is "tampered"
     let valid = !request.anchor.contains("tampered");
-    
+
     Ok(Json(FabricDidResponse {
         valid,
-        message: if valid { "DID verified successfully".to_string() } else { "DID verification failed".to_string() },
+        message: if valid {
+            "DID verified successfully".to_string()
+        } else {
+            "DID verification failed".to_string()
+        },
     }))
 }
 
@@ -1314,7 +1360,7 @@ pub async fn create_sfu_context(
     if request.session_id.is_empty() {
         return Err(ApiError::invalid_request("Session ID is required"));
     }
-    
+
     Ok(Json(SfuContextResponse {
         context_id: format!("ctx_{}", request.session_id),
         status: "active".to_string(),
@@ -1335,11 +1381,11 @@ pub async fn next_sfu_step(
     if request.context_id.is_empty() {
         return Err(ApiError::invalid_request("Context ID is required"));
     }
-    
+
     if request.context_id == "unknown" {
         return Err(ApiError::invalid_request("Unknown context ID"));
     }
-    
+
     Ok(Json(SfuContextResponse {
         context_id: request.context_id,
         status: "updated".to_string(),
@@ -1365,19 +1411,21 @@ pub struct TransparencyRecord {
     pub action: String,
 }
 
-pub async fn transparency_tree(State(state): State<Arc<ServerState>>) -> Json<TransparencyResponse> {
+pub async fn transparency_tree(
+    State(state): State<Arc<ServerState>>,
+) -> Json<TransparencyResponse> {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    
+
     // Get the actual transparency tree snapshot from the state
     let snapshot = state.transparency_tree_snapshot().await;
     let transcript_hash = snapshot
         .transcript_hash()
         .expect("transcript hash")
         .map(hex::encode);
-    
+
     Json(TransparencyResponse {
         domain: "aunsorm-server".to_string(),
         tree_head: "abc123def456".to_string(),
@@ -1396,7 +1444,7 @@ pub async fn transparency_tree(State(state): State<Arc<ServerState>>) -> Json<Tr
 pub fn build_router(state: &Arc<ServerState>) -> Router {
     let service_mode = std::env::var("SERVICE_MODE").ok();
     tracing::info!("🔧 SERVICE_MODE: {:?}", service_mode);
-    
+
     let mut router = Router::new()
         // Health endpoints (available on all services)
         .route("/health", get(health))
@@ -1474,7 +1522,10 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/sfu/context/step", post(next_sfu_step));
         }
         _ => {
-            tracing::info!("🔧 Building DEFAULT routes for service_mode: {:?}", service_mode);
+            tracing::info!(
+                "🔧 Building DEFAULT routes for service_mode: {:?}",
+                service_mode
+            );
             // Default: expose all endpoints (backwards compatibility)
             router = router
                 // Random number endpoint
@@ -1489,13 +1540,12 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/acme/orders/:id/finalize", post(acme_finalize_order))
                 .route("/acme/cert/:id", get(acme_get_certificate))
                 .route("/acme/revoke-cert", post(acme_revoke_certificate))
-
                 // OAuth endpoints
                 .route("/oauth/begin-auth", post(begin_auth))
                 .route("/oauth/token", post(exchange_token))
                 .route("/oauth/introspect", post(introspect_token))
                 .route("/oauth/transparency", get(oauth_transparency))
-                // JWT endpoints  
+                // JWT endpoints
                 .route("/cli/jwt/verify", post(verify_jwt_token))
                 .route("/security/jwt-verify", post(verify_jwt_token))
                 .route("/security/generate-media-token", post(generate_media_token))
@@ -1515,7 +1565,7 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/transparency/tree", get(transparency_tree));
         }
     }
-    
+
     router.with_state(state.clone())
 }
 
@@ -1551,11 +1601,11 @@ async fn proxy_media_token(
     Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let client = reqwest::Client::new();
-    
+
     let mut request = client
         .post("http://aun-auth-service:50011/security/generate-media-token")
         .json(&payload);
-    
+
     // Forward relevant headers
     if let Some(content_type) = headers.get("content-type") {
         if let Ok(ct_str) = content_type.to_str() {
@@ -1567,7 +1617,7 @@ async fn proxy_media_token(
             request = request.header("authorization", auth_str);
         }
     }
-    
+
     match request.send().await {
         Ok(response) => {
             let status_code = match response.status().as_u16() {
