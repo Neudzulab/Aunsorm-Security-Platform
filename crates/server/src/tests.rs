@@ -22,12 +22,12 @@ use x509_parser::{
     certificate::X509Certificate, extensions::GeneralName, pem::parse_x509_pem, prelude::FromDer,
 };
 
+use crate::build_router;
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::fabric::{
     canonical_challenge, FABRIC_POC_CHANNEL, FABRIC_POC_DID, FABRIC_POC_KEY_SEED,
     FABRIC_POC_METHOD_ID, FABRIC_POC_TRANSACTION_ID,
 };
-use crate::build_router;
 use crate::state::ServerState;
 use ed25519_dalek::Signer;
 use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
@@ -217,7 +217,7 @@ fn setup_state() -> Arc<ServerState> {
 #[tokio::test]
 async fn acme_directory_and_order_flow() {
     let state = setup_state();
-    
+
     // Debug: test simple route first
     let app = build_router(&state);
     let health_response = app
@@ -231,13 +231,16 @@ async fn acme_directory_and_order_flow() {
         )
         .await
         .expect("health response");
-    eprintln!("DEBUG: Health endpoint status: {}", health_response.status());
-    
+    eprintln!(
+        "DEBUG: Health endpoint status: {}",
+        health_response.status()
+    );
+
     let app = build_router(&state);
 
-    // Debug: test ACME directory specifically 
+    // Debug: test ACME directory specifically
     eprintln!("DEBUG: Attempting ACME directory...");
-    
+
     // Directory discovery returns fully qualified endpoints.
     let response = app
         .clone()
@@ -250,8 +253,16 @@ async fn acme_directory_and_order_flow() {
         )
         .await
         .expect("response");
-    eprintln!("DEBUG: ACME directory response status: {}", response.status());
-    assert_eq!(response.status(), StatusCode::OK, "ACME directory endpoint returned: {}", response.status());
+    eprintln!(
+        "DEBUG: ACME directory response status: {}",
+        response.status()
+    );
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "ACME directory endpoint returned: {}",
+        response.status()
+    );
     let replay = response
         .headers()
         .get(REPLAY_NONCE_HEADER)
@@ -264,7 +275,10 @@ async fn acme_directory_and_order_flow() {
         .expect("body bytes");
     let directory: AcmeDirectoryPayload = serde_json::from_slice(&body).expect("directory json");
     assert_eq!(directory.new_nonce, state.acme().new_nonce_url().as_str());
-    assert_eq!(directory.new_account, state.acme().new_account_url().as_str());
+    assert_eq!(
+        directory.new_account,
+        state.acme().new_account_url().as_str()
+    );
     assert_eq!(directory.new_order, state.acme().new_order_url().as_str());
 
     // Fetch a nonce for new-account.
@@ -1110,7 +1124,9 @@ async fn mdm_rejects_empty_identifiers() {
     let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
     assert_eq!(error.error, "invalid_request");
     assert!(
-        error.error_description.contains("device_id cannot be empty"),
+        error
+            .error_description
+            .contains("device_id cannot be empty"),
         "unexpected error message: {}",
         error.error_description
     );
@@ -1150,7 +1166,9 @@ async fn mdm_rejects_control_characters_in_platform() {
     let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
     assert_eq!(error.error, "invalid_request");
     assert!(
-        error.error_description.contains("Platform contains control characters"),
+        error
+            .error_description
+            .contains("Platform contains control characters"),
         "unexpected error message: {}",
         error.error_description
     );
@@ -1206,7 +1224,9 @@ async fn mdm_certificate_plan_rejects_blank_identifier() {
     let error: ErrorResponse = serde_json::from_slice(&body).expect("json");
     assert_eq!(error.error, "invalid_request");
     assert!(
-        error.error_description.contains("device_id cannot be empty"),
+        error
+            .error_description
+            .contains("device_id cannot be empty"),
         "unexpected error message: {}",
         error.error_description
     );
@@ -2024,10 +2044,10 @@ struct NextSfuStepResponse {
 async fn test_acme_service_debug() {
     let state = setup_state();
     println!("✓ State created successfully");
-    
+
     let acme_service = state.acme();
     println!("✓ ACME service accessed successfully");
-    
+
     let nonce_url = acme_service.new_nonce_url();
     println!("✓ Nonce URL: {}", nonce_url);
 }

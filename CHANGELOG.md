@@ -69,6 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Linux/macOS ortamları için `cargo fmt`/`cargo clippy`/`cargo test` adımlarını tek komutla çalıştıran `scripts/test-all.sh` betiği.
 
 ### Changed
+- `/security/generate-media-token` now issues Ed25519-signed JWTs via
+  `aunsorm-jwt`, records issued JTIs in the ledger, and `/security/jwt-verify`
+  performs full signature/claim validation with descriptive error mapping.
 - `/oauth/begin-auth` now validates registered redirect URIs and scopes, returning RFC-compliant `invalid_redirect_uri` and
   `invalid_scope` errors when clients use unauthorized values.
 - Randomness API's entropy mapper now performs branchless constant-time rejection sampling to harden the `/random/number`
