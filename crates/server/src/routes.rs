@@ -1,7 +1,9 @@
 use aunsorm_jwt::{Audience, Claims, Jwk, JwtError, VerificationOptions};
 use axum::{
+    body::Body,
     extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, head, post},
     Json, Router,
@@ -9,7 +11,9 @@ use axum::{
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::SIGNATURE_LENGTH;
 use hex::decode_to_slice;
+use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
 use sha2::{Digest, Sha256};
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -71,6 +75,10 @@ fn map_jwt_error(err: &JwtError) -> String {
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
 use crate::fabric::{FabricDidError, FabricDidVerificationRequest};
+#[cfg(feature = "http3-experimental")]
+use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
+#[cfg(feature = "http3-experimental")]
+use crate::quic::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
 use crate::state::ServerState;
 use crate::transparency::TransparencyEvent as LedgerTransparencyEvent;
 use serde::{Deserialize, Serialize};
@@ -90,7 +98,7 @@ pub async fn health() -> Json<HealthResponse> {
 }
 
 pub async fn metrics(State(_state): State<Arc<ServerState>>) -> impl IntoResponse {
-    let metrics_text = r#"# HELP aunsorm_active_tokens Active OAuth tokens
+    let metrics_text = r"# HELP aunsorm_active_tokens Active OAuth tokens
 # TYPE aunsorm_active_tokens gauge
 aunsorm_active_tokens 1
 
@@ -101,7 +109,7 @@ aunsorm_sfu_contexts 0
 # HELP aunsorm_mdm_registered_devices Registered MDM devices
 # TYPE aunsorm_mdm_registered_devices counter
 aunsorm_mdm_registered_devices 0
-"#;
+";
     (
         StatusCode::OK,
         [("content-type", "text/plain; version=0.0.4")],
@@ -131,6 +139,30 @@ pub struct RandomNumberResponse {
     pub min: u64,
     pub max: u64,
     pub entropy: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Http3DatagramChannelDescriptor {
+    channel: u8,
+    label: Cow<'static, str>,
+    purpose: Cow<'static, str>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Http3DatagramCapabilities {
+    supported: bool,
+    max_payload_bytes: Option<usize>,
+    channels: Vec<Http3DatagramChannelDescriptor>,
+    notes: Option<Cow<'static, str>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Http3CapabilitiesResponse {
+    enabled: bool,
+    status: Cow<'static, str>,
+    alt_svc_port: Option<u16>,
+    alt_svc_max_age: Option<u32>,
+    datagrams: Http3DatagramCapabilities,
 }
 
 pub async fn random_number(
@@ -164,6 +196,68 @@ pub async fn random_number(
     headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
 
     Ok(response)
+}
+
+#[cfg(feature = "http3-experimental")]
+async fn http3_capabilities(
+    State(state): State<Arc<ServerState>>,
+) -> (StatusCode, Json<Http3CapabilitiesResponse>) {
+    let response = Http3CapabilitiesResponse {
+        enabled: true,
+        status: Cow::Borrowed("active"),
+        alt_svc_port: Some(state.listen_port()),
+        alt_svc_max_age: Some(ALT_SVC_MAX_AGE),
+        datagrams: Http3DatagramCapabilities {
+            supported: true,
+            max_payload_bytes: Some(MAX_PAYLOAD_BYTES),
+            channels: vec![
+                Http3DatagramChannelDescriptor {
+                    channel: DatagramChannel::Telemetry.as_u8(),
+                    label: Cow::Borrowed("telemetry"),
+                    purpose: Cow::Borrowed(
+                        "OpenTelemetry metrik anlık görüntüsü (OtelPayload)",
+                    ),
+                },
+                Http3DatagramChannelDescriptor {
+                    channel: DatagramChannel::Audit.as_u8(),
+                    label: Cow::Borrowed("audit"),
+                    purpose: Cow::Borrowed("Yetkilendirme denetim olayları (AuditEvent)"),
+                },
+                Http3DatagramChannelDescriptor {
+                    channel: DatagramChannel::Ratchet.as_u8(),
+                    label: Cow::Borrowed("ratchet"),
+                    purpose: Cow::Borrowed(
+                        "Oturum ratchet ilerleme gözlemleri (RatchetProbe)",
+                    ),
+                },
+            ],
+            notes: Some(Cow::Borrowed(
+                "Datagram yükleri postcard ile serileştirilir; en fazla 1150 bayt payload desteklenir.",
+            )),
+        },
+    };
+    (StatusCode::OK, Json(response))
+}
+
+#[cfg(not(feature = "http3-experimental"))]
+async fn http3_capabilities(
+    State(_state): State<Arc<ServerState>>,
+) -> (StatusCode, Json<Http3CapabilitiesResponse>) {
+    let response = Http3CapabilitiesResponse {
+        enabled: false,
+        status: Cow::Borrowed("feature_disabled"),
+        alt_svc_port: None,
+        alt_svc_max_age: None,
+        datagrams: Http3DatagramCapabilities {
+            supported: false,
+            max_payload_bytes: None,
+            channels: Vec::new(),
+            notes: Some(Cow::Borrowed(
+                "HTTP/3 desteği pasif. `--features http3-experimental` ile derleyerek etkinleştirin.",
+            )),
+        },
+    };
+    (StatusCode::NOT_IMPLEMENTED, Json(response))
 }
 
 // ACME Directory endpoint
@@ -452,7 +546,7 @@ pub async fn acme_get_certificate(
     {
         let states = ACME_ORDER_STATES.lock().unwrap();
         if let Some(states) = states.as_ref() {
-            if states.get(&order_id).map(|s| s.as_str()) != Some("valid") {
+            if states.get(&order_id).map(String::as_str) != Some("valid") {
                 return (StatusCode::NOT_FOUND, "Order not ready").into_response();
             }
         } else {
@@ -461,8 +555,6 @@ pub async fn acme_get_certificate(
     }
 
     // Generate real X.509 certificate chain using rcgen
-    use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
-
     // Create CA certificate
     let mut ca_params = CertificateParams::new(vec!["Test CA".to_string()]);
     ca_params.distinguished_name = DistinguishedName::new();
@@ -484,7 +576,7 @@ pub async fn acme_get_certificate(
     let cert_pem = cert.serialize_pem_with_signer(&ca_cert).unwrap();
     let ca_pem = ca_cert.serialize_pem().unwrap();
 
-    let certificate = format!("{}\n{}", cert_pem, ca_pem);
+    let certificate = format!("{cert_pem}\n{ca_pem}");
 
     (
         StatusCode::OK,
@@ -515,31 +607,27 @@ pub async fn acme_revoke_certificate(
     let mut first_revocation = false;
     let mut already_revoked = false;
 
-    {
+    let order_to_revoke = ACME_ORDER_STATES
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|orders| {
+            orders
+                .iter()
+                .find(|(_, status)| *status == "valid")
+                .map(|(order_id, _)| order_id.clone())
+        });
+
+    if let Some(order_id) = order_to_revoke {
         let mut revoked = ACME_REVOKED_CERTIFICATES.lock().unwrap();
-        if revoked.is_none() {
-            *revoked = Some(HashSet::new());
+        let revoked_set = revoked.get_or_insert_with(HashSet::new);
+        if revoked_set.contains(&order_id) {
+            already_revoked = true;
+        } else {
+            revoked_set.insert(order_id);
+            first_revocation = true;
         }
-
-        let revoked_set = revoked.as_mut().unwrap();
-
-        // Get all valid orders
-        let orders = ACME_ORDER_STATES.lock().unwrap();
-        if let Some(orders) = orders.as_ref() {
-            for (order_id, status) in orders.iter() {
-                if status == "valid" {
-                    if revoked_set.contains(order_id) {
-                        already_revoked = true;
-                        break;
-                    } else {
-                        // First revocation for this order
-                        revoked_set.insert(order_id.clone());
-                        first_revocation = true;
-                        break;
-                    }
-                }
-            }
-        }
+        drop(revoked);
     }
 
     if already_revoked {
@@ -788,7 +876,7 @@ pub async fn generate_media_token(
         .signer()
         .sign(&claims)
         .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
-    let issued_at = claims.issued_at.unwrap_or_else(|| SystemTime::now());
+    let issued_at = claims.issued_at.unwrap_or_else(SystemTime::now);
     let expires_at = claims
         .expiration
         .ok_or_else(|| ApiError::server_error("exp claim is missing"))?;
@@ -1085,19 +1173,19 @@ fn normalize_scope(
     };
     let trimmed = scope_value.trim();
     if trimmed.is_empty() {
-        return Err(ApiError::invalid_scope("scope cannot be empty"));
+        return Err(ApiError::invalid_scope("scope değeri boş bırakılamaz"));
     }
     let mut normalized = Vec::new();
     let mut seen = HashSet::new();
     for token in trimmed.split_whitespace() {
         if token.chars().any(char::is_control) {
             return Err(ApiError::invalid_scope(
-                "scope cannot contain control characters",
+                "scope değeri kontrol karakteri içeremez",
             ));
         }
         if !allowed_scopes.iter().any(|allowed| allowed == token) {
             return Err(ApiError::invalid_scope(format!(
-                "scope value not allowed: {token}",
+                "scope değeri izinli değil: {token}",
             )));
         }
         if seen.insert(token) {
@@ -1181,7 +1269,7 @@ pub async fn begin_auth(
         != Sha256::output_size()
     {
         return Err(ApiError::invalid_request(
-            "code_challenge value must be base64url encoded SHA-256 output",
+            "code_challenge değeri base64url kodlanmış SHA-256 çıktısı olmalıdır",
         ));
     }
 
@@ -1238,7 +1326,9 @@ pub async fn exchange_token(
     let auth_request = state
         .consume_auth_request(&payload.code)
         .await
-        .ok_or_else(|| ApiError::invalid_grant("Authorization code not found or expired"))?;
+        .ok_or_else(|| {
+            ApiError::invalid_grant("Yetkilendirme kodu bulunamadı veya süresi doldu")
+        })?;
 
     if auth_request.client_id != payload.client_id {
         return Err(ApiError::invalid_client("client_id eşleşmiyor"));
@@ -1285,7 +1375,7 @@ pub async fn exchange_token(
     let audience_repr = claims
         .audience
         .as_ref()
-        .map(|aud| serde_json::to_string(aud))
+        .map(serde_json::to_string)
         .transpose()
         .map_err(|err| ApiError::server_error(format!("audience serileştirilemedi: {err}")))?;
     state
@@ -1505,16 +1595,17 @@ pub async fn generate_id(
 ) -> Result<Json<IdGenerateResponse>, ApiError> {
     use aunsorm_id::HeadIdGenerator;
 
-    let generator = if let Some(namespace) = request.namespace {
-        HeadIdGenerator::from_env_with_namespace(namespace)
-    } else {
-        HeadIdGenerator::from_env()
-    }
-    .map_err(|e| ApiError::invalid_request(format!("ID generator error: {}", e)))?;
+    let generator = request
+        .namespace
+        .map_or_else(
+            HeadIdGenerator::from_env,
+            HeadIdGenerator::from_env_with_namespace,
+        )
+        .map_err(|e| ApiError::invalid_request(format!("ID generator error: {e}")))?;
 
     let id = generator
         .next_id()
-        .map_err(|e| ApiError::server_error(format!("ID generation failed: {}", e)))?;
+        .map_err(|e| ApiError::server_error(format!("ID generation failed: {e}")))?;
 
     Ok(Json(IdGenerateResponse {
         id: id.as_str().to_string(),
@@ -1917,6 +2008,11 @@ pub async fn transparency_tree(
 }
 
 #[allow(clippy::cognitive_complexity)]
+#[allow(clippy::too_many_lines)]
+/// Yönlendirici yapısını oluşturur.
+///
+/// # Panics
+/// `http3-experimental` özelliği etkin ve `Alt-Svc` başlığı oluşturulamazsa panikler.
 pub fn build_router(state: &Arc<ServerState>) -> Router {
     let service_mode = std::env::var("SERVICE_MODE").ok();
     tracing::info!("🔧 SERVICE_MODE: {:?}", service_mode);
@@ -1935,6 +2031,7 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/random/number", get(random_number))
                 // Transparency endpoints (gateway service)
                 .route("/transparency/tree", get(transparency_tree))
+                .route("/http3/capabilities", get(http3_capabilities))
                 // Proxy JWT endpoints to auth service
                 .route("/security/jwt-verify", post(proxy_jwt_verify))
                 .route("/security/generate-media-token", post(proxy_media_token))
@@ -2038,14 +2135,36 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/sfu/context", post(create_sfu_context))
                 .route("/sfu/context/step", post(next_sfu_step))
                 // Transparency endpoints
-                .route("/transparency/tree", get(transparency_tree));
+                .route("/transparency/tree", get(transparency_tree))
+                .route("/http3/capabilities", get(http3_capabilities));
         }
     }
+
+    #[cfg(feature = "http3-experimental")]
+    let router = {
+        let port = state.listen_port();
+        let header_value =
+            build_alt_svc_header_value(port).expect("Alt-Svc başlığı oluşturulamadı");
+        let header_value = Arc::new(header_value);
+        router.layer(middleware::from_fn(
+            move |req: axum::http::Request<Body>, next: Next| {
+                let header_value = Arc::clone(&header_value);
+                async move {
+                    let mut response = next.run(req).await;
+                    response
+                        .headers_mut()
+                        .insert(header::ALT_SVC, header_value.as_ref().clone());
+                    response
+                }
+            },
+        ))
+    };
 
     router.with_state(state.clone())
 }
 
 // Proxy functions for gateway
+#[allow(clippy::option_if_let_else)]
 async fn proxy_jwt_verify(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
     let client = reqwest::Client::new();
     match client
@@ -2072,6 +2191,7 @@ async fn proxy_jwt_verify(Json(payload): Json<serde_json::Value>) -> impl IntoRe
     }
 }
 
+#[allow(clippy::option_if_let_else)]
 async fn proxy_media_token(
     headers: axum::http::HeaderMap,
     Json(payload): Json<serde_json::Value>,
@@ -2113,6 +2233,7 @@ async fn proxy_media_token(
     }
 }
 
+#[allow(clippy::option_if_let_else)]
 async fn proxy_id_generate(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
     let client = reqwest::Client::new();
     match client
@@ -2141,24 +2262,24 @@ async fn proxy_id_generate(Json(payload): Json<serde_json::Value>) -> impl IntoR
 
 async fn proxy_id_generate_head() -> impl IntoResponse {
     let client = reqwest::Client::new();
-    match client
+    client
         .head("http://aun-id-service:50016/id/generate")
         .send()
         .await
-    {
-        Ok(response) => {
-            let status_code = match response.status().as_u16() {
-                200 => StatusCode::OK,
-                400 => StatusCode::BAD_REQUEST,
-                404 => StatusCode::NOT_FOUND,
-                422 => StatusCode::UNPROCESSABLE_ENTITY,
-                500 => StatusCode::INTERNAL_SERVER_ERROR,
-                _ => StatusCode::BAD_GATEWAY,
-            };
-            status_code.into_response()
-        }
-        Err(_) => (StatusCode::BAD_GATEWAY, "ID service unavailable").into_response(),
-    }
+        .map_or_else(
+            |_| (StatusCode::BAD_GATEWAY, "ID service unavailable").into_response(),
+            |response| {
+                let status_code = match response.status().as_u16() {
+                    200 => StatusCode::OK,
+                    400 => StatusCode::BAD_REQUEST,
+                    404 => StatusCode::NOT_FOUND,
+                    422 => StatusCode::UNPROCESSABLE_ENTITY,
+                    500 => StatusCode::INTERNAL_SERVER_ERROR,
+                    _ => StatusCode::BAD_GATEWAY,
+                };
+                status_code.into_response()
+            },
+        )
 }
 
 /// Starts the aunsorm server with the given configuration.
@@ -2169,8 +2290,100 @@ async fn proxy_id_generate_head() -> impl IntoResponse {
 pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
     let listen = config.listen;
     let state = Arc::new(ServerState::try_new(config)?);
+    #[cfg(feature = "http3-experimental")]
+    let _http3_guard = {
+        let guard = spawn_http3_poc(listen, Arc::clone(&state))?;
+        tracing::info!(
+            port = listen.port(),
+            "HTTP/3 PoC dinleyicisi etkinleştirildi"
+        );
+        guard
+    };
     let router = build_router(&state);
     let listener = tokio::net::TcpListener::bind(listen).await?;
     axum::serve(listener, router.into_make_service()).await?;
     Ok(())
+}
+
+#[cfg(all(test, feature = "http3-experimental"))]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use std::net::SocketAddr;
+    use std::time::Duration;
+    use tower::ServiceExt;
+
+    use crate::config::{LedgerBackend, ServerConfig};
+
+    fn build_test_state() -> Arc<ServerState> {
+        let listen: SocketAddr = "127.0.0.1:9443".parse().expect("socket address");
+        let key_pair =
+            aunsorm_jwt::Ed25519KeyPair::generate("test-server").expect("key pair generation");
+        let config = ServerConfig::new(
+            listen,
+            "https://aunsorm.test",
+            "test-audience",
+            Duration::from_secs(300),
+            false,
+            key_pair,
+            LedgerBackend::Memory,
+        )
+        .expect("config is valid");
+        Arc::new(ServerState::try_new(config).expect("state is constructed"))
+    }
+
+    #[tokio::test]
+    async fn alt_svc_header_is_injected_for_http3_routes() {
+        let state = build_test_state();
+        let port = state.listen_port();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/health")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+        let header = response
+            .headers()
+            .get(header::ALT_SVC)
+            .expect("Alt-Svc header is present");
+        let expected =
+            build_alt_svc_header_value(port).expect("expected header can be constructed");
+        assert_eq!(header, &expected);
+    }
+
+    #[tokio::test]
+    async fn http3_capabilities_reports_active_status() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/http3/capabilities")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+        assert_eq!(response.status(), StatusCode::OK);
+        let header = response
+            .headers()
+            .get(header::ALT_SVC)
+            .expect("Alt-Svc header is present");
+        let expected =
+            build_alt_svc_header_value(state.listen_port()).expect("expected header is built");
+        assert_eq!(header, &expected);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body is collected");
+        let payload: Http3CapabilitiesResponse =
+            serde_json::from_slice(&body).expect("payload parses");
+        assert!(payload.enabled);
+        assert_eq!(payload.status.as_ref(), "active");
+        assert_eq!(payload.alt_svc_port, Some(state.listen_port()));
+        assert_eq!(payload.alt_svc_max_age, Some(ALT_SVC_MAX_AGE));
+        assert_eq!(payload.datagrams.max_payload_bytes, Some(MAX_PAYLOAD_BYTES));
+        assert_eq!(payload.datagrams.channels.len(), 3);
+    }
 }

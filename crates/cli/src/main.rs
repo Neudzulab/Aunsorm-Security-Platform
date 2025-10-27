@@ -3420,6 +3420,7 @@ fn handle_acme_revoke(args: &AcmeRevokeArgs) -> CliResult<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn handle_validate_endpoints(args: EndpointValidatorArgs) -> CliResult<()> {
     let EndpointValidatorArgs {
         base_url,
