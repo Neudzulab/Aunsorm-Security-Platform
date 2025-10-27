@@ -1,0 +1,55 @@
+name: Endpoint Validator
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1'
+
+jobs:
+  validate-endpoints:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.76.0
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: endpoint-validator-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Run endpoint-validator tests
+        run: cargo test -p endpoint-validator
+      - name: Start mock API
+        run: |
+          cargo run -p endpoint-validator --example mock_api -- --bind 127.0.0.1:8090 &
+          echo $! > mock_api.pid
+          sleep 3
+      - name: Validate endpoints
+        run: |
+          cargo run -p aunsorm-cli -- validate-endpoints \
+            --base-url http://127.0.0.1:8090 \
+            --markdown-report endpoint-report.md \
+            --json-output endpoint-results.json \
+            --allowlist ci/endpoint-validator-allowlist.json
+      - name: Upload validator reports
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: endpoint-validator-report
+          path: |
+            endpoint-report.md
+            endpoint-results.json
+      - name: Stop mock API
+        if: always()
+        run: |
+          if [ -f mock_api.pid ]; then
+            kill $(cat mock_api.pid) || true
+          fi

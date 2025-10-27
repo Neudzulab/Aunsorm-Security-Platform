@@ -25,6 +25,7 @@ paket üretme ve çözme iş akışlarını otomatikleştirir.
   stdout üzerinden boru hatlarına yönlendirilebilir.
 - JWT anahtar üretimi, imzalama/doğrulama ve JWKS dışa aktarımı.
 - Kalibrasyon uzantılı Ed25519 öz-imzalı X.509 sertifika üretimi.
+- Uzak API uçlarını keşfeden ve raporlayan `validate-endpoints` komutu.
 
 ## Kullanım
 
@@ -88,3 +89,17 @@ Her komutun ayrıntılı yardım sayfasına `--help` ile erişilebilir.
 
 Parola dosyaları yalnızca satır sonu karakterlerinden arındırılır;
 dosya boşsa komut hata döndürür.
+
+## Endpoint Doğrulama
+
+```bash
+cargo run -p aunsorm-cli -- validate-endpoints \
+  --base-url https://api.example.com \
+  --markdown-report endpoint-report.md \
+  --json-output endpoint-results.json \
+  --allowlist ci/endpoint-validator-allowlist.json
+```
+
+Komut otomatik olarak OpenAPI, sitemap ve HTML kaynaklarını tarayıp uçları
+toplar, güvenli metodları çağırır ve başarısızlıkları Markdown/JSON olarak
+raporlar. Allowlist dosyası bilinen hataları toleranslı hale getirir.

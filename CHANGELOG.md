@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-server` HTTP hizmetine `tower-http` TraceLayer katmanı eklenerek
   her isteğin başlangıcı/yanıtı milisaniye gecikmesiyle stdout log'larına
   aktarılır.
+- `endpoint-validator` kütüphanesi ve `aunsorm-cli validate-endpoints`
+  komutu: OpenAPI/sitemap/HTML keşfi, otomatik gövde üretimi, geri çekilme
+  politikaları ve Markdown/JSON raporlarıyla uzak API uçlarını doğrular.
 - `aunsorm-id` HEAD parmak izini ham byte dizisi olarak döndüren
   `HeadIdGenerator::head_fingerprint_bytes` ve `HeadStampedId::fingerprint_bytes`
   yardımcılarını sağlayarak ikili doğrulama ve anahtar materyali karşılaştırma

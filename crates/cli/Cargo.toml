@@ -18,6 +18,7 @@ aunsorm-kms = { path = "../kms" }
 aunsorm-packet = { path = "../packet" }
 aunsorm-pqc = { path = "../pqc" }
 aunsorm-x509 = { path = "../x509" }
+endpoint-validator = { path = "../endpoint-validator" }
 base64 = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
@@ -33,6 +34,7 @@ thiserror = { workspace = true }
 ureq = { version = "2.9" }
 url = { workspace = true }
 zeroize = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [dev-dependencies]
 tempfile = "3"

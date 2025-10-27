@@ -1,0 +1,7 @@
+[
+  {
+    "method": "GET",
+    "path": "/broken",
+    "statuses": [500]
+  }
+]
