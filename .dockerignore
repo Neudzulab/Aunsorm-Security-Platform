@@ -21,7 +21,6 @@ target/
 *.md
 docs/
 examples/
-benches/
 
 # CI/CD
 .github/
