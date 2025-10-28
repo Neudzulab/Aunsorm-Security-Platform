@@ -26,6 +26,8 @@ use crate::acme::{
     RevokeCertOutcome,
 };
 
+mod acme;
+
 // Global registered devices set for testing
 static REGISTERED_DEVICES: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
@@ -468,7 +470,8 @@ fn is_jose_content_type(headers: &HeaderMap) -> bool {
         })
 }
 
-fn apply_acme_headers(response: &mut Response, nonce: &str) {
+#[allow(clippy::redundant_pub_crate)]
+pub(crate) fn apply_acme_headers(response: &mut Response, nonce: &str) {
     let replay_name = header::HeaderName::from_static("replay-nonce");
     let value = HeaderValue::from_str(nonce).expect("nonce header değeri geçerli olmalı");
     response.headers_mut().insert(replay_name, value);
@@ -477,7 +480,8 @@ fn apply_acme_headers(response: &mut Response, nonce: &str) {
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
 }
 
-fn acme_problem_response(problem: &AcmeProblem, nonce: &str) -> Response {
+#[allow(clippy::redundant_pub_crate)]
+pub(crate) fn acme_problem_response(problem: &AcmeProblem, nonce: &str) -> Response {
     let mut response = (problem.status(), Json(problem.body())).into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
@@ -549,24 +553,6 @@ fn acme_revoke_response(outcome: &RevokeCertOutcome, nonce: &str) -> Response {
     response
 }
 
-async fn acme_directory(State(state): State<Arc<ServerState>>) -> Response {
-    let service = state.acme();
-    let document = service.directory_document();
-    let nonce = service.issue_nonce().await;
-    let mut response = (StatusCode::OK, Json(document)).into_response();
-    apply_acme_headers(&mut response, &nonce);
-    response
-}
-
-async fn acme_new_nonce(State(state): State<Arc<ServerState>>) -> Response {
-    let service = state.acme();
-    let nonce = service.issue_nonce().await;
-    let mut response = Response::new(Body::empty());
-    *response.status_mut() = StatusCode::OK;
-    apply_acme_headers(&mut response, &nonce);
-    response
-}
-
 async fn acme_new_account(
     State(state): State<Arc<ServerState>>,
     request: Request<Body>,
@@ -574,7 +560,7 @@ async fn acme_new_account(
     let service = state.acme();
     let (parts, body) = request.into_parts();
     if !is_jose_content_type(&parts.headers) {
-        let nonce = service.issue_nonce().await;
+        let nonce = service.next_nonce().await;
         let problem =
             AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
         return acme_problem_response(&problem, &nonce);
@@ -583,7 +569,7 @@ async fn acme_new_account(
     let body_bytes = match to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
         }
@@ -592,7 +578,7 @@ async fn acme_new_account(
     let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
         Ok(value) => value,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem =
                 AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
@@ -601,11 +587,11 @@ async fn acme_new_account(
 
     match service.handle_new_account(jws).await {
         Ok(outcome) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_account_response(outcome, &nonce)
         }
         Err(problem) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_problem_response(&problem, &nonce)
         }
     }
@@ -619,7 +605,7 @@ async fn acme_account_lookup(
     let service = state.acme();
     let (parts, body) = request.into_parts();
     if !is_jose_content_type(&parts.headers) {
-        let nonce = service.issue_nonce().await;
+        let nonce = service.next_nonce().await;
         let problem =
             AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
         return acme_problem_response(&problem, &nonce);
@@ -628,7 +614,7 @@ async fn acme_account_lookup(
     let body_bytes = match to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
         }
@@ -637,7 +623,7 @@ async fn acme_account_lookup(
     let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
         Ok(value) => value,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem =
                 AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
@@ -646,11 +632,11 @@ async fn acme_account_lookup(
 
     match service.handle_account_lookup(&account_id, jws).await {
         Ok(outcome) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_account_response(outcome, &nonce)
         }
         Err(problem) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_problem_response(&problem, &nonce)
         }
     }
@@ -660,7 +646,7 @@ async fn acme_new_order(State(state): State<Arc<ServerState>>, request: Request<
     let service = state.acme();
     let (parts, body) = request.into_parts();
     if !is_jose_content_type(&parts.headers) {
-        let nonce = service.issue_nonce().await;
+        let nonce = service.next_nonce().await;
         let problem =
             AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
         return acme_problem_response(&problem, &nonce);
@@ -669,7 +655,7 @@ async fn acme_new_order(State(state): State<Arc<ServerState>>, request: Request<
     let body_bytes = match to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
         }
@@ -678,7 +664,7 @@ async fn acme_new_order(State(state): State<Arc<ServerState>>, request: Request<
     let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
         Ok(value) => value,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem =
                 AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
@@ -687,11 +673,11 @@ async fn acme_new_order(State(state): State<Arc<ServerState>>, request: Request<
 
     match service.handle_new_order(jws).await {
         Ok(outcome) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_order_response(outcome, &nonce)
         }
         Err(problem) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_problem_response(&problem, &nonce)
         }
     }
@@ -705,7 +691,7 @@ async fn acme_order_status(
     let service = state.acme();
     let (parts, body) = request.into_parts();
     if !is_jose_content_type(&parts.headers) {
-        let nonce = service.issue_nonce().await;
+        let nonce = service.next_nonce().await;
         let problem =
             AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
         return acme_problem_response(&problem, &nonce);
@@ -714,7 +700,7 @@ async fn acme_order_status(
     let body_bytes = match to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
         }
@@ -723,7 +709,7 @@ async fn acme_order_status(
     let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
         Ok(value) => value,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem =
                 AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
@@ -732,11 +718,11 @@ async fn acme_order_status(
 
     match service.handle_order_lookup(&order_id, jws).await {
         Ok(outcome) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_order_status_response(outcome, &nonce)
         }
         Err(problem) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_problem_response(&problem, &nonce)
         }
     }
@@ -750,7 +736,7 @@ async fn acme_finalize_order(
     let service = state.acme();
     let (parts, body) = request.into_parts();
     if !is_jose_content_type(&parts.headers) {
-        let nonce = service.issue_nonce().await;
+        let nonce = service.next_nonce().await;
         let problem =
             AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
         return acme_problem_response(&problem, &nonce);
@@ -759,7 +745,7 @@ async fn acme_finalize_order(
     let body_bytes = match to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
         }
@@ -768,7 +754,7 @@ async fn acme_finalize_order(
     let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
         Ok(value) => value,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem =
                 AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
@@ -777,11 +763,11 @@ async fn acme_finalize_order(
 
     match service.handle_finalize_order(&order_id, jws).await {
         Ok(outcome) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_finalize_response(outcome, &nonce)
         }
         Err(problem) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_problem_response(&problem, &nonce)
         }
     }
@@ -794,7 +780,7 @@ async fn acme_get_certificate(
     let service = state.acme();
     match service.certificate_pem_bundle(&order_id).await {
         Ok(bundle) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let mut response = Response::new(Body::from(bundle));
             *response.status_mut() = StatusCode::OK;
             response.headers_mut().insert(
@@ -805,7 +791,7 @@ async fn acme_get_certificate(
             response
         }
         Err(problem) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_problem_response(&problem, &nonce)
         }
     }
@@ -818,7 +804,7 @@ async fn acme_revoke_certificate(
     let service = state.acme();
     let (parts, body) = request.into_parts();
     if !is_jose_content_type(&parts.headers) {
-        let nonce = service.issue_nonce().await;
+        let nonce = service.next_nonce().await;
         let problem =
             AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
         return acme_problem_response(&problem, &nonce);
@@ -827,7 +813,7 @@ async fn acme_revoke_certificate(
     let body_bytes = match to_bytes(body, usize::MAX).await {
         Ok(bytes) => bytes,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
         }
@@ -836,7 +822,7 @@ async fn acme_revoke_certificate(
     let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
         Ok(value) => value,
         Err(err) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             let problem =
                 AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
             return acme_problem_response(&problem, &nonce);
@@ -845,11 +831,11 @@ async fn acme_revoke_certificate(
 
     match service.revoke_certificate(jws).await {
         Ok(outcome) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_revoke_response(&outcome, &nonce)
         }
         Err(problem) => {
-            let nonce = service.issue_nonce().await;
+            let nonce = service.next_nonce().await;
             acme_problem_response(&problem, &nonce)
         }
     }
@@ -2236,8 +2222,8 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
             tracing::info!("🔒 Building ACME SERVICE routes");
             router = router
                 // ACME endpoints (acme service)
-                .route("/acme/directory", get(acme_directory))
-                .route("/acme/new-nonce", get(acme_new_nonce))
+                .route("/acme/directory", get(acme::directory))
+                .route("/acme/new-nonce", get(acme::new_nonce))
                 .route("/acme/new-account", post(acme_new_account))
                 .route("/acme/account/:id", post(acme_account_lookup))
                 .route("/acme/new-order", post(acme_new_order))
@@ -2285,8 +2271,8 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/random/number", get(random_number))
                 .route("/pqc/capabilities", get(pqc_capabilities))
                 // ACME endpoints
-                .route("/acme/directory", get(acme_directory))
-                .route("/acme/new-nonce", get(acme_new_nonce))
+                .route("/acme/directory", get(acme::directory))
+                .route("/acme/new-nonce", get(acme::new_nonce))
                 .route("/acme/new-account", post(acme_new_account))
                 .route("/acme/account/:id", post(acme_account_lookup))
                 .route("/acme/new-order", post(acme_new_order))

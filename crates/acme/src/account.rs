@@ -1,5 +1,14 @@
-use std::fmt;
+//! ACME `newAccount` akışı için veri modelleri ve servis soyutlamaları.
+//!
+//! RFC 8555 §7.3 ve §7.3.2, hesap oluşturma ve hesap kaynağını sorgulama
+//! süreçlerini tanımlar. Bu modül, ACME hesap isteklerinin doğrulanması
+//! için veri yapılarını ve hesap servislerinin uygulaması gereken trait
+//! tabanlı sözleşmeyi sağlar.
 
+use std::fmt;
+use std::future::Future;
+
+use crate::AcmeJws;
 use idna::domain_to_ascii;
 use percent_encoding::percent_decode_str;
 use serde::ser::{Serialize, Serializer};
@@ -432,6 +441,37 @@ fn normalize_email(value: &str) -> Result<String, AccountContactError> {
     })?;
 
     Ok(format!("{local}@{ascii_domain}"))
+}
+
+/// ACME hesap yönetimi gerçekleştiren servisler için sözleşme.
+///
+/// Hesap oluşturma isteği, istemci anahtarını `newAccount` uç noktasına
+/// JWS olarak imzalar. Akabinde istemciler kid değerini kullanarak POST-as-GET
+/// isteğiyle hesap kaynağını sorgular. Bu trait, servislerin bu iki adımı
+/// RFC 8555'e uygun şekilde uygulaması için gerekli imzalı JWS girdilerini
+/// soyutlar.
+pub trait AccountService {
+    /// Servisin hata türü.
+    type Error;
+
+    /// Hesap sonuç yapısı.
+    type Account;
+
+    /// `newAccount` isteği için kullanılan future türü.
+    type RegistrationFuture<'a>: Future<Output = Result<Self::Account, Self::Error>> + Send + 'a
+    where
+        Self: 'a;
+
+    /// Hesap sorguları için kullanılan future türü.
+    type LookupFuture<'a>: Future<Output = Result<Self::Account, Self::Error>> + Send + 'a
+    where
+        Self: 'a;
+
+    /// RFC 8555 §7.3'e uygun olarak yeni hesap kaydeder.
+    fn register_account(&self, jws: AcmeJws) -> Self::RegistrationFuture<'_>;
+
+    /// RFC 8555 §7.3.2'de tanımlanan POST-as-GET hesabı sorgusunu yürütür.
+    fn query_account<'a>(&'a self, account_id: &'a str, jws: AcmeJws) -> Self::LookupFuture<'a>;
 }
 
 fn normalize_tel(value: &str) -> Result<String, AccountContactError> {

@@ -1,4 +1,12 @@
+//! ACME `newNonce` uç noktası ve nonce yönetimi için yardımcılar.
+//!
+//! RFC 8555 §7.2 uyarınca her yetkilendirme isteği, tekrar saldırılarını
+//! önlemek için benzersiz bir `Replay-Nonce` değeri taşır. Bu modül nonce
+//! doğrulama yardımcılarını ve nonce üretimi/ tüketimi gerçekleştiren
+//! servisler için trait tabanlı bir sözleşmeyi içerir.
+
 use std::collections::VecDeque;
+use std::future::Future;
 use std::str::FromStr;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -188,6 +196,33 @@ impl Default for NoncePool {
     fn default() -> Self {
         Self::with_default_capacity()
     }
+}
+
+/// ACME `newNonce` uç noktasını sağlayan servisler için sözleşme.
+///
+/// İstemciler RFC 8555 akışında her POST isteği öncesinde `newNonce`
+/// uç noktasından yeni bir değer alır. Bu trait, nonce üretimi ve
+/// doğrulamasını soyutlayarak uygulamaların tekrar saldırılarına karşı
+/// koruma uygulamasını kolaylaştırır.
+pub trait NonceService {
+    /// Servisin hata türü.
+    type Error;
+
+    /// Yeni nonce üretimi için kullanılan future türü.
+    type IssueFuture<'a>: Future<Output = Result<String, Self::Error>> + Send + 'a
+    where
+        Self: 'a;
+
+    /// Nonce tüketimi/ doğrulaması için kullanılan future türü.
+    type ConsumeFuture<'a>: Future<Output = Result<(), Self::Error>> + Send + 'a
+    where
+        Self: 'a;
+
+    /// `newNonce` uç noktasından kullanılmak üzere benzersiz bir değer üretir.
+    fn issue_nonce(&self) -> Self::IssueFuture<'_>;
+
+    /// Gelen istekteki nonce değerini doğrular ve tekrar kullanımını engeller.
+    fn consume_nonce<'a>(&'a self, nonce: &'a str) -> Self::ConsumeFuture<'a>;
 }
 
 /// `newNonce` uç noktasına HTTP isteği sırasında oluşabilecek hatalar.

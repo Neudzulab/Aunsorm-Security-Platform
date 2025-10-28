@@ -156,7 +156,7 @@ impl RngCore for AunsormNativeRng {
             self.cache_offset += 4;
             return result;
         }
-        
+
         // Generate new block and cache it
         self.cached_entropy = self.next_entropy_block();
         self.cache_offset = 4;
@@ -184,7 +184,7 @@ impl RngCore for AunsormNativeRng {
             self.cache_offset += 8;
             return result;
         }
-        
+
         // Generate new block and cache it
         self.cached_entropy = self.next_entropy_block();
         self.cache_offset = 8;
@@ -202,16 +202,18 @@ impl RngCore for AunsormNativeRng {
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         let mut offset = 0;
-        
+
         // First, drain any cached entropy
         if self.cache_offset < 32 {
             let available = 32 - self.cache_offset;
             let to_copy = std::cmp::min(available, dest.len());
-            dest[..to_copy].copy_from_slice(&self.cached_entropy[self.cache_offset..self.cache_offset + to_copy]);
+            dest[..to_copy].copy_from_slice(
+                &self.cached_entropy[self.cache_offset..self.cache_offset + to_copy],
+            );
             self.cache_offset += to_copy;
             offset += to_copy;
         }
-        
+
         // Then fill remaining with fresh entropy blocks
         while offset < dest.len() {
             let entropy = self.next_entropy_block();
@@ -219,7 +221,7 @@ impl RngCore for AunsormNativeRng {
             let chunk_size = std::cmp::min(32, remaining);
             dest[offset..offset + chunk_size].copy_from_slice(&entropy[..chunk_size]);
             offset += chunk_size;
-            
+
             // Cache any unused entropy
             if chunk_size < 32 {
                 self.cached_entropy = entropy;
