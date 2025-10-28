@@ -33,4 +33,6 @@ pub use order::{
     OrderIdentifierError,
 };
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
-pub use validation::{Http01KeyAuthorization, Http01ValidationError};
+pub use validation::{
+    Dns01TxtRecord, Dns01ValidationError, Http01KeyAuthorization, Http01ValidationError,
+};

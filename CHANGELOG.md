@@ -63,6 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AccountContact` üretme ihtiyacını ortadan kaldırıyor.
 - ACME authorization veri modelleri: Authorization/Challenge JSON belgeleri
   HTTP-01/DNS-01/TLS-ALPN-01 türlerini doğrulayıp token formatını denetler.
+- ACME DNS-01 doğrulama yardımcıları: `_acme-challenge` TXT kayıt adı ve
+  SHA-256 key-authorization digest değerini deterministik olarak üretir,
+  wildcard domainleri normalleştirir.
 - ACME hesap anahtarları için Ed25519, ES256 ve RS256 üretim yardımcıları; RNG
   enjeksiyonunu destekleyerek CLI ve sunucu entegrasyonları için hazır anahtar
   üretimi sağlar.

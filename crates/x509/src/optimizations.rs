@@ -317,7 +317,11 @@ mod tests {
         // Native Aunsorm RNG - debug mode is significantly slower than release mode.
         // The debug threshold allows for CI environments with reduced entropy sources,
         // while still asserting that release builds remain snappy.
-        let threshold = if cfg!(debug_assertions) { 25_000 } else { 10_000 };
+        let threshold = if cfg!(debug_assertions) {
+            25_000
+        } else {
+            10_000
+        };
         assert!(
             duration.as_millis() < threshold,
             "RSA 2048 generation took too long: {:?} (debug: {})",
