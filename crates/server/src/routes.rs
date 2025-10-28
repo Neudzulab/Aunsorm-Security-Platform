@@ -73,6 +73,20 @@ fn map_jwt_error(err: &JwtError) -> String {
         _ => err.to_string(),
     }
 }
+
+const BEARER_PREFIX: &str = "bearer ";
+
+fn sanitize_token_input(token: &str) -> Cow<'_, str> {
+    let trimmed = token.trim();
+
+    if trimmed.len() > BEARER_PREFIX.len()
+        && trimmed[..BEARER_PREFIX.len()].eq_ignore_ascii_case(BEARER_PREFIX)
+    {
+        Cow::Owned(trimmed[BEARER_PREFIX.len()..].trim_start().to_owned())
+    } else {
+        Cow::Borrowed(trimmed)
+    }
+}
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
 use crate::fabric::{FabricDidError, FabricDidVerificationRequest};
@@ -895,7 +909,9 @@ async fn verify_token_for_audience(
 ) -> JwtVerifyResponse {
     tracing::info!("ROUTES.RS: verifying token with expected audience {expected_audience}");
 
-    if token.is_empty() {
+    let normalized_token = sanitize_token_input(token);
+
+    if normalized_token.is_empty() {
         return JwtVerifyResponse {
             valid: false,
             payload: None,
@@ -913,7 +929,7 @@ async fn verify_token_for_audience(
         ..VerificationOptions::default()
     };
 
-    match verifier.verify(token, &options) {
+    match verifier.verify(normalized_token.as_ref(), &options) {
         Ok(claims) => {
             let payload_value = match serde_json::to_value(&claims) {
                 Ok(value) => value,
