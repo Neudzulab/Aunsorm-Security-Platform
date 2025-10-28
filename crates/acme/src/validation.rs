@@ -382,7 +382,9 @@ impl TlsAlpnChallenge {
         &self,
         rng: &mut R,
     ) -> Result<TlsAlpnCertificate, TlsAlpnCertificateError> {
-        let signing_key = SigningKey::generate(rng);
+        let mut seed = [0u8; 32];
+        rng.fill_bytes(&mut seed);
+        let signing_key = SigningKey::from_bytes(&seed);
         let key_doc = signing_key
             .to_pkcs8_der()
             .map_err(|err| TlsAlpnCertificateError::KeyEncoding(err.to_string()))?;
