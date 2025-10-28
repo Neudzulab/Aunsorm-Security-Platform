@@ -10,7 +10,7 @@ use aunsorm_acme::{
     AccountContact, Ed25519AccountKey, KeyBinding, NewAccountRequest, NewOrderRequest,
     OrderIdentifier, ReplayNonce, REPLAY_NONCE_HEADER,
 };
-use aunsorm_jwt::{Ed25519KeyPair, Jwk};
+use aunsorm_jwt::{Audience, Claims, Ed25519KeyPair, Jwk};
 use aunsorm_mdm::{DeviceCertificatePlan, DeviceRecord, PolicyDocument};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use serde::Deserialize;
@@ -1961,6 +1961,48 @@ async fn jwt_verify_endpoint_rejects_missing_token() {
     assert!(!verify.valid);
     assert!(verify.payload.is_none());
     assert_eq!(verify.error.as_deref(), Some("Token is required"));
+}
+
+#[tokio::test]
+async fn jwt_verify_endpoint_rejects_tokens_missing_jti() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let mut claims = Claims::new();
+    claims.subject = Some("participant-007".to_string());
+    claims.issuer = Some(state.issuer().to_owned());
+    claims.audience = Some(Audience::Single("zasian-media".to_owned()));
+    claims.set_issued_now();
+    claims.set_expiration_from_now(state.token_ttl());
+    claims
+        .extra
+        .insert("roomId".to_string(), Value::String("room-missing-jti".to_string()));
+
+    let signer = state.signer().clone();
+    let token = signer
+        .sign(&claims)
+        .expect("token without jti should still sign");
+
+    let verify_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwt-verify")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "token": token }).to_string()))
+                .expect("verify request"),
+        )
+        .await
+        .expect("verify response");
+
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let verify_body = to_bytes(verify_response.into_body(), usize::MAX)
+        .await
+        .expect("verify body");
+    let verify: JwtVerifyResponseBody = serde_json::from_slice(&verify_body).expect("verify json");
+    assert!(!verify.valid);
+    assert!(verify.payload.is_none());
+    assert_eq!(verify.error.as_deref(), Some("Token missing jti claim"));
 }
 
 #[allow(dead_code)]
