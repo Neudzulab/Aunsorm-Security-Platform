@@ -1881,6 +1881,68 @@ async fn jwt_verify_endpoint_accepts_valid_token() {
 }
 
 #[tokio::test]
+async fn jwt_verify_endpoint_accepts_bearer_prefix() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let token_payload = json!({
+        "roomId": "room-bearer",
+        "identity": "participant-99"
+    });
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/generate-media-token")
+                .header("content-type", "application/json")
+                .body(Body::from(token_payload.to_string()))
+                .expect("token request"),
+        )
+        .await
+        .expect("token response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("token body");
+    let token_body: MediaTokenResponseBody = serde_json::from_slice(&body).expect("token json");
+
+    let verify_payload = json!({
+        "token": format!(" BEARER  {}", token_body.token)
+    });
+
+    let verify_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwt-verify")
+                .header("content-type", "application/json")
+                .body(Body::from(verify_payload.to_string()))
+                .expect("verify request"),
+        )
+        .await
+        .expect("verify response");
+
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let verify_body = to_bytes(verify_response.into_body(), usize::MAX)
+        .await
+        .expect("verify body");
+    let verify: JwtVerifyResponseBody = serde_json::from_slice(&verify_body).expect("verify json");
+    assert!(verify.valid);
+    assert!(verify.error.is_none());
+    let payload = verify.payload.expect("payload");
+    assert_eq!(
+        payload.get("audience").and_then(|value| value.as_str()),
+        Some("zasian-media"),
+    );
+    assert_eq!(
+        payload.get("subject").and_then(|value| value.as_str()),
+        Some("participant-99"),
+    );
+}
+
+#[tokio::test]
 async fn jwt_verify_endpoint_rejects_tampered_token() {
     let state = setup_state();
     let app = build_router(&state);
