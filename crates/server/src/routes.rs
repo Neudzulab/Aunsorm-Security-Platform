@@ -112,24 +112,37 @@ pub async fn health() -> Json<HealthResponse> {
     Json(HealthResponse { status: "OK" })
 }
 
-pub async fn metrics(State(_state): State<Arc<ServerState>>) -> impl IntoResponse {
-    let metrics_text = r"# HELP aunsorm_active_tokens Active OAuth tokens
-# TYPE aunsorm_active_tokens gauge
-aunsorm_active_tokens 1
+pub async fn metrics(State(state): State<Arc<ServerState>>) -> Result<impl IntoResponse, ApiError> {
+    let now = SystemTime::now();
+    let pending = state.auth_request_count().await;
+    let active = state.active_token_count(now).await.map_err(|err| {
+        ApiError::server_error(format!("Aktif token sayısı sorgulanamadı: {err}",))
+    })?;
+    let sfu = state.sfu_context_count(now).await;
+    let devices = state
+        .registered_device_count()
+        .map_err(|err| ApiError::server_error(format!("Kayıtlı cihaz sayısı alınamadı: {err}",)))?;
 
-# HELP aunsorm_sfu_contexts Active SFU contexts
-# TYPE aunsorm_sfu_contexts gauge
-aunsorm_sfu_contexts 0
+    let metrics_text = format!(
+        "# HELP aunsorm_pending_auth_requests Pending PKCE authorization requests\n\
+         # TYPE aunsorm_pending_auth_requests gauge\n\
+         aunsorm_pending_auth_requests {pending}\n\n\
+         # HELP aunsorm_active_tokens Active OAuth tokens\n\
+         # TYPE aunsorm_active_tokens gauge\n\
+         aunsorm_active_tokens {active}\n\n\
+         # HELP aunsorm_sfu_contexts Active SFU contexts\n\
+         # TYPE aunsorm_sfu_contexts gauge\n\
+         aunsorm_sfu_contexts {sfu}\n\n\
+         # HELP aunsorm_mdm_registered_devices Registered MDM devices\n\
+         # TYPE aunsorm_mdm_registered_devices gauge\n\
+         aunsorm_mdm_registered_devices {devices}\n",
+    );
 
-# HELP aunsorm_mdm_registered_devices Registered MDM devices
-# TYPE aunsorm_mdm_registered_devices counter
-aunsorm_mdm_registered_devices 0
-";
-    (
+    Ok((
         StatusCode::OK,
-        [("content-type", "text/plain; version=0.0.4")],
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
         metrics_text,
-    )
+    ))
 }
 
 // Random Number endpoint

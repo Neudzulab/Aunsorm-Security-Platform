@@ -65,7 +65,9 @@ fn generate_rsa_with_hints(bits: usize) -> Result<RsaPrivateKey, X509Error> {
     let start = std::time::Instant::now();
 
     // For large keys (4096+), use parallel prime generation
-    let result = if bits >= 4096 && std::thread::available_parallelism().map_or(1, |p| p.get()) > 1 {
+    let result = if bits >= 4096
+        && std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get) > 1
+    {
         generate_rsa_parallel(bits)
     } else {
         let mut rng = AunsormNativeRng::new();
@@ -83,20 +85,20 @@ fn generate_rsa_with_hints(bits: usize) -> Result<RsaPrivateKey, X509Error> {
 /// Parallel RSA key generation for large key sizes (4096+)
 /// Uses multiple RNG streams to generate primes concurrently
 fn generate_rsa_parallel(bits: usize) -> Result<RsaPrivateKey, X509Error> {
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
-    
+    use std::sync::Arc;
+
     eprintln!("⚡ Using parallel prime generation for RSA-{bits}...");
-    
+
     // Try multiple times with different RNG seeds
     let max_attempts = 3;
     let found = Arc::new(AtomicBool::new(false));
-    
+
     for attempt in 1..=max_attempts {
         if attempt > 1 {
             eprintln!("🔄 Retry attempt {attempt}/{max_attempts}...");
         }
-        
+
         // Generate with dedicated RNG instance
         let mut rng = AunsormNativeRng::new();
         match RsaPrivateKey::new(&mut rng, bits) {
@@ -106,7 +108,6 @@ fn generate_rsa_parallel(bits: usize) -> Result<RsaPrivateKey, X509Error> {
             }
             Err(err) if attempt < max_attempts => {
                 eprintln!("⚠️  Attempt {attempt} failed: {err}, retrying with fresh entropy...");
-                continue;
             }
             Err(err) => {
                 return Err(X509Error::KeyGeneration(format!(
@@ -115,7 +116,7 @@ fn generate_rsa_parallel(bits: usize) -> Result<RsaPrivateKey, X509Error> {
             }
         }
     }
-    
+
     Err(X509Error::KeyGeneration(format!(
         "RSA {bits}-bit generation exhausted all attempts"
     )))
@@ -136,7 +137,7 @@ impl AunsormNativeRng {
     #[must_use]
     pub fn new() -> Self {
         use rand_core::OsRng;
-        
+
         let mut entropy_salt = [0u8; 32];
         OsRng.fill_bytes(&mut entropy_salt);
 
@@ -274,7 +275,7 @@ impl rand_core::RngCore for AunsormNativeRng {
             self.cache_offset += 4;
             return result;
         }
-        
+
         // Generate new block and cache it
         self.cached_entropy = self.next_entropy_block();
         self.cache_offset = 4;
@@ -302,7 +303,7 @@ impl rand_core::RngCore for AunsormNativeRng {
             self.cache_offset += 8;
             return result;
         }
-        
+
         // Generate new block and cache it
         self.cached_entropy = self.next_entropy_block();
         self.cache_offset = 8;
@@ -320,16 +321,18 @@ impl rand_core::RngCore for AunsormNativeRng {
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         let mut offset = 0;
-        
+
         // First, drain any cached entropy
         if self.cache_offset < 32 {
             let available = 32 - self.cache_offset;
             let to_copy = std::cmp::min(available, dest.len());
-            dest[..to_copy].copy_from_slice(&self.cached_entropy[self.cache_offset..self.cache_offset + to_copy]);
+            dest[..to_copy].copy_from_slice(
+                &self.cached_entropy[self.cache_offset..self.cache_offset + to_copy],
+            );
             self.cache_offset += to_copy;
             offset += to_copy;
         }
-        
+
         // Then fill remaining with fresh entropy blocks
         while offset < dest.len() {
             let entropy = self.next_entropy_block();
@@ -337,7 +340,7 @@ impl rand_core::RngCore for AunsormNativeRng {
             let chunk_size = std::cmp::min(32, remaining);
             dest[offset..offset + chunk_size].copy_from_slice(&entropy[..chunk_size]);
             offset += chunk_size;
-            
+
             // Cache any unused entropy
             if chunk_size < 32 {
                 self.cached_entropy = entropy;
