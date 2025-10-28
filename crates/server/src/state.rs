@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::sync::{Arc, Mutex as StdMutex};
+use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::rng::AunsormNativeRng;
 use aunsorm_core::{
     transparency::{
         unix_timestamp, KeyTransparencyLog, TransparencyError,
@@ -15,33 +16,8 @@ use aunsorm_mdm::{
     CertificateDistributionPlan, DevicePlatform, EnrollmentMode, MdmDirectory, MdmError,
     PolicyDocument, PolicyRule,
 };
-use rand_core::{OsRng, RngCore};
-use sha2::Sha256;
+use rand_core::RngCore;
 use tokio::sync::{Mutex, RwLock};
-
-// Mathematical entropy enhancement constants (inspired by prime distribution theory)
-// NEUDZ-PCS method "Zeroish" calibration constants
-#[allow(clippy::unreadable_literal)]
-const ZEROISH_AS: f64 = -17.1163104468;
-#[allow(clippy::unreadable_literal)]
-const ZEROISH_AL: f64 = 0.991760130167;
-#[allow(clippy::unreadable_literal)]
-const ZEROISH_BS: f64 = 124.19647718;
-#[allow(clippy::unreadable_literal)]
-const ZEROISH_BL: f64 = 2.50542954;
-const ZEROISH_TAU: f64 = 1_000_000.0; // 10^6
-
-// AACM (Anglenna Angular Correction Model) coefficients
-#[allow(clippy::unreadable_literal)]
-const AACM_A: f64 = 0.999621;
-#[allow(clippy::unreadable_literal)]
-const AACM_B: f64 = -0.47298;
-#[allow(clippy::unreadable_literal)]
-const AACM_C: f64 = 2.49373;
-#[allow(clippy::unreadable_literal)]
-const AACM_D: f64 = 1.55595;
-#[allow(clippy::unreadable_literal)]
-const AACM_E: f64 = 1.35684;
 
 use crate::acme::AcmeService;
 use crate::config::{LedgerBackend, ServerConfig};
@@ -135,8 +111,12 @@ impl AuthStore {
 }
 
 fn generate_id() -> String {
+    static RNG: OnceLock<StdMutex<AunsormNativeRng>> = OnceLock::new();
     let mut buf = [0_u8; 16];
-    OsRng.fill_bytes(&mut buf);
+    RNG.get_or_init(|| StdMutex::new(AunsormNativeRng::new()))
+        .lock()
+        .expect("Aunsorm native RNG mutex poisoned while generating id")
+        .fill_bytes(&mut buf);
     hex::encode(buf)
 }
 
@@ -216,10 +196,11 @@ impl SfuContext {
     ) -> Self {
         let expires_at = now + SFU_CONTEXT_TTL;
         if enable_e2ee {
+            let mut rng = AunsormNativeRng::new();
             let mut root = [0_u8; 32];
-            OsRng.fill_bytes(&mut root);
+            rng.fill_bytes(&mut root);
             let mut session_id = [0_u8; 16];
-            OsRng.fill_bytes(&mut session_id);
+            rng.fill_bytes(&mut session_id);
             let ratchet = SessionRatchet::new(root, session_id, strict);
             Self {
                 room_id,
@@ -753,8 +734,7 @@ pub struct ServerState {
     mdm: MdmDirectory,
     fabric: FabricDidRegistry,
     acme: AcmeService,
-    entropy_salt: [u8; 32],
-    entropy_counter: StdMutex<u64>,
+    rng: StdMutex<AunsormNativeRng>,
 }
 
 impl ServerState {
@@ -798,8 +778,6 @@ impl ServerState {
         let mdm = default_mdm_directory()?;
         let fabric = FabricDidRegistry::poc()?;
         let acme = AcmeService::new(&issuer)?;
-        let mut entropy_salt = [0_u8; 32];
-        OsRng.fill_bytes(&mut entropy_salt);
         let oauth_clients = Arc::new(default_oauth_clients());
         Ok(Self {
             listen_port: listen.port(),
@@ -819,8 +797,7 @@ impl ServerState {
             mdm,
             fabric,
             acme,
-            entropy_salt,
-            entropy_counter: StdMutex::new(0),
+            rng: StdMutex::new(AunsormNativeRng::new()),
         })
     }
 
@@ -1059,189 +1036,13 @@ impl ServerState {
     }
 
     fn next_entropy_block(&self) -> [u8; 32] {
-        use hkdf::Hkdf;
-
-        // 1. OS-level kriptografik entropi (32 byte)
-        let mut os_entropy = [0_u8; 32];
-        OsRng.fill_bytes(&mut os_entropy);
-
-        // 2. Nanosaniye hassasiyetli timestamp
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_nanos()
-            .to_le_bytes();
-
-        // 3. Atomik counter (collision prevention)
-        let counter = {
-            let mut counter_guard = self
-                .entropy_counter
-                .lock()
-                .expect("entropy counter poisoned");
-            let val = *counter_guard;
-            *counter_guard = val.wrapping_add(1);
-            val
-        };
-
-        // 4. Process ID (multi-instance uniqueness)
-        let process_id = std::process::id();
-
-        // 5. Thread ID (parallel execution uniqueness)
-        let thread_id = std::thread::current().id();
-        let thread_hash = {
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-            let mut hasher = DefaultHasher::new();
-            thread_id.hash(&mut hasher);
-            hasher.finish()
-        };
-
-        // HKDF-Extract-and-Expand (RFC 5869) - kriptografik olarak kanıtlanmış entropi genişletme
-        // IKM (Input Key Material): os_entropy (32 byte high-quality randomness)
-        // Salt: entropy_salt (server başlangıcında oluşturulan unique salt)
-        let hk = Hkdf::<Sha256>::new(Some(&self.entropy_salt), &os_entropy);
-        let mut okm = [0_u8; 32];
-
-        // Info context: counter + timestamp + process_id + thread_hash
-        // Bu kombinasyon her çağrıda benzersiz olması garanti eder
-        let mut info = Vec::with_capacity(40);
-        info.extend_from_slice(&counter.to_le_bytes()); // 8 bytes
-        info.extend_from_slice(&timestamp); // 16 bytes
-        info.extend_from_slice(&process_id.to_le_bytes()); // 4 bytes
-        info.extend_from_slice(&thread_hash.to_le_bytes()); // 8 bytes
-
-        hk.expand(&info, &mut okm)
-            .expect("HKDF expand with 32 bytes should never fail");
-
-        // Mathematical entropy enhancement: Apply prime distribution mixing
-        Self::apply_mathematical_mixing(&mut okm);
-
-        okm
-    }
-
-    /// NEUDZ-PCS entropy mixing: π(x) prime counting function yaklaşımı
-    /// Bu fonksiyon entropy bytes'larını asal sayı dağılımı teorisi ile karıştırır
-    #[inline]
-    #[allow(clippy::suboptimal_flops)]
-    fn neudz_pcs_mix(x: f64) -> f64 {
-        if x <= 1.0 {
-            return x;
-        }
-        let ln_x = x.ln();
-        let w = Self::weight_function(x);
-        let a = ZEROISH_AS + (ZEROISH_AL - ZEROISH_AS) * w;
-        let b = ZEROISH_BS + (ZEROISH_BL - ZEROISH_BS) * w;
-
-        // π(x) ≈ x/ln(x) * (1 + a/ln(x) + b/(ln(x))²)
-        let ln_x_inv = 1.0 / ln_x;
-        let correction = 1.0 + a * ln_x_inv + b * ln_x_inv * ln_x_inv;
-        x * ln_x_inv * correction
-    }
-
-    /// Weighting function: w(x) = x² / (x² + τ)
-    #[inline]
-    fn weight_function(x: f64) -> f64 {
-        let x_squared = x * x;
-        x_squared / (x_squared + ZEROISH_TAU)
-    }
-
-    /// AACM (Anglenna Angular Correction Model) entropy mixing
-    /// Cipolla expansion + sinusoidal angular correction
-    #[inline]
-    #[allow(clippy::suboptimal_flops)]
-    fn aacm_mix(n: f64) -> f64 {
-        if n < 2.0 {
-            return n;
-        }
-        let ln_n = n.ln();
-        let ln_ln_n = ln_n.ln();
-
-        // Cipolla expansion base
-        let base = n * (ln_n + ln_ln_n - 1.0);
-
-        // Correction terms with optimized divisions
-        let ln_n_inv = 1.0 / ln_n;
-        let ln_n_sq_inv = ln_n_inv * ln_n_inv;
-
-        let term1 = AACM_A * ln_n_inv;
-        let term2 = AACM_B * ln_n_sq_inv;
-
-        // Angular correction: C·sin(D/ln(n) + E/√ln(n))
-        let angular = AACM_C * (AACM_D * ln_n_inv + AACM_E / ln_n.sqrt()).sin();
-        let term3 = angular * ln_n_sq_inv;
-
-        base * (1.0 + term1 + term2 + term3)
-    }
-
-    /// Entropy bytes'larını matematiksel modeller ile karıştır
-    ///
-    /// # PRODUCTION STRATEGY: Split-Domain Mathematical Mixing
-    ///
-    /// After extensive experimentation (5 variants, multiple test runs), this configuration
-    /// achieved the closest match to theoretical Chi-square expectation (χ² ≈ 100.0).
-    ///
-    /// ## Architecture
-    /// - **First 16 bytes**: NEUDZ-PCS mixing (prime distribution theory)
-    /// - **Last 16 bytes**: AACM mixing (angular correction with Cipolla expansion)
-    ///
-    /// ## Validated Results (Average of 2 independent 1M-sample tests)
-    /// - **Chi-square**: 100.05 ± 1.08 (theoretical target: 100.0)
-    /// - **Absolute deviation**: 0.05% (near-perfect)
-    /// - **Pass rate**: 96.7% (29/30 Chi-square trials < 124.3 critical value)
-    /// - **Mean**: 50.02 ± 0.02 (perfectly centered in 0-100 range)
-    /// - **Throughput**: 77,000-78,000 samples/sec
-    ///
-    /// ## Mathematical Models
-    /// - **NEUDZ-PCS**: Prime counting function π(x) approximation using Zeroish constants
-    /// - **AACM**: Anglenna Angular Correction Model with sinusoidal micro-oscillations
-    ///
-    /// ## Why This Configuration?
-    /// Domain separation allows each model to operate optimally without interference.
-    /// NEUDZ provides smooth prime-based smoothing, AACM adds fine-grained corrections.
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_precision_loss,
-        clippy::cast_sign_loss,
-        clippy::suboptimal_flops
-    )]
-    fn apply_mathematical_mixing(entropy: &mut [u8; 32]) {
-        // First 16 bytes: NEUDZ-PCS mixing
-        for i in (0..16).step_by(8) {
-            let mut buf = [0u8; 8];
-            buf.copy_from_slice(&entropy[i..i + 8]);
-            let value = u64::from_le_bytes(buf);
-
-            // Normalize to 0-1 range, apply mixing, denormalize
-            let normalized = value as f64 / u64::MAX as f64;
-            let x = 2.0 + normalized * 1_000_000.0; // Scale to [2, 1000002]
-            let mixed = Self::neudz_pcs_mix(x);
-            let mixed_normalized = (mixed.fract() * u64::MAX as f64) as u64;
-
-            // XOR original with mixed (preserves entropy)
-            let mixed_bytes = mixed_normalized.to_le_bytes();
-            for j in 0..8 {
-                entropy[i + j] ^= mixed_bytes[j];
-            }
-        }
-
-        // Last 16 bytes: AACM mixing
-        for i in (16..32).step_by(8) {
-            let mut buf = [0u8; 8];
-            buf.copy_from_slice(&entropy[i..i + 8]);
-            let value = u64::from_le_bytes(buf);
-
-            // Normalize to prime range, apply AACM mixing
-            let normalized = value as f64 / u64::MAX as f64;
-            let n = 2.0 + normalized * 1_000_000.0; // Scale to [2, 1000002]
-            let mixed = Self::aacm_mix(n);
-            let mixed_normalized = (mixed.fract() * u64::MAX as f64) as u64;
-
-            // XOR original with mixed
-            let mixed_bytes = mixed_normalized.to_le_bytes();
-            for j in 0..8 {
-                entropy[i + j] ^= mixed_bytes[j];
-            }
-        }
+        let mut buf = [0_u8; 32];
+        let mut rng = self
+            .rng
+            .lock()
+            .expect("Aunsorm native RNG mutex poisoned while deriving entropy");
+        rng.fill_bytes(&mut buf);
+        buf
     }
 
     /// Constant-time rejection sampling ile timing attack koruması
