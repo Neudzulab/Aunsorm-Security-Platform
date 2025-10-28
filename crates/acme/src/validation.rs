@@ -6,9 +6,13 @@ use std::fmt;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::authorization::{validate_token, Challenge, ChallengeError, ChallengeKind};
+use crate::authorization::{
+    validate_token, Authorization, Challenge, ChallengeError, ChallengeKind,
+};
+use crate::order::OrderIdentifier;
 
 /// Errors that can occur while preparing or validating an HTTP-01 challenge.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -167,6 +171,98 @@ impl Http01KeyAuthorization {
     }
 }
 
+/// Errors that can occur while preparing DNS-01 validation records.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum Dns01ValidationError {
+    /// The provided challenge is not a DNS-01 challenge.
+    #[error("Challenge DNS-01 türünde değil")]
+    NotDns01,
+    /// The challenge does not contain a token value.
+    #[error("DNS-01 challenge token değeri eksik")]
+    MissingToken,
+    /// DNS-01 requires a DNS identifier on the authorization object.
+    #[error("DNS-01 challenge yalnızca DNS identifier ile kullanılabilir")]
+    UnsupportedIdentifier,
+    /// Underlying key-authorization preparation failed.
+    #[error("DNS-01 key-authorization doğrulaması başarısız: {source}")]
+    KeyAuthorization {
+        /// Source HTTP-01 style validation error.
+        #[from]
+        source: Http01ValidationError,
+    },
+}
+
+/// Prepared TXT record information for satisfying a DNS-01 challenge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Dns01TxtRecord {
+    name: String,
+    value: String,
+}
+
+impl Dns01TxtRecord {
+    /// Builds a TXT record from a raw challenge token, identifier and account thumbprint.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Dns01ValidationError`] when the identifier is not DNS based or when the
+    /// underlying HTTP-01 key-authorization checks fail.
+    pub fn new(
+        token: &str,
+        identifier: &OrderIdentifier,
+        account_thumbprint: &str,
+    ) -> Result<Self, Dns01ValidationError> {
+        let dns_identifier = match identifier {
+            OrderIdentifier::Dns(value) => value.as_str(),
+            _ => return Err(Dns01ValidationError::UnsupportedIdentifier),
+        };
+        let key_authorization = Http01KeyAuthorization::new(token, account_thumbprint)?;
+        let digest = Sha256::digest(key_authorization.key_authorization().as_bytes());
+        let record_value = URL_SAFE_NO_PAD.encode(digest);
+        let record_name = format!(
+            "_acme-challenge.{}",
+            dns_identifier.strip_prefix("*.").unwrap_or(dns_identifier)
+        );
+        Ok(Self {
+            name: record_name,
+            value: record_value,
+        })
+    }
+
+    /// Creates a TXT record from a parsed authorization and challenge pair.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Dns01ValidationError`] when the challenge is not DNS-01, when it lacks a
+    /// token, the identifier is not DNS based or underlying validation fails.
+    pub fn from_authorization(
+        authorization: &Authorization,
+        challenge: &Challenge,
+        account_thumbprint: &str,
+    ) -> Result<Self, Dns01ValidationError> {
+        if !matches!(challenge.kind(), ChallengeKind::Dns01) {
+            return Err(Dns01ValidationError::NotDns01);
+        }
+        let token = challenge
+            .token()
+            .ok_or(Dns01ValidationError::MissingToken)?;
+        Self::new(token, authorization.identifier(), account_thumbprint)
+    }
+
+    /// Returns the FQDN that must contain the TXT record.
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
+
+    /// Returns the TXT record value required by the DNS-01 challenge.
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn value(&self) -> &str {
+        self.value.as_str()
+    }
+}
+
 fn trim_trailing_http_whitespace(input: &str) -> &str {
     let without_newlines = input.trim_end_matches(['\n', '\r']);
     without_newlines.trim_end_matches([' ', '\t'])
@@ -184,6 +280,7 @@ mod tests {
 
     use super::*;
     use crate::authorization::{Authorization, Challenge};
+    use crate::order::OrderIdentifier;
     use serde_json::json;
 
     fn sample_challenge(token: &str) -> Challenge {
@@ -312,5 +409,90 @@ mod tests {
         } else {
             panic!("beklenmeyen hata: {err:?}");
         }
+    }
+
+    #[test]
+    fn builds_dns01_record_from_authorization() {
+        let authorization = Authorization::from_json_value(json!({
+            "status": "pending",
+            "identifier": {"type": "dns", "value": "example.com"},
+            "challenges": [
+                {
+                    "type": "dns-01",
+                    "status": "pending",
+                    "url": "https://acme.invalid/challenge/1",
+                    "token": "gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH",
+                }
+            ]
+        }))
+        .expect("authorization ayrıştırılmalı");
+        let challenge = authorization
+            .challenges()
+            .first()
+            .expect("challenge mevcut olmalı");
+        let record = Dns01TxtRecord::from_authorization(
+            &authorization,
+            challenge,
+            "ytxINsp8lvQ1mX8kGqCFyT9OQy2M7o1uz7NErHOwhwU",
+        )
+        .expect("DNS-01 kaydı oluşturulmalı");
+        assert_eq!(record.name(), "_acme-challenge.example.com");
+        assert_eq!(
+            record.value(),
+            "X1WjMMFxcIhXcEU6oMwAFrf3Ymk622YZVSoBHxgkzuM"
+        );
+    }
+
+    #[test]
+    fn dns01_record_strips_wildcard_prefix() {
+        let identifier =
+            OrderIdentifier::dns("*.Example.com").expect("identifier normalleştirilmeli");
+        let record = Dns01TxtRecord::new(
+            "gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH",
+            &identifier,
+            "ytxINsp8lvQ1mX8kGqCFyT9OQy2M7o1uz7NErHOwhwU",
+        )
+        .expect("DNS-01 kaydı oluşturulmalı");
+        assert_eq!(record.name(), "_acme-challenge.example.com");
+    }
+
+    #[test]
+    fn dns01_record_rejects_non_dns_identifier() {
+        let identifier = OrderIdentifier::ip("192.0.2.10").expect("ip identifier oluşturulmalı");
+        let err = Dns01TxtRecord::new(
+            "gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH",
+            &identifier,
+            "ytxINsp8lvQ1mX8kGqCFyT9OQy2M7o1uz7NErHOwhwU",
+        )
+        .expect_err("DNS olmayan identifier reddedilmeli");
+        assert!(matches!(err, Dns01ValidationError::UnsupportedIdentifier));
+    }
+
+    #[test]
+    fn dns01_record_rejects_non_dns_challenge() {
+        let authorization = Authorization::from_json_value(json!({
+            "status": "pending",
+            "identifier": {"type": "dns", "value": "example.com"},
+            "challenges": [
+                {
+                    "type": "http-01",
+                    "status": "pending",
+                    "url": "https://acme.invalid/challenge/1",
+                    "token": "gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH",
+                }
+            ]
+        }))
+        .expect("authorization ayrıştırılmalı");
+        let challenge = authorization
+            .challenges()
+            .first()
+            .expect("challenge mevcut olmalı");
+        let err = Dns01TxtRecord::from_authorization(
+            &authorization,
+            challenge,
+            "ytxINsp8lvQ1mX8kGqCFyT9OQy2M7o1uz7NErHOwhwU",
+        )
+        .expect_err("DNS olmayan challenge reddedilmeli");
+        assert!(matches!(err, Dns01ValidationError::NotDns01));
     }
 }

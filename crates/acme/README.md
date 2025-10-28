@@ -37,6 +37,9 @@ kullanılacaktır.
   beklenen dosya yolu (`/.well-known/acme-challenge/<token>`) ve yanıt
   gövdesi doğrulama yardımcıları sağlar; basit dosya sunucusu
   dağıtımlarında sondaki newline karakterlerini tolere eder.
+- DNS-01 domain doğrulamaları için `_acme-challenge` TXT kayıt adı ve
+  SHA-256 digest değeri üreten yardımcılar sunar; wildcard domainleri
+  otomatik olarak normalleştirir.
 - Ed25519, ECDSA P-256 ve RSA (RS256) hesap anahtarlarıyla ACME JWS
   (`protected`, `payload`, `signature`) üretir; `kid` veya JWK tabanlı
   başlık bağlamını destekler.
