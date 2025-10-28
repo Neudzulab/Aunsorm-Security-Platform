@@ -66,6 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ACME DNS-01 doğrulama yardımcıları: `_acme-challenge` TXT kayıt adı ve
   SHA-256 key-authorization digest değerini deterministik olarak üretir,
   wildcard domainleri normalleştirir.
+- ACME TLS-ALPN-01 doğrulama yardımcıları: key-authorization SHA-256 özetini
+  hesaplayıp `acmeIdentifier` uzantısı ve Ed25519 anahtarlarıyla kendinden
+  imzalı sertifika üreten yardımcılar sağlar; PEM çıktıları ALPN `acme-tls/1`
+  protokolüyle birlikte döndürülür.
 - ACME hesap anahtarları için Ed25519, ES256 ve RS256 üretim yardımcıları; RNG
   enjeksiyonunu destekleyerek CLI ve sunucu entegrasyonları için hazır anahtar
   üretimi sağlar.

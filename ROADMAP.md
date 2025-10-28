@@ -128,7 +128,7 @@
   - [x] HTTP-01: Web server challenge response (key-authorization üretimi ve yanıt gövdesi doğrulaması `aunsorm-acme` crate'inde hazır)
   - [ ] DNS-01: DNS provider API abstraction
     - [x] TXT kayıt adı + key-authorization digest üretimi (`crates/acme::validation`)
-  - [ ] TLS-ALPN-01: ALPN challenge handler
+  - [x] TLS-ALPN-01: ALPN challenge handler (key-authorization digest + self-signed certificate helper)
   
 - [ ] Certificate management
   - [ ] CSR (Certificate Signing Request) generation

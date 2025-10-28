@@ -35,4 +35,5 @@ pub use order::{
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
 pub use validation::{
     Dns01TxtRecord, Dns01ValidationError, Http01KeyAuthorization, Http01ValidationError,
+    TlsAlpnCertificate, TlsAlpnCertificateError, TlsAlpnChallenge, TlsAlpnValidationError,
 };
