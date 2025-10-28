@@ -17,6 +17,8 @@ pub struct AunsormNativeRng {
     entropy_salt: [u8; 32],
     state: [u8; 32],
     counter: u64,
+    cached_entropy: [u8; 32],
+    cache_offset: usize,
 }
 
 impl AunsormNativeRng {
@@ -33,6 +35,8 @@ impl AunsormNativeRng {
             entropy_salt,
             state,
             counter: 0,
+            cached_entropy: [0u8; 32],
+            cache_offset: 32, // Force initial generation
         }
     }
 
@@ -141,26 +145,86 @@ impl CryptoRng for AunsormNativeRng {}
 
 impl RngCore for AunsormNativeRng {
     fn next_u32(&mut self) -> u32 {
-        let entropy = self.next_entropy_block();
-        u32::from_le_bytes([entropy[0], entropy[1], entropy[2], entropy[3]])
+        // Use cached entropy if available
+        if self.cache_offset + 4 <= 32 {
+            let result = u32::from_le_bytes([
+                self.cached_entropy[self.cache_offset],
+                self.cached_entropy[self.cache_offset + 1],
+                self.cached_entropy[self.cache_offset + 2],
+                self.cached_entropy[self.cache_offset + 3],
+            ]);
+            self.cache_offset += 4;
+            return result;
+        }
+        
+        // Generate new block and cache it
+        self.cached_entropy = self.next_entropy_block();
+        self.cache_offset = 4;
+        u32::from_le_bytes([
+            self.cached_entropy[0],
+            self.cached_entropy[1],
+            self.cached_entropy[2],
+            self.cached_entropy[3],
+        ])
     }
 
     fn next_u64(&mut self) -> u64 {
-        let entropy = self.next_entropy_block();
+        // Use cached entropy if available
+        if self.cache_offset + 8 <= 32 {
+            let result = u64::from_le_bytes([
+                self.cached_entropy[self.cache_offset],
+                self.cached_entropy[self.cache_offset + 1],
+                self.cached_entropy[self.cache_offset + 2],
+                self.cached_entropy[self.cache_offset + 3],
+                self.cached_entropy[self.cache_offset + 4],
+                self.cached_entropy[self.cache_offset + 5],
+                self.cached_entropy[self.cache_offset + 6],
+                self.cached_entropy[self.cache_offset + 7],
+            ]);
+            self.cache_offset += 8;
+            return result;
+        }
+        
+        // Generate new block and cache it
+        self.cached_entropy = self.next_entropy_block();
+        self.cache_offset = 8;
         u64::from_le_bytes([
-            entropy[0], entropy[1], entropy[2], entropy[3], entropy[4], entropy[5], entropy[6],
-            entropy[7],
+            self.cached_entropy[0],
+            self.cached_entropy[1],
+            self.cached_entropy[2],
+            self.cached_entropy[3],
+            self.cached_entropy[4],
+            self.cached_entropy[5],
+            self.cached_entropy[6],
+            self.cached_entropy[7],
         ])
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         let mut offset = 0;
+        
+        // First, drain any cached entropy
+        if self.cache_offset < 32 {
+            let available = 32 - self.cache_offset;
+            let to_copy = std::cmp::min(available, dest.len());
+            dest[..to_copy].copy_from_slice(&self.cached_entropy[self.cache_offset..self.cache_offset + to_copy]);
+            self.cache_offset += to_copy;
+            offset += to_copy;
+        }
+        
+        // Then fill remaining with fresh entropy blocks
         while offset < dest.len() {
             let entropy = self.next_entropy_block();
             let remaining = dest.len() - offset;
             let chunk_size = std::cmp::min(32, remaining);
             dest[offset..offset + chunk_size].copy_from_slice(&entropy[..chunk_size]);
             offset += chunk_size;
+            
+            // Cache any unused entropy
+            if chunk_size < 32 {
+                self.cached_entropy = entropy;
+                self.cache_offset = chunk_size;
+            }
         }
     }
 
