@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rand_core::{OsRng, RngCore};
+use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -87,10 +87,11 @@ impl Claims {
         }
     }
 
-    /// `jti` alanı yoksa rastgele üretir.
+    /// `jti` alanı yoksa Aunsorm native RNG ile rastgele üretir.
     pub fn ensure_jwt_id(&mut self) {
         if self.jwt_id.is_none() {
-            let mut rng = OsRng;
+            use crate::rng::AunsormNativeRng;
+            let mut rng = AunsormNativeRng::new();
             let mut buf = [0_u8; 16];
             rng.fill_bytes(&mut buf);
             self.jwt_id = Some(hex::encode(buf));

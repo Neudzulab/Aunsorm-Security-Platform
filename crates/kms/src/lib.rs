@@ -18,12 +18,14 @@ mod gcp;
 mod local;
 #[cfg(feature = "kms-pkcs11")]
 mod pkcs11;
+mod rng;
 mod util;
 
 pub use client::KmsClient;
 #[cfg(feature = "kms-azure")]
 pub use config::{AzureBackendConfig, AzureKeyConfig};
 pub use config::{BackendKind, BackendLocator, KeyDescriptor, KmsConfig, LocalStoreConfig};
+pub use rng::{AunsormNativeRng, create_aunsorm_rng};
 #[cfg(feature = "kms-gcp")]
 pub use config::{GcpBackendConfig, GcpKeyConfig};
 #[cfg(feature = "kms-pkcs11")]

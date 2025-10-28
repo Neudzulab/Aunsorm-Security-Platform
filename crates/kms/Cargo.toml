@@ -22,6 +22,7 @@ thiserror = { workspace = true }
 zeroize = { workspace = true }
 base64 = { workspace = true }
 aes-gcm = { workspace = true }
+aead = { version = "0.5", features = ["alloc"] }
 hkdf = { workspace = true }
 rand_core = { workspace = true }
 sha2 = { workspace = true }

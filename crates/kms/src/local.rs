@@ -3,12 +3,12 @@ use std::convert::TryInto;
 use std::fs;
 use std::path::Path;
 
-use aes_gcm::aead::{Aead, KeyInit, Payload};
-use aes_gcm::{Aes256Gcm, Nonce};
+use aes_gcm::{Aes256Gcm, Nonce, KeyInit};
+use aead::{Aead, Payload};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey, VerifyingKey};
-use rand_core::{OsRng, RngCore};
+use rand_core::RngCore;
 use serde::Deserialize;
 use zeroize::Zeroizing;
 
@@ -142,16 +142,10 @@ impl LocalBackend {
                     KmsError::Crypto(format!("invalid aes key for {key_id}: {err}"))
                 })?;
                 let mut nonce_bytes = [0u8; 12];
-                OsRng.fill_bytes(&mut nonce_bytes);
+                crate::rng::create_aunsorm_rng().fill_bytes(&mut nonce_bytes);
                 let nonce = Nonce::from(nonce_bytes);
                 let ciphertext = cipher
-                    .encrypt(
-                        &nonce,
-                        Payload {
-                            msg: plaintext,
-                            aad,
-                        },
-                    )
+                    .encrypt(&nonce, Payload { msg: plaintext, aad })
                     .map_err(|err| KmsError::Crypto(format!("wrap failed for {key_id}: {err}")))?;
                 let mut output = Vec::with_capacity(nonce.len() + ciphertext.len());
                 output.extend_from_slice(&nonce_bytes);
@@ -183,9 +177,10 @@ impl LocalBackend {
                     .try_into()
                     .map_err(|_| KmsError::Crypto("invalid nonce size".into()))?;
                 let nonce = Nonce::from(nonce_array);
-                cipher
+                Ok(cipher
                     .decrypt(&nonce, Payload { msg: payload, aad })
-                    .map_err(|err| KmsError::Crypto(format!("unwrap failed for {key_id}: {err}")))
+                    .map_err(|err| KmsError::Crypto(format!("unwrap failed for {key_id}: {err}")))?
+                    .into())
             }
             Some(LocalKey::Ed25519 { .. }) => Err(KmsError::Unsupported {
                 backend: BackendKind::Local,

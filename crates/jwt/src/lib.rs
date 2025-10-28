@@ -9,6 +9,7 @@ mod claims;
 mod error;
 mod jti;
 mod jwk;
+mod rng;
 mod signer;
 mod verifier;
 
@@ -16,6 +17,7 @@ pub use claims::{Audience, Claims};
 pub use error::{JwtError, Result};
 pub use jti::{InMemoryJtiStore, JtiStore};
 pub use jwk::{Ed25519KeyPair, Ed25519PublicKey, Jwk, Jwks};
+pub use rng::{AunsormNativeRng, create_aunsorm_rng};
 pub use signer::JwtSigner;
 #[cfg(feature = "kms")]
 pub use signer::KmsJwtSigner;

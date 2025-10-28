@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
 use ed25519_dalek::{SecretKey, SigningKey, VerifyingKey};
-use rand_core::{CryptoRng, OsRng, RngCore};
+use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use zeroize::Zeroize;
@@ -31,13 +31,14 @@ impl Clone for Ed25519KeyPair {
 }
 
 impl Ed25519KeyPair {
-    /// Rastgele anahtar üretir.
+    /// Aunsorm native RNG ile rastgele Ed25519 anahtar çifti üretir.
     ///
     /// # Errors
     ///
     /// RNG'den seed alınırken veya seed doğrulanırken hata oluşursa `JwtError` döner.
     pub fn generate(kid: impl Into<String>) -> Result<Self> {
-        let mut rng = OsRng;
+        use crate::rng::AunsormNativeRng;
+        let mut rng = AunsormNativeRng::new();
         Self::generate_with_rng(kid, &mut rng)
     }
 

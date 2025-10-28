@@ -99,15 +99,17 @@ impl Ed25519AccountKey {
     #[must_use]
     pub fn generate() -> Self {
         use crate::rng::AunsormNativeRng;
-        let mut rng = AunsormNativeRng::new(b"ed25519-acme-account");
+        let mut rng = AunsormNativeRng::new();
         Self::generate_with_rng(&mut rng)
     }
 
     /// Harici RNG kullanarak yeni hesap anahtarı üretir.
     #[must_use]
     pub fn generate_with_rng(rng: &mut (impl CryptoRng + RngCore)) -> Self {
+        let mut bytes = [0u8; 32];
+        rng.fill_bytes(&mut bytes);
         Self {
-            signing_key: SigningKey::generate(rng),
+            signing_key: SigningKey::from_bytes(&bytes),
         }
     }
 
@@ -245,7 +247,7 @@ impl EcdsaP256AccountKey {
     #[must_use]
     pub fn generate() -> Self {
         use crate::rng::AunsormNativeRng;
-        let mut rng = AunsormNativeRng::new(b"p256-ecdsa-acme-account");
+        let mut rng = AunsormNativeRng::new();
         Self::generate_with_rng(&mut rng)
     }
 
@@ -399,7 +401,7 @@ impl RsaAccountKey {
     /// döner.
     pub fn generate() -> Result<Self, JwsError> {
         use crate::rng::AunsormNativeRng;
-        let mut rng = AunsormNativeRng::new(b"rsa-acme-account");
+        let mut rng = AunsormNativeRng::new();
         Self::generate_with_rng(Self::DEFAULT_MODULUS_BITS, &mut rng)
     }
 
@@ -599,7 +601,11 @@ mod tests {
     }
 
     fn sample_rsa_key() -> RsaAccountKey {
-        let mut rng = crate::rng::create_aunsorm_rng();
+        // For consistent testing, use a deterministic seed
+        use rand_chacha::ChaCha8Rng;
+        use rand_core::SeedableRng;
+        
+        let mut rng = ChaCha8Rng::from_seed([42u8; 32]); // Fixed seed for reproducible tests
         let private_key = RsaPrivateKey::new(&mut rng, 1024).expect("rsa anahtarı üretimi");
         RsaAccountKey::new(private_key).expect("geçerli rsa anahtarı")
     }
@@ -934,7 +940,7 @@ mod tests {
         let key = sample_rsa_key();
         assert_eq!(
             key.jwk_thumbprint(),
-            "eUhjIXanXay3iIPcEh1jwOSpEEds2erAbAq3AdZ0sT8"
+            "j96e4slH9isLdrk4vEZbgy5bkw861i4cHBOFsSqOPXE"
         );
     }
 }
