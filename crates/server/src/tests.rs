@@ -1936,6 +1936,33 @@ async fn jwt_verify_endpoint_rejects_tampered_token() {
     assert!(error.contains("Invalid token"));
 }
 
+#[tokio::test]
+async fn jwt_verify_endpoint_rejects_missing_token() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let verify_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwt-verify")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "token": "   " }).to_string()))
+                .expect("verify request"),
+        )
+        .await
+        .expect("verify response");
+
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let verify_body = to_bytes(verify_response.into_body(), usize::MAX)
+        .await
+        .expect("verify body");
+    let verify: JwtVerifyResponseBody = serde_json::from_slice(&verify_body).expect("verify json");
+    assert!(!verify.valid);
+    assert!(verify.payload.is_none());
+    assert_eq!(verify.error.as_deref(), Some("Token is required"));
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct BeginAuthResponse {

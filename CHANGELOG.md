@@ -66,6 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   destekler hale geldi.
 - Hyperledger Fabric DID doğrulama PoC'u için `POST /blockchain/fabric/did/verify` endpoint'i ve `FabricDidRegistry` PoC kayıt deposu.
 - Server entegrasyon testleri: `fabric_did_verification_succeeds` ve `fabric_did_verification_rejects_tampered_anchor`.
+- JWT doğrulama regresyon testi `jwt_verify_endpoint_rejects_missing_token` boş token girişlerini yakalayarak `/security/jwt-verify`
+  uç noktasının hata mesajını güvence altına alıyor.
 - Experimental `GET /http3/capabilities` endpoint exposing Alt-Svc metadata and QUIC datagram channel descriptors behind the `http3-experimental` feature flag.
 - Router test coverage ensuring the HTTP/3 capability payload advertises active status and datagram limits.
 - Optional `http3-poc` GitHub Actions job gated by `ENABLE_HTTP3_POC=true`, executing `aunsorm-server` and integration tests with `http3-experimental` enabled.
