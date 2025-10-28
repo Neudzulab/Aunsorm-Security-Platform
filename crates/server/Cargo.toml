@@ -36,6 +36,7 @@ aunsorm-jwt = { path = "../jwt" }
 aunsorm-core = { path = "../core" }
 aunsorm-mdm = { path = "../mdm" }
 aunsorm-id = { path = "../id" }
+aunsorm-pqc = { path = "../pqc" }
 ed25519-dalek = { version = "2", features = ["std"] }
 p256 = { version = "0.13", features = ["ecdsa"] }
 rsa = { workspace = true }

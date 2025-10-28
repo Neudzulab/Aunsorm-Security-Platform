@@ -48,6 +48,7 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /validate/endpoint ✅ - Endpoint bağlantı doğrulaması
 │   │   ├── POST /blockchain/fabric/did/verify ✅ - Hyperledger Fabric DID doğrulama PoC'u
 │   │   ├── GET /http3/capabilities 🚧 - HTTP/3 PoC introspeksiyonu (`http3-experimental`)
+│   │   ├── GET /pqc/capabilities ✅ - PQC algoritma durumu ve strict kip yönergeleri
 │   │   ├── GET /acme/directory ✅ - ACME directory keşfi ve meta bilgisi
 │   │   ├── GET /acme/new-nonce ✅ - Replay-Nonce üretimi (JWS koruması için)
 │   │   ├── POST /acme/new-account ✅ - Hesap kaydı (JWK doğrulamalı)
