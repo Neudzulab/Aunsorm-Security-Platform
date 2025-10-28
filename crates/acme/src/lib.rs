@@ -9,6 +9,7 @@ mod jws;
 mod nonce;
 mod order;
 mod rng;
+mod validation;
 
 pub use account::{
     AccountContact, AccountContactError, AccountContactKind, ExternalAccountBinding,
@@ -32,3 +33,4 @@ pub use order::{
     OrderIdentifierError,
 };
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
+pub use validation::{Http01KeyAuthorization, Http01ValidationError};

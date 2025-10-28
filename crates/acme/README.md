@@ -33,6 +33,10 @@ kullanılacaktır.
 - ACME authorization kaynaklarını ayrıştırır; HTTP-01/DNS-01/TLS-ALPN-01
   challenge girdilerini RFC 8555 kurallarıyla doğrular ve token
   değerlerini güvenli biçimde doğrular.
+- HTTP-01 domain doğrulamaları için key-authorization üretimi,
+  beklenen dosya yolu (`/.well-known/acme-challenge/<token>`) ve yanıt
+  gövdesi doğrulama yardımcıları sağlar; basit dosya sunucusu
+  dağıtımlarında sondaki newline karakterlerini tolere eder.
 - Ed25519, ECDSA P-256 ve RSA (RS256) hesap anahtarlarıyla ACME JWS
   (`protected`, `payload`, `signature`) üretir; `kid` veya JWK tabanlı
   başlık bağlamını destekler.
