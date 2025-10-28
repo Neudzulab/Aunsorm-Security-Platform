@@ -4,7 +4,7 @@ use axum::{
     body::Body,
     extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
-    middleware::{self, Next},
+    middleware::{from_fn, Next},
     response::{IntoResponse, Response},
     routing::{get, head, post},
     Json, Router,
@@ -2333,7 +2333,7 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
         let header_value =
             build_alt_svc_header_value(port).expect("Alt-Svc başlığı oluşturulamadı");
         let header_value = Arc::new(header_value);
-        router.layer(middleware::from_fn(
+        router.layer(from_fn(
             move |req: axum::http::Request<Body>, next: Next| {
                 let header_value = Arc::clone(&header_value);
                 async move {

@@ -62,7 +62,9 @@ fn bench_root_generation_with_metrics(c: &mut Criterion) {
                             key_algorithm: Some(algorithm),
                         };
 
-                        black_box(generate_root_ca(&params).expect(&format!("rsa{} root", bits)));
+                        black_box(
+                            generate_root_ca(&params).unwrap_or_else(|_| panic!("rsa{bits} root")),
+                        );
 
                         let gen_duration = gen_start.elapsed();
                         metrics.record_key_generation(gen_duration.as_millis() as u64);
@@ -108,8 +110,8 @@ fn bench_entropy_performance(c: &mut Criterion) {
             use rand_core::{OsRng, RngCore};
             let mut rng = OsRng;
             let mut buffer = [0u8; 32];
-            black_box(rng.fill_bytes(&mut buffer));
-            buffer
+            rng.fill_bytes(&mut buffer);
+            black_box(buffer)
         });
     });
 
