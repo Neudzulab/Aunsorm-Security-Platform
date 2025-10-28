@@ -1,10 +1,13 @@
 use aunsorm_jwt::{Audience, Claims, Jwk, JwtError, VerificationOptions};
 use aunsorm_pqc::{kem::KemAlgorithm, signature::SignatureAlgorithm};
+#[cfg(feature = "http3-experimental")]
 use axum::{
     body::Body,
+    middleware::{from_fn, Next},
+};
+use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
-    middleware::{from_fn, Next},
     response::{IntoResponse, Response},
     routing::{get, head, post},
     Json, Router,
