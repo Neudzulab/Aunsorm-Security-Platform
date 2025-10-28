@@ -2037,7 +2037,9 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/security/generate-media-token", post(proxy_media_token))
                 // Proxy ID endpoints to id service
                 .route("/id/generate", post(proxy_id_generate))
-                .route("/id/generate", head(proxy_id_generate_head));
+                .route("/id/generate", head(proxy_id_generate_head))
+                // Endpoint validation
+                .route("/validate/endpoint", post(validate_endpoint));
         }
         Some("auth-service") => {
             tracing::info!("🔐 Building AUTH SERVICE routes");
@@ -2289,6 +2291,7 @@ async fn proxy_id_generate_head() -> impl IntoResponse {
 /// Returns `ServerError` if the server fails to start or bind to the specified address.
 pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
     let listen = config.listen;
+    tracing::info!("🚀 Starting server on {}", listen);
     let state = Arc::new(ServerState::try_new(config)?);
     #[cfg(feature = "http3-experimental")]
     let _http3_guard = {
@@ -2301,8 +2304,107 @@ pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
     };
     let router = build_router(&state);
     let listener = tokio::net::TcpListener::bind(listen).await?;
+    tracing::info!("✅ Server successfully bound to {}", listen);
+    tracing::info!("🌐 Starting HTTP server...");
     axum::serve(listener, router.into_make_service()).await?;
     Ok(())
+}
+
+/// Endpoint validation handler for testing connectivity and responses
+async fn validate_endpoint(Json(payload): Json<EndpointValidationRequest>) -> impl IntoResponse {
+    use reqwest;
+    
+    tracing::info!("🔍 Validating endpoint: {} {}", payload.method, payload.url);
+    
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+    {
+        Ok(client) => client,
+        Err(e) => {
+            tracing::error!("Failed to create HTTP client: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Client creation failed").into_response();
+        }
+    };
+
+    let method = match payload.method.to_uppercase().as_str() {
+        "GET" => reqwest::Method::GET,
+        "POST" => reqwest::Method::POST,
+        "PUT" => reqwest::Method::PUT,
+        "DELETE" => reqwest::Method::DELETE,
+        "HEAD" => reqwest::Method::HEAD,
+        _ => return (StatusCode::BAD_REQUEST, "Unsupported HTTP method").into_response(),
+    };
+
+    let request = client.request(method, &payload.url);
+    
+    let request = if let Some(body) = payload.body {
+        request.body(body)
+    } else {
+        request
+    };
+
+    let request = if let Some(headers) = payload.headers {
+        let mut req = request;
+        for (key, value) in headers {
+            if let (Ok(name), Ok(val)) = (reqwest::header::HeaderName::from_bytes(key.as_bytes()), reqwest::header::HeaderValue::from_str(&value)) {
+                req = req.header(name, val);
+            }
+        }
+        req
+    } else {
+        request
+    };
+
+    match request.send().await {
+        Ok(response) => {
+            let status = response.status().as_u16();
+            let headers: std::collections::HashMap<String, String> = response
+                .headers()
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+                .collect();
+            
+            let body = response.text().await.unwrap_or_default();
+            
+            Json(EndpointValidationResponse {
+                success: true,
+                status_code: status,
+                headers: Some(headers),
+                body: Some(body),
+                error: None,
+            }).into_response()
+        }
+        Err(e) => {
+            tracing::warn!("Endpoint validation failed: {}", e);
+            Json(EndpointValidationResponse {
+                success: false,
+                status_code: 0,
+                headers: None,
+                body: None,
+                error: Some(e.to_string()),
+            }).into_response()
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct EndpointValidationRequest {
+    url: String,
+    method: String,
+    #[serde(default)]
+    headers: Option<std::collections::HashMap<String, String>>,
+    #[serde(default)]
+    body: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct EndpointValidationResponse {
+    success: bool,
+    status_code: u16,
+    headers: Option<std::collections::HashMap<String, String>>,
+    body: Option<String>,
+    error: Option<String>,
 }
 
 #[cfg(all(test, feature = "http3-experimental"))]

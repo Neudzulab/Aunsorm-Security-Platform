@@ -109,22 +109,8 @@ impl KeyAlgorithm {
 }
 
 fn generate_rsa_keypair(bits: usize) -> Result<KeyPair, X509Error> {
-    // Manual RSA generation gerekiyor - rcgen native RSA generation desteklemiyor
-    use pem::Pem;
-    use rand_core::OsRng;
-    use rsa::{pkcs8::EncodePrivateKey, RsaPrivateKey};
-
-    let mut rng = OsRng;
-    let private_key = RsaPrivateKey::new(&mut rng, bits)
-        .map_err(|err| X509Error::KeyGeneration(err.to_string()))?;
-    let pkcs8 = private_key
-        .to_pkcs8_der()
-        .map_err(|err| X509Error::KeyGeneration(err.to_string()))?;
-
-    let pem = Pem::new("PRIVATE KEY", pkcs8.as_bytes());
-    let pem_encoded = pem::encode(&pem);
-    KeyPair::from_pkcs8_pem_and_sign_algo(&pem_encoded, &rcgen::PKCS_RSA_SHA256)
-        .map_err(|err| X509Error::KeyGeneration(err.to_string()))
+    // Use optimized RSA generation for better performance
+    crate::optimizations::generate_optimized_rsa_keypair(bits)
 }
 
 /// Parameters for Root CA generation.

@@ -15,6 +15,7 @@ members = [
     "crates/mdm",
     "tests",
     "crates/endpoint-validator",
+    "benches",
 ]
 resolver = "2"
 

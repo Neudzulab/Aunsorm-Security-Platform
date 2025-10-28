@@ -23,6 +23,7 @@ signature = { version = "2", default-features = false, features = ["std"] }
 zeroize = { workspace = true }
 time = { version = "0.3", features = ["formatting", "macros", "serde"] }
 rand_core = { workspace = true }
+hkdf = "0.12"
 
 [dev-dependencies]
 pretty_assertions = "1"

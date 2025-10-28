@@ -37,12 +37,15 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /e2ee/context/step ✅ - E2EE ratchet adımı ilerletme
 │   │   ├── POST /security/generate-media-token ✅ - Medya erişim token üretimi
 │   │   ├── POST /security/jwt-verify ✅ - Zasian JWT doğrulama ve payload dökümü
+│   │   ├── POST /sfu/context ✅ - SFU E2EE context oluşturma
+│   │   ├── POST /sfu/context/step ✅ - SFU session ratchet ilerletme
 │   │   ├── POST /mdm/register ✅ - Cihaz kayıt akışı
 │   │   ├── GET /mdm/policy/:platform ✅ - Platform bazlı MDM politikası
 │   │   ├── GET /mdm/cert-plan/:device_id ✅ - Sertifika planı keşfi
 │   │   ├── POST /id/generate ✅ - Head damgalı kimlik üretimi
 │   │   ├── POST /id/parse ✅ - Kimlik çözümleme servisi
 │   │   ├── POST /id/verify-head ✅ - Head damgalı kimlik doğrulama
+│   │   ├── POST /validate/endpoint ✅ - Endpoint bağlantı doğrulaması
 │   │   ├── POST /blockchain/fabric/did/verify ✅ - Hyperledger Fabric DID doğrulama PoC'u
 │   │   ├── GET /http3/capabilities 🚧 - HTTP/3 PoC introspeksiyonu (`http3-experimental`)
 │   │   ├── GET /acme/directory ✅ - ACME directory keşfi ve meta bilgisi
@@ -187,23 +190,61 @@ docker-compose down -v          # + Volumeleri sil
 - **Aunsorm Calibration Extension:** Benzersiz sertifika metadata
 - **CLI Tools:** Komut satırından tam kontrol
 
+**📊 Performans Karşılaştırması (v0.4.5 Benchmark Sonuçları):**
+
+| Algoritma | Key Generation | Certificate Signing | Kullanım Önerisi |
+|-----------|---------------|-------------------|-------------------|
+| **Ed25519** | ~100 µs | ~162 µs | ✅ **Önerilen** - Modern, hızlı, güvenli |
+| **RSA-2048** | ~142 ms | ~147 ms | ⚠️ Legacy uyumluluk için |
+| **RSA-4096** | ~1.6s | ~1.7s | 🔒 Yüksek güvenlik gereken durumlar |
+
+> 🚀 **Performans Notu:** Ed25519, RSA-2048'den **~1,400x daha hızlı** ve aynı güvenlik seviyesi sağlar.
+> Yeni projeler için Ed25519 tercih edilmelidir. RSA sadece legacy sistem entegrasyonları için kullanın.
+
 ```bash
-# Root CA oluştur
+# 🚀 Modern, Hızlı Yaklaşım (Önerilen - Ed25519)
 aunsorm-cli x509 ca init --profile ca-profile.yaml \
   --cert-out root-ca.crt --key-out root-ca.key \
-  --algorithm rsa4096
+  --algorithm ed25519
 
-# Server sertifikası imzala (production)
 aunsorm-cli x509 ca sign-server \
   --ca-cert root-ca.crt --ca-key root-ca.key \
   --hostname example.com --cert-out server.crt --key-out server.key \
-  --algorithm rsa2048 \
-  --organization "Company Name" \
-  --organizational-unit "IT Security" \
+  --algorithm ed25519 \
+  --organization "Company Name" --country US
+
+# 🔒 Legacy Uyumluluk (RSA gerektiğinde)
+aunsorm-cli x509 ca init --profile ca-profile.yaml \
+  --cert-out root-ca-rsa.crt --key-out root-ca-rsa.key \
+  --algorithm rsa4096  # Yüksek güvenlik için
+
+aunsorm-cli x509 ca sign-server \
+  --ca-cert root-ca-rsa.crt --ca-key root-ca-rsa.key \
+  --hostname legacy.example.com --cert-out server-rsa.crt --key-out server-rsa.key \
+  --algorithm rsa2048  # Denge: hız vs güvenlik
+  --organization "Company Name" --organizational-unit "IT Security" \
   --country US --state California --locality "San Francisco"
 ```
 
-##### 🏠 Self-Signed Certificate for Local Development
+##### � Algoritma Seçim Rehberi
+
+**Ed25519 Kullan (Önerilen):**
+- ✅ Yeni projeler ve modern altyapılar
+- ✅ Mikro servisler arası TLS 
+- ✅ JWT imzalama ve API güvenliği
+- ✅ İç ağ sertifikaları ve development
+
+**RSA-2048 Kullan:**
+- ⚠️ Legacy sistem entegrasyonları (eski Java/OpenSSL)
+- ⚠️ Üçüncü parti tool'lar Ed25519 desteklemiyorsa
+- ⚠️ Compliance gereksinimleri (FIPS 140-2, Common Criteria)
+
+**RSA-4096 Kullan:**
+- 🔒 Uzun vadeli arşiv sertifikaları (10+ yıl)
+- 🔒 Root CA sertifikaları (maksimum güvenlik)
+- 🔒 Kritik financial/healthcare sistemleri
+
+##### �🏠 Self-Signed Certificate for Local Development
 
 **Localhost HTTPS için self-signed sertifika oluşturma:**
 
@@ -632,7 +673,43 @@ aunsorm-server v0.4.5
 │  └─ POST   /e2ee/context/step ✅       → Ratchet key rotation
 │                                          └─ Forward secrecy + replay protection
 │
-├─ 📱 MDM (Mobile Device Management)
+├─ � Core Cryptography (AEAD + Calibration)
+│  ├─ POST   /crypto/encrypt 📋 [Planlandı v0.5.0] → AEAD şifreleme (CLI: encrypt komutu)
+│  │                                       └─ Input: plaintext, password, org_salt?, calib_text?
+│  │                                       └─ Output: encrypted_packet (base64), algorithm_info
+│  │                                       └─ AEAD: ChaCha20Poly1305 + kalibrasyon bağlamı
+│  ├─ POST   /crypto/decrypt 📋 [Planlandı v0.5.0] → AEAD şifre çözme (CLI: decrypt komutu)  
+│  │                                       └─ Input: encrypted_packet, password, org_salt?, calib_text?
+│  │                                       └─ Output: plaintext, verification_info
+│  │                                       └─ Doğrulama: MAC verification + kalibrasyon kontrol
+│  ├─ POST   /crypto/session-encrypt 📋 [Planlandı v0.5.0] → Double Ratchet şifreleme
+│  │                                       └─ Input: message, session_store (JSON state)
+│  │                                       └─ Output: encrypted_packet, updated_session_store
+│  │                                       └─ Forward secrecy + replay protection
+│  └─ POST   /crypto/session-decrypt 📋 [Planlandı v0.5.0] → Double Ratchet şifre çözme
+│                                          └─ Input: encrypted_packet, session_store
+│                                          └─ Output: plaintext, updated_session_store
+│                                          └─ Ratchet advance + message ordering
+│
+├─ 📊 Calibration Management (Kalibrasyon Yönetimi)
+│  ├─ POST   /calib/inspect 📋 [Planlandı v0.5.0] → Kalibrasyon parametrelerini görüntüle
+│  │                                       └─ Input: org_salt, calib_text  
+│  │                                       └─ Output: context_hash, derived_salts, status
+│  │                                       └─ CLI equivalent: calib inspect
+│  ├─ POST   /calib/derive-coord 📋 [Planlandı v0.5.0] → Koordinat kimlik türetme
+│  │                                       └─ Input: password, org_salt, calib_text, kdf_profile
+│  │                                       └─ Output: coord_id, coord_value, kdf_info
+│  │                                       └─ CLI equivalent: calib derive-coord  
+│  ├─ POST   /calib/fingerprint 📋 [Planlandı v0.5.0] → SHA-256 parmak izi
+│  │                                       └─ Input: org_salt, calib_text
+│  │                                       └─ Output: fingerprint (hex), calibration_id
+│  │                                       └─ CLI equivalent: calib fingerprint
+│  └─ POST   /calib/verify 📋 [Planlandı v0.5.0] → Kalibrasyon doğrula
+│                                          └─ Input: org_salt, calib_text, expected_fingerprint
+│                                          └─ Output: valid (boolean), computed_fingerprint
+│                                          └─ CLI equivalent: calib verify
+│
+├─ �📱 MDM (Mobile Device Management)
 │  ├─ POST   /mdm/register ✅           → Cihaz kaydı + Politika + Sertifika
 │  ├─ GET    /mdm/policy/{platform} ✅  → Platform politikası (ios/android/windows)
 │  └─ GET    /mdm/cert-plan/{device_id} ✅ → Sertifika dağıtım planı

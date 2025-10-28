@@ -7,6 +7,7 @@
 
 pub mod automation;
 pub mod ca;
+pub mod optimizations;
 
 use std::collections::BTreeSet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};

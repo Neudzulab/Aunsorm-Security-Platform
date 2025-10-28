@@ -8,6 +8,7 @@ publish = false
 criterion = { workspace = true }
 aunsorm-core = { path = "../crates/core" }
 aunsorm-x509 = { path = "../crates/x509" }
+rand_core = "0.6"
 
 [[bench]]
 name = "aead"
@@ -22,4 +23,9 @@ harness = false
 [[bench]]
 name = "x509"
 path = "x509.rs"
+harness = false
+
+[[bench]]
+name = "performance_analysis"
+path = "performance_analysis.rs"
 harness = false

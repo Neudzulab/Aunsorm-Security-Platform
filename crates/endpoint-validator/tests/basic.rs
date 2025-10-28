@@ -110,8 +110,7 @@ async fn home() -> impl IntoResponse {
 }
 
 fn router() -> Router {
-    let (sender, _) = broadcast::channel(1);
-    sender.send("hello").expect("initial event");
+    let (sender, _) = broadcast::channel(16);
     let state = AppState { sender };
     Router::new()
         .route("/", get(home))
@@ -150,7 +149,7 @@ async fn validator_discovers_endpoints() {
     let addr = spawn_server().await;
     let base_url = Url::parse(&format!("http://{}:{}", addr.ip(), addr.port())).expect("url");
     let mut config = ValidatorConfig::with_base_url(base_url);
-    config.include_destructive = false;
+    config.include_destructive = true;
     config.seed_paths.push("/stream".to_string());
     config.allowlist.push(AllowlistedFailure {
         method: "GET".to_string(),

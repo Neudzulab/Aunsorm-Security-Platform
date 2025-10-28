@@ -8,6 +8,7 @@ mod directory;
 mod jws;
 mod nonce;
 mod order;
+mod rng;
 
 pub use account::{
     AccountContact, AccountContactError, AccountContactKind, ExternalAccountBinding,
@@ -30,3 +31,4 @@ pub use order::{
     IdentifierKind, NewOrderError, NewOrderRequest, NewOrderRequestBuilder, OrderIdentifier,
     OrderIdentifierError,
 };
+pub use rng::{AunsormNativeRng, create_aunsorm_rng};

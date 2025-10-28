@@ -22,5 +22,8 @@ pem = "3"
 ring = { workspace = true }
 rsa = { workspace = true }
 rand_core = { workspace = true }
+hkdf = "0.12"
+[features]
+default = []
 
 [dev-dependencies]

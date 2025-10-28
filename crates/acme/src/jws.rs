@@ -9,7 +9,7 @@ use p256::ecdsa::{
 };
 use p256::elliptic_curve;
 use p256::SecretKey as P256SecretKey;
-use rand_core::{CryptoRng, OsRng, RngCore};
+use rand_core::{CryptoRng, RngCore};
 use rsa::errors::Error as RsaError;
 use rsa::pkcs1v15::SigningKey as RsaSigningKey;
 use rsa::traits::PublicKeyParts;
@@ -95,10 +95,11 @@ impl Ed25519AccountKey {
     /// ACME JWS başlığında kullanılacak algoritma adı.
     pub const ALGORITHM: &'static str = "EdDSA";
 
-    /// Varsayılan işletim sistemi RNG'sini kullanarak yeni hesap anahtarı üretir.
+    /// Aunsorm native RNG kullanarak yeni hesap anahtarı üretir.
     #[must_use]
     pub fn generate() -> Self {
-        let mut rng = OsRng;
+        use crate::rng::AunsormNativeRng;
+        let mut rng = AunsormNativeRng::new(b"ed25519-acme-account");
         Self::generate_with_rng(&mut rng)
     }
 
@@ -240,10 +241,11 @@ impl EcdsaP256AccountKey {
     /// ACME JWS başlığında kullanılacak algoritma adı.
     pub const ALGORITHM: &'static str = "ES256";
 
-    /// Varsayılan işletim sistemi RNG'si ile yeni ECDSA hesap anahtarı üretir.
+    /// Aunsorm native RNG ile yeni ECDSA hesap anahtarı üretir.
     #[must_use]
     pub fn generate() -> Self {
-        let mut rng = OsRng;
+        use crate::rng::AunsormNativeRng;
+        let mut rng = AunsormNativeRng::new(b"p256-ecdsa-acme-account");
         Self::generate_with_rng(&mut rng)
     }
 
@@ -389,14 +391,15 @@ impl RsaAccountKey {
     pub const ALGORITHM: &'static str = "RS256";
     const DEFAULT_MODULUS_BITS: usize = 2048;
 
-    /// Varsayılan modül uzunluğunda RSA hesap anahtarı üretir.
+    /// Aunsorm native RNG ile varsayılan modül uzunluğunda RSA hesap anahtarı üretir.
     ///
     /// # Errors
     ///
     /// Rastgele sayı üretimi veya asal üretim başarısız olursa `JwsError::InvalidRsaKey`
     /// döner.
     pub fn generate() -> Result<Self, JwsError> {
-        let mut rng = OsRng;
+        use crate::rng::AunsormNativeRng;
+        let mut rng = AunsormNativeRng::new(b"rsa-acme-account");
         Self::generate_with_rng(Self::DEFAULT_MODULUS_BITS, &mut rng)
     }
 
@@ -596,7 +599,7 @@ mod tests {
     }
 
     fn sample_rsa_key() -> RsaAccountKey {
-        let mut rng = ChaCha20Rng::from_seed([11_u8; 32]);
+        let mut rng = crate::rng::create_aunsorm_rng();
         let private_key = RsaPrivateKey::new(&mut rng, 1024).expect("rsa anahtarı üretimi");
         RsaAccountKey::new(private_key).expect("geçerli rsa anahtarı")
     }
