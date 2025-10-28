@@ -125,7 +125,7 @@
 - [x] Account key generation (RSA/ECDSA)
   
 - [ ] Domain validation handlers
-  - [ ] HTTP-01: Web server challenge response
+  - [x] HTTP-01: Web server challenge response (key-authorization üretimi ve yanıt gövdesi doğrulaması `aunsorm-acme` crate'inde hazır)
   - [ ] DNS-01: DNS provider API abstraction
   - [ ] TLS-ALPN-01: ALPN challenge handler
   

@@ -518,7 +518,8 @@ fn parse_datetime(value: &str) -> Result<OffsetDateTime, time::error::Parse> {
     OffsetDateTime::parse(value, &Rfc3339)
 }
 
-fn validate_token(value: &str) -> Result<(), ChallengeError> {
+#[allow(clippy::redundant_pub_crate)]
+pub(crate) fn validate_token(value: &str) -> Result<(), ChallengeError> {
     if value.len() < 16 {
         return Err(ChallengeError::InvalidToken {
             reason: "token çok kısa",

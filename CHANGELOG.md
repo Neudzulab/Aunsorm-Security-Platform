@@ -25,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `HeadIdGenerator::head_fingerprint_bytes` ve `HeadStampedId::fingerprint_bytes`
   yardımcılarını sağlayarak ikili doğrulama ve anahtar materyali karşılaştırma
   senaryolarını kolaylaştırıyor.
+- `aunsorm-acme` HTTP-01 domain doğrulamaları için key-authorization üretimi,
+  beklenen `/.well-known/acme-challenge/<token>` dosya yolu ve yanıt gövdesi
+  doğrulaması sağlayan yardımcılar ekledi; basit dosya sunucu dağıtımlarında
+  sondaki newline karakterleri tolere ediliyor.
 - Docker Compose `compose.yaml` reçetesi: kalıcı `AUNSORM_JTI_DB` volume'ü,
   healthcheck ve varsayılan `RUST_LOG`/strict yapılandırmasıyla konteyner
   dağıtımlarını tek komutla başlatır.

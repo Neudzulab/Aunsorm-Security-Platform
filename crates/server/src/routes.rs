@@ -2458,6 +2458,7 @@ async fn proxy_id_generate_head() -> impl IntoResponse {
 /// # Errors
 ///
 /// Returns `ServerError` if the server fails to start or bind to the specified address.
+#[allow(clippy::cognitive_complexity)]
 pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
     let listen = config.listen;
     tracing::info!("🚀 Starting server on {}", listen);
@@ -2480,6 +2481,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
 }
 
 /// Endpoint validation handler for testing connectivity and responses
+#[allow(clippy::cognitive_complexity)]
 async fn validate_endpoint(Json(payload): Json<EndpointValidationRequest>) -> impl IntoResponse {
     use reqwest;
 
