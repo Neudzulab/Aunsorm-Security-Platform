@@ -1,4 +1,5 @@
 use aunsorm_jwt::{Audience, Claims, Jwk, JwtError, VerificationOptions};
+use aunsorm_pqc::{kem::KemAlgorithm, signature::SignatureAlgorithm};
 use axum::{
     body::Body,
     extract::{Path, Query, State},
@@ -141,6 +142,64 @@ pub struct RandomNumberResponse {
     pub entropy: String,
 }
 
+const ML_KEM_768_ALIASES: &[&str] = &["mlkem768", "kyber-768", "kyber768"];
+const ML_KEM_1024_ALIASES: &[&str] = &["mlkem1024", "kyber-1024", "kyber1024"];
+const ML_DSA_65_ALIASES: &[&str] = &["mldsa65", "dilithium5", "dilithium-5"];
+const FALCON_512_ALIASES: &[&str] = &["falcon512"];
+const SPHINCS_SHAKE_128F_ALIASES: &[&str] = &[
+    "sphincs-shake-128f",
+    "sphincsplus-shake-128f",
+    "sphincsplusshake128f",
+];
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PqcCapabilitiesResponse {
+    strict: PqcStrictMode,
+    kem: Vec<KemCapability>,
+    signatures: Vec<SignatureCapability>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PqcStrictMode {
+    env_var: &'static str,
+    default_enabled: bool,
+    fail_if_unavailable: bool,
+    description: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KemCapability {
+    algorithm: &'static str,
+    available: bool,
+    nist_category: &'static str,
+    public_key_bytes: usize,
+    secret_key_bytes: usize,
+    ciphertext_bytes: usize,
+    shared_secret_bytes: usize,
+    aliases: &'static [&'static str],
+    description: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SignatureCapability {
+    algorithm: &'static str,
+    available: bool,
+    deterministic: bool,
+    nist_category: &'static str,
+    public_key_bytes: usize,
+    secret_key_bytes: usize,
+    signature_bytes: usize,
+    aliases: &'static [&'static str],
+    client_actions: Vec<&'static str>,
+    runtime_assertions: Vec<&'static str>,
+    references: Vec<&'static str>,
+    description: &'static str,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Http3DatagramChannelDescriptor {
     channel: u8,
@@ -196,6 +255,114 @@ pub async fn random_number(
     headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
 
     Ok(response)
+}
+
+fn build_pqc_capabilities_document() -> PqcCapabilitiesResponse {
+    PqcCapabilitiesResponse {
+        strict: PqcStrictMode {
+            env_var: "AUNSORM_STRICT",
+            default_enabled: false,
+            fail_if_unavailable: true,
+            description:
+                "Set to `1` or `true` to require PQC negotiation and reject classical fallbacks.",
+        },
+        kem: build_kem_capabilities(),
+        signatures: build_signature_capabilities(),
+    }
+}
+
+fn build_kem_capabilities() -> Vec<KemCapability> {
+    [
+        (
+            KemAlgorithm::MlKem768,
+            "3",
+            1_184,
+            2_400,
+            1_088,
+            32,
+            ML_KEM_768_ALIASES,
+            "Module-lattice KEM aligned with ML-KEM-768 / Kyber768 parameters.",
+        ),
+        (
+            KemAlgorithm::MlKem1024,
+            "5",
+            1_568,
+            3_168,
+            1_568,
+            32,
+            ML_KEM_1024_ALIASES,
+            "Module-lattice KEM aligned with ML-KEM-1024 / Kyber1024 parameters.",
+        ),
+    ]
+    .into_iter()
+    .map(
+        |(
+            algorithm,
+            nist_category,
+            public_key_bytes,
+            secret_key_bytes,
+            ciphertext_bytes,
+            shared_secret_bytes,
+            aliases,
+            description,
+        )| {
+            KemCapability {
+                algorithm: algorithm.name(),
+                available: algorithm.is_available(),
+                nist_category,
+                public_key_bytes,
+                secret_key_bytes,
+                ciphertext_bytes,
+                shared_secret_bytes,
+                aliases,
+                description,
+            }
+        },
+    )
+    .collect()
+}
+
+fn build_signature_capabilities() -> Vec<SignatureCapability> {
+    [
+        (
+            SignatureAlgorithm::MlDsa65,
+            ML_DSA_65_ALIASES,
+            "Deterministic module-lattice signature (ML-DSA-65 / Dilithium5).",
+        ),
+        (
+            SignatureAlgorithm::Falcon512,
+            FALCON_512_ALIASES,
+            "Floating-point lattice signature optimized for bandwidth-sensitive deployments.",
+        ),
+        (
+            SignatureAlgorithm::SphincsShake128f,
+            SPHINCS_SHAKE_128F_ALIASES,
+            "Stateless hash-based signature using the SHAKE-128f-simple parameter set.",
+        ),
+    ]
+    .into_iter()
+    .map(|(algorithm, aliases, description)| {
+        let checklist = algorithm.checklist();
+        SignatureCapability {
+            algorithm: algorithm.name(),
+            available: algorithm.is_available(),
+            deterministic: checklist.deterministic(),
+            nist_category: checklist.nist_category(),
+            public_key_bytes: checklist.public_key_bytes(),
+            secret_key_bytes: checklist.secret_key_bytes(),
+            signature_bytes: checklist.signature_bytes(),
+            aliases,
+            client_actions: checklist.client_actions().collect(),
+            runtime_assertions: checklist.runtime_assertions().collect(),
+            references: checklist.references().collect(),
+            description,
+        }
+    })
+    .collect()
+}
+
+async fn pqc_capabilities() -> Json<PqcCapabilitiesResponse> {
+    Json(build_pqc_capabilities_document())
 }
 
 #[cfg(feature = "http3-experimental")]
@@ -2031,6 +2198,7 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/random/number", get(random_number))
                 // Transparency endpoints (gateway service)
                 .route("/transparency/tree", get(transparency_tree))
+                .route("/pqc/capabilities", get(pqc_capabilities))
                 .route("/http3/capabilities", get(http3_capabilities))
                 // Proxy JWT endpoints to auth service
                 .route("/security/jwt-verify", post(proxy_jwt_verify))
@@ -2105,6 +2273,7 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
             router = router
                 // Random number endpoint
                 .route("/random/number", get(random_number))
+                .route("/pqc/capabilities", get(pqc_capabilities))
                 // ACME endpoints
                 .route("/acme/directory", get(acme_directory))
                 .route("/acme/new-nonce", get(acme_new_nonce))
@@ -2313,9 +2482,9 @@ pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
 /// Endpoint validation handler for testing connectivity and responses
 async fn validate_endpoint(Json(payload): Json<EndpointValidationRequest>) -> impl IntoResponse {
     use reqwest;
-    
+
     tracing::info!("🔍 Validating endpoint: {} {}", payload.method, payload.url);
-    
+
     let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
@@ -2337,7 +2506,7 @@ async fn validate_endpoint(Json(payload): Json<EndpointValidationRequest>) -> im
     };
 
     let request = client.request(method, &payload.url);
-    
+
     let request = if let Some(body) = payload.body {
         request.body(body)
     } else {
@@ -2347,7 +2516,10 @@ async fn validate_endpoint(Json(payload): Json<EndpointValidationRequest>) -> im
     let request = if let Some(headers) = payload.headers {
         let mut req = request;
         for (key, value) in headers {
-            if let (Ok(name), Ok(val)) = (reqwest::header::HeaderName::from_bytes(key.as_bytes()), reqwest::header::HeaderValue::from_str(&value)) {
+            if let (Ok(name), Ok(val)) = (
+                reqwest::header::HeaderName::from_bytes(key.as_bytes()),
+                reqwest::header::HeaderValue::from_str(&value),
+            ) {
                 req = req.header(name, val);
             }
         }
@@ -2364,16 +2536,17 @@ async fn validate_endpoint(Json(payload): Json<EndpointValidationRequest>) -> im
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
                 .collect();
-            
+
             let body = response.text().await.unwrap_or_default();
-            
+
             Json(EndpointValidationResponse {
                 success: true,
                 status_code: status,
                 headers: Some(headers),
                 body: Some(body),
                 error: None,
-            }).into_response()
+            })
+            .into_response()
         }
         Err(e) => {
             tracing::warn!("Endpoint validation failed: {}", e);
@@ -2383,7 +2556,8 @@ async fn validate_endpoint(Json(payload): Json<EndpointValidationRequest>) -> im
                 headers: None,
                 body: None,
                 error: Some(e.to_string()),
-            }).into_response()
+            })
+            .into_response()
         }
     }
 }
@@ -2407,32 +2581,111 @@ struct EndpointValidationResponse {
     error: Option<String>,
 }
 
-#[cfg(all(test, feature = "http3-experimental"))]
-mod tests {
-    use super::*;
-    use axum::body::to_bytes;
+#[cfg(test)]
+fn build_test_state() -> Arc<ServerState> {
     use std::net::SocketAddr;
     use std::time::Duration;
+
+    let listen: SocketAddr = "127.0.0.1:9443".parse().expect("socket address");
+    let key_pair =
+        aunsorm_jwt::Ed25519KeyPair::generate("test-server").expect("key pair generation");
+    let config = crate::config::ServerConfig::new(
+        listen,
+        "https://aunsorm.test",
+        "test-audience",
+        Duration::from_secs(300),
+        false,
+        key_pair,
+        crate::config::LedgerBackend::Memory,
+    )
+    .expect("config is valid");
+    Arc::new(ServerState::try_new(config).expect("state is constructed"))
+}
+
+#[cfg(test)]
+mod pqc_tests {
+    use super::*;
+    use axum::body::to_bytes;
     use tower::ServiceExt;
 
-    use crate::config::{LedgerBackend, ServerConfig};
+    #[tokio::test]
+    async fn pqc_capabilities_report_feature_flags() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/pqc/capabilities")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
 
-    fn build_test_state() -> Arc<ServerState> {
-        let listen: SocketAddr = "127.0.0.1:9443".parse().expect("socket address");
-        let key_pair =
-            aunsorm_jwt::Ed25519KeyPair::generate("test-server").expect("key pair generation");
-        let config = ServerConfig::new(
-            listen,
-            "https://aunsorm.test",
-            "test-audience",
-            Duration::from_secs(300),
-            false,
-            key_pair,
-            LedgerBackend::Memory,
-        )
-        .expect("config is valid");
-        Arc::new(ServerState::try_new(config).expect("state is constructed"))
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body is collected");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("payload parses");
+
+        let strict = payload.get("strict").expect("strict section present");
+        assert_eq!(
+            strict.get("envVar").and_then(serde_json::Value::as_str),
+            Some("AUNSORM_STRICT")
+        );
+        assert_eq!(
+            strict
+                .get("defaultEnabled")
+                .and_then(serde_json::Value::as_bool),
+            Some(false)
+        );
+
+        let kem = payload
+            .get("kem")
+            .and_then(serde_json::Value::as_array)
+            .expect("kem list present");
+        assert!(!kem.is_empty(), "kem capability list should not be empty");
+
+        let mlkem_entry = kem
+            .iter()
+            .find(|entry| {
+                entry.get("algorithm").and_then(serde_json::Value::as_str) == Some("ml-kem-768")
+            })
+            .expect("ml-kem-768 entry present");
+        let mlkem_available = mlkem_entry
+            .get("available")
+            .and_then(serde_json::Value::as_bool)
+            .expect("available bool");
+        assert_eq!(
+            mlkem_available,
+            aunsorm_pqc::kem::KemAlgorithm::MlKem768.is_available()
+        );
+
+        let aliases = mlkem_entry
+            .get("aliases")
+            .and_then(serde_json::Value::as_array)
+            .expect("aliases array");
+        assert!(
+            aliases
+                .iter()
+                .any(|value| value.as_str() == Some("kyber-768")),
+            "aliases should include kyber-768"
+        );
+
+        let signatures = payload
+            .get("signatures")
+            .and_then(serde_json::Value::as_array)
+            .expect("signatures list present");
+        assert!(signatures.iter().any(|entry| {
+            entry.get("algorithm").and_then(serde_json::Value::as_str) == Some("ml-dsa-65")
+        }));
     }
+}
+
+#[cfg(all(test, feature = "http3-experimental"))]
+mod http3_tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use tower::ServiceExt;
 
     #[tokio::test]
     async fn alt_svc_header_is_injected_for_http3_routes() {

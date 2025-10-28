@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `endpoint-validator` kütüphanesi ve `aunsorm-cli validate-endpoints`
   komutu: OpenAPI/sitemap/HTML keşfi, otomatik gövde üretimi, geri çekilme
   politikaları ve Markdown/JSON raporlarıyla uzak API uçlarını doğrular.
+- `aunsorm-server` `GET /pqc/capabilities` endpoint'i PQC algoritma envanterini
+  ve `AUNSORM_STRICT` ortam değişkeni davranışını JSON formatında raporlar.
 - `aunsorm-id` HEAD parmak izini ham byte dizisi olarak döndüren
   `HeadIdGenerator::head_fingerprint_bytes` ve `HeadStampedId::fingerprint_bytes`
   yardımcılarını sağlayarak ikili doğrulama ve anahtar materyali karşılaştırma
