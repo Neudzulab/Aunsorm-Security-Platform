@@ -92,6 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Linux/macOS ortamları için `cargo fmt`/`cargo clippy`/`cargo test` adımlarını tek komutla çalıştıran `scripts/test-all.sh` betiği.
 
 ### Changed
+- `/metrics` endpoint now pulls live counts from the server state instead of
+  returning placeholder metric values.
 - `/security/generate-media-token` now issues Ed25519-signed JWTs via
   `aunsorm-jwt`, records issued JTIs in the ledger, and `/security/jwt-verify`
   performs full signature/claim validation with descriptive error mapping.

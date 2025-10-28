@@ -925,6 +925,7 @@ async fn pkce_flow_succeeds() {
         .await
         .expect("metrics body");
     let metrics_text = String::from_utf8(metrics_body.to_vec()).expect("metrics str");
+    assert!(metrics_text.contains("aunsorm_pending_auth_requests"));
     assert!(metrics_text.contains("aunsorm_active_tokens"));
     assert!(metrics_text.contains("aunsorm_sfu_contexts"));
     assert!(metrics_text.contains("aunsorm_mdm_registered_devices"));
