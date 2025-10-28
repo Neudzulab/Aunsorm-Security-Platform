@@ -4,15 +4,23 @@
 
 use std::fmt;
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine as _;
+use ed25519_dalek::{pkcs8::EncodePrivateKey, SigningKey};
+use rand_core::{CryptoRng, RngCore};
+use rcgen::{
+    Certificate, CertificateParams, CustomExtension, DistinguishedName, DnType, KeyPair,
+    PKCS_ED25519,
+};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+use zeroize::Zeroizing;
 
 use crate::authorization::{
     validate_token, Authorization, Challenge, ChallengeError, ChallengeKind,
 };
 use crate::order::OrderIdentifier;
+use crate::rng::AunsormNativeRng;
 
 /// Errors that can occur while preparing or validating an HTTP-01 challenge.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -213,7 +221,7 @@ impl Dns01TxtRecord {
     ) -> Result<Self, Dns01ValidationError> {
         let dns_identifier = match identifier {
             OrderIdentifier::Dns(value) => value.as_str(),
-            _ => return Err(Dns01ValidationError::UnsupportedIdentifier),
+            OrderIdentifier::Ip(_) => return Err(Dns01ValidationError::UnsupportedIdentifier),
         };
         let key_authorization = Http01KeyAuthorization::new(token, account_thumbprint)?;
         let digest = Sha256::digest(key_authorization.key_authorization().as_bytes());
@@ -263,9 +271,254 @@ impl Dns01TxtRecord {
     }
 }
 
+/// TLS-ALPN-01 doğrulama verilerini hazırlarken oluşabilecek hatalar.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum TlsAlpnValidationError {
+    /// Sağlanan challenge TLS-ALPN-01 türünde değil.
+    #[error("Challenge TLS-ALPN-01 türünde değil")]
+    NotTlsAlpn01,
+    /// Challenge token değeri eksik.
+    #[error("TLS-ALPN challenge token değeri eksik")]
+    MissingToken,
+    /// TLS-ALPN yalnızca DNS tabanlı identifier'larla kullanılabilir.
+    #[error("TLS-ALPN challenge yalnızca DNS identifier ile kullanılabilir")]
+    UnsupportedIdentifier,
+    /// HTTP-01 key-authorization doğrulaması başarısız oldu.
+    #[error("TLS-ALPN key-authorization doğrulaması başarısız: {source}")]
+    KeyAuthorization {
+        /// Kaynak doğrulama hatası.
+        #[from]
+        source: Http01ValidationError,
+    },
+}
+
+/// TLS-ALPN-01 challenge verilerini temsil eder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TlsAlpnChallenge {
+    domain: String,
+    key_authorization: Http01KeyAuthorization,
+    digest: [u8; 32],
+}
+
+impl TlsAlpnChallenge {
+    /// ACME TLS-ALPN-01 için kullanılacak ALPN protokol dizesi.
+    pub const ALPN_PROTOCOL: &'static str = "acme-tls/1";
+
+    /// Challenge token'ı ve identifier'dan TLS-ALPN bağlamı oluşturur.
+    ///
+    /// # Errors
+    ///
+    /// DNS dışı identifier'larda veya key-authorization doğrulaması başarısız
+    /// olduğunda [`TlsAlpnValidationError`] döndürür.
+    pub fn new(
+        token: &str,
+        identifier: &OrderIdentifier,
+        account_thumbprint: &str,
+    ) -> Result<Self, TlsAlpnValidationError> {
+        let domain = match identifier {
+            OrderIdentifier::Dns(value) => value.strip_prefix("*.").unwrap_or(value).to_owned(),
+            OrderIdentifier::Ip(_) => return Err(TlsAlpnValidationError::UnsupportedIdentifier),
+        };
+
+        let key_authorization = Http01KeyAuthorization::new(token, account_thumbprint)?;
+        let digest = Sha256::digest(key_authorization.key_authorization().as_bytes());
+        let mut digest_bytes = [0u8; 32];
+        digest_bytes.copy_from_slice(&digest);
+
+        Ok(Self {
+            domain,
+            key_authorization,
+            digest: digest_bytes,
+        })
+    }
+
+    /// Authorization/challenge çiftinden TLS-ALPN bağlamı oluşturur.
+    ///
+    /// # Errors
+    ///
+    /// Challenge TLS-ALPN-01 türünde değilse, token alanı eksikse veya
+    /// doğrulama başarısız olursa [`TlsAlpnValidationError`] döndürür.
+    pub fn from_authorization(
+        authorization: &Authorization,
+        challenge: &Challenge,
+        account_thumbprint: &str,
+    ) -> Result<Self, TlsAlpnValidationError> {
+        if !matches!(challenge.kind(), ChallengeKind::TlsAlpn01) {
+            return Err(TlsAlpnValidationError::NotTlsAlpn01);
+        }
+        let token = challenge
+            .token()
+            .ok_or(TlsAlpnValidationError::MissingToken)?;
+        Self::new(token, authorization.identifier(), account_thumbprint)
+    }
+
+    /// DNS tabanlı domain değerini döndürür.
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn domain(&self) -> &str {
+        self.domain.as_str()
+    }
+
+    /// Challenge key-authorization değerini döndürür.
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn key_authorization(&self) -> &str {
+        self.key_authorization.key_authorization()
+    }
+
+    /// Key-authorization SHA-256 özetini döndürür.
+    #[must_use]
+    pub const fn digest(&self) -> &[u8; 32] {
+        &self.digest
+    }
+
+    /// TLS-ALPN sertifikasını deterministik bir RNG ile üretir.
+    ///
+    /// # Errors
+    ///
+    /// Sertifika oluşturulurken hata oluşursa [`TlsAlpnCertificateError`]
+    /// döner.
+    pub fn create_certificate_with_rng<R: RngCore + CryptoRng>(
+        &self,
+        rng: &mut R,
+    ) -> Result<TlsAlpnCertificate, TlsAlpnCertificateError> {
+        let signing_key = SigningKey::generate(rng);
+        let key_doc = signing_key
+            .to_pkcs8_der()
+            .map_err(|err| TlsAlpnCertificateError::KeyEncoding(err.to_string()))?;
+        let private_key_der = Zeroizing::new(key_doc.as_bytes().to_vec());
+        let key_pair = KeyPair::from_der(private_key_der.as_slice())
+            .map_err(|err| TlsAlpnCertificateError::Certificate(err.to_string()))?;
+
+        let mut params = CertificateParams::new(vec![self.domain.clone()]);
+        params.alg = &PKCS_ED25519;
+        params.distinguished_name = DistinguishedName::new();
+        params
+            .distinguished_name
+            .push(DnType::CommonName, self.domain.clone());
+        params
+            .custom_extensions
+            .push(CustomExtension::new_acme_identifier(&self.digest));
+        params.key_pair = Some(key_pair);
+
+        let certificate = Certificate::from_params(params)
+            .map_err(|err| TlsAlpnCertificateError::Certificate(err.to_string()))?;
+        let certificate_der = certificate
+            .serialize_der()
+            .map_err(|err| TlsAlpnCertificateError::Certificate(err.to_string()))?;
+
+        Ok(TlsAlpnCertificate {
+            domain: self.domain.clone(),
+            certificate_der,
+            private_key_der,
+            digest: self.digest,
+        })
+    }
+
+    /// TLS-ALPN sertifikasını Aunsorm native RNG ile üretir.
+    ///
+    /// # Errors
+    ///
+    /// Sertifika oluşturulurken hata oluşursa [`TlsAlpnCertificateError`]
+    /// döner.
+    pub fn create_certificate(&self) -> Result<TlsAlpnCertificate, TlsAlpnCertificateError> {
+        let mut rng = AunsormNativeRng::new();
+        self.create_certificate_with_rng(&mut rng)
+    }
+}
+
+/// TLS-ALPN sertifikasını ve ilişkili materyali temsil eder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TlsAlpnCertificate {
+    domain: String,
+    certificate_der: Vec<u8>,
+    private_key_der: Zeroizing<Vec<u8>>,
+    digest: [u8; 32],
+}
+
+impl TlsAlpnCertificate {
+    /// ACME TLS-ALPN-01 için kullanılacak ALPN protokol dizesi.
+    pub const ALPN_PROTOCOL: &'static str = TlsAlpnChallenge::ALPN_PROTOCOL;
+
+    /// Sertifikanın hedef domain'ini döndürür.
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn domain(&self) -> &str {
+        self.domain.as_str()
+    }
+
+    /// Sertifikanın DER kodlu halini döndürür.
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn certificate_der(&self) -> &[u8] {
+        self.certificate_der.as_slice()
+    }
+
+    /// Özel anahtarın PKCS#8 DER kodunu döndürür.
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn private_key_der(&self) -> &[u8] {
+        self.private_key_der.as_slice()
+    }
+
+    /// Key-authorization SHA-256 özetini döndürür.
+    #[must_use]
+    pub const fn key_authorization_digest(&self) -> &[u8; 32] {
+        &self.digest
+    }
+
+    /// Sertifikayı PEM formatında döndürür.
+    #[must_use]
+    pub fn certificate_pem(&self) -> String {
+        encode_pem("CERTIFICATE", self.certificate_der())
+    }
+
+    /// Özel anahtarı PEM formatında döndürür.
+    #[must_use]
+    pub fn private_key_pem(&self) -> String {
+        encode_pem("PRIVATE KEY", self.private_key_der())
+    }
+
+    /// ALPN protokol dizesini döndürür.
+    #[must_use]
+    pub const fn alpn_protocol(&self) -> &'static str {
+        Self::ALPN_PROTOCOL
+    }
+}
+
+/// TLS-ALPN sertifikası üretilirken oluşabilecek hatalar.
+#[derive(Debug, Error)]
+pub enum TlsAlpnCertificateError {
+    /// Girdi doğrulaması başarısız oldu.
+    #[error("TLS-ALPN doğrulaması başarısız: {0}")]
+    Validation(#[from] TlsAlpnValidationError),
+    /// Ed25519 anahtarı PKCS#8 olarak kodlanamadı.
+    #[error("Ed25519 anahtarı PKCS#8 olarak kodlanamadı: {0}")]
+    KeyEncoding(String),
+    /// Sertifika oluşturma sırasında hata oluştu.
+    #[error("TLS-ALPN sertifikası oluşturulamadı: {0}")]
+    Certificate(String),
+}
+
 fn trim_trailing_http_whitespace(input: &str) -> &str {
     let without_newlines = input.trim_end_matches(['\n', '\r']);
     without_newlines.trim_end_matches([' ', '\t'])
+}
+
+fn encode_pem(label: &str, der: &[u8]) -> String {
+    let mut pem = String::new();
+    pem.push_str("-----BEGIN ");
+    pem.push_str(label);
+    pem.push_str("-----\n");
+    let encoded = STANDARD.encode(der);
+    for chunk in encoded.as_bytes().chunks(64) {
+        pem.push_str(&String::from_utf8_lossy(chunk));
+        pem.push('\n');
+    }
+    pem.push_str("-----END ");
+    pem.push_str(label);
+    pem.push_str("-----\n");
+    pem
 }
 
 impl fmt::Display for Http01KeyAuthorization {
@@ -281,7 +534,11 @@ mod tests {
     use super::*;
     use crate::authorization::{Authorization, Challenge};
     use crate::order::OrderIdentifier;
+    use rand_chacha::rand_core::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
     use serde_json::json;
+    use x509_parser::extensions::{GeneralName, ParsedExtension};
+    use x509_parser::oid_registry::Oid;
 
     fn sample_challenge(token: &str) -> Challenge {
         let authorization = Authorization::from_json_value(json!({
@@ -494,5 +751,122 @@ mod tests {
         )
         .expect_err("DNS olmayan challenge reddedilmeli");
         assert!(matches!(err, Dns01ValidationError::NotDns01));
+    }
+
+    #[test]
+    fn tls_alpn_challenge_builds_digest() {
+        let authorization = Authorization::from_json_value(json!({
+            "status": "pending",
+            "identifier": {"type": "dns", "value": "*.Example.com"},
+            "challenges": [
+                {
+                    "type": "tls-alpn-01",
+                    "status": "pending",
+                    "url": "https://acme.invalid/challenge/42",
+                    "token": "gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH",
+                }
+            ]
+        }))
+        .expect("authorization ayrıştırılmalı");
+        let challenge = authorization
+            .challenges()
+            .first()
+            .expect("challenge mevcut olmalı")
+            .clone();
+        let context = TlsAlpnChallenge::from_authorization(
+            &authorization,
+            &challenge,
+            "ytxINsp8lvQ1mX8kGqCFyT9OQy2M7o1uz7NErHOwhwU",
+        )
+        .expect("TLS-ALPN bağlamı oluşturulmalı");
+        assert_eq!(context.domain(), "example.com");
+        assert_eq!(TlsAlpnChallenge::ALPN_PROTOCOL, "acme-tls/1");
+        let digest = context.digest();
+        assert_eq!(digest.len(), 32);
+    }
+
+    #[test]
+    fn tls_alpn_challenge_rejects_non_dns_identifier() {
+        let identifier = OrderIdentifier::ip("192.0.2.10").expect("ip identifier");
+        let err = TlsAlpnChallenge::new(
+            "gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH",
+            &identifier,
+            "ytxINsp8lvQ1mX8kGqCFyT9OQy2M7o1uz7NErHOwhwU",
+        )
+        .expect_err("IP identifier TLS-ALPN tarafından reddedilmeli");
+        assert!(matches!(err, TlsAlpnValidationError::UnsupportedIdentifier));
+    }
+
+    #[test]
+    fn tls_alpn_certificate_contains_acme_extension() {
+        let authorization = Authorization::from_json_value(json!({
+            "status": "pending",
+            "identifier": {"type": "dns", "value": "example.com"},
+            "challenges": [
+                {
+                    "type": "tls-alpn-01",
+                    "status": "pending",
+                    "url": "https://acme.invalid/challenge/1",
+                    "token": "abc1234567890DEFghij-KLMNOP",
+                }
+            ]
+        }))
+        .expect("authorization ayrıştırılmalı");
+        let challenge = authorization
+            .challenges()
+            .first()
+            .expect("challenge mevcut olmalı")
+            .clone();
+        let context = TlsAlpnChallenge::from_authorization(
+            &authorization,
+            &challenge,
+            "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+        )
+        .expect("TLS-ALPN bağlamı oluşturulmalı");
+        let mut rng = ChaCha20Rng::seed_from_u64(42);
+        let certificate = context
+            .create_certificate_with_rng(&mut rng)
+            .expect("sertifika oluşturulmalı");
+        assert_eq!(certificate.domain(), "example.com");
+        assert_eq!(certificate.alpn_protocol(), "acme-tls/1");
+        assert_eq!(certificate.key_authorization_digest(), context.digest());
+
+        let (_, parsed) = x509_parser::parse_x509_certificate(certificate.certificate_der())
+            .expect("sertifika ayrıştırılmalı");
+
+        let san = parsed
+            .extensions()
+            .iter()
+            .find_map(|ext| match ext.parsed_extension() {
+                ParsedExtension::SubjectAlternativeName(san) => Some(san),
+                _ => None,
+            })
+            .expect("SAN uzantısı bulunmalı");
+        let dns_names: Vec<String> = san
+            .general_names
+            .iter()
+            .filter_map(|name| match name {
+                GeneralName::DNSName(value) => Some((*value).to_string()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(dns_names, vec!["example.com".to_string()]);
+
+        let mut expected_extension = Vec::with_capacity(34);
+        expected_extension.push(0x04); // OCTET STRING
+        expected_extension.push(0x20); // length 32
+        expected_extension.extend_from_slice(context.digest());
+
+        let acme_oid = Oid::from(&[1, 3, 6, 1, 5, 5, 7, 1, 31]).expect("acmeIdentifier OID");
+        let acme_ext = parsed
+            .extensions()
+            .iter()
+            .find(|ext| ext.oid == acme_oid)
+            .expect("acmeIdentifier uzantısı bulunmalı");
+        assert!(acme_ext.critical);
+        assert_eq!(acme_ext.value, expected_extension.as_slice());
+
+        assert!(certificate.certificate_pem().contains("BEGIN CERTIFICATE"));
+        assert!(certificate.private_key_pem().contains("BEGIN PRIVATE KEY"));
     }
 }
