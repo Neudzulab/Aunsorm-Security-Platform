@@ -31,4 +31,4 @@ pub use order::{
     IdentifierKind, NewOrderError, NewOrderRequest, NewOrderRequestBuilder, OrderIdentifier,
     OrderIdentifierError,
 };
-pub use rng::{AunsormNativeRng, create_aunsorm_rng};
+pub use rng::{create_aunsorm_rng, AunsormNativeRng};

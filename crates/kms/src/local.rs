@@ -3,8 +3,8 @@ use std::convert::TryInto;
 use std::fs;
 use std::path::Path;
 
-use aes_gcm::{Aes256Gcm, Nonce, KeyInit};
 use aead::{Aead, Payload};
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use ed25519_dalek::{Signer as _, SigningKey, VerifyingKey};
@@ -145,7 +145,13 @@ impl LocalBackend {
                 crate::rng::create_aunsorm_rng().fill_bytes(&mut nonce_bytes);
                 let nonce = Nonce::from(nonce_bytes);
                 let ciphertext = cipher
-                    .encrypt(&nonce, Payload { msg: plaintext, aad })
+                    .encrypt(
+                        &nonce,
+                        Payload {
+                            msg: plaintext,
+                            aad,
+                        },
+                    )
                     .map_err(|err| KmsError::Crypto(format!("wrap failed for {key_id}: {err}")))?;
                 let mut output = Vec::with_capacity(nonce.len() + ciphertext.len());
                 output.extend_from_slice(&nonce_bytes);
@@ -179,8 +185,9 @@ impl LocalBackend {
                 let nonce = Nonce::from(nonce_array);
                 Ok(cipher
                     .decrypt(&nonce, Payload { msg: payload, aad })
-                    .map_err(|err| KmsError::Crypto(format!("unwrap failed for {key_id}: {err}")))?
-                    .into())
+                    .map_err(|err| {
+                        KmsError::Crypto(format!("unwrap failed for {key_id}: {err}"))
+                    })?)
             }
             Some(LocalKey::Ed25519 { .. }) => Err(KmsError::Unsupported {
                 backend: BackendKind::Local,
