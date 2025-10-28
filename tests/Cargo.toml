@@ -16,8 +16,10 @@ kms-remote = ["kms-gcp", "kms-azure"]
 
 [dependencies]
 aunsorm-core = { path = "../crates/core" }
+aunsorm-acme = { path = "../crates/acme" }
 aunsorm-packet = { path = "../crates/packet" }
 aunsorm-jwt = { path = "../crates/jwt", features = ["kms"] }
+http = "0.2"
 aunsorm-kms = { path = "../crates/kms" }
 aunsorm-x509 = { path = "../crates/x509" }
 aunsorm-server = { path = "../crates/server" }

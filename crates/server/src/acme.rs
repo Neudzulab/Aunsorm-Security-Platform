@@ -1,10 +1,13 @@
 #![allow(clippy::module_name_repetitions)]
 
 use std::borrow::ToOwned;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::convert::{Infallible, TryFrom};
 use std::fmt;
+use std::future::Future;
+use std::future::{ready, Ready};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::rng::AunsormNativeRng;
@@ -34,7 +37,8 @@ use x509_parser::extensions::{GeneralName, ParsedExtension};
 use x509_parser::prelude::FromDer;
 
 use aunsorm_acme::{
-    AccountContact, AcmeJws, IdentifierKind, OrderIdentifier, OrderIdentifierError, ReplayNonce,
+    AccountContact, AccountService, AcmeDirectory, AcmeDirectoryMeta, AcmeJws, DirectoryService,
+    IdentifierKind, NonceService, OrderIdentifier, OrderIdentifierError, OrderService, ReplayNonce,
 };
 
 use crate::error::ServerError;
@@ -43,7 +47,7 @@ const ORDER_EXPIRATION: Duration = Duration::hours(8);
 
 pub struct AcmeService {
     endpoints: AcmeEndpoints,
-    directory: DirectoryResponse,
+    directory: AcmeDirectory,
     terms_of_service: Option<String>,
     nonces: Mutex<NonceState>,
     accounts: Mutex<AccountStore>,
@@ -84,14 +88,25 @@ impl AcmeService {
             ServerError::Configuration(format!("ACME endpoint'leri oluşturulamadı: {err}"))
         })?;
 
-        let terms = endpoints
-            .base
-            .join("docs/terms-of-service")
-            .ok()
-            .map(|url| url.to_string());
-        let website = endpoints.base.join("docs").ok().map(|url| url.to_string());
-
-        let directory = DirectoryResponse::new(&endpoints, terms.clone(), website);
+        let terms_url = endpoints.base.join("docs/terms-of-service").ok();
+        let website_url = endpoints.base.join("docs").ok();
+        let directory = AcmeDirectory {
+            new_nonce: endpoints.new_nonce.clone(),
+            new_account: endpoints.new_account.clone(),
+            new_order: endpoints.new_order.clone(),
+            revoke_cert: endpoints.revoke_cert.clone(),
+            key_change: endpoints.key_change.clone(),
+            new_authz: None,
+            renewal_info: None,
+            meta: Some(AcmeDirectoryMeta {
+                terms_of_service: terms_url.clone(),
+                website: website_url,
+                caa_identities: vec!["aunsorm.example".to_string()],
+                external_account_required: false,
+            }),
+            additional_endpoints: BTreeMap::new(),
+        };
+        let terms = terms_url.map(|url| url.to_string());
         let (ca_certificate, ca_pem) = generate_acme_ca(&endpoints.base)?;
 
         Ok(Self {
@@ -110,7 +125,7 @@ impl AcmeService {
     }
 
     #[must_use]
-    pub fn directory_document(&self) -> DirectoryResponse {
+    pub fn directory_document(&self) -> AcmeDirectory {
         self.directory.clone()
     }
 
@@ -139,7 +154,7 @@ impl AcmeService {
         &self.endpoints.revoke_cert
     }
 
-    pub async fn issue_nonce(&self) -> String {
+    pub async fn next_nonce(&self) -> String {
         let mut guard = self.nonces.lock().await;
         guard.issue()
     }
@@ -726,6 +741,113 @@ impl AcmeService {
     }
 }
 
+impl DirectoryService for AcmeService {
+    type Error = Infallible;
+
+    type DirectoryFuture<'a>
+        = Ready<Result<AcmeDirectory, Self::Error>>
+    where
+        Self: 'a;
+
+    fn directory(&self) -> Self::DirectoryFuture<'_> {
+        ready(Ok(self.directory_document()))
+    }
+}
+
+impl NonceService for AcmeService {
+    type Error = AcmeProblem;
+
+    type IssueFuture<'a>
+        = Pin<Box<dyn Future<Output = Result<String, Self::Error>> + Send + 'a>>
+    where
+        Self: 'a;
+
+    type ConsumeFuture<'a>
+        = Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + 'a>>
+    where
+        Self: 'a;
+
+    fn issue_nonce(&self) -> Self::IssueFuture<'_> {
+        Box::pin(async move { Ok(Self::next_nonce(self).await) })
+    }
+
+    fn consume_nonce<'a>(&'a self, nonce: &'a str) -> Self::ConsumeFuture<'a> {
+        Box::pin(async move { Self::consume_nonce(self, nonce).await })
+    }
+}
+
+impl AccountService for AcmeService {
+    type Error = AcmeProblem;
+
+    type Account = NewAccountOutcome;
+
+    type RegistrationFuture<'a>
+        = Pin<Box<dyn Future<Output = Result<Self::Account, Self::Error>> + Send + 'a>>
+    where
+        Self: 'a;
+
+    type LookupFuture<'a>
+        = Pin<Box<dyn Future<Output = Result<Self::Account, Self::Error>> + Send + 'a>>
+    where
+        Self: 'a;
+
+    fn register_account(&self, jws: AcmeJws) -> Self::RegistrationFuture<'_> {
+        Box::pin(async move { Self::handle_new_account(self, jws).await })
+    }
+
+    fn query_account<'a>(&'a self, account_id: &'a str, jws: AcmeJws) -> Self::LookupFuture<'a> {
+        Box::pin(async move { Self::handle_account_lookup(self, account_id, jws).await })
+    }
+}
+
+impl OrderService for AcmeService {
+    type Error = AcmeProblem;
+
+    type NewOrder = NewOrderOutcome;
+
+    type LookupOrder = OrderLookupOutcome;
+
+    type FinalizeOrder = FinalizeOrderOutcome;
+
+    type RevokeOutcome = RevokeCertOutcome;
+
+    type NewOrderFuture<'a>
+        = Pin<Box<dyn Future<Output = Result<Self::NewOrder, Self::Error>> + Send + 'a>>
+    where
+        Self: 'a;
+
+    type LookupFuture<'a>
+        = Pin<Box<dyn Future<Output = Result<Self::LookupOrder, Self::Error>> + Send + 'a>>
+    where
+        Self: 'a;
+
+    type FinalizeFuture<'a>
+        = Pin<Box<dyn Future<Output = Result<Self::FinalizeOrder, Self::Error>> + Send + 'a>>
+    where
+        Self: 'a;
+
+    type RevokeFuture<'a>
+        = Pin<Box<dyn Future<Output = Result<Self::RevokeOutcome, Self::Error>> + Send + 'a>>
+    where
+        Self: 'a;
+
+    fn create_order(&self, jws: AcmeJws) -> Self::NewOrderFuture<'_> {
+        Box::pin(async move { Self::handle_new_order(self, jws).await })
+    }
+
+    fn query_order<'a>(&'a self, order_id: &'a str, jws: AcmeJws) -> Self::LookupFuture<'a> {
+        Box::pin(async move { Self::handle_order_lookup(self, order_id, jws).await })
+    }
+
+    fn finalize_order<'a>(&'a self, order_id: &'a str, jws: AcmeJws) -> Self::FinalizeFuture<'a> {
+        Box::pin(async move { Self::handle_finalize_order(self, order_id, jws).await })
+    }
+
+    fn revoke_certificate(&self, jws: AcmeJws) -> Self::RevokeFuture<'_> {
+        Box::pin(async move { Self::revoke_certificate(self, jws).await })
+    }
+}
+
 fn generate_acme_ca(base: &Url) -> Result<(Certificate, String), ServerError> {
     let host = base
         .host_str()
@@ -811,53 +933,6 @@ impl AcmeEndpoints {
     fn certificate_url(&self, order_id: &str) -> Result<Url, ParseError> {
         self.certificate_base.join(order_id)
     }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct DirectoryResponse {
-    #[serde(rename = "newNonce")]
-    new_nonce: String,
-    #[serde(rename = "newAccount")]
-    new_account: String,
-    #[serde(rename = "newOrder")]
-    new_order: String,
-    #[serde(rename = "revokeCert")]
-    revoke_cert: String,
-    #[serde(rename = "keyChange")]
-    key_change: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    meta: Option<DirectoryMeta>,
-}
-
-impl DirectoryResponse {
-    fn new(endpoints: &AcmeEndpoints, terms: Option<String>, website: Option<String>) -> Self {
-        let meta = Some(DirectoryMeta {
-            terms_of_service: terms,
-            website,
-            caa_identities: vec!["aunsorm.example".to_string()],
-            external_account_required: false,
-        });
-        Self {
-            new_nonce: endpoints.new_nonce.to_string(),
-            new_account: endpoints.new_account.to_string(),
-            new_order: endpoints.new_order.to_string(),
-            revoke_cert: endpoints.revoke_cert.to_string(),
-            key_change: endpoints.key_change.to_string(),
-            meta,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct DirectoryMeta {
-    #[serde(rename = "termsOfService", skip_serializing_if = "Option::is_none")]
-    terms_of_service: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    website: Option<String>,
-    #[serde(rename = "caaIdentities")]
-    caa_identities: Vec<String>,
-    #[serde(rename = "externalAccountRequired")]
-    external_account_required: bool,
 }
 
 #[derive(Debug, Default)]

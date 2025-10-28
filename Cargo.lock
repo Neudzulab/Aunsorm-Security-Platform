@@ -606,6 +606,7 @@ name = "aunsorm-tests"
 version = "0.4.5"
 dependencies = [
  "aes-gcm",
+ "aunsorm-acme",
  "aunsorm-core",
  "aunsorm-jwt",
  "aunsorm-kms",
@@ -616,6 +617,7 @@ dependencies = [
  "base64 0.21.7",
  "ed25519-dalek",
  "hex",
+ "http 0.2.12",
  "pem",
  "proptest",
  "serde",

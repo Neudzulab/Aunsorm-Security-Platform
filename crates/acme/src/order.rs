@@ -1,7 +1,16 @@
+//! ACME `newOrder`, order sorgulama ve finalize akışı yardımcıları.
+//!
+//! RFC 8555 §7.4-§7.4.2 alan adları için order oluşturma, durum sorgulama
+//! ve CSR göndererek finalize etme işlemlerini tanımlar. Bu modül order
+//! identifier doğrulamalarını sağlar ve ACME order servisleri için trait
+//! tabanlı sözleşmeyi sunar.
+
 use std::borrow::Cow;
 use std::fmt;
+use std::future::Future;
 use std::net::IpAddr;
 
+use crate::AcmeJws;
 use idna::domain_to_ascii;
 use serde::ser::{Serialize, SerializeStruct, Serializer};
 use serde::Serialize as DeriveSerialize;
@@ -159,6 +168,62 @@ impl OrderIdentifier {
             Self::Ip(addr) => Cow::Owned(addr.to_string()),
         }
     }
+}
+
+/// ACME order yönetimini gerçekleştiren servisler için sözleşme.
+///
+/// Order oluşturma, istemcinin doğrulanacak alan adlarını `newOrder`
+/// uç noktasına JWS olarak göndermesiyle başlar. Ardından POST-as-GET order
+/// sorguları ve CSR içeren `finalize` isteği gelir. Bu trait, söz konusu
+/// adımları RFC 8555'e uygun biçimde uygulamak isteyen servisler için
+/// asenkron imzalı istekleri soyutlar.
+pub trait OrderService {
+    /// Servisin hata türü.
+    type Error;
+
+    /// Yeni order sonucunun türü.
+    type NewOrder;
+
+    /// Order sorgu sonucunun türü.
+    type LookupOrder;
+
+    /// Finalize sonucunun türü.
+    type FinalizeOrder;
+
+    /// Revoke sonucunun türü.
+    type RevokeOutcome;
+
+    /// `newOrder` işleminin future türü.
+    type NewOrderFuture<'a>: Future<Output = Result<Self::NewOrder, Self::Error>> + Send + 'a
+    where
+        Self: 'a;
+
+    /// Order sorgularının future türü.
+    type LookupFuture<'a>: Future<Output = Result<Self::LookupOrder, Self::Error>> + Send + 'a
+    where
+        Self: 'a;
+
+    /// Finalize işleminin future türü.
+    type FinalizeFuture<'a>: Future<Output = Result<Self::FinalizeOrder, Self::Error>> + Send + 'a
+    where
+        Self: 'a;
+
+    /// Sertifika revoke akışının future türü.
+    type RevokeFuture<'a>: Future<Output = Result<Self::RevokeOutcome, Self::Error>> + Send + 'a
+    where
+        Self: 'a;
+
+    /// RFC 8555 §7.4'e uygun olarak yeni bir order oluşturur.
+    fn create_order(&self, jws: AcmeJws) -> Self::NewOrderFuture<'_>;
+
+    /// RFC 8555 §7.4.1'de tanımlanan order sorgusunu yürütür.
+    fn query_order<'a>(&'a self, order_id: &'a str, jws: AcmeJws) -> Self::LookupFuture<'a>;
+
+    /// RFC 8555 §7.4.2'ye göre CSR içeren finalize isteğini işler.
+    fn finalize_order<'a>(&'a self, order_id: &'a str, jws: AcmeJws) -> Self::FinalizeFuture<'a>;
+
+    /// RFC 8555 §7.6'ya göre sertifika revoke isteğini işler.
+    fn revoke_certificate(&self, jws: AcmeJws) -> Self::RevokeFuture<'_>;
 }
 
 impl Serialize for OrderIdentifier {

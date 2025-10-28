@@ -1,5 +1,13 @@
-use std::{borrow::ToOwned, collections::BTreeMap};
+//! ACME directory keşif belgeleri ve servis soyutlaması.
+//!
+//! RFC 8555 §7.1.1'e göre istemciler "directory" uç noktasına GET isteği
+//! yaparak yetkili ACME operasyonlarının URL'lerini keşfeder. Bu modül,
+//! directory belgesinin tip güvenli temsillerini ve bu belgeyi sunan
+//! servisler için trait tabanlı bir sözleşmeyi sağlar.
 
+use std::{borrow::ToOwned, collections::BTreeMap, future::Future};
+
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 use url::Url;
@@ -50,24 +58,35 @@ impl KnownEndpoint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AcmeDirectory {
+    #[serde(rename = "newNonce")]
     pub new_nonce: Url,
+    #[serde(rename = "newAccount")]
     pub new_account: Url,
+    #[serde(rename = "newOrder")]
     pub new_order: Url,
+    #[serde(rename = "revokeCert")]
     pub revoke_cert: Url,
+    #[serde(rename = "keyChange")]
     pub key_change: Url,
+    #[serde(rename = "newAuthz")]
     pub new_authz: Option<Url>,
+    #[serde(rename = "renewalInfo")]
     pub renewal_info: Option<Url>,
     pub meta: Option<AcmeDirectoryMeta>,
+    #[serde(flatten)]
     pub additional_endpoints: BTreeMap<String, Url>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AcmeDirectoryMeta {
+    #[serde(rename = "termsOfService")]
     pub terms_of_service: Option<Url>,
     pub website: Option<Url>,
+    #[serde(rename = "caaIdentities")]
     pub caa_identities: Vec<String>,
+    #[serde(rename = "externalAccountRequired")]
     pub external_account_required: bool,
 }
 
@@ -149,6 +168,25 @@ impl AcmeDirectory {
             additional_endpoints,
         })
     }
+}
+
+/// ACME directory belgesini sunan servisler için sözleşme.
+///
+/// Bir ACME istemcisi RFC 8555 akışına başlarken ilk olarak directory
+/// belgesini sorgular. Bu trait, uygulamanın directory belgesini üretme
+/// ve paylaşma sorumluluğunu soyutlar. Implementasyonlar genellikle
+/// statik bir yapı döndürür ve her istekte Replay-Nonce başlığı üretir.
+pub trait DirectoryService {
+    /// Servisin hata türü.
+    type Error;
+
+    /// Directory belgesini döndürmek için kullanılan asenkron future türü.
+    type DirectoryFuture<'a>: Future<Output = Result<AcmeDirectory, Self::Error>> + Send + 'a
+    where
+        Self: 'a;
+
+    /// RFC 8555 §7.1.1'de tanımlanan directory keşif belgesini döndürür.
+    fn directory(&self) -> Self::DirectoryFuture<'_>;
 }
 
 fn parse_required_url(

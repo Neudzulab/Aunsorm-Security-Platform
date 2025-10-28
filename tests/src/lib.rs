@@ -7,3 +7,6 @@
 /// Crate'in boş derlenmesini doğrulamak için sembolik bir fonksiyon.
 #[allow(clippy::missing_const_for_fn)]
 pub fn ensure_ready() {}
+
+#[cfg(test)]
+mod acme;

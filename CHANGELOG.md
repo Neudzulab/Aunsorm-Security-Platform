@@ -108,6 +108,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hatalarını ayırt ediyor ve HEAD bilgisi için `from_env_with_namespace` yardımcısını kullanıyor.
 - ACME HTTP uçları artık doğrudan `AcmeService` mantığına delegasyon yaparak nonce tüketimi, JWS doğrulaması ve RFC 8555 problem
   yanıtlarını sunuyor; eski sabit JSON yanıtları kaldırıldı.
+- ACME directory ve `new-nonce` uçları `aunsorm-acme` trait tabanlı servis
+  soyutlamalarını kullanacak şekilde `routes/acme` modülüne taşındı; nonce
+  üretimi ve JWS yetkilendirmesi çekirdek yardımcılarla paylaşılarak RFC 8555
+  akışı dokümante edildi.
 
 ### Fixed
 - `/security/jwt-verify` artık JSON gövdesinde `Bearer` önekiyle gelen token

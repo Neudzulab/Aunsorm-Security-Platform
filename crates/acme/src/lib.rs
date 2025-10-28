@@ -12,25 +12,28 @@ mod rng;
 mod validation;
 
 pub use account::{
-    AccountContact, AccountContactError, AccountContactKind, ExternalAccountBinding,
-    ExternalAccountBindingError, NewAccountRequest, NewAccountRequestBuilder,
+    AccountContact, AccountContactError, AccountContactKind, AccountService,
+    ExternalAccountBinding, ExternalAccountBindingError, NewAccountRequest,
+    NewAccountRequestBuilder,
 };
 pub use authorization::{
     Authorization, AuthorizationError, AuthorizationStatus, Challenge, ChallengeError,
     ChallengeKind, ChallengeStatus,
 };
-pub use directory::{AcmeDirectory, AcmeDirectoryError, AcmeDirectoryMeta, KnownEndpoint};
+pub use directory::{
+    AcmeDirectory, AcmeDirectoryError, AcmeDirectoryMeta, DirectoryService, KnownEndpoint,
+};
 pub use jws::{
     AcmeJws, EcdsaP256AccountKey, EcdsaP256Jwk, Ed25519AccountKey, Ed25519Jwk, JwsError,
     KeyBinding, RsaAccountKey, RsaJwk,
 };
 pub use nonce::{
     NewNonceRequester, NonceError, NonceManager, NonceManagerError, NoncePool, NonceRequestError,
-    ReplayNonce, REPLAY_NONCE_HEADER,
+    NonceService, ReplayNonce, REPLAY_NONCE_HEADER,
 };
 pub use order::{
     IdentifierKind, NewOrderError, NewOrderRequest, NewOrderRequestBuilder, OrderIdentifier,
-    OrderIdentifierError,
+    OrderIdentifierError, OrderService,
 };
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
 pub use validation::{
