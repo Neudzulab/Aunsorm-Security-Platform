@@ -7,13 +7,14 @@ use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::rng::AunsormNativeRng;
 use axum::http::StatusCode;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
 use ed25519_dalek::{Signature as Ed25519Signature, VerifyingKey as Ed25519VerifyingKey};
 use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256VerifyingKey};
 use pem::Pem;
-use rand_core::{OsRng, RngCore};
+use rand_core::RngCore;
 use rcgen::{
     BasicConstraints, Certificate, CertificateParams, CertificateSigningRequest, DnType,
     ExtendedKeyUsagePurpose, IsCa, KeyUsagePurpose, SerialNumber, PKCS_ED25519,
@@ -862,13 +863,14 @@ struct DirectoryMeta {
 #[derive(Debug, Default)]
 struct NonceState {
     minted: HashSet<String>,
+    rng: AunsormNativeRng,
 }
 
 impl NonceState {
     fn issue(&mut self) -> String {
         loop {
             let mut bytes = [0_u8; 16];
-            OsRng.fill_bytes(&mut bytes);
+            self.rng.fill_bytes(&mut bytes);
             let value = URL_SAFE_NO_PAD.encode(bytes);
             if self.minted.insert(value.clone()) {
                 return value;
@@ -1021,7 +1023,8 @@ fn append_pem_block(target: &mut String, pem: &str) {
 
 fn random_serial_number() -> SerialNumber {
     let mut bytes = [0_u8; 16];
-    OsRng.fill_bytes(&mut bytes);
+    let mut rng = AunsormNativeRng::new();
+    rng.fill_bytes(&mut bytes);
     SerialNumber::from(bytes.to_vec())
 }
 

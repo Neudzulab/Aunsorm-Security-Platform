@@ -23,6 +23,7 @@ mod config;
 mod error;
 pub(crate) mod fabric;
 mod quic;
+mod rng;
 mod routes;
 mod state;
 mod telemetry;
@@ -37,6 +38,7 @@ pub use quic::datagram::{
 };
 #[cfg(feature = "http3-experimental")]
 pub use quic::{build_alt_svc_header_value, spawn_http3_poc, Http3PocGuard, ALT_SVC_MAX_AGE};
+pub use rng::{create_aunsorm_rng, AunsormNativeRng};
 pub use routes::{build_router, serve};
 pub use state::ServerState;
 pub use telemetry::{init_tracing, TelemetryError, TelemetryGuard};
