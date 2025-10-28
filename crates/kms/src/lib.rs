@@ -25,12 +25,12 @@ pub use client::KmsClient;
 #[cfg(feature = "kms-azure")]
 pub use config::{AzureBackendConfig, AzureKeyConfig};
 pub use config::{BackendKind, BackendLocator, KeyDescriptor, KmsConfig, LocalStoreConfig};
-pub use rng::{AunsormNativeRng, create_aunsorm_rng};
 #[cfg(feature = "kms-gcp")]
 pub use config::{GcpBackendConfig, GcpKeyConfig};
 #[cfg(feature = "kms-pkcs11")]
 pub use config::{Pkcs11BackendConfig, Pkcs11KeyConfig};
 pub use error::{KmsError, Result};
+pub use rng::{create_aunsorm_rng, AunsormNativeRng};
 
 #[cfg(test)]
 mod tests;

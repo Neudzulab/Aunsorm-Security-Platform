@@ -1,83 +1,93 @@
 //! Native Aunsorm RNG implementation for ACME crate
-//! 
+//!
 //! This provides the same entropy generation algorithm used by the Aunsorm server,
 //! ensuring consistent high-quality randomness across all components.
 
+use hkdf::Hkdf;
 use rand_core::{CryptoRng, OsRng, RngCore};
-use sha2::Sha256;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use sha2::{Digest, Sha256};
 use std::collections::hash_map::DefaultHasher;
+use std::convert::TryFrom;
 use std::hash::{Hash, Hasher};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Native Aunsorm RNG - Direct implementation of server's entropy algorithm
 /// No HTTP overhead, pure mathematical entropy generation
 pub struct AunsormNativeRng {
     entropy_salt: [u8; 32],
+    state: [u8; 32],
     counter: u64,
 }
 
 impl AunsormNativeRng {
     /// Create new Aunsorm native RNG
+    #[must_use]
     pub fn new() -> Self {
         let mut entropy_salt = [0u8; 32];
         OsRng.fill_bytes(&mut entropy_salt);
-        
+
+        let mut state = [0u8; 32];
+        OsRng.fill_bytes(&mut state);
+
         Self {
             entropy_salt,
+            state,
             counter: 0,
         }
     }
-    
+
     /// Generate next entropy block using Aunsorm's HKDF+NEUDZ-PCS algorithm
     /// This is the EXACT same algorithm used by the server
     fn next_entropy_block(&mut self) -> [u8; 32] {
-        // 1. OS-level cryptographic entropy (32 bytes)
-        let mut os_entropy = [0u8; 32];
-        OsRng.fill_bytes(&mut os_entropy);
-        
-        // 2. Nanosecond precision timestamp
+        // 1. Nanosecond precision timestamp
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_else(|_| Duration::from_secs(0))
             .as_nanos()
             .to_le_bytes();
-        
-        // 3. Atomic counter (collision prevention)
+
+        // 2. Atomic counter (collision prevention)
         let counter = self.counter;
         self.counter = self.counter.wrapping_add(1);
-        
-        // 4. Process ID (multi-instance uniqueness)
+
+        // 3. Process ID (multi-instance uniqueness)
         let process_id = std::process::id();
-        
-        // 5. Thread ID (parallel execution uniqueness)
+
+        // 4. Thread ID (parallel execution uniqueness)
         let thread_id = std::thread::current().id();
         let thread_hash = {
             let mut hasher = DefaultHasher::new();
             thread_id.hash(&mut hasher);
             hasher.finish()
         };
-        
+
         // HKDF-Extract-and-Expand (RFC 5869) - cryptographically proven entropy expansion
-        use hkdf::Hkdf;
-        let hk = Hkdf::<Sha256>::new(Some(&self.entropy_salt), &os_entropy);
+        let hk = Hkdf::<Sha256>::new(Some(&self.entropy_salt), &self.state);
         let mut okm = [0u8; 32];
-        
+
         // Info context: counter + timestamp + process_id + thread_hash
         let mut info = Vec::with_capacity(40);
         info.extend_from_slice(&counter.to_le_bytes()); // 8 bytes
-        info.extend_from_slice(&timestamp); // 16 bytes  
+        info.extend_from_slice(&timestamp); // 16 bytes
         info.extend_from_slice(&process_id.to_le_bytes()); // 4 bytes
         info.extend_from_slice(&thread_hash.to_le_bytes()); // 8 bytes
-        
+
         hk.expand(&info, &mut okm)
             .expect("HKDF expand with 32 bytes should never fail");
-            
+
         // Mathematical entropy enhancement: Apply prime distribution mixing
         Self::apply_mathematical_mixing(&mut okm);
-        
+
+        let mut hasher = Sha256::new();
+        hasher.update(self.entropy_salt);
+        hasher.update(self.state);
+        hasher.update(&info);
+        hasher.update(okm);
+        self.state.copy_from_slice(&hasher.finalize());
+
         okm
     }
-    
+
     /// NEUDZ-PCS entropy mixing: π(x) prime counting function approximation
     /// This function mixes entropy bytes using prime number distribution theory
     #[allow(clippy::suboptimal_flops)]
@@ -88,7 +98,7 @@ impl AunsormNativeRng {
         let ln_x = x.ln();
         // Prime number theorem: π(x) ≈ x / ln(x)
         let pi_approx = x / ln_x;
-        
+
         // Enhanced mixing using Mertens function approximation
         let mertens_approx = if x >= 2.0 {
             let sqrt_x = x.sqrt();
@@ -96,18 +106,25 @@ impl AunsormNativeRng {
         } else {
             pi_approx
         };
-        
+
         // Normalize to [0, 255] range
         (mertens_approx % 256.0).abs()
     }
-    
+
     /// Apply mathematical mixing to entropy bytes
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss,
+        clippy::suboptimal_flops
+    )]
     fn apply_mathematical_mixing(entropy: &mut [u8; 32]) {
         // AACM (Aunsorm Advanced Cryptographic Mixing): mathematical entropy enhancement
         for (i, byte) in entropy.iter_mut().enumerate() {
-            let x = (*byte as f64) + (i as f64 * 0.618033988749); // Golden ratio mixing
+            let idx = f64::from(u32::try_from(i).expect("entropy index < 2^32"));
+            let x = idx.mul_add(0.618_033_988_749, f64::from(*byte));
             let mixed = Self::neudz_pcs_mix(x + 1.0); // +1 to avoid ln(0)
-            *byte = (*byte).wrapping_add(mixed as u8);
+            *byte = byte.wrapping_add(mixed as u8);
         }
     }
 }
@@ -125,15 +142,15 @@ impl RngCore for AunsormNativeRng {
         let entropy = self.next_entropy_block();
         u32::from_le_bytes([entropy[0], entropy[1], entropy[2], entropy[3]])
     }
-    
+
     fn next_u64(&mut self) -> u64 {
         let entropy = self.next_entropy_block();
         u64::from_le_bytes([
-            entropy[0], entropy[1], entropy[2], entropy[3],
-            entropy[4], entropy[5], entropy[6], entropy[7]
+            entropy[0], entropy[1], entropy[2], entropy[3], entropy[4], entropy[5], entropy[6],
+            entropy[7],
         ])
     }
-    
+
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         let mut offset = 0;
         while offset < dest.len() {
@@ -144,7 +161,7 @@ impl RngCore for AunsormNativeRng {
             offset += chunk_size;
         }
     }
-    
+
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
         self.fill_bytes(dest);
         Ok(())
@@ -153,6 +170,7 @@ impl RngCore for AunsormNativeRng {
 
 /// Create a new Aunsorm RNG instance for RSA key generation
 /// This function provides a convenient way to get Aunsorm's high-quality entropy
+#[must_use]
 pub fn create_aunsorm_rng() -> AunsormNativeRng {
     AunsormNativeRng::new()
 }
