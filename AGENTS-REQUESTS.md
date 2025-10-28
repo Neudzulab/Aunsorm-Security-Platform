@@ -326,12 +326,14 @@ aunsorm-cli acme order \
 
 **Status:**
 - [x] 📋 Pending (2025-10-19)
-- [ ] 🔄 In Progress
-- [ ] ✅ Done
+- [x] 🔄 In Progress (2025-10-24 – ACME HTTP katmanı için servis delegasyonu başlatıldı)
+- [x] ✅ Done (2025-10-24 – RFC 8555 uyumlu ACME endpoint'leri ve revoke akışı yayınlandı)
 - [ ] ❌ Rejected
 
 **Aunsorm Agent Notes:**
-- _(Güncelleme bekleniyor)_
+- `crates/server/src/routes.rs` içindeki ACME uçları artık `AcmeService` ile JWS imza doğrulaması, nonce tüketimi ve problem yanıtlarını kullanıyor.
+- `CHANGELOG.md` "Changed" bölümü ACME servis aktivasyonunu belgeledi.
+- `AGENTS-REQUESTS.md` bu kayıt ile senkronize edildi; commit: (bkz. `HEAD`).
 
 ---
 

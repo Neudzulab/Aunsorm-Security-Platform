@@ -104,6 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ara cache katmanlarında saklanmasını engelliyor.
 - `/id/generate` endpoint'i, namespace doğrulama hatalarında artık `invalid_request` döndürerek misconfiguration ile istemci
   hatalarını ayırt ediyor ve HEAD bilgisi için `from_env_with_namespace` yardımcısını kullanıyor.
+- ACME HTTP uçları artık doğrudan `AcmeService` mantığına delegasyon yaparak nonce tüketimi, JWS doğrulaması ve RFC 8555 problem
+  yanıtlarını sunuyor; eski sabit JSON yanıtları kaldırıldı.
 
 ### Fixed
 - `/security/jwt-verify` artık JSON gövdesinde `Bearer` önekiyle gelen token
