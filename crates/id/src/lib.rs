@@ -4,6 +4,10 @@
 #![allow(clippy::module_name_repetitions)]
 #![doc = "Projeler arası HEAD bağlı benzersiz kimlik üreticisi."]
 
+mod rng;
+
+pub use crate::rng::{create_aunsorm_rng, AunsormNativeRng};
+
 use std::fmt;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -11,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use once_cell::sync::Lazy;
-use rand_core::{OsRng, RngCore};
+use rand_core::RngCore;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -34,8 +38,9 @@ const COUNTER_LEN: usize = 8;
 const PAYLOAD_LEN: usize = FINGERPRINT_LEN + ENTROPY_LEN + TIMESTAMP_LEN + COUNTER_LEN;
 
 static PROCESS_ENTROPY: Lazy<[u8; ENTROPY_LEN]> = Lazy::new(|| {
+    let mut rng = crate::rng::create_aunsorm_rng();
     let mut entropy = [0_u8; ENTROPY_LEN];
-    OsRng.fill_bytes(&mut entropy);
+    rng.fill_bytes(&mut entropy);
     entropy
 });
 
@@ -150,7 +155,8 @@ impl HeadIdGenerator {
         let namespace = normalize_namespace(namespace.as_ref())?;
         let fingerprint = fingerprint_from_head(&normalized_head);
         let prefix_hex = hex::encode(&fingerprint[..FINGERPRINT_PREFIX_BYTES]);
-        let counter_seed = OsRng.next_u64();
+        let mut rng = crate::rng::create_aunsorm_rng();
+        let counter_seed = rng.next_u64();
         Ok(Self {
             namespace,
             fingerprint,
