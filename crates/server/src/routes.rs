@@ -1,13 +1,12 @@
+use aunsorm_acme::AcmeJws;
 use aunsorm_jwt::{Audience, Claims, Jwk, JwtError, VerificationOptions};
 use aunsorm_pqc::{kem::KemAlgorithm, signature::SignatureAlgorithm};
+use axum::body::{to_bytes, Body};
 #[cfg(feature = "http3-experimental")]
-use axum::{
-    body::Body,
-    middleware::{from_fn, Next},
-};
+use axum::middleware::{from_fn, Next};
 use axum::{
     extract::{Path, Query, State},
-    http::{header, HeaderValue, StatusCode},
+    http::{header, HeaderMap, HeaderValue, Request, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, head, post},
     Json, Router,
@@ -15,21 +14,20 @@ use axum::{
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::SIGNATURE_LENGTH;
 use hex::decode_to_slice;
-use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
 use sha2::{Digest, Sha256};
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use time::OffsetDateTime;
+
+use crate::acme::{
+    AcmeProblem, FinalizeOrderOutcome, NewAccountOutcome, NewOrderOutcome, OrderLookupOutcome,
+    RevokeCertOutcome,
+};
 
 // Global registered devices set for testing
 static REGISTERED_DEVICES: Mutex<Option<HashSet<String>>> = Mutex::new(None);
-
-// ACME order states for testing
-static ACME_ORDER_STATES: Mutex<Option<HashMap<String, String>>> = Mutex::new(None);
-
-// ACME revoked certificates for testing
-static ACME_REVOKED_CERTIFICATES: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
 fn system_time_to_unix_seconds(time: SystemTime) -> u64 {
     time.duration_since(UNIX_EPOCH)
@@ -102,7 +100,6 @@ use crate::transparency::TransparencyEvent as LedgerTransparencyEvent;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::format_description::well_known::Rfc3339;
-use time::OffsetDateTime;
 
 const ZASIAN_MEDIA_AUDIENCE: &str = "zasian-media";
 
@@ -444,423 +441,404 @@ async fn http3_capabilities(
     (StatusCode::NOT_IMPLEMENTED, Json(response))
 }
 
-// ACME Directory endpoint
-#[derive(Serialize)]
-#[allow(clippy::struct_field_names)]
-pub struct AcmeDirectory {
-    #[serde(rename = "newNonce")]
-    pub new_nonce: String,
-    #[serde(rename = "newAccount")]
-    pub new_account: String,
-    #[serde(rename = "newOrder")]
-    pub new_order: String,
+const APPLICATION_JOSE_JSON: &str = "application/jose+json";
+
+fn is_jose_content_type(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| {
+            value
+                .split(';')
+                .next()
+                .is_some_and(|mime| mime.trim().eq_ignore_ascii_case(APPLICATION_JOSE_JSON))
+        })
 }
 
-pub async fn acme_directory(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
-    let response = Json(AcmeDirectory {
-        new_nonce: state.acme().new_nonce_url().as_str().to_string(),
-        new_account: state.acme().new_account_url().as_str().to_string(),
-        new_order: state.acme().new_order_url().as_str().to_string(),
-    });
-
-    (
-        [(
-            header::HeaderName::from_static("replay-nonce"),
-            HeaderValue::from_static("dGVzdF9ub25jZQ"),
-        )],
-        response,
-    )
+fn apply_acme_headers(response: &mut Response, nonce: &str) {
+    let replay_name = header::HeaderName::from_static("replay-nonce");
+    let value = HeaderValue::from_str(nonce).expect("nonce header değeri geçerli olmalı");
+    response.headers_mut().insert(replay_name, value);
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
 }
 
-pub async fn acme_new_nonce(State(_state): State<Arc<ServerState>>) -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        [(
-            header::HeaderName::from_static("replay-nonce"),
-            HeaderValue::from_static("ZnJlc2hfbm9uY2U"),
-        )],
-    )
+fn acme_problem_response(problem: &AcmeProblem, nonce: &str) -> Response {
+    let mut response = (problem.status(), Json(problem.body())).into_response();
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/problem+json"),
+    );
+    apply_acme_headers(&mut response, nonce);
+    response
 }
 
-#[derive(Deserialize)]
-pub struct AcmeNewAccountRequest {
-    #[allow(dead_code)]
-    protected: String,
-    #[allow(dead_code)]
-    payload: String,
-    #[allow(dead_code)]
-    signature: String,
+fn acme_account_response(outcome: NewAccountOutcome, nonce: &str) -> Response {
+    let mut response = (outcome.status, Json(outcome.response)).into_response();
+    apply_acme_headers(&mut response, nonce);
+    if let Ok(value) = HeaderValue::from_str(&outcome.location) {
+        response.headers_mut().insert(header::LOCATION, value);
+    }
+    if let Some(link) = outcome.link_terms {
+        let formatted = format!("<{link}>; rel=\"terms-of-service\"");
+        if let Ok(value) = HeaderValue::from_str(&formatted) {
+            response.headers_mut().insert(header::LINK, value);
+        }
+    }
+    response
 }
 
-#[derive(Serialize)]
-pub struct AcmeAccountResponse {
-    pub status: String,
-    pub contact: Vec<String>,
-    #[serde(rename = "orders")]
-    pub _orders: String,
-    #[serde(rename = "termsOfServiceAgreed")]
-    pub terms_of_service_agreed: bool,
-    pub kid: String,
+fn acme_order_response(outcome: NewOrderOutcome, nonce: &str) -> Response {
+    let mut response = (StatusCode::CREATED, Json(outcome.response)).into_response();
+    apply_acme_headers(&mut response, nonce);
+    if let Ok(value) = HeaderValue::from_str(&outcome.location) {
+        response.headers_mut().insert(header::LOCATION, value);
+    }
+    response
 }
 
-pub async fn acme_new_account(
-    State(_state): State<Arc<ServerState>>,
-    Json(_request): Json<AcmeNewAccountRequest>,
-) -> impl IntoResponse {
-    let account = AcmeAccountResponse {
-        status: "valid".to_string(),
-        contact: vec!["mailto:security@example.com".to_string()],
-        _orders: "https://issuer/acme/accounts/123/orders".to_string(),
-        terms_of_service_agreed: true,
-        kid: "https://issuer/acme/accounts/123".to_string(),
+fn acme_finalize_response(outcome: FinalizeOrderOutcome, nonce: &str) -> Response {
+    let mut response = (StatusCode::OK, Json(outcome.response)).into_response();
+    apply_acme_headers(&mut response, nonce);
+    if let Ok(value) = HeaderValue::from_str(&outcome.location) {
+        response.headers_mut().insert(header::LOCATION, value);
+    }
+    response
+}
+
+fn acme_order_status_response(outcome: OrderLookupOutcome, nonce: &str) -> Response {
+    let mut response = (StatusCode::OK, Json(outcome.response)).into_response();
+    apply_acme_headers(&mut response, nonce);
+    if let Ok(value) = HeaderValue::from_str(&outcome.location) {
+        response.headers_mut().insert(header::LOCATION, value);
+    }
+    response
+}
+
+fn acme_revoke_response(outcome: &RevokeCertOutcome, nonce: &str) -> Response {
+    #[derive(Serialize)]
+    struct Body {
+        status: &'static str,
+        #[serde(rename = "revokedAt", with = "time::serde::rfc3339")]
+        revoked_at: OffsetDateTime,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<u8>,
+    }
+
+    let body = Body {
+        status: "revoked",
+        revoked_at: outcome.revoked_at,
+        reason: outcome.reason,
+    };
+    let mut response = (StatusCode::OK, Json(body)).into_response();
+    apply_acme_headers(&mut response, nonce);
+    response
+}
+
+async fn acme_directory(State(state): State<Arc<ServerState>>) -> Response {
+    let service = state.acme();
+    let document = service.directory_document();
+    let nonce = service.issue_nonce().await;
+    let mut response = (StatusCode::OK, Json(document)).into_response();
+    apply_acme_headers(&mut response, &nonce);
+    response
+}
+
+async fn acme_new_nonce(State(state): State<Arc<ServerState>>) -> Response {
+    let service = state.acme();
+    let nonce = service.issue_nonce().await;
+    let mut response = Response::new(Body::empty());
+    *response.status_mut() = StatusCode::OK;
+    apply_acme_headers(&mut response, &nonce);
+    response
+}
+
+async fn acme_new_account(
+    State(state): State<Arc<ServerState>>,
+    request: Request<Body>,
+) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
+    }
+
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
     };
 
-    (
-        StatusCode::CREATED,
-        [
-            (
-                header::HeaderName::from_static("replay-nonce"),
-                HeaderValue::from_static("YWNjb3VudF9ub25jZQ"),
-            ),
-            (
-                header::LOCATION,
-                HeaderValue::from_static("https://issuer/acme/accounts/123"),
-            ),
-        ],
-        Json(account),
-    )
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    match service.handle_new_account(jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_account_response(outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
 }
 
-pub async fn acme_account_status(
-    State(_state): State<Arc<ServerState>>,
+async fn acme_account_lookup(
     Path(account_id): Path<String>,
-    Json(_request): Json<AcmeNewAccountRequest>,
-) -> impl IntoResponse {
-    let account = AcmeAccountResponse {
-        status: "valid".to_string(),
-        contact: vec!["mailto:security@example.com".to_string()],
-        _orders: format!("https://issuer/acme/accounts/{account_id}/orders"),
-        terms_of_service_agreed: true,
-        kid: format!("https://issuer/acme/accounts/{account_id}"),
-    };
-
-    (
-        StatusCode::OK,
-        [(
-            header::HeaderName::from_static("replay-nonce"),
-            HeaderValue::from_static("c3RhdHVzX25vbmNl"),
-        )],
-        Json(account),
-    )
-}
-
-#[derive(Serialize)]
-pub struct AcmeOrderIdentifier {
-    #[serde(rename = "type")]
-    pub ty: String,
-    pub value: String,
-}
-
-#[derive(Serialize)]
-pub struct AcmeOrderResponse {
-    pub status: String,
-    pub identifiers: Vec<AcmeOrderIdentifier>,
-    pub authorizations: Vec<String>,
-    pub finalize: String,
-    #[serde(rename = "expires")]
-    pub _expires: String,
-    #[serde(rename = "notBefore")]
-    pub _not_before: Option<String>,
-    #[serde(rename = "notAfter")]
-    pub _not_after: Option<String>,
-    pub certificate: Option<String>,
-}
-
-pub async fn acme_new_order(
-    State(_state): State<Arc<ServerState>>,
-    Json(_request): Json<AcmeNewAccountRequest>,
-) -> impl IntoResponse {
-    let order = AcmeOrderResponse {
-        status: "pending".to_string(),
-        identifiers: vec![AcmeOrderIdentifier {
-            ty: "dns".to_string(),
-            value: "example.com".to_string(),
-        }],
-        authorizations: vec!["https://issuer/acme/authz/1".to_string()],
-        finalize: "https://issuer/acme/orders/1/finalize".to_string(),
-        _expires: "2025-10-26T10:00:00Z".to_string(),
-        _not_before: None,
-        _not_after: None,
-        certificate: None,
-    };
-
-    (
-        StatusCode::CREATED,
-        [
-            (
-                header::HeaderName::from_static("replay-nonce"),
-                HeaderValue::from_static("b3JkZXJfbm9uY2U"),
-            ),
-            (
-                header::LOCATION,
-                HeaderValue::from_static("https://issuer/acme/order/1"),
-            ),
-        ],
-        Json(order),
-    )
-}
-
-pub async fn acme_order_status(
-    State(_state): State<Arc<ServerState>>,
-    Path(order_id): Path<String>,
-    Json(_request): Json<AcmeNewAccountRequest>,
-) -> impl IntoResponse {
-    // Check order state - default to pending if not finalized
-    let status = {
-        let mut states = ACME_ORDER_STATES.lock().unwrap();
-        if states.is_none() {
-            *states = Some(HashMap::new());
-        }
-        states
-            .as_ref()
-            .unwrap()
-            .get(&order_id)
-            .cloned()
-            .unwrap_or_else(|| "pending".to_string())
-    };
-
-    let certificate = if status == "valid" {
-        Some(format!("https://issuer/acme/cert/{order_id}"))
-    } else {
-        None
-    };
-
-    let order = AcmeOrderResponse {
-        status,
-        identifiers: vec![AcmeOrderIdentifier {
-            ty: "dns".to_string(),
-            value: "example.com".to_string(),
-        }],
-        authorizations: vec![format!("https://issuer/acme/authz/{order_id}")],
-        finalize: format!("https://issuer/acme/orders/{order_id}/finalize"),
-        _expires: "2025-10-26T10:00:00Z".to_string(),
-        _not_before: None,
-        _not_after: None,
-        certificate,
-    };
-
-    (
-        StatusCode::OK,
-        [(
-            header::HeaderName::from_static("replay-nonce"),
-            HeaderValue::from_static("b3JkZXJTdGF0dXNOb25jZQ"),
-        )],
-        Json(order),
-    )
-}
-
-pub async fn acme_finalize_order(
-    State(_state): State<Arc<ServerState>>,
-    Path(order_id): Path<String>,
-    Json(_request): Json<AcmeNewAccountRequest>,
-) -> impl IntoResponse {
-    // Mark order as finalized/valid
-    {
-        let mut states = ACME_ORDER_STATES.lock().unwrap();
-        if states.is_none() {
-            *states = Some(HashMap::new());
-        }
-        states
-            .as_mut()
-            .unwrap()
-            .insert(order_id.clone(), "valid".to_string());
+    State(state): State<Arc<ServerState>>,
+    request: Request<Body>,
+) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
     }
 
-    let order = AcmeOrderResponse {
-        status: "valid".to_string(),
-        identifiers: vec![AcmeOrderIdentifier {
-            ty: "dns".to_string(),
-            value: "example.com".to_string(),
-        }],
-        authorizations: vec![format!("https://issuer/acme/authz/{order_id}")],
-        finalize: format!("https://issuer/acme/orders/{order_id}/finalize"),
-        _expires: "2025-10-26T10:00:00Z".to_string(),
-        _not_before: None,
-        _not_after: None,
-        certificate: Some(format!("https://issuer/acme/cert/{order_id}")),
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
     };
 
-    (
-        StatusCode::OK,
-        [
-            (
-                header::HeaderName::from_static("replay-nonce"),
-                HeaderValue::from_static("ZmluYWxpemVOb25jZQ"),
-            ),
-            (
-                header::LOCATION,
-                HeaderValue::from_str(&format!("https://issuer/acme/order/{order_id}")).unwrap(),
-            ),
-        ],
-        Json(order),
-    )
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    match service.handle_account_lookup(&account_id, jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_account_response(outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
 }
 
-pub async fn acme_get_certificate(
-    State(_state): State<Arc<ServerState>>,
+async fn acme_new_order(State(state): State<Arc<ServerState>>, request: Request<Body>) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
+    }
+
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    match service.handle_new_order(jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_order_response(outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
+}
+
+async fn acme_order_status(
     Path(order_id): Path<String>,
-) -> impl IntoResponse {
-    // Check if certificate is revoked
-    {
-        let revoked = ACME_REVOKED_CERTIFICATES.lock().unwrap();
-        if let Some(revoked) = revoked.as_ref() {
-            if revoked.contains(&order_id) {
-                use serde_json::json;
-                let problem = json!({
-                    "type": "urn:ietf:params:acme:error:unauthorized",
-                    "detail": "Certificate has been revoked",
-                    "status": 401
-                });
-                return (StatusCode::UNAUTHORIZED, Json(problem)).into_response();
-            }
-        }
+    State(state): State<Arc<ServerState>>,
+    request: Request<Body>,
+) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
     }
 
-    // Check if order is finalized/valid
-    {
-        let states = ACME_ORDER_STATES.lock().unwrap();
-        if let Some(states) = states.as_ref() {
-            if states.get(&order_id).map(String::as_str) != Some("valid") {
-                return (StatusCode::NOT_FOUND, "Order not ready").into_response();
-            }
-        } else {
-            return (StatusCode::NOT_FOUND, "Order not found").into_response();
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
+
+    match service.handle_order_lookup(&order_id, jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_order_status_response(outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
         }
     }
+}
 
-    // Generate real X.509 certificate chain using rcgen
-    // Create CA certificate
-    let mut ca_params = CertificateParams::new(vec!["Test CA".to_string()]);
-    ca_params.distinguished_name = DistinguishedName::new();
-    ca_params
-        .distinguished_name
-        .push(DnType::CommonName, "Test CA");
-    ca_params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
-    let ca_cert = Certificate::from_params(ca_params).unwrap();
+async fn acme_finalize_order(
+    Path(order_id): Path<String>,
+    State(state): State<Arc<ServerState>>,
+    request: Request<Body>,
+) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
+    }
 
-    // Create end-entity certificate
-    let mut cert_params = CertificateParams::new(vec!["example.com".to_string()]);
-    cert_params.distinguished_name = DistinguishedName::new();
-    cert_params
-        .distinguished_name
-        .push(DnType::CommonName, "example.com");
-    let cert = Certificate::from_params(cert_params).unwrap();
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
 
-    // Sign the end-entity cert with CA
-    let cert_pem = cert.serialize_pem_with_signer(&ca_cert).unwrap();
-    let ca_pem = ca_cert.serialize_pem().unwrap();
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
 
-    let certificate = format!("{cert_pem}\n{ca_pem}");
+    match service.handle_finalize_order(&order_id, jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_finalize_response(outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
+}
 
-    (
-        StatusCode::OK,
-        [
-            (
-                header::HeaderName::from_static("replay-nonce"),
-                HeaderValue::from_static("Y2VydGlmaWNhdGVOb25jZQ"),
-            ),
-            (
+async fn acme_get_certificate(
+    Path(order_id): Path<String>,
+    State(state): State<Arc<ServerState>>,
+) -> Response {
+    let service = state.acme();
+    match service.certificate_pem_bundle(&order_id).await {
+        Ok(bundle) => {
+            let nonce = service.issue_nonce().await;
+            let mut response = Response::new(Body::from(bundle));
+            *response.status_mut() = StatusCode::OK;
+            response.headers_mut().insert(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("text/plain; charset=utf-8"),
-            ),
-        ],
-        certificate,
-    )
-        .into_response()
+            );
+            apply_acme_headers(&mut response, &nonce);
+            response
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
+    }
 }
 
-pub async fn acme_revoke_certificate(
-    State(_state): State<Arc<ServerState>>,
-    Json(_request): Json<AcmeNewAccountRequest>,
-) -> impl IntoResponse {
-    use serde_json::json;
-    use time::OffsetDateTime;
+async fn acme_revoke_certificate(
+    State(state): State<Arc<ServerState>>,
+    request: Request<Body>,
+) -> Response {
+    let service = state.acme();
+    let (parts, body) = request.into_parts();
+    if !is_jose_content_type(&parts.headers) {
+        let nonce = service.issue_nonce().await;
+        let problem =
+            AcmeProblem::malformed("Content-Type application/jose+json olarak ayarlanmalıdır");
+        return acme_problem_response(&problem, &nonce);
+    }
 
-    // For testing, we'll revoke all current valid orders
-    // In reality, we'd parse the certificate from the request to find the order ID
-    let mut first_revocation = false;
-    let mut already_revoked = false;
-
-    let order_to_revoke = ACME_ORDER_STATES
-        .lock()
-        .unwrap()
-        .as_ref()
-        .and_then(|orders| {
-            orders
-                .iter()
-                .find(|(_, status)| *status == "valid")
-                .map(|(order_id, _)| order_id.clone())
-        });
-
-    if let Some(order_id) = order_to_revoke {
-        let mut revoked = ACME_REVOKED_CERTIFICATES.lock().unwrap();
-        let revoked_set = revoked.get_or_insert_with(HashSet::new);
-        if revoked_set.contains(&order_id) {
-            already_revoked = true;
-        } else {
-            revoked_set.insert(order_id);
-            first_revocation = true;
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem = AcmeProblem::server_internal(format!("İstek gövdesi okunamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
         }
-        drop(revoked);
-    }
+    };
 
-    if already_revoked {
-        let error_response = json!({
-            "type": "urn:ietf:params:acme:error:alreadyRevoked",
-            "detail": "Certificate has already been revoked",
-            "status": 200
-        });
-        return (
-            StatusCode::OK,
-            [(
-                header::HeaderName::from_static("replay-nonce"),
-                HeaderValue::from_static("cmV2b2tlTm9uY2U"),
-            )],
-            Json(error_response),
-        );
-    }
+    let jws: AcmeJws = match serde_json::from_slice(&body_bytes) {
+        Ok(value) => value,
+        Err(err) => {
+            let nonce = service.issue_nonce().await;
+            let problem =
+                AcmeProblem::malformed(format!("ACME JWS gövdesi ayrıştırılamadı: {err}"));
+            return acme_problem_response(&problem, &nonce);
+        }
+    };
 
-    if first_revocation {
-        // First revocation - return success response
-        let response = json!({
-            "status": "revoked",
-            "revokedAt": OffsetDateTime::now_utc().format(&time::format_description::well_known::Rfc3339).unwrap(),
-            "reason": 1
-        });
-
-        (
-            StatusCode::OK,
-            [(
-                header::HeaderName::from_static("replay-nonce"),
-                HeaderValue::from_static("cmV2b2tlTm9uY2U"),
-            )],
-            Json(response),
-        )
-    } else {
-        // No valid orders found
-        let error_response = json!({
-            "type": "urn:ietf:params:acme:error:malformed",
-            "detail": "No valid certificate found to revoke",
-            "status": 400
-        });
-        (
-            StatusCode::BAD_REQUEST,
-            [(
-                header::HeaderName::from_static("replay-nonce"),
-                HeaderValue::from_static("cmV2b2tlTm9uY2U"),
-            )],
-            Json(error_response),
-        )
+    match service.revoke_certificate(jws).await {
+        Ok(outcome) => {
+            let nonce = service.issue_nonce().await;
+            acme_revoke_response(&outcome, &nonce)
+        }
+        Err(problem) => {
+            let nonce = service.issue_nonce().await;
+            acme_problem_response(&problem, &nonce)
+        }
     }
 }
 
@@ -2248,10 +2226,10 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/acme/directory", get(acme_directory))
                 .route("/acme/new-nonce", get(acme_new_nonce))
                 .route("/acme/new-account", post(acme_new_account))
-                .route("/acme/accounts/:id", post(acme_account_status))
+                .route("/acme/account/:id", post(acme_account_lookup))
                 .route("/acme/new-order", post(acme_new_order))
                 .route("/acme/order/:id", post(acme_order_status))
-                .route("/acme/orders/:id/finalize", post(acme_finalize_order))
+                .route("/acme/order/:id/finalize", post(acme_finalize_order))
                 .route("/acme/cert/:id", get(acme_get_certificate))
                 .route("/acme/revoke-cert", post(acme_revoke_certificate));
         }
@@ -2297,10 +2275,10 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/acme/directory", get(acme_directory))
                 .route("/acme/new-nonce", get(acme_new_nonce))
                 .route("/acme/new-account", post(acme_new_account))
-                .route("/acme/accounts/:id", post(acme_account_status))
+                .route("/acme/account/:id", post(acme_account_lookup))
                 .route("/acme/new-order", post(acme_new_order))
                 .route("/acme/order/:id", post(acme_order_status))
-                .route("/acme/orders/:id/finalize", post(acme_finalize_order))
+                .route("/acme/order/:id/finalize", post(acme_finalize_order))
                 .route("/acme/cert/:id", get(acme_get_certificate))
                 .route("/acme/revoke-cert", post(acme_revoke_certificate))
                 // OAuth endpoints
