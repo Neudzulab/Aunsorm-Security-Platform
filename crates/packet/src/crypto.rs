@@ -6,7 +6,7 @@ use chacha20poly1305::ChaCha20Poly1305;
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
 use pmac::{Mac as PmacTrait, Pmac};
-use rand_core::{OsRng, RngCore};
+use rand_core::RngCore;
 use sha2::{Digest, Sha256, Sha512};
 use subtle::ConstantTimeEq;
 
@@ -15,6 +15,7 @@ use aes_siv::Aes128SivAead;
 
 use crate::error::PacketError;
 use crate::header::{AeadAlgorithm, Header};
+use crate::rng::AunsormNativeRng;
 
 pub const VERSION: &str = "1.01";
 
@@ -52,7 +53,8 @@ pub const fn nonce_length(algorithm: AeadAlgorithm) -> usize {
 
 pub fn generate_nonce(algorithm: AeadAlgorithm) -> Vec<u8> {
     let mut nonce = vec![0_u8; nonce_length(algorithm)];
-    OsRng.fill_bytes(&mut nonce);
+    let mut rng = AunsormNativeRng::new();
+    rng.fill_bytes(&mut nonce);
     nonce
 }
 
