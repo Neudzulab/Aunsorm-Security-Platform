@@ -349,12 +349,15 @@ name = "aunsorm-acme"
 version = "0.4.2"
 dependencies = [
  "async-trait",
+ "aunsorm-kms",
+ "aunsorm-x509",
  "base64 0.21.7",
  "ed25519-dalek",
  "hkdf",
  "http 0.2.12",
  "idna",
  "p256",
+ "pem",
  "percent-encoding",
  "pretty_assertions",
  "rand_chacha 0.3.1",
@@ -628,6 +631,7 @@ dependencies = [
  "tiny_http",
  "tokio",
  "tower 0.4.13",
+ "url",
  "x509-parser 0.18.0",
 ]
 

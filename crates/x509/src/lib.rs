@@ -69,6 +69,15 @@ pub enum X509Error {
     /// Anahtar üretimi başarısız.
     #[error("anahtar üretimi başarısız: {0}")]
     KeyGeneration(String),
+    /// CSR PEM içeriği ayrıştırılamadı.
+    #[error("CSR PEM ayrıştırılamadı: {0}")]
+    CsrPem(String),
+    /// Sertifika zinciri ayrıştırması başarısız oldu.
+    #[error("sertifika zinciri ayrıştırılamadı: {0}")]
+    ChainParse(String),
+    /// Sertifika zinciri doğrulaması başarısız oldu.
+    #[error("sertifika zinciri doğrulanamadı: {0}")]
+    ChainVerification(String),
 }
 
 /// Öz-imzalı sertifika üretimi için parametreler.
