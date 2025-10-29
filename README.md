@@ -37,6 +37,7 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /e2ee/context/step ✅ - E2EE ratchet adımı ilerletme
 │   │   ├── POST /security/generate-media-token ✅ - Medya erişim token üretimi
 │   │   ├── POST /security/jwt-verify ✅ - Zasian JWT doğrulama ve payload dökümü
+│   │   ├── POST /security/jwe/encrypt 📋 [Planlandı v0.6.0] - WebRTC köprüsü için JWE kapsülleme servisi
 │   │   ├── POST /sfu/context ✅ - SFU E2EE context oluşturma
 │   │   ├── POST /sfu/context/step ✅ - SFU session ratchet ilerletme
 │   │   ├── POST /mdm/register ✅ - Cihaz kayıt akışı
@@ -47,6 +48,7 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /id/verify-head ✅ - Head damgalı kimlik doğrulama
 │   │   ├── POST /validate/endpoint ✅ - Endpoint bağlantı doğrulaması
 │   │   ├── POST /blockchain/fabric/did/verify ✅ - Hyperledger Fabric DID doğrulama PoC'u
+│   │   ├── POST /blockchain/media/record 📋 [Planlandı v0.6.1] - Medya oturumu ledger kaydı ve şeffaflık izi
 │   │   ├── GET /http3/capabilities 🚧 - HTTP/3 PoC introspeksiyonu (`http3-experimental`)
 │   │   ├── GET /pqc/capabilities ✅ - PQC algoritma durumu ve strict kip yönergeleri
 │   │   ├── GET /acme/directory ✅ - ACME directory keşfi ve meta bilgisi
