@@ -3,7 +3,7 @@ use std::time::Duration as StdDuration;
 
 use aunsorm_acme::{
     async_trait, ManagedCertificate, RenewalCandidate, RenewalInventory, RenewalJob,
-    RenewalJobError,
+    RenewalJobError, DEFAULT_RENEWAL_THRESHOLD,
 };
 use time::{Duration, OffsetDateTime};
 use tokio::task::JoinHandle;
@@ -27,6 +27,10 @@ impl RenewalInventory for ServerAcmeInventory {
     }
 }
 
+/// Default interval between renewal scans when no custom configuration is
+/// provided.
+pub const DEFAULT_RENEWAL_PERIOD: StdDuration = StdDuration::from_secs(3600);
+
 /// Spawns the background task responsible for scanning ACME certificates and
 /// logging candidates that are approaching their expiry.
 pub fn spawn_acme_renewal_job(
@@ -37,7 +41,10 @@ pub fn spawn_acme_renewal_job(
     let inventory = ServerAcmeInventory { state };
     let job = RenewalJob::new(inventory, renew_before);
     tokio::spawn(async move {
-        info!("ACME yenileme taraması başlatıldı");
+        info!(
+            threshold_days = renew_before.whole_days(),
+            "ACME yenileme taraması başlatıldı"
+        );
         if !execute_scan(&job).await {
             return;
         }
@@ -50,6 +57,11 @@ pub fn spawn_acme_renewal_job(
             }
         }
     })
+}
+
+/// Convenience helper that starts the renewal job with the repository defaults.
+pub fn spawn_default_acme_renewal_job(state: Arc<ServerState>) -> JoinHandle<()> {
+    spawn_acme_renewal_job(state, DEFAULT_RENEWAL_PERIOD, DEFAULT_RENEWAL_THRESHOLD)
 }
 
 async fn execute_scan(job: &RenewalJob<ServerAcmeInventory>) -> bool {

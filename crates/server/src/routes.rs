@@ -18,8 +18,8 @@ use sha2::{Digest, Sha256};
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration as StdDuration, SystemTime, UNIX_EPOCH};
-use time::{Duration as TimeDuration, OffsetDateTime};
+use std::time::{SystemTime, UNIX_EPOCH};
+use time::OffsetDateTime;
 
 use crate::acme::{
     AcmeProblem, FinalizeOrderOutcome, NewAccountOutcome, NewOrderOutcome, OrderLookupOutcome,
@@ -2473,11 +2473,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
     let listen = config.listen;
     tracing::info!("🚀 Starting server on {}", listen);
     let state = Arc::new(ServerState::try_new(config)?);
-    let _renewal_task = crate::jobs::spawn_acme_renewal_job(
-        Arc::clone(&state),
-        StdDuration::from_secs(3600),
-        TimeDuration::days(30),
-    );
+    let _renewal_task = crate::jobs::spawn_default_acme_renewal_job(Arc::clone(&state));
     #[cfg(feature = "http3-experimental")]
     let _http3_guard = {
         let guard = spawn_http3_poc(listen, Arc::clone(&state))?;

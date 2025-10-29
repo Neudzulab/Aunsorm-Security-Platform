@@ -9,6 +9,10 @@ use time::{Duration, OffsetDateTime};
 /// Re-exports the [`async_trait`] macro for consumers implementing [`RenewalInventory`].
 pub use async_trait::async_trait;
 
+/// Default window used by the server to determine when certificates should be
+/// renewed.
+pub const DEFAULT_RENEWAL_THRESHOLD: Duration = Duration::days(30);
+
 /// Metadata describing a certificate managed by the renewal subsystem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagedCertificate {

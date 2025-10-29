@@ -49,7 +49,7 @@ pub use providers::dns::{
 };
 pub use renewal::{
     async_trait, ManagedCertificate, RenewalCandidate, RenewalInventory, RenewalJob,
-    RenewalJobError,
+    RenewalJobError, DEFAULT_RENEWAL_THRESHOLD,
 };
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
 pub use storage::{
