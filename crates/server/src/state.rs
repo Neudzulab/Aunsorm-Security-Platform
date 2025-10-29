@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fmt;
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::rng::AunsormNativeRng;
 use aunsorm_core::{
+    clock::{ClockAuthority, ClockValidation, SecureClockVerifier},
     transparency::{
         unix_timestamp, KeyTransparencyLog, TransparencyError,
         TransparencyEvent as CoreTransparencyEvent, TransparencyRecord,
@@ -17,6 +19,8 @@ use aunsorm_mdm::{
     PolicyDocument, PolicyRule,
 };
 use rand_core::RngCore;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::acme::AcmeService;
@@ -107,6 +111,122 @@ impl AuthStore {
 
     fn purge_locked(map: &mut HashMap<String, AuthRequest>, now: SystemTime) {
         map.retain(|_, value| value.expires_at > now);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditProofDocument {
+    pub calibration_fingerprint: String,
+    pub authority: String,
+    pub authority_fingerprint: String,
+    pub attested_unix_ms: u64,
+    pub clock_signature: String,
+    pub audit_digest_hex: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AuditProof {
+    calibration_fingerprint: String,
+    authority: String,
+    authority_fingerprint: String,
+    attested_unix_ms: u64,
+    digest: [u8; 32],
+    clock_signature: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuditProofValidationError {
+    CalibrationFingerprint,
+    Authority,
+    AuthorityFingerprint,
+    Timestamp,
+    ClockSignature,
+    Digest,
+}
+
+impl fmt::Display for AuditProofValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let message = match self {
+            Self::CalibrationFingerprint => "kalibrasyon fingerprint doğrulanamadı",
+            Self::Authority => "audit proof beklenen saat otoritesiyle uyuşmuyor",
+            Self::AuthorityFingerprint => "saat otoritesi sertifika parmak izi eşleşmiyor",
+            Self::Timestamp => "audit proof zaman damgası beklenen değerle uyuşmuyor",
+            Self::ClockSignature => "saat imzası beklenen değeri sağlamıyor",
+            Self::Digest => "audit proof özeti beklenen değeri sağlamıyor",
+        };
+        f.write_str(message)
+    }
+}
+
+impl std::error::Error for AuditProofValidationError {}
+
+impl AuditProof {
+    fn compute_digest(calibration_fingerprint: &str, validation: &ClockValidation) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(b"Aunsorm/1.01/audit-proof");
+        hasher.update(calibration_fingerprint.as_bytes());
+        hasher.update(validation.authority_fingerprint_hex.as_bytes());
+        hasher.update(validation.unix_time_ms.to_be_bytes());
+        hasher.update(validation.signature_b64.as_bytes());
+        let digest = hasher.finalize();
+        let mut out = [0_u8; 32];
+        out.copy_from_slice(&digest[..32]);
+        out
+    }
+
+    pub fn new(calibration_fingerprint: impl Into<String>, validation: ClockValidation) -> Self {
+        let calibration_fingerprint = calibration_fingerprint.into();
+        let digest = Self::compute_digest(&calibration_fingerprint, &validation);
+        Self {
+            calibration_fingerprint,
+            authority: validation.authority_id,
+            authority_fingerprint: validation.authority_fingerprint_hex,
+            attested_unix_ms: validation.unix_time_ms,
+            digest,
+            clock_signature: validation.signature_b64,
+        }
+    }
+
+    #[must_use]
+    pub fn digest_hex(&self) -> String {
+        hex::encode(self.digest)
+    }
+
+    #[must_use]
+    pub fn document(&self) -> AuditProofDocument {
+        AuditProofDocument {
+            calibration_fingerprint: self.calibration_fingerprint.clone(),
+            authority: self.authority.clone(),
+            authority_fingerprint: self.authority_fingerprint.clone(),
+            attested_unix_ms: self.attested_unix_ms,
+            clock_signature: self.clock_signature.clone(),
+            audit_digest_hex: self.digest_hex(),
+        }
+    }
+
+    pub fn verify_document(
+        &self,
+        candidate: &AuditProofDocument,
+    ) -> Result<(), AuditProofValidationError> {
+        if candidate.calibration_fingerprint != self.calibration_fingerprint {
+            return Err(AuditProofValidationError::CalibrationFingerprint);
+        }
+        if candidate.authority != self.authority {
+            return Err(AuditProofValidationError::Authority);
+        }
+        if candidate.authority_fingerprint != self.authority_fingerprint {
+            return Err(AuditProofValidationError::AuthorityFingerprint);
+        }
+        if candidate.attested_unix_ms != self.attested_unix_ms {
+            return Err(AuditProofValidationError::Timestamp);
+        }
+        if candidate.clock_signature != self.clock_signature {
+            return Err(AuditProofValidationError::ClockSignature);
+        }
+        if candidate.audit_digest_hex != self.digest_hex() {
+            return Err(AuditProofValidationError::Digest);
+        }
+        Ok(())
     }
 }
 
@@ -735,6 +855,7 @@ pub struct ServerState {
     fabric: FabricDidRegistry,
     acme: AcmeService,
     rng: StdMutex<AunsormNativeRng>,
+    audit_proof: AuditProof,
 }
 
 impl ServerState {
@@ -752,6 +873,9 @@ impl ServerState {
             strict,
             key_pair,
             ledger,
+            fabric: _fabric,
+            calibration_fingerprint,
+            clock_snapshot,
         } = config;
         let signer = JwtSigner::new(key_pair.clone());
         let public = key_pair.public_key();
@@ -760,6 +884,14 @@ impl ServerState {
         let jwks = Jwks {
             keys: vec![public_jwk.clone()],
         };
+        let authority = ClockAuthority::new(
+            clock_snapshot.authority_id.clone(),
+            clock_snapshot.authority_fingerprint_hex.clone(),
+        );
+        let clock_verifier = SecureClockVerifier::strict(vec![authority])?;
+        let validation = clock_verifier.verify(&clock_snapshot)?;
+        let audit_proof = AuditProof::new(calibration_fingerprint, validation);
+
         let transparency_backend = ledger.clone();
         let ledger = TokenLedger::new(ledger)?;
         let mut transparency_tree = KeyTransparencyLog::new("aunsorm-server");
@@ -798,6 +930,7 @@ impl ServerState {
             fabric,
             acme,
             rng: StdMutex::new(AunsormNativeRng::new()),
+            audit_proof,
         })
     }
 
@@ -827,6 +960,22 @@ impl ServerState {
 
     pub const fn jwks(&self) -> &Jwks {
         &self.jwks
+    }
+
+    pub fn audit_proof_document(&self) -> AuditProofDocument {
+        self.audit_proof.document()
+    }
+
+    /// Verilen audit kanıtını beklenen değerlerle karşılaştırır.
+    ///
+    /// # Errors
+    /// Sağlanan kanıtın herhangi bir bileşeni uyuşmadığında
+    /// [`AuditProofValidationError`] döndürür.
+    pub fn verify_audit_proof(
+        &self,
+        candidate: &AuditProofDocument,
+    ) -> Result<(), AuditProofValidationError> {
+        self.audit_proof.verify_document(candidate)
     }
 
     pub fn oauth_client(&self, client_id: &str) -> Option<&OAuthClient> {
@@ -1195,7 +1344,21 @@ impl TransparencyTreeSnapshot {
 
 #[cfg(test)]
 mod tests {
-    use super::ServerState;
+    use super::{AuditProof, AuditProofValidationError, ServerState};
+    use aunsorm_core::clock::ClockValidation;
+
+    fn sample_validation() -> ClockValidation {
+        ClockValidation {
+            authority_id: "ntp.test.aunsorm".to_owned(),
+            authority_fingerprint_hex:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            unix_time_ms: 1_720_000_000_000,
+            skew_ms: 4,
+            round_trip_ms: 8,
+            dispersion_ms: 12,
+            signature_b64: "dGVzdC1jbG9jay1zaWc".to_owned(),
+        }
+    }
 
     #[test]
     fn map_entropy_to_range_selects_first_valid_candidate() {
@@ -1244,5 +1407,29 @@ mod tests {
             u64::try_from(valid_candidate as u128 % range).expect("offset fits in u64");
         let result = ServerState::map_entropy_to_range(&entropy, min, max);
         assert_eq!(result, Some(min + expected_offset));
+    }
+
+    #[test]
+    fn audit_proof_valid_document_passes() {
+        let validation = sample_validation();
+        let proof = AuditProof::new(
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            validation,
+        );
+        let document = proof.document();
+        assert!(proof.verify_document(&document).is_ok());
+    }
+
+    #[test]
+    fn audit_proof_mismatch_detected() {
+        let validation = sample_validation();
+        let proof = AuditProof::new(
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            validation,
+        );
+        let mut document = proof.document();
+        document.audit_digest_hex = "deadbeef".to_owned();
+        let err = proof.verify_document(&document).unwrap_err();
+        assert_eq!(err, AuditProofValidationError::Digest);
     }
 }

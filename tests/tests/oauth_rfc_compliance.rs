@@ -2,8 +2,9 @@
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use aunsorm_core::{calibration::calib_from_text, clock::SecureClockSnapshot};
 use aunsorm_jwt::Ed25519KeyPair;
 use aunsorm_server::{build_router, LedgerBackend, ServerConfig, ServerState};
 use axum::body::{to_bytes, Body};
@@ -50,6 +51,27 @@ struct ErrorBody {
 fn demo_state() -> Arc<ServerState> {
     const SEED: [u8; 32] = [7_u8; 32];
     let key = Ed25519KeyPair::from_seed("oauth-test", SEED).expect("seed");
+    let now_ms = u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX);
+    let clock_snapshot = SecureClockSnapshot {
+        authority_id: "ntp.test.aunsorm".to_owned(),
+        authority_fingerprint_hex:
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+        unix_time_ms: now_ms,
+        stratum: 2,
+        round_trip_ms: 8,
+        dispersion_ms: 12,
+        estimated_offset_ms: 4,
+        signature_b64: "dGVzdC1jbG9jay1zaWc".to_owned(),
+    };
+    let (calibration, _) =
+        calib_from_text(b"test-salt", "Test calibration for audit proof").expect("calibration");
+    let calibration_fingerprint = calibration.fingerprint_hex();
     let config = ServerConfig::new(
         "127.0.0.1:0".parse::<SocketAddr>().expect("socket address"),
         "https://issuer",
@@ -59,6 +81,8 @@ fn demo_state() -> Arc<ServerState> {
         key,
         LedgerBackend::Memory,
         None,
+        calibration_fingerprint,
+        clock_snapshot,
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))

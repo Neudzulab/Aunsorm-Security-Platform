@@ -6,6 +6,7 @@ use std::time::Duration;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use zeroize::Zeroizing;
 
+use aunsorm_core::clock::SecureClockSnapshot;
 use aunsorm_jwt::Ed25519KeyPair;
 
 use crate::error::ServerError;
@@ -70,6 +71,8 @@ pub struct ServerConfig {
     pub(crate) key_pair: Ed25519KeyPair,
     pub(crate) ledger: LedgerBackend,
     pub(crate) fabric: Option<FabricChaincodeConfig>,
+    pub(crate) calibration_fingerprint: String,
+    pub(crate) clock_snapshot: SecureClockSnapshot,
 }
 
 impl ServerConfig {
@@ -135,8 +138,52 @@ impl ServerConfig {
             }
         };
 
+        let calibration_fingerprint =
+            env::var("AUNSORM_CALIBRATION_FINGERPRINT").map_err(|_| {
+                ServerError::Configuration(
+                    "AUNSORM_CALIBRATION_FINGERPRINT çevre değişkeni zorunludur".to_string(),
+                )
+            })?;
+
+        if calibration_fingerprint.len() != 64
+            || !calibration_fingerprint
+                .chars()
+                .all(|ch| ch.is_ascii_hexdigit())
+        {
+            return Err(ServerError::Configuration(
+                "AUNSORM_CALIBRATION_FINGERPRINT 64 karakterlik hex dizesi olmalıdır".to_string(),
+            ));
+        }
+
+        let attestation = env::var("AUNSORM_CLOCK_ATTESTATION").map_err(|_| {
+            ServerError::Configuration(
+                "AUNSORM_CLOCK_ATTESTATION çevre değişkeni zorunludur".to_string(),
+            )
+        })?;
+        let clock_snapshot: SecureClockSnapshot =
+            serde_json::from_str(&attestation).map_err(|err| {
+                ServerError::Configuration(format!(
+                    "AUNSORM_CLOCK_ATTESTATION JSON parse edilemedi: {err}"
+                ))
+            })?;
+
+        if clock_snapshot.signature_b64.trim().is_empty() {
+            return Err(ServerError::Configuration(
+                "AUNSORM_CLOCK_ATTESTATION.signature_b64 boş bırakılamaz".to_string(),
+            ));
+        }
+
         Self::new(
-            listen, issuer, audience, token_ttl, strict, key_pair, ledger, fabric,
+            listen,
+            issuer,
+            audience,
+            token_ttl,
+            strict,
+            key_pair,
+            ledger,
+            fabric,
+            calibration_fingerprint,
+            clock_snapshot,
         )
     }
 
@@ -145,6 +192,7 @@ impl ServerConfig {
     /// # Errors
     ///
     /// Strict kip ve in-memory defter kombinasyonu gibi tutarsızlıklar `ServerError` üretir.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         listen: SocketAddr,
         issuer: impl Into<String>,
@@ -154,10 +202,27 @@ impl ServerConfig {
         key_pair: Ed25519KeyPair,
         ledger: LedgerBackend,
         fabric: Option<FabricChaincodeConfig>,
+        calibration_fingerprint: impl Into<String>,
+        clock_snapshot: SecureClockSnapshot,
     ) -> Result<Self, ServerError> {
         if strict && matches!(ledger, LedgerBackend::Memory) {
             return Err(ServerError::Configuration(
                 "Strict kipte bellek içi JTI deposu kullanılamaz".to_string(),
+            ));
+        }
+        if clock_snapshot.signature_b64.trim().is_empty() {
+            return Err(ServerError::Configuration(
+                "Saat doğrulama imzası boş olamaz".to_string(),
+            ));
+        }
+        let calibration_fingerprint = calibration_fingerprint.into();
+        if calibration_fingerprint.len() != 64
+            || !calibration_fingerprint
+                .chars()
+                .all(|ch| ch.is_ascii_hexdigit())
+        {
+            return Err(ServerError::Configuration(
+                "Kalibrasyon fingerprint'i 64 haneli hex dize olmalıdır".to_string(),
             ));
         }
         Ok(Self {
@@ -169,11 +234,28 @@ impl ServerConfig {
             key_pair,
             ledger,
             fabric,
+            calibration_fingerprint,
+            clock_snapshot,
         })
     }
 
     #[must_use]
-    pub(crate) fn fabric(&self) -> Option<&FabricChaincodeConfig> {
-        self.fabric.as_ref()
+    pub(crate) const fn fabric(&self) -> Option<&FabricChaincodeConfig> {
+        match &self.fabric {
+            Some(cfg) => Some(cfg),
+            None => None,
+        }
+    }
+
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub(crate) fn calibration_fingerprint(&self) -> &str {
+        &self.calibration_fingerprint
+    }
+
+    #[must_use]
+    #[allow(clippy::missing_const_for_fn)]
+    pub(crate) fn clock_snapshot(&self) -> &SecureClockSnapshot {
+        &self.clock_snapshot
     }
 }
