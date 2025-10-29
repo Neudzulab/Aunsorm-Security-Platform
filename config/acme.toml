@@ -1,0 +1,26 @@
+# Örnek ACME istemci yapılandırması
+
+[account]
+email = "security@example.com"
+terms_of_service_agreed = true
+
+[order]
+domains = ["example.com", "www.example.com"]
+
+[csr]
+common_name = "example.com"
+subject_alt_names = ["example.com", "www.example.com"]
+key_algorithm = "ed25519"
+
+[storage.local]
+certificate_path = "var/certs/example.com/cert.pem"
+chain_path = "var/certs/example.com/fullchain.pem"
+private_key_path = "var/certs/example.com/privkey.pem"
+
+# Yerel anahtar sarma için KMS entegrasyonu tercih edilirse aşağıdaki blok etkinleştirilebilir.
+# [storage.kms]
+# config_path = "config/kms-local.json"
+# wrap_key = "tls-wrap-key"
+# certificate_path = "var/certs/example.com/cert.pem"
+# chain_path = "var/certs/example.com/fullchain.pem"
+# wrapped_key_path = "var/certs/example.com/wrapped-key.json"

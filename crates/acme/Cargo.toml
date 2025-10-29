@@ -26,6 +26,9 @@ rand_core = { workspace = true }
 hkdf = "0.12"
 rcgen = { version = "0.12" }
 async-trait = "0.1"
+pem = "3"
+aunsorm-x509 = { path = "../x509" }
+aunsorm-kms = { path = "../kms" }
 
 [dev-dependencies]
 pretty_assertions = "1"

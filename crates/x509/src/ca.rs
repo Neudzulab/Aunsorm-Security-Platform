@@ -276,6 +276,34 @@ pub struct ServerCert {
     pub calibration_id: String,
 }
 
+/// Parameters used to generate a certificate signing request (CSR).
+pub struct CertificateSigningRequestParams<'a> {
+    /// Common Name (CN) that will appear in the CSR subject.
+    pub common_name: &'a str,
+    /// Subject Alternative Name entries that should be encoded into the CSR.
+    pub subject_alt_names: &'a [SubjectAltName],
+    /// Key algorithm to be used when generating the CSR key pair.
+    pub key_algorithm: Option<KeyAlgorithm>,
+}
+
+/// Generated CSR artifacts containing both the request and the subject's private key.
+pub struct GeneratedCsr {
+    /// PEM encoded certificate signing request.
+    pub csr_pem: String,
+    /// PEM encoded private key corresponding to the CSR subject.
+    pub private_key_pem: String,
+    /// Algorithm used for the CSR key pair.
+    pub key_algorithm: KeyAlgorithm,
+}
+
+/// Result of verifying a certificate chain.
+pub struct ChainValidation {
+    /// Ordered subject names starting from the leaf up to the root certificate.
+    pub subjects: Vec<String>,
+    /// Earliest expiry across the validated chain.
+    pub not_after: OffsetDateTime,
+}
+
 /// Generates a Root CA certificate with Ed25519.
 ///
 /// The generated certificate:
@@ -408,7 +436,7 @@ pub fn sign_server_cert(params: &ServerCertParams<'_>) -> Result<ServerCert, X50
     let algorithm = params.key_algorithm.unwrap_or_default();
 
     let mut cert_params = CertificateParams::new(vec![params.hostname.to_owned()])?;
-    cert_params.is_ca = IsCa::ExplicitNoCa;
+    cert_params.is_ca = IsCa::NoCa;
     cert_params.key_usages = vec![
         KeyUsagePurpose::DigitalSignature,
         KeyUsagePurpose::KeyEncipherment,
@@ -457,6 +485,151 @@ pub fn sign_server_cert(params: &ServerCertParams<'_>) -> Result<ServerCert, X50
     })
 }
 
+/// Generates a CSR alongside the subject private key using the provided parameters.
+///
+/// # Errors
+///
+/// Returns [`X509Error`] when the CSR cannot be generated or the common name is empty.
+pub fn generate_certificate_signing_request(
+    params: &CertificateSigningRequestParams<'_>,
+) -> Result<GeneratedCsr, X509Error> {
+    if params.common_name.trim().is_empty() {
+        return Err(X509Error::ProfileValidation(
+            "CSR common_name boş olamaz".to_owned(),
+        ));
+    }
+
+    let mut cert_params = CertificateParams::new(vec![params.common_name.to_owned()])?;
+    cert_params.is_ca = IsCa::NoCa;
+    cert_params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+    cert_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    cert_params
+        .distinguished_name
+        .push(DnType::CommonName, params.common_name);
+    cert_params.use_authority_key_identifier_extension = false;
+    cert_params.subject_alt_names.clear();
+    for san in params.subject_alt_names {
+        cert_params.subject_alt_names.push(san.to_san_type()?);
+    }
+
+    let algorithm = params.key_algorithm.unwrap_or_default();
+    let key_pair = match algorithm {
+        KeyAlgorithm::Ed25519 => KeyPair::generate_for(&rcgen::PKCS_ED25519)
+            .map_err(|err| X509Error::KeyGeneration(err.to_string()))?,
+        KeyAlgorithm::Rsa2048 | KeyAlgorithm::Rsa4096 => algorithm.generate_keypair()?,
+    };
+
+    let csr = cert_params.serialize_request(&key_pair)?;
+    let csr_pem = csr.pem()?;
+    let private_key_pem = key_pair.serialize_pem();
+
+    Ok(GeneratedCsr {
+        csr_pem,
+        private_key_pem,
+        key_algorithm: algorithm,
+    })
+}
+
+/// Verifies that the provided leaf certificate chains up to the root using the optional
+/// intermediate certificates.
+///
+/// # Errors
+///
+/// Returns [`X509Error`] when the PEM structures are invalid, the chain breaks or
+/// any certificate is expired at verification time.
+pub fn verify_certificate_chain(
+    leaf_pem: &str,
+    intermediates: &[&str],
+    root_pem: &str,
+) -> Result<ChainValidation, X509Error> {
+    let now = OffsetDateTime::now_utc();
+    let mut subjects = Vec::new();
+    let mut expiries = Vec::new();
+
+    let mut chain: Vec<Vec<u8>> = Vec::with_capacity(intermediates.len() + 2);
+    chain.push(parse_pem_certificate(leaf_pem)?);
+    for pem in intermediates {
+        chain.push(parse_pem_certificate(pem)?);
+    }
+    let root_der = parse_pem_certificate(root_pem)?;
+    chain.push(root_der);
+
+    for index in 0..(chain.len() - 1) {
+        let (_, subject) = X509Certificate::from_der(&chain[index])
+            .map_err(|err| X509Error::ChainParse(err.to_string()))?;
+        let (_, issuer) = X509Certificate::from_der(&chain[index + 1])
+            .map_err(|err| X509Error::ChainParse(err.to_string()))?;
+
+        subject
+            .verify_signature(Some(issuer.public_key()))
+            .map_err(|err| {
+                X509Error::ChainVerification(format!(
+                    "imza doğrulaması başarısız (konum {index}): {err}"
+                ))
+            })?;
+
+        if subject.tbs_certificate.issuer != issuer.tbs_certificate.subject {
+            return Err(X509Error::ChainVerification(format!(
+                "issuer subject eşleşmiyor: beklenen {} fakat {}",
+                issuer.tbs_certificate.subject, subject.tbs_certificate.issuer
+            )));
+        }
+
+        let validity = subject.validity();
+        let not_before = validity.not_before.to_datetime();
+        let not_after = validity.not_after.to_datetime();
+        if now < not_before || now > not_after {
+            return Err(X509Error::ChainVerification(format!(
+                "sertifika geçerli değil: {}",
+                subject.tbs_certificate.subject
+            )));
+        }
+        subjects.push(subject.tbs_certificate.subject.to_string());
+        expiries.push(not_after);
+    }
+
+    let root_bytes = chain
+        .last()
+        .ok_or_else(|| X509Error::ChainParse("root sertifikası eksik".to_owned()))?
+        .as_slice();
+    let (_, root_cert) = X509Certificate::from_der(root_bytes)
+        .map_err(|err| X509Error::ChainParse(err.to_string()))?;
+    root_cert.verify_signature(None).map_err(|err| {
+        X509Error::ChainVerification(format!("root self-signature başarısız: {err}"))
+    })?;
+    let validity = root_cert.validity();
+    let root_not_after = validity.not_after.to_datetime();
+    let root_not_before = validity.not_before.to_datetime();
+    if now < root_not_before || now > root_not_after {
+        return Err(X509Error::ChainVerification(
+            "root sertifika geçerli değil".to_owned(),
+        ));
+    }
+    subjects.push(root_cert.tbs_certificate.subject.to_string());
+    expiries.push(root_not_after);
+
+    let not_after = expiries
+        .into_iter()
+        .min()
+        .ok_or_else(|| X509Error::ChainVerification("zincir boş".to_owned()))?;
+
+    Ok(ChainValidation {
+        subjects,
+        not_after,
+    })
+}
+
+fn parse_pem_certificate(pem_value: &str) -> Result<Vec<u8>, X509Error> {
+    let parsed = pem::parse(pem_value).map_err(|err| X509Error::ChainParse(err.to_string()))?;
+    if parsed.tag() != "CERTIFICATE" {
+        return Err(X509Error::ChainParse(format!(
+            "beklenen CERTIFICATE etiketi, bulundu {}",
+            parsed.tag()
+        )));
+    }
+    Ok(parsed.into_contents())
+}
+
 struct BackendSigningKey<'a, B: CaSigningBackend + ?Sized> {
     backend: &'a B,
     algorithm: &'static SignatureAlgorithm,
@@ -497,10 +670,12 @@ mod tests {
     use crate::calib_from_text;
     use pem::parse;
     use rsa::pkcs1::DecodeRsaPublicKey;
+    use rsa::pkcs8::DecodePrivateKey;
     use rsa::traits::PublicKeyParts;
-    use rsa::RsaPublicKey;
+    use rsa::{RsaPrivateKey, RsaPublicKey};
     use std::net::Ipv4Addr;
     use x509_parser::{
+        certification_request::X509CertificationRequest,
         extensions::{GeneralName, ParsedExtension},
         prelude::{FromDer, X509Certificate},
     };
@@ -712,6 +887,84 @@ mod tests {
         if std::env::var_os("AUNSORM_TEST_RSA4096").is_some() {
             assert_rsa_certificate_chain(KeyAlgorithm::Rsa4096, 4096);
         }
+    }
+
+    #[test]
+    fn csr_generation_includes_subject_alt_names() {
+        let sans = vec![
+            SubjectAltName::Dns("example.com".to_owned()),
+            SubjectAltName::Dns("www.example.com".to_owned()),
+        ];
+        let params = CertificateSigningRequestParams {
+            common_name: "example.com",
+            subject_alt_names: &sans,
+            key_algorithm: Some(KeyAlgorithm::Ed25519),
+        };
+
+        let csr = generate_certificate_signing_request(&params).expect("csr generation");
+        assert!(csr.csr_pem.contains("BEGIN CERTIFICATE REQUEST"));
+
+        let parsed = pem::parse(csr.csr_pem.as_str()).expect("csr pem");
+        let (_, request) = X509CertificationRequest::from_der(parsed.contents()).expect("csr der");
+        let mut dns_names = Vec::new();
+        if let Some(extensions) = request.requested_extensions() {
+            for extension in extensions {
+                if let ParsedExtension::SubjectAlternativeName(san) = extension {
+                    for name in &san.general_names {
+                        if let GeneralName::DNSName(value) = name {
+                            dns_names.push((*value).to_owned());
+                        }
+                    }
+                }
+            }
+        }
+        assert!(dns_names.contains(&"example.com".to_owned()));
+        assert!(dns_names.contains(&"www.example.com".to_owned()));
+    }
+
+    #[test]
+    fn rsa_csr_uses_native_rng() {
+        let params = CertificateSigningRequestParams {
+            common_name: "rsa.example",
+            subject_alt_names: &[],
+            key_algorithm: Some(KeyAlgorithm::Rsa2048),
+        };
+
+        let csr = generate_certificate_signing_request(&params).expect("csr");
+        let private_key = RsaPrivateKey::from_pkcs8_pem(&csr.private_key_pem).expect("rsa pem");
+        assert_eq!(private_key.n().bits(), 2048);
+    }
+
+    #[test]
+    fn certificate_chain_verification_succeeds() {
+        let root_params = RootCaParams {
+            common_name: "Demo Root",
+            org_salt: b"demo-salt",
+            calibration_text: "Demo Root Calibration",
+            validity_days: 3650,
+            cps_uris: &[],
+            policy_oids: &[],
+            key_algorithm: None,
+        };
+        let root = generate_root_ca(&root_params).expect("root");
+
+        let server_params = ServerCertParams {
+            hostname: "demo.aunsorm.test",
+            org_salt: b"demo-salt",
+            calibration_text: "Demo Server",
+            ca_cert_pem: &root.certificate_pem,
+            ca_key_pem: &root.private_key_pem,
+            validity_days: 365,
+            extra_dns: &[],
+            extra_ips: &[],
+            key_algorithm: None,
+        };
+        let server = sign_server_cert(&server_params).expect("server");
+
+        let validation =
+            verify_certificate_chain(&server.certificate_pem, &[], &root.certificate_pem)
+                .expect("chain validation");
+        assert_eq!(validation.subjects.len(), 2);
     }
 
     #[test]

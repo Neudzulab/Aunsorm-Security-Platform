@@ -4,12 +4,14 @@
 
 mod account;
 mod authorization;
+mod certificates;
 mod directory;
 mod jws;
 mod nonce;
 mod order;
 mod providers;
 mod rng;
+mod storage;
 mod validation;
 
 pub use account::{
@@ -20,6 +22,10 @@ pub use account::{
 pub use authorization::{
     Authorization, AuthorizationError, AuthorizationStatus, Challenge, ChallengeError,
     ChallengeKind, ChallengeStatus,
+};
+pub use certificates::{
+    build_finalize_payload, download_certificate_chain, finalize_order_with_csr,
+    CertificateDownload, CertificateError,
 };
 pub use directory::{
     AcmeDirectory, AcmeDirectoryError, AcmeDirectoryMeta, DirectoryService, KnownEndpoint,
@@ -40,6 +46,9 @@ pub use providers::dns::{
     CloudflareDnsProvider, DnsProvider, DnsProviderError, DnsRecordHandle, Route53DnsProvider,
 };
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
+pub use storage::{
+    CertificateBundle, CertificateStorage, KmsStorage, LocalStorage, StorageError, StorageOutcome,
+};
 pub use validation::{
     dns01::Dns01Publication, dns01::Dns01StateMachine, http01::Http01Publication,
     http01::Http01StateMachine, ChallengeState, Dns01TxtRecord, Dns01ValidationError,
