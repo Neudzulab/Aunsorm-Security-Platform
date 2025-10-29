@@ -217,10 +217,10 @@ impl SecureClockVerifier {
     /// Returns [`ClockError`] when the verifier cannot be constructed for the
     /// provided authorities, for example if the attestation policy parameters
     /// overflow their supported range.
-    /// Creates a verifier with configurable max_age for different environments.
+    /// Creates a verifier with configurable `max_age` for different environments.
     ///
-    /// **Production**: Use 30s max_age with real NTP server that refreshes attestation every ~15s
-    /// **Staging/Development**: Use higher max_age (300s) if using static/manual attestations
+    /// **Production**: Use 30s `max_age` with real NTP server that refreshes attestation every ~15s
+    /// **Staging/Development**: Use higher `max_age` (300s) if using static/manual attestations
     ///
     /// # Examples
     /// ```
