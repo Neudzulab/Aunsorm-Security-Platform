@@ -16,12 +16,13 @@ pub struct ClockRefreshService {
     current: Arc<RwLock<SecureClockSnapshot>>,
     /// NTP server URL (optional for dev mode)
     ntp_url: Option<String>,
-    /// Refresh interval (default: 15 seconds for 30s max_age)
+    /// Refresh interval (default: 15 seconds for 30s `max_age`)
     refresh_interval: Duration,
 }
 
 impl ClockRefreshService {
     /// Create a new refresh service
+    #[must_use]
     pub fn new(
         initial: SecureClockSnapshot,
         ntp_url: Option<String>,
@@ -40,6 +41,7 @@ impl ClockRefreshService {
     }
 
     /// Start the background refresh task
+    #[must_use]
     pub fn start(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut ticker = interval(self.refresh_interval);
@@ -62,7 +64,7 @@ impl ClockRefreshService {
             self.fetch_from_ntp(url).await?
         } else {
             // Development: Generate mock attestation with current timestamp
-            self.generate_dev_attestation()?
+            Self::generate_dev_attestation()?
         };
 
         // Update current attestation
@@ -88,10 +90,11 @@ impl ClockRefreshService {
     }
 
     /// Generate dev-mode attestation with current timestamp
-    fn generate_dev_attestation(&self) -> Result<SecureClockSnapshot, Box<dyn std::error::Error>> {
+    fn generate_dev_attestation() -> Result<SecureClockSnapshot, Box<dyn std::error::Error>> {
         use std::time::{SystemTime, UNIX_EPOCH};
 
-        let now_ms = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
+        let now_ms = u64::try_from(SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis())
+            .map_err(Box::<dyn std::error::Error>::from)?;
 
         Ok(SecureClockSnapshot {
             authority_id: "ntp.dev.aunsorm".to_string(),
@@ -116,7 +119,7 @@ mod tests {
         let initial = SecureClockSnapshot {
             authority_id: "test".to_string(),
             authority_fingerprint_hex: "00".repeat(32),
-            unix_time_ms: 1000000000000,
+            unix_time_ms: 1_000_000_000_000,
             stratum: 2,
             round_trip_ms: 10,
             dispersion_ms: 10,

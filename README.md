@@ -702,9 +702,9 @@ aunsorm-server v0.4.5
 │                                          └─ Ratchet advance + message ordering
 │
 ├─ 📊 Calibration Management (Kalibrasyon Yönetimi)
-│  ├─ POST   /calib/inspect 📋 [Planlandı v0.5.0] → Kalibrasyon parametrelerini görüntüle
-│  │                                       └─ Input: org_salt, calib_text  
-│  │                                       └─ Output: context_hash, derived_salts, status
+│  ├─ POST   /calib/inspect ✅ → Kalibrasyon parametrelerini görüntüle
+│  │                                       └─ Input: org_salt, calib_text
+│  │                                       └─ Output: `calib inspect` JSON raporuyla birebir
 │  │                                       └─ CLI equivalent: calib inspect
 │  ├─ POST   /calib/derive-coord 📋 [Planlandı v0.5.0] → Koordinat kimlik türetme
 │  │                                       └─ Input: password, org_salt, calib_text, kdf_profile
@@ -714,9 +714,9 @@ aunsorm-server v0.4.5
 │  │                                       └─ Input: org_salt, calib_text
 │  │                                       └─ Output: fingerprint (hex), calibration_id
 │  │                                       └─ CLI equivalent: calib fingerprint
-│  └─ POST   /calib/verify 📋 [Planlandı v0.5.0] → Kalibrasyon doğrula
-│                                          └─ Input: org_salt, calib_text, expected_fingerprint
-│                                          └─ Output: valid (boolean), computed_fingerprint
+│  └─ POST   /calib/verify ✅ → Kalibrasyon doğrula
+│                                          └─ Input: org_salt, calib_text
+│                                          └─ Output: CLI verify JSON; strict kipte fingerprint uyuşmazlığı 422 döndürür
 │                                          └─ CLI equivalent: calib verify
 │
 ├─ �📱 MDM (Mobile Device Management)

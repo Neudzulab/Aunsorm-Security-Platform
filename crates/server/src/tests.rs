@@ -13,7 +13,10 @@ use aunsorm_acme::{
 use aunsorm_core::{calibration::calib_from_text, clock::SecureClockSnapshot};
 use aunsorm_jwt::{Audience, Claims, Ed25519KeyPair, Jwk};
 use aunsorm_mdm::{DeviceCertificatePlan, DeviceRecord, PolicyDocument};
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine as _,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -22,6 +25,8 @@ use url::Url;
 use x509_parser::{
     certificate::X509Certificate, extensions::GeneralName, pem::parse_x509_pem, prelude::FromDer,
 };
+
+use tempfile::tempdir;
 
 use crate::build_router;
 use crate::config::{LedgerBackend, ServerConfig};
@@ -57,6 +62,55 @@ struct RandomNumberPayload {
     min: u64,
     max: u64,
     entropy: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct CalibrationRangeBody {
+    start: u16,
+    end: u16,
+    step: u16,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct CalibrationInspectBody {
+    calibration_id: String,
+    note_text: String,
+    alpha_long: u16,
+    alpha_short: u16,
+    beta_long: u16,
+    beta_short: u16,
+    tau: u16,
+    fingerprint: String,
+    fingerprint_hex: String,
+    ranges: Vec<CalibrationRangeBody>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct CalibrationVerifyExpectationsBody {
+    id: Option<String>,
+    fingerprint_b64: Option<String>,
+    fingerprint_hex: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct CalibrationVerifyResultsBody {
+    id: Option<bool>,
+    fingerprint_b64: Option<bool>,
+    fingerprint_hex: Option<bool>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct CalibrationVerifyBody {
+    calibration_id: String,
+    fingerprint_b64: String,
+    fingerprint_hex: String,
+    expectations: CalibrationVerifyExpectationsBody,
+    results: CalibrationVerifyResultsBody,
 }
 
 #[derive(Debug, Deserialize)]
@@ -202,6 +256,13 @@ fn test_seed() -> [u8; 32] {
 }
 
 fn setup_state() -> Arc<ServerState> {
+    setup_state_with_profile(false, None)
+}
+
+fn setup_state_with_profile(
+    strict: bool,
+    calibration_override: Option<String>,
+) -> Arc<ServerState> {
     let key = Ed25519KeyPair::from_seed("test", test_seed()).expect("seed");
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -220,15 +281,24 @@ fn setup_state() -> Arc<ServerState> {
     };
     let (calibration, _) =
         calib_from_text(b"test-salt", "Test calibration for audit proof").expect("calibration");
-    let calibration_fingerprint = calibration.fingerprint_hex();
+    let calibration_fingerprint =
+        calibration_override.unwrap_or_else(|| calibration.fingerprint_hex());
+    let ledger = if strict {
+        let dir = tempdir().expect("tempdir");
+        #[allow(deprecated)]
+        let path = dir.into_path().join("jti.sqlite");
+        LedgerBackend::Sqlite(path)
+    } else {
+        LedgerBackend::Memory
+    };
     let config = ServerConfig::new(
         "127.0.0.1:0".parse::<SocketAddr>().expect("addr"),
         "https://issuer",
         "aunsorm-audience",
         Duration::from_secs(600),
-        false,
+        strict,
         key,
-        LedgerBackend::Memory,
+        ledger,
         None,
         calibration_fingerprint,
         clock_snapshot,
@@ -844,6 +914,118 @@ async fn acme_directory_and_order_flow() {
     );
     assert_eq!(second_problem.status, StatusCode::OK.as_u16());
     assert!(!second_problem.detail.is_empty());
+}
+
+#[tokio::test]
+async fn calibration_inspect_reports_cli_equivalent_payload() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let org_salt_b64 = STANDARD.encode(b"test-salt");
+    let payload = json!({
+        "org_salt": org_salt_b64,
+        "calib_text": "Test calibration for audit proof",
+    });
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/calib/inspect")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("inspect request"),
+        )
+        .await
+        .expect("inspect response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let report: CalibrationInspectBody = serde_json::from_slice(&body).expect("inspect json");
+
+    let (calibration, _) =
+        calib_from_text(b"test-salt", "Test calibration for audit proof").expect("calibration");
+
+    assert_eq!(report.calibration_id, calibration.id.as_str());
+    assert_eq!(report.fingerprint_hex, calibration.fingerprint_hex());
+    assert_eq!(report.fingerprint, calibration.fingerprint_b64());
+    assert_eq!(report.ranges.len(), 5);
+}
+
+#[tokio::test]
+async fn calibration_verify_accepts_matching_calibration() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let org_salt_b64 = STANDARD.encode(b"test-salt");
+    let payload = json!({
+        "org_salt": org_salt_b64,
+        "calib_text": "Test calibration for audit proof",
+    });
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/calib/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("verify request"),
+        )
+        .await
+        .expect("verify response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let report: CalibrationVerifyBody = serde_json::from_slice(&body).expect("verify json");
+
+    let expected_hex = state.audit_proof_document().calibration_fingerprint;
+    assert_eq!(
+        report.expectations.fingerprint_hex.as_deref(),
+        Some(expected_hex.as_str())
+    );
+    assert_eq!(report.results.fingerprint_hex, Some(true));
+    assert_eq!(report.results.fingerprint_b64, Some(true));
+}
+
+#[tokio::test]
+async fn calibration_verify_rejects_mismatch_in_strict_mode() {
+    let state = setup_state_with_profile(true, None);
+    let app = build_router(&state);
+    let org_salt_b64 = STANDARD.encode(b"test-salt");
+    let payload = json!({
+        "org_salt": org_salt_b64,
+        "calib_text": "Different calibration payload",
+    });
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/calib/verify")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("verify request"),
+        )
+        .await
+        .expect("verify response");
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let report: CalibrationVerifyBody = serde_json::from_slice(&body).expect("verify json");
+
+    assert_eq!(report.results.fingerprint_hex, Some(false));
+    assert_eq!(report.results.fingerprint_b64, Some(false));
 }
 
 #[allow(clippy::too_many_lines)]
