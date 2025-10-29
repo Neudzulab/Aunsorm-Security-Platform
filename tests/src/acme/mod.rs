@@ -1,3 +1,4 @@
+mod dns_mock;
 mod mock_server;
 
 use aunsorm_acme::{AcmeDirectory, NoncePool, ReplayNonce, REPLAY_NONCE_HEADER};

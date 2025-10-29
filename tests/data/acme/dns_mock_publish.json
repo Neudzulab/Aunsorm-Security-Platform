@@ -1,0 +1,9 @@
+{
+  "description": "Mock sağlayıcı publish/verify/revoke akışını simüle eder",
+  "provider": "mock-dns",
+  "zone": "ZMOCK001",
+  "record": {
+    "fqdn": "_acme-challenge.example.com",
+    "value": "XJuN1UjSPYtllmFnnopoWcSaLOAp1Zh03rVYSVJT_gk"
+  }
+}

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     authorization::{Authorization, Challenge},
     order::OrderIdentifier,
+    providers::dns::{DnsProvider, DnsProviderError, DnsRecordHandle},
 };
 
 use super::{ChallengeState, Dns01TxtRecord, Dns01ValidationError};
@@ -34,6 +35,7 @@ impl Dns01Publication {
 pub struct Dns01StateMachine {
     record: Dns01TxtRecord,
     state: ChallengeState,
+    handle: Option<DnsRecordHandle>,
 }
 
 impl Dns01StateMachine {
@@ -51,6 +53,7 @@ impl Dns01StateMachine {
         Ok(Self {
             record,
             state: ChallengeState::Pending,
+            handle: None,
         })
     }
 
@@ -69,6 +72,7 @@ impl Dns01StateMachine {
         Ok(Self {
             record,
             state: ChallengeState::Pending,
+            handle: None,
         })
     }
 
@@ -87,11 +91,33 @@ impl Dns01StateMachine {
         }
     }
 
+    /// Yayınlanan TXT kaydı tanımlayıcısını döndürür.
+    #[must_use]
+    pub const fn record_handle(&self) -> Option<&DnsRecordHandle> {
+        self.handle.as_ref()
+    }
+
     /// Challenge'ı yayınlanmış olarak işaretler.
     #[allow(clippy::missing_const_for_fn)]
     pub fn publish(&mut self) -> ChallengeState {
         self.state = ChallengeState::Published;
         self.state
+    }
+
+    /// DNS sağlayıcısı üzerinden TXT kaydı yayınlar.
+    ///
+    /// # Errors
+    ///
+    /// Sağlayıcı kimlik doğrulaması, doğrulama veya işlem hatası dönerse
+    /// [`DnsProviderError`] hatası üretilir.
+    pub async fn publish_with_provider(
+        &mut self,
+        provider: &dyn DnsProvider,
+    ) -> Result<ChallengeState, DnsProviderError> {
+        let handle = provider.publish_txt_record(&self.record).await?;
+        self.handle = Some(handle);
+        self.state = ChallengeState::Published;
+        Ok(self.state)
     }
 
     /// DNS sorgularından dönen TXT kayıtlarını doğrular.
@@ -124,11 +150,57 @@ impl Dns01StateMachine {
         }
     }
 
+    /// DNS sağlayıcısı üzerinden TXT yayılım durumunu doğrular.
+    ///
+    /// # Errors
+    ///
+    /// TXT kaydı henüz yayınlanmadıysa veya sağlayıcı işlem hatası döndürürse
+    /// [`DnsProviderError`] hatası üretilir.
+    pub async fn verify_with_provider(
+        &mut self,
+        provider: &dyn DnsProvider,
+    ) -> Result<ChallengeState, DnsProviderError> {
+        let handle = self
+            .handle
+            .as_ref()
+            .ok_or_else(|| DnsProviderError::Provider {
+                message: "TXT kaydı henüz yayınlanmadı".to_owned(),
+            })?;
+        let state = provider.verify_propagation(handle).await?;
+        self.state = state;
+        Ok(self.state)
+    }
+
     /// TXT kaydını geri çağırır.
     #[allow(clippy::missing_const_for_fn)]
     pub fn revoke(&mut self) -> ChallengeState {
+        self.handle = None;
         self.state = ChallengeState::Revoked;
         self.state
+    }
+
+    /// DNS sağlayıcısı üzerinden TXT kaydını geri çağırır.
+    ///
+    /// # Errors
+    ///
+    /// TXT kaydı yayınlanmadıysa veya sağlayıcı işlem hatası döndürürse
+    /// [`DnsProviderError`] hatası oluşur.
+    pub async fn revoke_with_provider(
+        &mut self,
+        provider: &dyn DnsProvider,
+    ) -> Result<ChallengeState, DnsProviderError> {
+        let handle = self
+            .handle
+            .as_ref()
+            .ok_or_else(|| DnsProviderError::Provider {
+                message: "TXT kaydı yayınlanmadan revoke işlemi çağrılamaz".to_owned(),
+            })?;
+        let state = provider.revoke_txt_record(handle).await?;
+        self.state = state;
+        if matches!(self.state, ChallengeState::Revoked) {
+            self.handle = None;
+        }
+        Ok(self.state)
     }
 
     /// İç kayıt yapısını döndürür.
