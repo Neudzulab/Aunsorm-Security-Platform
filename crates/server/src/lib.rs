@@ -30,7 +30,7 @@ mod state;
 mod telemetry;
 mod transparency;
 
-pub use config::{LedgerBackend, ServerConfig};
+pub use config::{FabricChaincodeConfig, LedgerBackend, ServerConfig};
 pub use error::{ApiError, ServerError};
 pub use quic::datagram::{
     AuditEvent, AuditOutcome, CounterSample, DatagramChannel, DatagramError, DatagramPayload,

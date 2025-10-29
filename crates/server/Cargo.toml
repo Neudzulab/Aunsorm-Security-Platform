@@ -51,7 +51,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 tower-http = { version = "0.5", features = ["trace"] }
 rusqlite = { version = "0.31", default-features = false, features = ["bundled"] }
-time = { version = "0.3", features = ["formatting", "macros"] }
+time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
 hyper = { version = "1", features = ["full"] }
 opentelemetry = { version = "0.24", optional = true }
 opentelemetry_sdk = { version = "0.24", optional = true, features = ["rt-tokio"] }

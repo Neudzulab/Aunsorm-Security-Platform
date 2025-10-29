@@ -34,6 +34,32 @@ impl LedgerBackend {
     }
 }
 
+/// Hyperledger Fabric chaincode invocation configuration.
+#[derive(Debug, Clone)]
+pub struct FabricChaincodeConfig {
+    pub(crate) channel: String,
+    pub(crate) chaincode: String,
+}
+
+impl FabricChaincodeConfig {
+    pub fn new(channel: impl Into<String>, chaincode: impl Into<String>) -> Self {
+        Self {
+            channel: channel.into(),
+            chaincode: chaincode.into(),
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn channel(&self) -> &str {
+        &self.channel
+    }
+
+    #[must_use]
+    pub(crate) fn chaincode(&self) -> &str {
+        &self.chaincode
+    }
+}
+
 /// Sunucu yapılandırması.
 pub struct ServerConfig {
     pub(crate) listen: SocketAddr,
@@ -43,6 +69,7 @@ pub struct ServerConfig {
     pub(crate) strict: bool,
     pub(crate) key_pair: Ed25519KeyPair,
     pub(crate) ledger: LedgerBackend,
+    pub(crate) fabric: Option<FabricChaincodeConfig>,
 }
 
 impl ServerConfig {
@@ -94,8 +121,22 @@ impl ServerConfig {
             Err(_) => Ed25519KeyPair::generate("aunsorm-server")?,
         };
 
+        let fabric = match (
+            env::var("AUNSORM_FABRIC_CHANNEL").ok(),
+            env::var("AUNSORM_FABRIC_CHAINCODE").ok(),
+        ) {
+            (Some(channel), Some(chaincode)) => Some(FabricChaincodeConfig::new(channel, chaincode)),
+            (None, None) => None,
+            (Some(_), None) | (None, Some(_)) => {
+                return Err(ServerError::Configuration(
+                    "Fabric entegrasyonu için hem AUNSORM_FABRIC_CHANNEL hem de AUNSORM_FABRIC_CHAINCODE gereklidir"
+                        .to_string(),
+                ))
+            }
+        };
+
         Self::new(
-            listen, issuer, audience, token_ttl, strict, key_pair, ledger,
+            listen, issuer, audience, token_ttl, strict, key_pair, ledger, fabric,
         )
     }
 
@@ -112,6 +153,7 @@ impl ServerConfig {
         strict: bool,
         key_pair: Ed25519KeyPair,
         ledger: LedgerBackend,
+        fabric: Option<FabricChaincodeConfig>,
     ) -> Result<Self, ServerError> {
         if strict && matches!(ledger, LedgerBackend::Memory) {
             return Err(ServerError::Configuration(
@@ -126,6 +168,12 @@ impl ServerConfig {
             strict,
             key_pair,
             ledger,
+            fabric,
         })
+    }
+
+    #[must_use]
+    pub(crate) fn fabric(&self) -> Option<&FabricChaincodeConfig> {
+        self.fabric.as_ref()
     }
 }

@@ -1636,6 +1636,7 @@ mod tests {
             false,
             key_pair,
             LedgerBackend::Memory,
+            None,
         )
         .expect("config is valid");
         Arc::new(ServerState::try_new(config).expect("state is constructed"))

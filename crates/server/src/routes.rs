@@ -2610,6 +2610,7 @@ fn build_test_state() -> Arc<ServerState> {
         false,
         key_pair,
         crate::config::LedgerBackend::Memory,
+        None,
     )
     .expect("config is valid");
     Arc::new(ServerState::try_new(config).expect("state is constructed"))
