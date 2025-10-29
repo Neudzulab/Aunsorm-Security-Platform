@@ -24,6 +24,7 @@ rsa = { workspace = true }
 rand_core = { workspace = true }
 hkdf = "0.12"
 once_cell = "1"
+ed25519-dalek = { version = "2", default-features = false, features = ["std", "pkcs8"] }
 [features]
 default = []
 

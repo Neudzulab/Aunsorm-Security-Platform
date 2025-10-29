@@ -1,9 +1,14 @@
+use std::collections::VecDeque;
 use std::fs;
-use std::sync::Arc;
+use std::future::{ready, Ready};
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use aunsorm_acme::{
-    build_finalize_payload, download_certificate_chain, CertificateBundle, CertificateError,
-    CertificateStorage,
+    build_finalize_payload, finalize_and_download_certificate, AcmeJws, CertificateBundle,
+    CertificateError, CertificateStorage, FinalizeOptions, FinalizeWorkflow, OrderService,
+    OrderStatus, OrderStatusSnapshot,
 };
 use aunsorm_kms::{BackendKind, BackendLocator, KmsClient, KmsConfig};
 use aunsorm_x509::ca::{
@@ -17,6 +22,128 @@ use serde_json::{self, Value};
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
 use url::Url;
+
+#[derive(Clone)]
+struct StubOrderStatus {
+    status: OrderStatus,
+    certificate_url: Option<String>,
+    retry_after: Option<Duration>,
+}
+
+impl StubOrderStatus {
+    fn new(status: OrderStatus) -> Self {
+        Self {
+            status,
+            certificate_url: None,
+            retry_after: None,
+        }
+    }
+
+    fn with_certificate(mut self, url: impl Into<String>) -> Self {
+        self.certificate_url = Some(url.into());
+        self
+    }
+
+    fn with_retry_after(mut self, delay: Duration) -> Self {
+        self.retry_after = Some(delay);
+        self
+    }
+}
+
+impl OrderStatusSnapshot for StubOrderStatus {
+    fn status(&self) -> OrderStatus {
+        self.status
+    }
+
+    fn certificate_url(&self) -> Option<&str> {
+        self.certificate_url.as_deref()
+    }
+
+    fn retry_after(&self) -> Option<Duration> {
+        self.retry_after
+    }
+}
+
+#[derive(Debug)]
+struct StubError;
+
+impl std::fmt::Display for StubError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("stub error")
+    }
+}
+
+impl std::error::Error for StubError {}
+
+struct StubOrderService {
+    finalize_response: StubOrderStatus,
+    poll_responses: Arc<Mutex<VecDeque<StubOrderStatus>>>,
+}
+
+impl StubOrderService {
+    fn new(finalize_response: StubOrderStatus, poll_responses: Vec<StubOrderStatus>) -> Self {
+        Self {
+            finalize_response,
+            poll_responses: Arc::new(Mutex::new(VecDeque::from(poll_responses))),
+        }
+    }
+}
+
+impl OrderService for StubOrderService {
+    type Error = StubError;
+    type NewOrder = ();
+    type LookupOrder = StubOrderStatus;
+    type FinalizeOrder = StubOrderStatus;
+    type RevokeOutcome = ();
+
+    type NewOrderFuture<'a> = Ready<Result<Self::NewOrder, Self::Error>>;
+    type LookupFuture<'a>
+        = Pin<
+        Box<dyn std::future::Future<Output = Result<Self::LookupOrder, Self::Error>> + Send + 'a>,
+    >
+    where
+        Self: 'a;
+    type FinalizeFuture<'a>
+        = Pin<
+        Box<dyn std::future::Future<Output = Result<Self::FinalizeOrder, Self::Error>> + Send + 'a>,
+    >
+    where
+        Self: 'a;
+    type RevokeFuture<'a>
+        = Ready<Result<Self::RevokeOutcome, Self::Error>>
+    where
+        Self: 'a;
+
+    fn create_order(&self, _jws: AcmeJws) -> Self::NewOrderFuture<'_> {
+        ready(Ok(()))
+    }
+
+    fn query_order<'a>(&'a self, _order_id: &'a str, _jws: AcmeJws) -> Self::LookupFuture<'a> {
+        let responses = Arc::clone(&self.poll_responses);
+        let fallback = self.finalize_response.clone();
+        Box::pin(async move {
+            let mut guard = responses.lock().expect("poll queue lock");
+            Ok(guard.pop_front().unwrap_or_else(|| fallback.clone()))
+        })
+    }
+
+    fn finalize_order<'a>(&'a self, _order_id: &'a str, _jws: AcmeJws) -> Self::FinalizeFuture<'a> {
+        let response = self.finalize_response.clone();
+        Box::pin(async move { Ok(response) })
+    }
+
+    fn revoke_certificate(&self, _jws: AcmeJws) -> Self::RevokeFuture<'_> {
+        ready(Ok(()))
+    }
+}
+
+fn blank_jws() -> AcmeJws {
+    AcmeJws {
+        protected: String::new(),
+        payload: String::new(),
+        signature: String::new(),
+    }
+}
 
 #[test]
 fn finalize_payload_contains_csr_der() {
@@ -63,17 +190,44 @@ fn certificate_download_and_storage_flow() {
         };
         let server = sign_server_cert(&server_params).expect("server");
 
+        let csr_params = CertificateSigningRequestParams {
+            common_name: "example.com",
+            subject_alt_names: &[],
+            key_algorithm: Some(KeyAlgorithm::Ed25519),
+        };
+        let csr = generate_certificate_signing_request(&csr_params).expect("csr generation");
+
+        let certificate_url = Url::parse("https://acme.test/cert/1").expect("url");
         let pem_chain = format!(
             "{}\n{}",
             server.certificate_pem.trim(),
             root.certificate_pem.trim()
         );
-        let url = Url::parse("https://acme.test/cert/1").expect("url");
-        let download = download_certificate_chain(&url, |_: &Url| async {
-            Ok::<_, CertificateError>(pem_chain.clone())
-        })
-        .await
-        .expect("download");
+        let finalize_status = StubOrderStatus::new(OrderStatus::Processing)
+            .with_retry_after(Duration::from_millis(1));
+        let poll_responses = vec![
+            StubOrderStatus::new(OrderStatus::Processing)
+                .with_retry_after(Duration::from_millis(1)),
+            StubOrderStatus::new(OrderStatus::Valid).with_certificate(certificate_url.as_str()),
+        ];
+        let service = StubOrderService::new(finalize_status, poll_responses);
+        let expected_url = certificate_url.clone();
+        let fetcher_pem = pem_chain.clone();
+        let fetcher = move |url: &Url| {
+            assert_eq!(url.as_str(), expected_url.as_str());
+            let pem_chain = fetcher_pem.clone();
+            async move { Ok::<_, CertificateError>(pem_chain) }
+        };
+        let workflow = FinalizeWorkflow::new(
+            |_payload, _csr| Ok(blank_jws()),
+            |_order_id: String| Ok(blank_jws()),
+            fetcher,
+            |_delay| async {},
+        )
+        .with_options(FinalizeOptions::new(4));
+        let download = finalize_and_download_certificate(&service, "order-123", &csr, workflow)
+            .await
+            .expect("download");
         assert_eq!(download.certificates().len(), 2);
 
         let intermediates: Vec<&str> = download

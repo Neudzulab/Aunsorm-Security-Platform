@@ -141,7 +141,13 @@ impl MockAcmeState {
         response
     }
 
-    fn problem_response(&self, status: StatusCode, error_type: &str, detail: String) -> Response {
+    fn problem_response(
+        &self,
+        status: StatusCode,
+        error_type: &str,
+        detail: impl Into<String>,
+    ) -> Response {
+        let detail = detail.into();
         let payload = json!({
             "type": error_type,
             "detail": detail,
@@ -169,10 +175,12 @@ fn directory_document(base_url: &str) -> Value {
     })
 }
 
+#[allow(clippy::unused_async)] // Axum handlers require async signatures.
 async fn directory_handler(State(state): State<MockAcmeState>) -> Response {
     state.json_response(StatusCode::OK, state.directory())
 }
 
+#[allow(clippy::unused_async)] // Axum handlers require async signatures.
 async fn new_nonce_handler(State(state): State<MockAcmeState>) -> Response {
     let mut response = Response::new(Body::empty());
     *response.status_mut() = StatusCode::OK;
@@ -187,6 +195,7 @@ struct NewAccountRequest {
     terms_of_service_agreed: bool,
 }
 
+#[allow(clippy::unused_async)] // Axum handlers require async signatures.
 async fn new_account_handler(
     State(state): State<MockAcmeState>,
     Json(payload): Json<NewAccountRequest>,
@@ -244,6 +253,7 @@ struct NewOrderRequest {
     identifiers: Vec<OrderIdentifier>,
 }
 
+#[allow(clippy::unused_async)] // Axum handlers require async signatures.
 async fn new_order_handler(
     State(state): State<MockAcmeState>,
     Json(payload): Json<NewOrderRequest>,
