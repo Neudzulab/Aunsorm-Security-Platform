@@ -11,10 +11,14 @@ use axum::{
     routing::{delete, get, head, post},
     Json, Router,
 };
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine as _,
+};
 use ed25519_dalek::SIGNATURE_LENGTH;
-use hex::decode_to_slice;
+use hex::{decode, decode_to_slice};
 use sha2::{Digest, Sha256};
+use std::array;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -107,7 +111,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::format_description::well_known::Rfc3339;
 
+use aunsorm_core::{calib_from_text, Calibration};
+
 const ZASIAN_MEDIA_AUDIENCE: &str = "zasian-media";
+
+const MIN_ORG_SALT_LEN: usize = 8;
 
 #[derive(Serialize)]
 pub struct HealthResponse {
@@ -173,6 +181,175 @@ pub struct RandomNumberResponse {
     pub min: u64,
     pub max: u64,
     pub entropy: String,
+}
+
+#[derive(Deserialize)]
+pub struct CalibrationRequest {
+    pub org_salt: String,
+    pub calib_text: String,
+}
+
+#[derive(Serialize)]
+pub struct CalibrationRangeResponse {
+    pub start: u16,
+    pub end: u16,
+    pub step: u16,
+}
+
+#[derive(Serialize)]
+pub struct CalibrationInspectResponse {
+    pub calibration_id: String,
+    pub note_text: String,
+    pub alpha_long: u16,
+    pub alpha_short: u16,
+    pub beta_long: u16,
+    pub beta_short: u16,
+    pub tau: u16,
+    pub fingerprint: String,
+    pub fingerprint_hex: String,
+    pub ranges: [CalibrationRangeResponse; 5],
+}
+
+#[derive(Serialize)]
+pub struct CalibrationVerifyResponse {
+    pub calibration_id: String,
+    pub fingerprint_b64: String,
+    pub fingerprint_hex: String,
+    pub expectations: CalibrationVerifyExpectations,
+    pub results: CalibrationVerifyResults,
+}
+
+#[derive(Serialize)]
+pub struct CalibrationVerifyExpectations {
+    pub id: Option<String>,
+    pub fingerprint_b64: Option<String>,
+    pub fingerprint_hex: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct CalibrationVerifyResults {
+    pub id: Option<bool>,
+    pub fingerprint_b64: Option<bool>,
+    pub fingerprint_hex: Option<bool>,
+}
+
+pub async fn calib_inspect(
+    Json(request): Json<CalibrationRequest>,
+) -> Result<Json<CalibrationInspectResponse>, ApiError> {
+    let (calibration, _) = parse_calibration_request(&request)?;
+    let response = build_calibration_inspect_response(&calibration);
+    Ok(Json(response))
+}
+
+pub async fn calib_verify(
+    State(state): State<Arc<ServerState>>,
+    Json(request): Json<CalibrationRequest>,
+) -> Result<(StatusCode, Json<CalibrationVerifyResponse>), ApiError> {
+    let (calibration, _) = parse_calibration_request(&request)?;
+    let expected_hex = state.audit_proof_document().calibration_fingerprint;
+    let expected_b64 = hex_to_fingerprint_b64(&expected_hex)?;
+    let actual_hex = calibration.fingerprint_hex();
+    let actual_b64 = calibration.fingerprint_b64();
+    let matches = actual_hex == expected_hex;
+
+    let response = CalibrationVerifyResponse {
+        calibration_id: calibration.id.as_str().to_owned(),
+        fingerprint_b64: actual_b64,
+        fingerprint_hex: actual_hex,
+        expectations: CalibrationVerifyExpectations {
+            id: None,
+            fingerprint_b64: Some(expected_b64),
+            fingerprint_hex: Some(expected_hex),
+        },
+        results: CalibrationVerifyResults {
+            id: None,
+            fingerprint_b64: Some(matches),
+            fingerprint_hex: Some(matches),
+        },
+    };
+
+    let status = if matches {
+        StatusCode::OK
+    } else if state.strict() {
+        StatusCode::UNPROCESSABLE_ENTITY
+    } else {
+        StatusCode::OK
+    };
+
+    Ok((status, Json(response)))
+}
+
+fn parse_calibration_request(
+    request: &CalibrationRequest,
+) -> Result<(Calibration, String), ApiError> {
+    let org_salt = decode_org_salt(&request.org_salt)?;
+    let calib_text = normalize_calibration_text_input(&request.calib_text)?;
+    calib_from_text(&org_salt, &calib_text)
+        .map_err(|err| ApiError::invalid_request(format!("calibration error: {err}")))
+}
+
+fn build_calibration_inspect_response(calibration: &Calibration) -> CalibrationInspectResponse {
+    let ranges = array::from_fn(|idx| {
+        let range = calibration.ranges[idx];
+        CalibrationRangeResponse {
+            start: range.start,
+            end: range.end,
+            step: range.step,
+        }
+    });
+
+    CalibrationInspectResponse {
+        calibration_id: calibration.id.as_str().to_owned(),
+        note_text: calibration.note_text().to_owned(),
+        alpha_long: calibration.alpha_long,
+        alpha_short: calibration.alpha_short,
+        beta_long: calibration.beta_long,
+        beta_short: calibration.beta_short,
+        tau: calibration.tau,
+        fingerprint: calibration.fingerprint_b64(),
+        fingerprint_hex: calibration.fingerprint_hex(),
+        ranges,
+    }
+}
+
+fn decode_org_salt(value: &str) -> Result<Vec<u8>, ApiError> {
+    let trimmed = value.trim();
+    let decoded = STANDARD.decode(trimmed).map_err(|err| {
+        ApiError::invalid_request(format!("org_salt base64 decode failed: {err}"))
+    })?;
+    if decoded.len() < MIN_ORG_SALT_LEN {
+        return Err(ApiError::invalid_request(format!(
+            "org_salt must be at least {MIN_ORG_SALT_LEN} bytes"
+        )));
+    }
+    Ok(decoded)
+}
+
+fn normalize_calibration_text_input(value: &str) -> Result<String, ApiError> {
+    let mut owned = value.to_owned();
+    strip_utf8_bom_mut(&mut owned);
+    if owned.trim().is_empty() {
+        return Err(ApiError::invalid_request(
+            "calibration text cannot be empty",
+        ));
+    }
+    Ok(owned)
+}
+
+fn strip_utf8_bom_mut(value: &mut String) {
+    const UTF8_BOM: char = '\u{feff}';
+    if value.starts_with(UTF8_BOM) {
+        value.drain(..UTF8_BOM.len_utf8());
+    }
+}
+
+fn hex_to_fingerprint_b64(expected_hex: &str) -> Result<String, ApiError> {
+    let bytes = decode(expected_hex).map_err(|err| {
+        ApiError::server_error(format!(
+            "configured calibration fingerprint is not valid hex: {err}"
+        ))
+    })?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 
 const ML_KEM_768_ALIASES: &[&str] = &["mlkem768", "kyber-768", "kyber768"];
@@ -2270,6 +2447,8 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
             router = router
                 // Random number endpoint (gateway service)
                 .route("/random/number", get(random_number))
+                .route("/calib/inspect", post(calib_inspect))
+                .route("/calib/verify", post(calib_verify))
                 // Transparency endpoints (gateway service)
                 .route("/transparency/tree", get(transparency_tree))
                 .route("/pqc/capabilities", get(pqc_capabilities))
@@ -2356,6 +2535,8 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
             router = router
                 // Random number endpoint
                 .route("/random/number", get(random_number))
+                .route("/calib/inspect", post(calib_inspect))
+                .route("/calib/verify", post(calib_verify))
                 .route("/pqc/capabilities", get(pqc_capabilities))
                 // ACME endpoints
                 .route("/acme/directory", get(acme::directory))
@@ -2904,7 +3085,7 @@ mod jwt_helper_tests {
 
     #[test]
     fn map_jwt_error_preserves_io_context() {
-        let io_error = io::Error::new(io::ErrorKind::Other, "disk failure");
+        let io_error = io::Error::other("disk failure");
         let message = map_jwt_error(&JwtError::Io(io_error));
         assert!(message.contains("disk failure"));
         assert!(message.starts_with("Token verification I/O error:"));
