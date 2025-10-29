@@ -2,6 +2,9 @@
 
 #![allow(clippy::module_name_repetitions)]
 
+pub mod dns01;
+pub mod http01;
+
 use std::fmt;
 
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -12,6 +15,7 @@ use rcgen::{
     Certificate, CertificateParams, CustomExtension, DistinguishedName, DnType, KeyPair,
     PKCS_ED25519,
 };
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use zeroize::Zeroizing;
@@ -21,6 +25,22 @@ use crate::authorization::{
 };
 use crate::order::OrderIdentifier;
 use crate::rng::AunsormNativeRng;
+
+/// ACME challenge durum makinesinin geçebileceği durumları temsil eder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ChallengeState {
+    /// Challenge henüz yayınlanmadı veya doğrulanmadı.
+    Pending,
+    /// Challenge için gerekli materyal yayınlandı.
+    Published,
+    /// Challenge başarıyla doğrulandı.
+    Verified,
+    /// Challenge doğrulaması başarısız oldu.
+    Invalid,
+    /// Challenge geri çağrıldı veya temizlendi.
+    Revoked,
+}
 
 /// Errors that can occur while preparing or validating an HTTP-01 challenge.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -191,6 +211,17 @@ pub enum Dns01ValidationError {
     /// DNS-01 requires a DNS identifier on the authorization object.
     #[error("DNS-01 challenge yalnızca DNS identifier ile kullanılabilir")]
     UnsupportedIdentifier,
+    /// TXT kaydı sorgusunda hiçbir kayıt bulunamadı.
+    #[error("DNS-01 challenge için TXT kaydı bulunamadı")]
+    MissingRecord,
+    /// TXT kaydı beklenen değerle eşleşmedi.
+    #[error("DNS-01 challenge TXT kaydı eşleşmedi: beklenen={expected}, alınan={received:?}")]
+    RecordMismatch {
+        /// Beklenen TXT değeri.
+        expected: String,
+        /// Sorgudan dönen değerler.
+        received: Vec<String>,
+    },
     /// Underlying key-authorization preparation failed.
     #[error("DNS-01 key-authorization doğrulaması başarısız: {source}")]
     KeyAuthorization {
