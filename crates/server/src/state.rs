@@ -888,22 +888,22 @@ impl ServerState {
             clock_snapshot.authority_id.clone(),
             clock_snapshot.authority_fingerprint_hex.clone(),
         );
-        
+
         // Parse max_age from environment (default: 30s for production)
         let max_age_secs = std::env::var("AUNSORM_CLOCK_MAX_AGE_SECS")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(30); // Production default: 30 seconds
-        
+
         let max_age = Duration::from_secs(max_age_secs);
-        
+
         if max_age_secs > 60 {
             tracing::warn!(
                 "⚠️  Clock max_age set to {} seconds (production should use ≤30s with NTP refresh)",
                 max_age_secs
             );
         }
-        
+
         let clock_verifier = SecureClockVerifier::configurable(vec![authority], max_age)?;
         let validation = clock_verifier.verify(&clock_snapshot)?;
         let audit_proof = AuditProof::new(calibration_fingerprint, validation);

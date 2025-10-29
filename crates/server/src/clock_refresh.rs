@@ -1,5 +1,5 @@
 //! Clock attestation refresh service
-//! 
+//!
 //! Production'da NTP sunucusundan periyodik olarak yeni attestation alır.
 //! Development'ta statik attestation kullanır veya mock server'dan çeker.
 
@@ -43,10 +43,10 @@ impl ClockRefreshService {
     pub fn start(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut ticker = interval(self.refresh_interval);
-            
+
             loop {
                 ticker.tick().await;
-                
+
                 if let Err(e) = self.refresh_once().await {
                     tracing::warn!("Clock attestation refresh failed: {}", e);
                     // Continue using old attestation until successful refresh
@@ -68,33 +68,35 @@ impl ClockRefreshService {
         // Update current attestation
         *self.current.write().await = new_snapshot;
         tracing::debug!("Clock attestation refreshed successfully");
-        
+
         Ok(())
     }
 
     /// Fetch fresh attestation from NTP server
-    async fn fetch_from_ntp(&self, url: &str) -> Result<SecureClockSnapshot, Box<dyn std::error::Error>> {
+    async fn fetch_from_ntp(
+        &self,
+        url: &str,
+    ) -> Result<SecureClockSnapshot, Box<dyn std::error::Error>> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(5))
             .build()?;
-        
+
         let response = client.get(url).send().await?;
         let snapshot: SecureClockSnapshot = response.json().await?;
-        
+
         Ok(snapshot)
     }
 
     /// Generate dev-mode attestation with current timestamp
     fn generate_dev_attestation(&self) -> Result<SecureClockSnapshot, Box<dyn std::error::Error>> {
         use std::time::{SystemTime, UNIX_EPOCH};
-        
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)?
-            .as_millis() as u64;
+
+        let now_ms = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis() as u64;
 
         Ok(SecureClockSnapshot {
             authority_id: "ntp.dev.aunsorm".to_string(),
-            authority_fingerprint_hex: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            authority_fingerprint_hex:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
             unix_time_ms: now_ms,
             stratum: 2,
             round_trip_ms: 8,
@@ -124,17 +126,17 @@ mod tests {
 
         let service = Arc::new(ClockRefreshService::new(
             initial,
-            None,  // Dev mode
+            None, // Dev mode
             Duration::from_secs(1),
         ));
 
         let snapshot1 = service.get_current().await;
         tokio::time::sleep(Duration::from_millis(100)).await;
-        
+
         // Refresh should generate new timestamp
         service.refresh_once().await.unwrap();
         let snapshot2 = service.get_current().await;
-        
+
         assert!(snapshot2.unix_time_ms > snapshot1.unix_time_ms);
     }
 }
