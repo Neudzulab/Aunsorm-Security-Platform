@@ -260,6 +260,7 @@ fn checked_millis(duration: Duration) -> Option<u64> {
 
 /// Media submission payload sent to the Fabric chaincode endpoint.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Future blockchain media recording integration
 pub struct MediaRecordSubmission<'a> {
     pub video_hash: &'a str,
     pub image_hash: &'a str,
@@ -269,6 +270,7 @@ pub struct MediaRecordSubmission<'a> {
 }
 
 impl MediaRecordSubmission<'_> {
+    #[allow(dead_code)] // Future blockchain media recording integration
     fn validate(&self) -> Result<OffsetDateTime, FabricClientError> {
         for (value, field) in [
             (self.video_hash, "video_hash"),
@@ -295,6 +297,7 @@ impl MediaRecordSubmission<'_> {
 }
 
 #[derive(Debug, Error)]
+#[allow(dead_code)] // Future blockchain media recording integration
 pub enum FabricClientError {
     #[error("media record field {field} must not be empty")]
     EmptyField { field: &'static str },
@@ -309,6 +312,7 @@ pub enum FabricClientError {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)] // Future blockchain media recording integration
 struct FabricInvokeRequest<'a> {
     channel: &'a str,
     chaincode: &'a str,
@@ -318,6 +322,7 @@ struct FabricInvokeRequest<'a> {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)] // Future blockchain media recording integration
 struct FabricMediaPayload<'a> {
     video_hash: &'a str,
     image_hash: &'a str,
@@ -328,6 +333,7 @@ struct FabricMediaPayload<'a> {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[allow(dead_code)] // Future blockchain media recording integration
 pub struct FabricTransactionReceipt {
     pub transaction_id: String,
     #[serde(default)]
@@ -337,6 +343,7 @@ pub struct FabricTransactionReceipt {
 }
 
 /// Submits a media transparency record to the configured Fabric chaincode endpoint.
+#[allow(dead_code)] // Future blockchain media recording integration
 pub async fn submit_media_record(
     client: &Client,
     endpoint: &str,

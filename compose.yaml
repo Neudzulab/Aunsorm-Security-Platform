@@ -12,6 +12,8 @@ services:
       context: .
       dockerfile: Dockerfile.gateway
     image: aunsorm-gateway:local
+    env_file:
+      - .env
     ports:
       - "50010:50010"
     networks:
@@ -62,6 +64,8 @@ services:
       context: .
       dockerfile: Dockerfile.crypto
     image: aunsorm-crypto:local
+    env_file:
+      - .env
     ports:
       - "50012:50012"
     networks:
@@ -78,6 +82,8 @@ services:
       context: .
       dockerfile: Dockerfile.x509
     image: aunsorm-x509:local
+    env_file:
+      - .env
     ports:
       - "50013:50013"
     networks:
@@ -91,6 +97,8 @@ services:
       context: .
       dockerfile: Dockerfile.kms
     image: aunsorm-kms:local
+    env_file:
+      - .env
     ports:
       - "50014:50014"
     networks:
@@ -104,6 +112,8 @@ services:
       context: .
       dockerfile: Dockerfile.mdm
     image: aunsorm-mdm:local
+    env_file:
+      - .env
     ports:
       - "50015:50015"
     volumes:
@@ -122,6 +132,8 @@ services:
       context: .
       dockerfile: Dockerfile.acme
     image: aunsorm-acme:local
+    env_file:
+      - .env
     ports:
       - "50017:50017"
     volumes:
@@ -140,6 +152,8 @@ services:
       context: .
       dockerfile: Dockerfile.id
     image: aunsorm-id:local
+    env_file:
+      - .env
     ports:
       - "50016:50016"
     networks:
@@ -156,6 +170,8 @@ services:
       context: .
       dockerfile: Dockerfile.pqc
     image: aunsorm-pqc:local
+    env_file:
+      - .env
     ports:
       - "50018:50018"
     networks:
@@ -169,6 +185,8 @@ services:
       context: .
       dockerfile: Dockerfile.rng
     image: aunsorm-rng:local
+    env_file:
+      - .env
     ports:
       - "50019:50019"
     networks:
@@ -200,6 +218,8 @@ services:
       context: .
       dockerfile: Dockerfile.blockchain
     image: aunsorm-blockchain:local
+    env_file:
+      - .env
     ports:
       - "50020:50020"
     networks:
@@ -213,6 +233,8 @@ services:
       context: .
       dockerfile: Dockerfile.e2ee
     image: aunsorm-e2ee:local
+    env_file:
+      - .env
     ports:
       - "50021:50021"
     volumes:
@@ -228,6 +250,8 @@ services:
       context: .
       dockerfile: Dockerfile.metrics
     image: aunsorm-metrics:local
+    env_file:
+      - .env
     ports:
       - "50022:50022"
     networks:
@@ -241,6 +265,8 @@ services:
       context: .
       dockerfile: Dockerfile.cli-gateway
     image: aunsorm-cli-gateway:local
+    env_file:
+      - .env
     ports:
       - "50023:50023"
     networks:

@@ -204,7 +204,46 @@ impl SecureClockVerifier {
             Duration::from_millis(50),
             Duration::from_millis(25),
             Duration::from_millis(150),
-            Duration::from_secs(30),
+            Duration::from_secs(30),  // Production: 30s max_age (NTP attestation must be fresh)
+        )
+    }
+
+    /// Creates a verifier with configurable max_age for different environments.
+    /// 
+    /// **Production**: Use 30s max_age with real NTP server that refreshes attestation every ~15s
+    /// **Staging/Development**: Use higher max_age (300s) if using static/manual attestations
+    /// 
+    /// # Examples
+    /// ```
+    /// use std::time::Duration;
+    /// use aunsorm_core::clock::{ClockAuthority, SecureClockVerifier};
+    /// 
+    /// let authority = ClockAuthority::new("ntp.example.org", "0123...");
+    /// 
+    /// // Development: Tolerant of static attestations
+    /// let dev_verifier = SecureClockVerifier::configurable(
+    ///     vec![authority.clone()],
+    ///     Duration::from_secs(300), // 5 minutes
+    /// )?;
+    /// 
+    /// // Production: Strict NTP freshness
+    /// let prod_verifier = SecureClockVerifier::configurable(
+    ///     vec![authority],
+    ///     Duration::from_secs(30),
+    /// )?;
+    /// # Ok::<(), aunsorm_core::clock::ClockError>(())
+    /// ```
+    pub fn configurable(
+        authorities: Vec<ClockAuthority>,
+        max_age: Duration,
+    ) -> Result<Self, ClockError> {
+        Self::new(
+            authorities,
+            3,
+            Duration::from_millis(50),
+            Duration::from_millis(25),
+            Duration::from_millis(150),
+            max_age,
         )
     }
 
@@ -246,6 +285,7 @@ impl SecureClockVerifier {
         if snapshot.signature_b64.trim().is_empty() {
             return Err(ClockError::MissingSignature);
         }
+        
         if !self
             .authorities
             .contains(&snapshot.authority_fingerprint_hex)

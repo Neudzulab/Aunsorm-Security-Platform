@@ -13,17 +13,20 @@ use tracing_subscriber::layer::SubscriberExt;
 /// These constants are introduced ahead of the instrumentation work so that
 /// service teams can align dashboards and alert rules while the counters and
 /// histograms are wired into the runtime.
+#[allow(dead_code)] // Reserved for future OpenTelemetry instrumentation
 pub const METRIC_JWE_GENERATED_TOTAL: &str = "aunsorm_server_jwe_generated_total";
 
 /// Counts every successfully produced JSON Web Encryption payload.
 /// The metric will backfill historical values once JWE generation is
 /// instrumented within the OAuth and E2EE services.
+#[allow(dead_code)] // Reserved for future OpenTelemetry instrumentation
 pub const METRIC_JWE_CALIBRATION_FAILURES_TOTAL: &str =
     "aunsorm_server_jwe_calibration_failures_total";
 
 /// Observes blockchain anchoring latency in milliseconds from the moment a
 /// transparency event is staged until the transaction hash is confirmed by the
 /// ledger backend.
+#[allow(dead_code)] // Reserved for future OpenTelemetry instrumentation
 pub const METRIC_BLOCKCHAIN_RECORD_LATENCY_MS: &str = "aunsorm_server_blockchain_record_latency_ms";
 
 #[cfg(feature = "otel")]

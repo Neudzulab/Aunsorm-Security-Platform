@@ -37,6 +37,7 @@ impl LedgerBackend {
 
 /// Hyperledger Fabric chaincode invocation configuration.
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // Future blockchain integration
 pub struct FabricChaincodeConfig {
     pub(crate) channel: String,
     pub(crate) chaincode: String,
@@ -51,11 +52,13 @@ impl FabricChaincodeConfig {
     }
 
     #[must_use]
+    #[allow(dead_code)] // Future blockchain integration
     pub(crate) fn channel(&self) -> &str {
         &self.channel
     }
 
     #[must_use]
+    #[allow(dead_code)] // Future blockchain integration
     pub(crate) fn chaincode(&self) -> &str {
         &self.chaincode
     }
@@ -240,6 +243,7 @@ impl ServerConfig {
     }
 
     #[must_use]
+    #[allow(dead_code)] // Future blockchain integration
     pub(crate) const fn fabric(&self) -> Option<&FabricChaincodeConfig> {
         match &self.fabric {
             Some(cfg) => Some(cfg),
@@ -249,12 +253,14 @@ impl ServerConfig {
 
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
+    #[allow(dead_code)] // Available for external audit proof verification
     pub(crate) fn calibration_fingerprint(&self) -> &str {
         &self.calibration_fingerprint
     }
 
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
+    #[allow(dead_code)] // Available for clock refresh service integration
     pub(crate) fn clock_snapshot(&self) -> &SecureClockSnapshot {
         &self.clock_snapshot
     }

@@ -19,6 +19,7 @@
 //! Aunsorm OAuth benzeri sunucu bileşeni.
 
 mod acme;
+mod clock_refresh;
 mod config;
 mod error;
 pub(crate) mod fabric;
@@ -30,6 +31,7 @@ mod state;
 mod telemetry;
 mod transparency;
 
+pub use clock_refresh::ClockRefreshService;
 pub use config::{FabricChaincodeConfig, LedgerBackend, ServerConfig};
 pub use error::{ApiError, ServerError};
 pub use quic::datagram::{
