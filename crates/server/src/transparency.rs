@@ -33,6 +33,29 @@ pub enum TransparencyEvent {
         audience: Option<String>,
         expires_at: u64,
     },
+    /// Medya kayıtlarının blokzincir çapası ve kalibrasyon izini bildirir.
+    ///
+    /// * `calibration_id` alanı, ilgili JWE üretimi sırasında yayımlanan
+    ///   kalibrasyon parmak iziyle birebir eşleşmelidir. Böylece zincire
+    ///   aktarılan medya kanıtı ile istemcilere dağıtılan şifreli oturum
+    ///   materyali arasında denetlenebilir bir bağ sağlanır.
+    /// * `blockchain_tx_hash` alanı, blokzincirdeki kesin işlem hash'ini
+    ///   taşır ve `blockchain_height` ile birlikte doğrulama sırasında
+    ///   yeniden sorgulanması beklenir.
+    /// * `media_commitment_sha256` değeri, medya içeriğinin kalıcı olarak
+    ///   saklanmayan haline ait SHA-256 taahhüdüdür; denetim sırasında eşleşme
+    ///   zorunludur.
+    MediaRecord {
+        calibration_id: String,
+        media_commitment_sha256: String,
+        blockchain_tx_hash: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default)]
+        blockchain_height: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(default)]
+        media_profile: Option<String>,
+    },
 }
 
 impl TransparencyEvent {

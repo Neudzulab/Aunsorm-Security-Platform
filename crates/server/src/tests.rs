@@ -999,6 +999,9 @@ async fn pkce_flow_succeeds() {
             assert_eq!(*expires_at, introspect.exp.expect("exp"));
         }
         TransparencyEventResponse::KeyPublished { .. } => panic!("unexpected event kind"),
+        TransparencyEventResponse::MediaRecord { .. } => {
+            panic!("media records are not expected in this smoke test")
+        }
     }
 }
 
@@ -2163,6 +2166,15 @@ enum TransparencyEventResponse {
         #[serde(default)]
         audience: Option<String>,
         expires_at: u64,
+    },
+    MediaRecord {
+        calibration_id: String,
+        media_commitment_sha256: String,
+        blockchain_tx_hash: String,
+        #[serde(default)]
+        blockchain_height: Option<u64>,
+        #[serde(default)]
+        media_profile: Option<String>,
     },
 }
 

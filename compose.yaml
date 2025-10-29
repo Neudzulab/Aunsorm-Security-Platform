@@ -176,6 +176,24 @@ services:
     restart: unless-stopped
 
   # Blockchain Service - DID verification and Fabric integration (Port 50020)
+  # ------------------------------------------------------------------
+  # Dev/Test bootstrapping notes for blockchain anchoring experiments:
+  #   1. Kopya alın: `tests/blockchain/config.example.toml` →
+  #      `config/blockchain.dev.toml` ve RPC uçlarını kendi dev ağına göre
+  #      güncelleyin.
+  #   2. `AUNSORM_CLOCK_ATTESTATION` değeri için `crates/server/src/tests.rs`
+  #      içindeki `SecureClockSnapshot` örneğini şablon olarak kullanarak bir
+  #      JSON üretin; değeri `.env.dev` dosyanıza tek satır olarak ekleyin.
+  #   3. Kalibrasyon gereksinimi için `AUNSORM_CALIBRATION_FINGERPRINT`
+  #      alanını, ilgili JWE kalibrasyon çıktısının hex parmak izi ile eşleyin.
+  #   4. Zincir ve zaman mock'larını başlatmak için
+  #      `COMPOSE_PROFILES=mocks docker compose up -d blockchain-service time-source-mock`
+  #      komutunu kullanın. `time-source-mock` konteyneri, planlanan dev profili
+  #      altında `http://time-source-mock:58080/now` uç noktası üzerinden
+  #      `SecureClockSnapshot` JSON'u sunarak blokzincir servisine tutarlı saat
+  #      sağlayacaktır.
+  #   5. Başlangıçta `docker compose logs -f blockchain-service` ile hizmetin
+  #      attestation ve kalibrasyon değerlerini kabul ettiğini doğrulayın.
   blockchain-service:
     container_name: aun-blockchain-service
     build:
