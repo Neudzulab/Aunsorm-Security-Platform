@@ -12,12 +12,17 @@ common_name = "example.com"
 subject_alt_names = ["example.com", "www.example.com"]
 key_algorithm = "ed25519"
 
+[storage]
+# `backend` alanı `local` veya `kms` olabilir.
+backend = "local"
+
 [storage.local]
 certificate_path = "var/certs/example.com/cert.pem"
 chain_path = "var/certs/example.com/fullchain.pem"
 private_key_path = "var/certs/example.com/privkey.pem"
 
-# Yerel anahtar sarma için KMS entegrasyonu tercih edilirse aşağıdaki blok etkinleştirilebilir.
+# Yerel anahtar sarma için KMS entegrasyonu tercih edilirse `backend = "kms"`
+# olarak güncellenmeli ve aşağıdaki blok yapılandırılmalıdır.
 # [storage.kms]
 # config_path = "config/kms-local.json"
 # wrap_key = "tls-wrap-key"

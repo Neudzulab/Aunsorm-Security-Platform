@@ -25,8 +25,9 @@ pub use authorization::{
     ChallengeKind, ChallengeStatus,
 };
 pub use certificates::{
-    build_finalize_payload, download_certificate_chain, finalize_order_with_csr,
-    CertificateDownload, CertificateError,
+    build_finalize_payload, download_certificate_chain, finalize_and_download_certificate,
+    finalize_order_with_csr, CertificateDownload, CertificateError, FinalizeOptions,
+    FinalizeWorkflow, OrderStatus, OrderStatusSnapshot,
 };
 pub use directory::{
     AcmeDirectory, AcmeDirectoryError, AcmeDirectoryMeta, DirectoryService, KnownEndpoint,

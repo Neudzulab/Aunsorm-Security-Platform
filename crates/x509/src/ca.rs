@@ -67,6 +67,9 @@
 
 use std::net::IpAddr;
 
+use ed25519_dalek::pkcs8::EncodePrivateKey;
+use ed25519_dalek::SigningKey as Ed25519SigningKey;
+use pem::Pem;
 use rcgen::{
     BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
     KeyUsagePurpose, SignatureAlgorithm, SigningKey,
@@ -76,7 +79,8 @@ use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::{
     build_extension_oid, calib_from_text, calibration_extension_from_parts, deterministic_serial,
-    SubjectAltName, X509Error, CALIBRATION_EXTENSION_ARC, DEFAULT_BASE_OID,
+    optimizations::AunsormNativeRng, SubjectAltName, X509Error, CALIBRATION_EXTENSION_ARC,
+    DEFAULT_BASE_OID,
 };
 
 /// Key algorithm for certificate generation.
@@ -287,6 +291,7 @@ pub struct CertificateSigningRequestParams<'a> {
 }
 
 /// Generated CSR artifacts containing both the request and the subject's private key.
+#[derive(Debug, Clone)]
 pub struct GeneratedCsr {
     /// PEM encoded certificate signing request.
     pub csr_pem: String,
@@ -514,8 +519,7 @@ pub fn generate_certificate_signing_request(
 
     let algorithm = params.key_algorithm.unwrap_or_default();
     let key_pair = match algorithm {
-        KeyAlgorithm::Ed25519 => KeyPair::generate_for(&rcgen::PKCS_ED25519)
-            .map_err(|err| X509Error::KeyGeneration(err.to_string()))?,
+        KeyAlgorithm::Ed25519 => generate_ed25519_keypair_with_native_rng()?,
         KeyAlgorithm::Rsa2048 | KeyAlgorithm::Rsa4096 => algorithm.generate_keypair()?,
     };
 
@@ -528,6 +532,18 @@ pub fn generate_certificate_signing_request(
         private_key_pem,
         key_algorithm: algorithm,
     })
+}
+
+fn generate_ed25519_keypair_with_native_rng() -> Result<KeyPair, X509Error> {
+    let mut rng = AunsormNativeRng::new();
+    let signing_key = Ed25519SigningKey::generate(&mut rng);
+    let pkcs8 = signing_key
+        .to_pkcs8_der()
+        .map_err(|err| X509Error::KeyGeneration(err.to_string()))?;
+    let pem = Pem::new("PRIVATE KEY", pkcs8.as_bytes());
+    let pem_encoded = pem::encode(&pem);
+    KeyPair::from_pkcs8_pem_and_sign_algo(&pem_encoded, &rcgen::PKCS_ED25519)
+        .map_err(|err| X509Error::KeyGeneration(err.to_string()))
 }
 
 /// Verifies that the provided leaf certificate chains up to the root using the optional
@@ -673,7 +689,8 @@ mod tests {
     use rsa::pkcs8::DecodePrivateKey;
     use rsa::traits::PublicKeyParts;
     use rsa::{RsaPrivateKey, RsaPublicKey};
-    use std::net::Ipv4Addr;
+    use std::convert::TryFrom;
+    use std::net::{IpAddr, Ipv4Addr};
     use x509_parser::{
         certification_request::X509CertificationRequest,
         extensions::{GeneralName, ParsedExtension},
@@ -894,6 +911,7 @@ mod tests {
         let sans = vec![
             SubjectAltName::Dns("example.com".to_owned()),
             SubjectAltName::Dns("www.example.com".to_owned()),
+            SubjectAltName::Ip(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         ];
         let params = CertificateSigningRequestParams {
             common_name: "example.com",
@@ -907,12 +925,21 @@ mod tests {
         let parsed = pem::parse(csr.csr_pem.as_str()).expect("csr pem");
         let (_, request) = X509CertificationRequest::from_der(parsed.contents()).expect("csr der");
         let mut dns_names = Vec::new();
+        let mut ip_addresses = Vec::new();
         if let Some(extensions) = request.requested_extensions() {
             for extension in extensions {
                 if let ParsedExtension::SubjectAlternativeName(san) = extension {
                     for name in &san.general_names {
-                        if let GeneralName::DNSName(value) = name {
-                            dns_names.push((*value).to_owned());
+                        match name {
+                            GeneralName::DNSName(value) => dns_names.push((*value).to_owned()),
+                            GeneralName::IPAddress(value) => {
+                                if let Ok(octets) = <[u8; 4]>::try_from(*value) {
+                                    ip_addresses.push(IpAddr::from(octets));
+                                } else if let Ok(octets) = <[u8; 16]>::try_from(*value) {
+                                    ip_addresses.push(IpAddr::from(octets));
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -920,6 +947,7 @@ mod tests {
         }
         assert!(dns_names.contains(&"example.com".to_owned()));
         assert!(dns_names.contains(&"www.example.com".to_owned()));
+        assert!(ip_addresses.contains(&IpAddr::V4(Ipv4Addr::LOCALHOST)));
     }
 
     #[test]
