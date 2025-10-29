@@ -62,6 +62,8 @@
 - **Ledger Kapsamı:** Denetlenen dönemde kullanılan Hyperledger Fabric ve Quorum ağlarını, ilgili kanal/sözleşme adlarını ve erişim politikalarını belgeleyin.
 - **Metaveri İzleme:** `AuditAssetRegistry` kayıtlarındaki `retention_policy`, `travel_rule_bundle` ve `calibration_ref` alanlarının nasıl üretildiğini ve doğrulandığını açıklayın.
 - **İz Sürme:** `RetentionSync`, `AuditRelay` ve `TravelRuleBridge` servis log'larının nasıl toplandığını, hash'lendiğini ve `certifications/compliance_exports/` altında nasıl saklandığını belirtin.
+- **HSM Audit Doğrulaması:** `certifications/audit/hsm_retention_audit.md` raporunu kanıt setine ekleyin; Quorum `AuditAssetRegistry`
+  metadatası, HSM imha log'ları ve Fabric anchor eşleşmelerini özetleyin.
 - **Test Kanıtları:** `tests/blockchain/cross_network.rs` ve `tests/blockchain/integrity_cases.rs` sonuçlarını özetleyerek ledger bütünlüğü kontrollerini rapora ekleyin.
 
 ## 6. Kontrol Test Sonuçları

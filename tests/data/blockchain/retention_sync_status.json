@@ -1,0 +1,52 @@
+{
+  "baseline": {
+    "evaluated_at_ms": 1718625905000,
+    "snapshots": [
+      {
+        "org_scope": "vasp:europe:de:001",
+        "expected_policy_version": "ret-2024.06-r5",
+        "expected_calibration_ref": "cal-2024-06-bridge-015",
+        "expected_travel_rule_bundle": "tr-2024-06-bridge-104",
+        "quorum_policy_version": "ret-2024.06-r5",
+        "quorum_calibration_ref": "cal-2024-06-bridge-015",
+        "quorum_travel_rule_bundle": "tr-2024-06-bridge-104",
+        "fabric_calibration_ref": "cal-2024-06-bridge-015"
+      },
+      {
+        "org_scope": "vasp:apac:sg:014",
+        "expected_policy_version": "ret-2024.07-r2",
+        "expected_calibration_ref": "cal-2024-07-bridge-021",
+        "expected_travel_rule_bundle": "tr-2024-07-bridge-208",
+        "quorum_policy_version": "ret-2024.07-r2",
+        "quorum_calibration_ref": "cal-2024-07-bridge-021",
+        "quorum_travel_rule_bundle": "tr-2024-07-bridge-208",
+        "fabric_calibration_ref": "cal-2024-07-bridge-021"
+      }
+    ]
+  },
+  "drift": {
+    "evaluated_at_ms": 1718626505000,
+    "snapshots": [
+      {
+        "org_scope": "vasp:europe:de:001",
+        "expected_policy_version": "ret-2024.06-r5",
+        "expected_calibration_ref": "cal-2024-06-bridge-015",
+        "expected_travel_rule_bundle": "tr-2024-06-bridge-104",
+        "quorum_policy_version": "ret-2024.06-r5",
+        "quorum_calibration_ref": "cal-2024-06-bridge-015",
+        "quorum_travel_rule_bundle": "tr-2024-06-bridge-104",
+        "fabric_calibration_ref": "cal-2024-06-bridge-015"
+      },
+      {
+        "org_scope": "vasp:apac:sg:014",
+        "expected_policy_version": "ret-2024.07-r2",
+        "expected_calibration_ref": "cal-2024-07-bridge-021",
+        "expected_travel_rule_bundle": "tr-2024-07-bridge-208",
+        "quorum_policy_version": "ret-2024.07-r3",
+        "quorum_calibration_ref": "cal-2024-07-bridge-021",
+        "quorum_travel_rule_bundle": "tr-2024-07-bridge-412",
+        "fabric_calibration_ref": null
+      }
+    ]
+  }
+}
