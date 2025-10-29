@@ -46,3 +46,5 @@ jobs:
           shared-key: acme-staging-${{ runner.os }}
       - name: Run ACME mock staging tests
         run: cargo test -p aunsorm-tests mock_server -- --nocapture
+      - name: Run ACME staging account roundtrip
+        run: cargo test -p aunsorm-tests --test acme_staging -- --ignored --nocapture

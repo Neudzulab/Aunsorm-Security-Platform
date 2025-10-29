@@ -58,11 +58,17 @@ düşürerek tekrar kullanımını engeller.
 
 - `.github/workflows/ci/acme.yml` — ACME staging smoke job’ı; gerekli secrets
   (`ACME_STAGING_DIRECTORY`, `ACME_STAGING_ACCOUNT_KEY`, `ACME_STAGING_CONTACT`)
-  tanımlı değilse pipeline hızlıca hata verir.
+  tanımlı değilse pipeline hızlıca hata verir ve staging hesabı `acme_staging`
+  testiyle Let’s Encrypt’e karşı doğrular.
 - `cargo test -p aunsorm-tests mock_server` — Mock senaryoları çalıştırır; CI
   job’ı aynı komutu kullanır.
+- `cargo test -p aunsorm-tests --test acme_staging -- --ignored --nocapture` —
+  Staging directory → newAccount → POST-as-GET hesabı akışını doğrular; secrets
+  eksikse test erken "Skipping" mesajıyla çıkar.
 - `tests/src/acme/mock_server.rs` — Directory → Nonce → Account → Order
   sırasını doğrulayan happy path; yetkisiz domain için sad path testi.
+- `docs/src/operations/acme/production-deploy.md` — Production dağıtım ve Let’s
+  Encrypt rate limit runbook’u.
 
 ## Operasyonel İpuçları
 

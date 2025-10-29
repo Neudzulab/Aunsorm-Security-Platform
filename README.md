@@ -101,6 +101,8 @@ Aunsorm Cryptography Suite/
 │   ├── acme/                          # ACME protokol mock server ve smoke testleri ✅
 │   ├── blockchain/                    # Fabric ve zincirler arası PoC testleri 🚧
 │   ├── data/                          # Deterministik test fixture'ları
+│   ├── tests/                         # Uçtan uca regresyon harness'leri ✅
+│   │   └── acme_staging.rs ✅ - Let’s Encrypt staging account roundtrip smoke testi
 │   └── identity/                      # Kimlik akış entegrasyon testleri ✅
 ├── CHANGELOG.md                       # Semver değişiklik günlüğü (her sürümde güncelle)
 ├── PLAN.md                            # Teslimat planı ve sprint görevleri
@@ -1232,7 +1234,7 @@ cargo test --features http3-experimental --test http3_datagram -- --nocapture
 
 > 🛠️ Ops Notu: GitHub Actions üzerinde `ENABLE_HTTP3_POC=true` olarak tetiklenen akış, `http3-poc` işini çalıştırarak HTTP/3 canary testlerini (`aunsorm-server` + entegrasyon testleri) doğrular.
 
-> 🛠️ Ops Notu: `ACME Staging Smoke` workflow'u (`.github/workflows/ci/acme.yml`) `ACME_STAGING_DIRECTORY`, `ACME_STAGING_ACCOUNT_KEY` ve `ACME_STAGING_CONTACT` secrets değerlerini doğrular; eksik konfigurasyonda pipeline erken hatalar ve `cargo test -p aunsorm-tests mock_server` komutunu kaydeder.
+> 🛠️ Ops Notu: `ACME Staging Smoke` workflow'u (`.github/workflows/ci/acme.yml`) `ACME_STAGING_DIRECTORY`, `ACME_STAGING_ACCOUNT_KEY` ve `ACME_STAGING_CONTACT` secrets değerlerini doğrular; eksik konfigurasyonda pipeline erken hatalar. Ardından `cargo test -p aunsorm-tests mock_server -- --nocapture` ve `cargo test -p aunsorm-tests --test acme_staging -- --ignored --nocapture` komutlarıyla hem mock hem de staging account roundtrip akışları yürütülür.
 
 **Limitasyonlar (Experimental):**
 - ⚠️ Production kullanımı önerilmez (v0.4.4 - PoC stage)
