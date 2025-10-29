@@ -1,0 +1,8 @@
+{
+  "description": "HTTP-01 key-authorization karmasına karşılık gelen DNS-01 TXT kaydı",
+  "token": "gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH",
+  "identifier": "example.com",
+  "thumbprint": "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+  "expected_name": "_acme-challenge.example.com",
+  "expected_value": "XJuN1UjSPYtllmFnnopoWcSaLOAp1Zh03rVYSVJT_gk"
+}

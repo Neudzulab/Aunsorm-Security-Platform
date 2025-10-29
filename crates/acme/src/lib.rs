@@ -8,6 +8,7 @@ mod directory;
 mod jws;
 mod nonce;
 mod order;
+mod providers;
 mod rng;
 mod validation;
 
@@ -35,8 +36,13 @@ pub use order::{
     IdentifierKind, NewOrderError, NewOrderRequest, NewOrderRequestBuilder, OrderIdentifier,
     OrderIdentifierError, OrderService,
 };
+pub use providers::dns::{
+    CloudflareDnsProvider, DnsProvider, DnsProviderError, DnsRecordHandle, Route53DnsProvider,
+};
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
 pub use validation::{
-    Dns01TxtRecord, Dns01ValidationError, Http01KeyAuthorization, Http01ValidationError,
-    TlsAlpnCertificate, TlsAlpnCertificateError, TlsAlpnChallenge, TlsAlpnValidationError,
+    dns01::Dns01Publication, dns01::Dns01StateMachine, http01::Http01Publication,
+    http01::Http01StateMachine, ChallengeState, Dns01TxtRecord, Dns01ValidationError,
+    Http01KeyAuthorization, Http01ValidationError, TlsAlpnCertificate, TlsAlpnCertificateError,
+    TlsAlpnChallenge, TlsAlpnValidationError,
 };

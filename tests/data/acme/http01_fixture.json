@@ -1,0 +1,7 @@
+{
+  "description": "Sentetik HTTP-01 yanıt gövdesi ve kaynak yolu",
+  "token": "gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH",
+  "thumbprint": "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+  "expected_path": "/.well-known/acme-challenge/gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH",
+  "expected_body": "gDn1sRZqXo9Nhc2ZtF1S7gT4u0Lk-pQ8R6aBcDeFgH.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+}
