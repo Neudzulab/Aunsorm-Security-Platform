@@ -17,6 +17,8 @@ parametreleri içerir:
 - `allowed_redirects`: HTTPS kökenli (ve yalnızca yerel geliştirme için HTTP
   localhost) geri dönüş URL'leri listesi.
 - `allowed_scopes`: Yetkilendirme isteği sırasında talep edilebilecek kapsamlar.
+- `fabric`: Opsiyonel Hyperledger Fabric zincir yapılandırması; kanal ve chaincode
+  adlarıyla medya kayıtlarının zincire gönderilmesini sağlar.
 
 Yeni bir istemci eklemek için yapılandırma dosyanıza veya `ServerConfig`
 oluşturma kodunuza aşağıdaki örnekle aynı kalıpta bir kayıt ekleyin:

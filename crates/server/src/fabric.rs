@@ -6,7 +6,14 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use aunsorm_jwt::{Ed25519KeyPair, Ed25519PublicKey, JwtError};
 use ed25519_dalek::{Signature, Verifier};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use thiserror::Error;
+use time::format_description::well_known::Rfc3339;
+use time::OffsetDateTime;
+
+use crate::config::FabricChaincodeConfig;
 
 const DEFAULT_CLOCK_SKEW_MS: u64 = 30_000;
 const ANCHOR_CONTEXT: &[u8] = b"aunsorm-fabric-anchor:v1";
@@ -249,4 +256,118 @@ fn checked_millis(duration: Duration) -> Option<u64> {
         .as_secs()
         .checked_mul(1_000)?
         .checked_add(u64::from(duration.subsec_millis()))
+}
+
+/// Media submission payload sent to the Fabric chaincode endpoint.
+#[derive(Debug, Clone)]
+pub struct MediaRecordSubmission<'a> {
+    pub video_hash: &'a str,
+    pub image_hash: &'a str,
+    pub audio_hash: &'a str,
+    pub calibration_id: &'a str,
+    pub captured_at: &'a str,
+}
+
+impl<'a> MediaRecordSubmission<'a> {
+    fn validate(&self) -> Result<OffsetDateTime, FabricClientError> {
+        for (value, field) in [
+            (self.video_hash, "video_hash"),
+            (self.image_hash, "image_hash"),
+            (self.audio_hash, "audio_hash"),
+            (self.calibration_id, "calibration_id"),
+        ] {
+            if value.trim().is_empty() {
+                return Err(FabricClientError::EmptyField { field });
+            }
+        }
+        let timestamp = OffsetDateTime::parse(self.captured_at, &Rfc3339).map_err(|_| {
+            FabricClientError::InvalidTimestamp {
+                value: self.captured_at.to_owned(),
+            }
+        })?;
+        if timestamp.unix_timestamp_nanos() < 0 {
+            return Err(FabricClientError::TimestampOutOfRange {
+                value: self.captured_at.to_owned(),
+            });
+        }
+        Ok(timestamp)
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum FabricClientError {
+    #[error("media record field {field} must not be empty")]
+    EmptyField { field: &'static str },
+    #[error("media record timestamp is not RFC3339: {value}")]
+    InvalidTimestamp { value: String },
+    #[error("media record timestamp predates unix epoch: {value}")]
+    TimestampOutOfRange { value: String },
+    #[error("fabric gateway rejected submission with status {status}: {body}")]
+    Rejected { status: u16, body: String },
+    #[error(transparent)]
+    Http(#[from] reqwest::Error),
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FabricInvokeRequest<'a> {
+    channel: &'a str,
+    chaincode: &'a str,
+    function: &'a str,
+    #[serde(flatten)]
+    payload: FabricMediaPayload<'a>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FabricMediaPayload<'a> {
+    video_hash: &'a str,
+    image_hash: &'a str,
+    audio_hash: &'a str,
+    calibration_id: &'a str,
+    captured_at: &'a str,
+    captured_at_ms: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct FabricTransactionReceipt {
+    pub transaction_id: String,
+    #[serde(default)]
+    pub block_number: Option<u64>,
+    #[serde(default)]
+    pub status: Option<String>,
+}
+
+/// Submits a media transparency record to the configured Fabric chaincode endpoint.
+pub async fn submit_media_record(
+    client: &Client,
+    endpoint: &str,
+    config: &FabricChaincodeConfig,
+    record: &MediaRecordSubmission<'_>,
+) -> Result<FabricTransactionReceipt, FabricClientError> {
+    const FUNCTION: &str = "submitMediaRecord";
+    let captured_at = record.validate()?;
+    let nanos = captured_at.unix_timestamp_nanos();
+    let captured_at_ms = u64::try_from(nanos / 1_000_000).expect("timestamp already validated");
+
+    let request = FabricInvokeRequest {
+        channel: config.channel(),
+        chaincode: config.chaincode(),
+        function: FUNCTION,
+        payload: FabricMediaPayload {
+            video_hash: record.video_hash,
+            image_hash: record.image_hash,
+            audio_hash: record.audio_hash,
+            calibration_id: record.calibration_id,
+            captured_at: record.captured_at,
+            captured_at_ms,
+        },
+    };
+
+    let response = client.post(endpoint).json(&request).send().await?;
+    if !response.status().is_success() {
+        let status = response.status().as_u16();
+        let body = response.text().await.unwrap_or_default();
+        return Err(FabricClientError::Rejected { status, body });
+    }
+    let receipt = response.json::<FabricTransactionReceipt>().await?;
+    Ok(receipt)
 }

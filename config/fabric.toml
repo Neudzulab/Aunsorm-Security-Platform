@@ -1,0 +1,13 @@
+# Example Hyperledger Fabric invocation configuration.
+#
+# The `channel` and `chaincode` values are referenced by `ServerConfig` when
+# `AUNSORM_FABRIC_CHANNEL` and `AUNSORM_FABRIC_CHAINCODE` ortam değişkenleri
+# sağlanır. Gerçek ağ uç noktalarını bu dosyadan okuyup environment'a
+# enjekte etmek için `dotenv` veya orkestrasyon aracınızı kullanabilirsiniz.
+
+[fabric]
+channel = "aunsorm-media"
+chaincode = "media_audit_cc"
+# endpoint alanı istemci entegrasyonuna yöneliktir ve `submit_media_record`
+# fonksiyonuna parametre olarak iletilmelidir.
+endpoint = "https://fabric-gateway.devnet.example/channels/aunsorm-media"

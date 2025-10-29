@@ -25,6 +25,7 @@ async fn http3_canary_listener_emits_datagrams() -> Result<(), ServerError> {
         false,
         key_pair,
         LedgerBackend::Memory,
+        None,
     )?;
     let state = Arc::new(ServerState::try_new(config)?);
 

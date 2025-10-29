@@ -58,6 +58,7 @@ fn demo_state() -> Arc<ServerState> {
         false,
         key,
         LedgerBackend::Memory,
+        None,
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))
