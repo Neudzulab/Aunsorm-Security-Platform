@@ -1,5 +1,6 @@
 #![allow(clippy::module_name_repetitions)]
 
+use aunsorm_core::error::CoreError;
 use thiserror::Error;
 
 /// JWT işlemleri için sonuç türü.
@@ -14,6 +15,12 @@ pub enum JwtError {
     /// Base64 kod çözme hatası.
     #[error("base64 decode error: {0}")]
     Base64(#[from] base64::DecodeError),
+    /// Şifreleme hatası.
+    #[error("encryption error: {0}")]
+    Encryption(&'static str),
+    /// Şifre çözme hatası.
+    #[error("decryption error: {0}")]
+    Decryption(&'static str),
     /// İmza doğrulama hatası.
     #[error("signature verification failed")]
     Signature,
@@ -38,6 +45,9 @@ pub enum JwtError {
     /// Zaman alanları hatalı.
     #[error("invalid claim {0}: {1}")]
     InvalidClaim(&'static str, &'static str),
+    /// JWE alanı hatalı.
+    #[error("invalid jwe field: {0}")]
+    InvalidJwe(&'static str),
     /// Beklenen claim eşleşmedi.
     #[error("claim mismatch: {0}")]
     ClaimMismatch(&'static str),
@@ -67,6 +77,9 @@ pub enum JwtError {
     #[cfg(feature = "kms")]
     #[error("kms error: {0}")]
     Kms(#[from] aunsorm_kms::KmsError),
+    /// Kalibrasyon katmanından dönen hata.
+    #[error("calibration error: {0}")]
+    Calibration(#[from] CoreError),
 }
 
 impl From<std::time::SystemTimeError> for JwtError {

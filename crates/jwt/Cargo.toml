@@ -25,6 +25,8 @@ hex = { workspace = true }
 sha2 = { workspace = true }
 hkdf = "0.12"
 aunsorm-kms = { path = "../kms", optional = true }
+aunsorm-core = { path = "../core" }
+chacha20poly1305 = { workspace = true }
 
 [dependencies.rusqlite]
 optional = true
