@@ -1074,6 +1074,10 @@ pub async fn generate_media_token(
     }))
 }
 
+pub async fn security_jwe_encrypt() -> Response {
+    todo!("Planned for v0.6.0: envelope encryption service stub")
+}
+
 fn format_timestamp(time: SystemTime) -> String {
     OffsetDateTime::from(time)
         .format(&Rfc3339)
@@ -1998,6 +2002,10 @@ pub async fn verify_fabric_did(
     Ok(Json(response))
 }
 
+pub async fn blockchain_media_record() -> Response {
+    todo!("Planned for v0.6.1: blockchain media record ingestion stub")
+}
+
 // SFU Context endpoints
 #[derive(Deserialize)]
 pub struct CreateSfuContextRequest {
@@ -2216,7 +2224,8 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 // JWT endpoints (auth service)
                 .route("/cli/jwt/verify", post(verify_jwt_token))
                 .route("/security/jwt-verify", post(verify_media_token))
-                .route("/security/generate-media-token", post(generate_media_token));
+                .route("/security/generate-media-token", post(generate_media_token))
+                .route("/security/jwe/encrypt", post(security_jwe_encrypt));
         }
         Some("acme-service") => {
             tracing::info!("🔒 Building ACME SERVICE routes");
@@ -2251,7 +2260,8 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
             tracing::info!("⛓️ Building BLOCKCHAIN SERVICE routes");
             router = router
                 // Fabric DID endpoints (blockchain service)
-                .route("/blockchain/fabric/did/verify", post(verify_fabric_did));
+                .route("/blockchain/fabric/did/verify", post(verify_fabric_did))
+                .route("/blockchain/media/record", post(blockchain_media_record));
         }
         Some("id-service") => {
             tracing::info!("🆔 Building ID SERVICE routes");
@@ -2303,12 +2313,14 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/cli/jwt/verify", post(verify_jwt_token))
                 .route("/security/jwt-verify", post(verify_media_token))
                 .route("/security/generate-media-token", post(generate_media_token))
+                .route("/security/jwe/encrypt", post(security_jwe_encrypt))
                 // MDM endpoints
                 .route("/mdm/register", post(register_device))
                 .route("/mdm/policy/:platform", get(fetch_policy))
                 .route("/mdm/cert-plan/:device_id", get(fetch_certificate_plan))
                 // Fabric DID endpoints
                 .route("/blockchain/fabric/did/verify", post(verify_fabric_did))
+                .route("/blockchain/media/record", post(blockchain_media_record))
                 // ID endpoints
                 .route("/id/generate", post(generate_id))
                 .route("/id/generate", head(head_generate_id))

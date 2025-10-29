@@ -158,6 +158,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Agent charter and sprint intake guide aligned with the revizyon kilidi policy (`docs/src/operations/agent-charters.md`).
 - OAuth PKCE uçları için OpenAPI 3.1 şeması ve redirect URI kayıt rehberi (`docs/src/operations/oauth-openapi.md`).
 
+### Planned
+- 📋 **v0.6.0** – `POST /security/jwe/encrypt`: WebRTC medya oturumlarını JWE ile sarmalayacak güvenlik hizmeti için rota ve
+  handler iskeleti ayrıldı.
+- 📋 **v0.6.1** – `POST /blockchain/media/record`: Medya köprüsü ledger kayıtlarını kabul edecek blockchain servisi uç noktası
+  router'a eklendi ve beklemede olan iş mantığı `todo!()` ile belirlendi.
+
 ### Planned for v0.5.0 (Q1 2026)
 - ACME v2 protocol client implementation (Let's Encrypt integration)
 - Automatic certificate issuance and renewal
