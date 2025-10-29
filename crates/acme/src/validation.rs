@@ -2,9 +2,6 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-pub mod dns01;
-pub mod http01;
-
 use std::fmt;
 
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -15,7 +12,6 @@ use rcgen::{
     Certificate, CertificateParams, CustomExtension, DistinguishedName, DnType, KeyPair,
     PKCS_ED25519,
 };
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use zeroize::Zeroizing;
@@ -25,22 +21,6 @@ use crate::authorization::{
 };
 use crate::order::OrderIdentifier;
 use crate::rng::AunsormNativeRng;
-
-/// ACME challenge lifecycle states.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum ChallengeState {
-    /// Challenge henüz yayınlanmadı.
-    Pending,
-    /// Challenge istemciye yayınlandı.
-    Published,
-    /// Challenge doğrulamaya hazır veya doğrulandı.
-    Verified,
-    /// Challenge içerikleri geri çağrıldı.
-    Revoked,
-    /// Challenge doğrulaması başarısız oldu.
-    Invalid,
-}
 
 /// Errors that can occur while preparing or validating an HTTP-01 challenge.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -217,19 +197,6 @@ pub enum Dns01ValidationError {
         /// Source HTTP-01 style validation error.
         #[from]
         source: Http01ValidationError,
-    },
-    /// DNS sorgusu beklenen TXT kaydını içermiyor.
-    #[error("DNS-01 TXT kaydı bulunamadı veya farklı değer döndü")]
-    MissingRecord,
-    /// Dönen TXT kaydı beklenen değerle eşleşmedi.
-    #[error(
-        "DNS-01 TXT kaydı beklenen değerle eşleşmedi. Beklenen: {expected}, alınan: {received:?}"
-    )]
-    RecordMismatch {
-        /// Beklenen TXT değeri.
-        expected: String,
-        /// Sorgu sonucunda elde edilen değerler.
-        received: Vec<String>,
     },
 }
 
