@@ -8,6 +8,7 @@
 mod claims;
 mod error;
 mod jti;
+mod jwe;
 mod jwk;
 mod rng;
 mod signer;
@@ -16,6 +17,7 @@ mod verifier;
 pub use claims::{Audience, Claims};
 pub use error::{JwtError, Result};
 pub use jti::{InMemoryJtiStore, JtiStore};
+pub use jwe::{CalibrationDescriptor, HybridJwe, JweProtectedHeader};
 pub use jwk::{Ed25519KeyPair, Ed25519PublicKey, Jwk, Jwks};
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
 pub use signer::JwtSigner;
