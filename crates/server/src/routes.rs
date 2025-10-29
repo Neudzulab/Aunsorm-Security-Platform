@@ -1699,6 +1699,15 @@ pub enum OAuthTransparencyEvent {
         audience: Option<String>,
         expires_at: u64,
     },
+    MediaRecord {
+        calibration_id: String,
+        media_commitment_sha256: String,
+        blockchain_tx_hash: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        blockchain_height: Option<u64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        media_profile: Option<String>,
+    },
 }
 
 pub async fn oauth_transparency(
@@ -1729,6 +1738,19 @@ pub async fn oauth_transparency(
                     subject_hash,
                     audience,
                     expires_at,
+                },
+                LedgerTransparencyEvent::MediaRecord {
+                    calibration_id,
+                    media_commitment_sha256,
+                    blockchain_tx_hash,
+                    blockchain_height,
+                    media_profile,
+                } => OAuthTransparencyEvent::MediaRecord {
+                    calibration_id,
+                    media_commitment_sha256,
+                    blockchain_tx_hash,
+                    blockchain_height,
+                    media_profile,
                 },
             },
             hash: entry.hash,
