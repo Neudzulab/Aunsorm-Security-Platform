@@ -22,6 +22,7 @@ mod acme;
 mod config;
 mod error;
 pub(crate) mod fabric;
+mod jobs;
 mod quic;
 mod rng;
 mod routes;

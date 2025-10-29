@@ -34,3 +34,4 @@ aunsorm-kms = { path = "../kms" }
 pretty_assertions = "1"
 rand_chacha = { workspace = true }
 x509-parser = { version = "0.16", features = ["verify"] }
+tokio = { version = "1", features = ["macros", "rt"] }
