@@ -77,18 +77,22 @@ fn map_jwt_error(err: &JwtError) -> String {
     }
 }
 
-const BEARER_PREFIX: &str = "bearer ";
+const BEARER_KEYWORD: &str = "bearer";
 
 fn sanitize_token_input(token: &str) -> Cow<'_, str> {
     let trimmed = token.trim();
 
-    if trimmed.len() > BEARER_PREFIX.len()
-        && trimmed[..BEARER_PREFIX.len()].eq_ignore_ascii_case(BEARER_PREFIX)
+    if trimmed.len() > BEARER_KEYWORD.len()
+        && trimmed[..BEARER_KEYWORD.len()].eq_ignore_ascii_case(BEARER_KEYWORD)
     {
-        Cow::Owned(trimmed[BEARER_PREFIX.len()..].trim_start().to_owned())
-    } else {
-        Cow::Borrowed(trimmed)
+        let after_keyword = &trimmed[BEARER_KEYWORD.len()..];
+        if after_keyword.starts_with(char::is_whitespace) {
+            let normalized = after_keyword.trim_start_matches(char::is_whitespace);
+            return Cow::Owned(normalized.to_owned());
+        }
     }
+
+    Cow::Borrowed(trimmed)
 }
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
@@ -2854,5 +2858,55 @@ mod http3_tests {
         assert_eq!(payload.alt_svc_max_age, Some(ALT_SVC_MAX_AGE));
         assert_eq!(payload.datagrams.max_payload_bytes, Some(MAX_PAYLOAD_BYTES));
         assert_eq!(payload.datagrams.channels.len(), 3);
+    }
+}
+
+#[cfg(test)]
+mod jwt_helper_tests {
+    use super::{map_jwt_error, sanitize_token_input};
+    use aunsorm_jwt::JwtError;
+    use std::borrow::Cow;
+    use std::io;
+
+    #[test]
+    fn sanitize_token_input_trims_whitespace_without_allocating() {
+        let result = sanitize_token_input("   my-token   ");
+        assert_eq!(result.as_ref(), "my-token");
+        assert!(matches!(result, Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn sanitize_token_input_removes_case_insensitive_bearer_prefix() {
+        let result = sanitize_token_input("  BEARER abc123  ");
+        assert_eq!(result.as_ref(), "abc123");
+        assert!(matches!(result, Cow::Owned(_)));
+
+        let result = sanitize_token_input("bearer\txyz");
+        assert_eq!(result.as_ref(), "xyz");
+        assert!(matches!(result, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn map_jwt_error_maps_common_variants_to_human_messages() {
+        assert_eq!(
+            map_jwt_error(&JwtError::Signature),
+            "Invalid token signature"
+        );
+        assert_eq!(
+            map_jwt_error(&JwtError::MissingJti),
+            "Token missing jti claim"
+        );
+        assert_eq!(
+            map_jwt_error(&JwtError::UnsupportedAlgorithm("HS256".to_owned())),
+            "Unsupported JWT algorithm: HS256"
+        );
+    }
+
+    #[test]
+    fn map_jwt_error_preserves_io_context() {
+        let io_error = io::Error::new(io::ErrorKind::Other, "disk failure");
+        let message = map_jwt_error(&JwtError::Io(io_error));
+        assert!(message.contains("disk failure"));
+        assert!(message.starts_with("Token verification I/O error:"));
     }
 }
