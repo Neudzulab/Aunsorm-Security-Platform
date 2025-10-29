@@ -6,7 +6,7 @@ mod media_ledger;
 mod mock_ledger;
 
 use media_ledger::{MediaLedgerRecord, MediaRecordError};
-use mock_ledger::InMemoryLedger;
+use mock_ledger::{InMemoryLedger, LedgerBackend};
 
 const GENESIS_TIMESTAMP: u64 = 1_728_000_000_000;
 

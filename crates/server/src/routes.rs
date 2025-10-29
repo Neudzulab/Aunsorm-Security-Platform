@@ -97,7 +97,7 @@ use crate::fabric::{FabricDidError, FabricDidVerificationRequest};
 use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
 #[cfg(feature = "http3-experimental")]
 use crate::quic::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
-use crate::state::ServerState;
+use crate::state::{AuditProofDocument, ServerState};
 use crate::transparency::TransparencyEvent as LedgerTransparencyEvent;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -2002,8 +2002,46 @@ pub async fn verify_fabric_did(
     Ok(Json(response))
 }
 
-pub async fn blockchain_media_record() -> Response {
-    todo!("Planned for v0.6.1: blockchain media record ingestion stub")
+#[derive(Deserialize)]
+pub struct BlockchainMediaRecordRequest {
+    #[serde(rename = "mediaHash")]
+    pub media_hash: String,
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    #[serde(rename = "auditProof")]
+    pub audit_proof: AuditProofDocument,
+}
+
+#[derive(Serialize)]
+pub struct BlockchainMediaRecordResponse {
+    pub status: &'static str,
+    pub queued: bool,
+    #[serde(rename = "expectedAuditProof")]
+    pub expected_audit_proof: AuditProofDocument,
+}
+
+pub async fn blockchain_media_record(
+    State(state): State<Arc<ServerState>>,
+    Json(request): Json<BlockchainMediaRecordRequest>,
+) -> Result<(StatusCode, Json<BlockchainMediaRecordResponse>), ApiError> {
+    if request.media_hash.trim().is_empty() {
+        return Err(ApiError::invalid_request("mediaHash boş olamaz"));
+    }
+    if request.session_id.trim().is_empty() {
+        return Err(ApiError::invalid_request("sessionId boş olamaz"));
+    }
+
+    if let Err(err) = state.verify_audit_proof(&request.audit_proof) {
+        return Err(ApiError::unprocessable_entity(err.to_string()));
+    }
+
+    let response = BlockchainMediaRecordResponse {
+        status: "not-implemented",
+        queued: false,
+        expected_audit_proof: state.audit_proof_document(),
+    };
+
+    Ok((StatusCode::NOT_IMPLEMENTED, Json(response)))
 }
 
 // SFU Context endpoints
@@ -2611,9 +2649,29 @@ fn build_test_state() -> Arc<ServerState> {
     use std::net::SocketAddr;
     use std::time::Duration;
 
+    use aunsorm_core::{calibration::calib_from_text, clock::SecureClockSnapshot};
+
     let listen: SocketAddr = "127.0.0.1:9443".parse().expect("socket address");
     let key_pair =
         aunsorm_jwt::Ed25519KeyPair::generate("test-server").expect("key pair generation");
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time")
+        .as_millis() as u64;
+    let clock_snapshot = SecureClockSnapshot {
+        authority_id: "ntp.test.aunsorm".to_owned(),
+        authority_fingerprint_hex:
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+        unix_time_ms: now_ms,
+        stratum: 2,
+        round_trip_ms: 8,
+        dispersion_ms: 12,
+        estimated_offset_ms: 4,
+        signature_b64: "dGVzdC1jbG9jay1zaWc".to_owned(),
+    };
+    let (calibration, _) =
+        calib_from_text(b"test-salt", "Test calibration for audit proof").expect("calibration");
+    let calibration_fingerprint = calibration.fingerprint_hex();
     let config = crate::config::ServerConfig::new(
         listen,
         "https://aunsorm.test",
@@ -2623,6 +2681,8 @@ fn build_test_state() -> Arc<ServerState> {
         key_pair,
         crate::config::LedgerBackend::Memory,
         None,
+        calibration_fingerprint,
+        clock_snapshot,
     )
     .expect("config is valid");
     Arc::new(ServerState::try_new(config).expect("state is constructed"))

@@ -268,7 +268,7 @@ pub struct MediaRecordSubmission<'a> {
     pub captured_at: &'a str,
 }
 
-impl<'a> MediaRecordSubmission<'a> {
+impl MediaRecordSubmission<'_> {
     fn validate(&self) -> Result<OffsetDateTime, FabricClientError> {
         for (value, field) in [
             (self.video_hash, "video_hash"),

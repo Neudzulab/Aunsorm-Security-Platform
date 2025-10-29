@@ -25,6 +25,9 @@ pub enum ServerError {
     /// Şeffaflık defteri hatası.
     #[error(transparent)]
     Transparency(#[from] aunsorm_core::transparency::TransparencyError),
+    /// Güvenilir saat doğrulaması hatası.
+    #[error(transparent)]
+    Clock(#[from] aunsorm_core::clock::ClockError),
 }
 
 /// RFC 6749 uyumlu API hata yanıtı.
@@ -130,6 +133,16 @@ impl ApiError {
 
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::new(StatusCode::NOT_FOUND, ErrorBody::not_found(message))
+    }
+
+    pub fn unprocessable_entity(message: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorBody {
+                error: "invalid_resource",
+                error_description: message.into(),
+            },
+        )
     }
 }
 

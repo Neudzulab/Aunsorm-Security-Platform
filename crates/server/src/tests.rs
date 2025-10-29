@@ -10,6 +10,7 @@ use aunsorm_acme::{
     AccountContact, Ed25519AccountKey, KeyBinding, NewAccountRequest, NewOrderRequest,
     OrderIdentifier, ReplayNonce, REPLAY_NONCE_HEADER,
 };
+use aunsorm_core::{calibration::calib_from_text, clock::SecureClockSnapshot};
 use aunsorm_jwt::{Audience, Claims, Ed25519KeyPair, Jwk};
 use aunsorm_mdm::{DeviceCertificatePlan, DeviceRecord, PolicyDocument};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -202,6 +203,24 @@ fn test_seed() -> [u8; 32] {
 
 fn setup_state() -> Arc<ServerState> {
     let key = Ed25519KeyPair::from_seed("test", test_seed()).expect("seed");
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("time")
+        .as_millis() as u64;
+    let clock_snapshot = SecureClockSnapshot {
+        authority_id: "ntp.test.aunsorm".to_owned(),
+        authority_fingerprint_hex:
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+        unix_time_ms: now_ms,
+        stratum: 2,
+        round_trip_ms: 8,
+        dispersion_ms: 12,
+        estimated_offset_ms: 4,
+        signature_b64: "dGVzdC1jbG9jay1zaWc".to_owned(),
+    };
+    let (calibration, _) =
+        calib_from_text(b"test-salt", "Test calibration for audit proof").expect("calibration");
+    let calibration_fingerprint = calibration.fingerprint_hex();
     let config = ServerConfig::new(
         "127.0.0.1:0".parse::<SocketAddr>().expect("addr"),
         "https://issuer",
@@ -211,6 +230,8 @@ fn setup_state() -> Arc<ServerState> {
         key,
         LedgerBackend::Memory,
         None,
+        calibration_fingerprint,
+        clock_snapshot,
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))

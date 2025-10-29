@@ -22,6 +22,9 @@ pub enum CoreError {
     /// Beklenen formatta olmayan girdi verisi.
     #[error("invalid input: {0}")]
     InvalidInput(&'static str),
+    /// Güvenilir saat doğrulaması başarısız oldu.
+    #[error(transparent)]
+    Clock(#[from] crate::clock::ClockError),
 }
 
 impl CoreError {

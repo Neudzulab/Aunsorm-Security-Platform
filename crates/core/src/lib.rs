@@ -6,6 +6,7 @@
 oturum ratchet mekanizmalarını sağlar."]
 
 pub mod calibration;
+pub mod clock;
 pub mod error;
 pub mod kdf;
 pub mod salts;
@@ -15,6 +16,9 @@ pub mod transparency;
 pub use calibration::{
     calib_from_text, coord32_derive, normalize_calibration_text, Calibration, CalibrationId,
     CalibrationRange,
+};
+pub use clock::{
+    ClockAuthority, ClockError, ClockValidation, SecureClockSnapshot, SecureClockVerifier,
 };
 pub use error::CoreError;
 pub use kdf::{

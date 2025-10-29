@@ -126,12 +126,18 @@ pub struct HybridJwe {
 
 impl HybridJwe {
     /// Protected header'ı çözümler.
+    ///
+    /// # Errors
+    /// Base64 çözülememesi veya JSON serileştirmesi başarısız olduğunda hata döner.
     pub fn protected_header(&self) -> Result<JweProtectedHeader> {
         let data = URL_SAFE_NO_PAD.decode(&self.protected)?;
         Ok(serde_json::from_slice(&data)?)
     }
 
     /// Kalibrasyon metninden türetilmiş verilerle JWE üretir.
+    ///
+    /// # Errors
+    /// Kalibrasyon üretimi veya şifreleme sırasında hata oluşursa `JwtError` döner.
     pub fn encrypt_with_calibration_text(
         payload: &[u8],
         key_pair: &Ed25519KeyPair,
@@ -144,6 +150,9 @@ impl HybridJwe {
     }
 
     /// Aunsorm Native RNG kullanarak JWE üretir.
+    ///
+    /// # Errors
+    /// İçte kullanılan şifreleme ve imzalama adımları başarısız olursa hata üretir.
     pub fn encrypt(
         payload: &[u8],
         key_pair: &Ed25519KeyPair,
@@ -155,6 +164,9 @@ impl HybridJwe {
     }
 
     /// Harici RNG ile JWE üretir.
+    ///
+    /// # Errors
+    /// Şifreleme, anahtar türetimi veya imzalama işlemleri başarısız olursa hata döner.
     pub fn encrypt_with_rng(
         payload: &[u8],
         key_pair: &Ed25519KeyPair,
@@ -186,10 +198,10 @@ impl HybridJwe {
             )
             .map_err(|_| JwtError::Encryption("aead failure"))?;
 
-        let tag = ciphertext.split_off(ciphertext.len() - TAG_SIZE);
+        let mut auth_tag = ciphertext.split_off(ciphertext.len() - TAG_SIZE);
         let ciphertext_b64 = URL_SAFE_NO_PAD.encode(&ciphertext);
-        let tag_b64 = URL_SAFE_NO_PAD.encode(&tag);
-        let nonce_b64 = URL_SAFE_NO_PAD.encode(&nonce);
+        let tag_b64 = URL_SAFE_NO_PAD.encode(&auth_tag);
+        let nonce_b64 = URL_SAFE_NO_PAD.encode(nonce);
 
         let signing_input = SigningInput::new(&protected, &nonce_b64, &ciphertext_b64, &tag_b64);
         let mut signature = key_pair
@@ -201,8 +213,7 @@ impl HybridJwe {
         cek.zeroize();
         key.iter_mut().for_each(|byte| *byte = 0);
         ciphertext.zeroize();
-        let mut tag = tag;
-        tag.zeroize();
+        auth_tag.zeroize();
         nonce.zeroize();
         nonce_ga.iter_mut().for_each(|byte| *byte = 0);
         signature.zeroize();
@@ -217,6 +228,9 @@ impl HybridJwe {
     }
 
     /// JWE çıktısını doğrulayarak plaintext'i döndürür.
+    ///
+    /// # Errors
+    /// İmza doğrulaması, şifre çözme veya kalibrasyon doğrulaması başarısız olursa hata döner.
     pub fn decrypt(
         &self,
         verifying_key: &Ed25519PublicKey,
@@ -286,6 +300,9 @@ impl HybridJwe {
     }
 
     /// Kalibrasyon metni üzerinden çözme işlemi.
+    ///
+    /// # Errors
+    /// Kalibrasyon üretimi veya şifre çözme başarısız olduğunda hata döner.
     pub fn decrypt_with_calibration_text(
         &self,
         verifying_key: &Ed25519PublicKey,
