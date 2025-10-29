@@ -2,6 +2,9 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
+mod rng;
+
+use crate::rng::AunsormNativeRng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error as _;
 use std::fs;
@@ -18,8 +21,7 @@ use base64::{
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use hkdf::Hkdf;
 use http::{header::LOCATION, HeaderMap, HeaderName, HeaderValue, StatusCode};
-use rand::rngs::OsRng;
-use rand::RngCore;
+use rand_core::RngCore;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value;
 use sha2::Sha256;
@@ -3786,7 +3788,8 @@ struct AcmeAccountState {
 impl AcmeAccountState {
     fn generate_ed25519() -> (Self, Ed25519AccountKey) {
         let mut seed = Zeroizing::new([0_u8; 32]);
-        OsRng.fill_bytes(seed.as_mut());
+        let mut rng = AunsormNativeRng::new();
+        rng.fill_bytes(seed.as_mut());
         let key = Ed25519AccountKey::from_bytes(&seed);
         let encoded = URL_SAFE_NO_PAD.encode(seed.as_slice());
         let state = Self {

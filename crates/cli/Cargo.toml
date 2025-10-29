@@ -26,7 +26,7 @@ hkdf = { workspace = true }
 http = "0.2"
 humantime = "2"
 pem = "3"
-rand = { version = "0.8", features = ["std"] }
+rand_core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

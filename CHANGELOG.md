@@ -117,6 +117,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/random/number` yanıtları artık `Cache-Control: no-store, no-cache, must-revalidate`,
   `Pragma: no-cache` ve `Expires: 0` başlıklarını göndererek kriptografik sonuçların
   ara cache katmanlarında saklanmasını engelliyor.
+- `aunsorm-cli` ACME hesap anahtarı üretimi işletim sistemi RNG'si yerine
+  `AunsormNativeRng` kullanarak platformun zorunlu entropy hattı ile uyumlu
+  hale getirildi.
 - `/id/generate` endpoint'i, namespace doğrulama hatalarında artık `invalid_request` döndürerek misconfiguration ile istemci
   hatalarını ayırt ediyor ve HEAD bilgisi için `from_env_with_namespace` yardımcısını kullanıyor.
 - ACME HTTP uçları artık doğrudan `AcmeService` mantığına delegasyon yaparak nonce tüketimi, JWS doğrulaması ve RFC 8555 problem
