@@ -13,6 +13,7 @@
 - [ACME Gateway Otomasyonu](operations/acme-gateway-automation.md)
 - [ACME Protokol Rehberi](operations/acme/protocol-guide.md)
 - [ACME Domain Doğrulama Kılavuzu](operations/acme/domain-validation.md)
+- [ACME Production Deployment & Rate Limiting Guide](operations/acme/production-deploy.md)
 - [ACME Sorun Giderme Rehberi](operations/acme/troubleshooting.md)
 - [HTTP/3 QUIC Güvenlik Değerlendirmesi](operations/http3-quic-security.md)
 - [Blockchain Entegrasyonu ve Runbook'u](operations/blockchain-integration.md)
