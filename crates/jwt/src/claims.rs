@@ -34,37 +34,40 @@ impl Audience {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Claims {
     /// `iss`
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "iss")]
     pub issuer: Option<String>,
     /// `sub`
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "sub")]
     pub subject: Option<String>,
     /// `aud`
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "aud")]
     pub audience: Option<Audience>,
     /// `exp`
     #[serde(
         skip_serializing_if = "Option::is_none",
         default,
-        with = "serde_opt_timestamp"
+        with = "serde_opt_timestamp",
+        rename = "exp"
     )]
     pub expiration: Option<SystemTime>,
     /// `nbf`
     #[serde(
         skip_serializing_if = "Option::is_none",
         default,
-        with = "serde_opt_timestamp"
+        with = "serde_opt_timestamp",
+        rename = "nbf"
     )]
     pub not_before: Option<SystemTime>,
     /// `iat`
     #[serde(
         skip_serializing_if = "Option::is_none",
         default,
-        with = "serde_opt_timestamp"
+        with = "serde_opt_timestamp",
+        rename = "iat"
     )]
     pub issued_at: Option<SystemTime>,
     /// `jti`
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "jti")]
     pub jwt_id: Option<String>,
     /// Ek claim alanları.
     #[serde(flatten)]

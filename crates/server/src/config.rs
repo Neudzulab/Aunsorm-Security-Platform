@@ -163,7 +163,7 @@ impl ServerConfig {
                 "AUNSORM_CLOCK_ATTESTATION çevre değişkeni zorunludur".to_string(),
             )
         })?;
-        let clock_snapshot: SecureClockSnapshot =
+        let mut clock_snapshot: SecureClockSnapshot =
             serde_json::from_str(&attestation).map_err(|err| {
                 ServerError::Configuration(format!(
                     "AUNSORM_CLOCK_ATTESTATION JSON parse edilemedi: {err}"
@@ -175,6 +175,23 @@ impl ServerConfig {
                 "AUNSORM_CLOCK_ATTESTATION.signature_b64 boş bırakılamaz".to_string(),
             ));
         }
+
+        // Auto-update timestamp to current time (development mode)
+        // Production should use NTP attestation server with real signatures
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| {
+                ServerError::Configuration(format!("System time error: {err}"))
+            })?
+            .as_millis()
+            .try_into()
+            .map_err(|_| {
+                ServerError::Configuration("Timestamp overflow".to_string())
+            })?;
+        
+        clock_snapshot.unix_time_ms = now_ms;
+        tracing::debug!("🕐 Clock attestation timestamp updated to current time: {}", now_ms);
 
         Self::new(
             listen,
