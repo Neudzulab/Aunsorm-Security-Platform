@@ -152,10 +152,10 @@
   - [ ] End-to-end renewal tests
   
 - [ ] Documentation
-  - [x] ACME protocol guide (bkz. `docs/src/operations/acme/protocol-guide.md`)
-  - [x] Domain validation setup (bkz. `docs/src/operations/acme/domain-validation.md`)
-  - [ ] Production deployment guide
-  - [x] Troubleshooting FAQ (bkz. `docs/src/operations/acme/troubleshooting.md`)
+- [x] ACME protocol guide (bkz. `docs/src/operations/acme/protocol-guide.md`)
+- [x] Domain validation setup (bkz. `docs/src/operations/acme/domain-validation.md`)
+- [x] Production deployment guide (bkz. `docs/src/operations/acme/production-deploy.md`)
+- [x] Troubleshooting FAQ (bkz. `docs/src/operations/acme/troubleshooting.md`)
 
 **Bağımlılıklar:**
 - `reqwest` - HTTPS client
