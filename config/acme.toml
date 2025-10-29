@@ -29,3 +29,16 @@ private_key_path = "var/certs/example.com/privkey.pem"
 # certificate_path = "var/certs/example.com/cert.pem"
 # chain_path = "var/certs/example.com/fullchain.pem"
 # wrapped_key_path = "var/certs/example.com/wrapped-key.json"
+
+[dns]
+provider = "cloudflare" # veya "route53"
+
+[dns.cloudflare]
+zone_id = "cf-zone-id"
+api_token = "cf-api-token"
+
+[dns.route53]
+hosted_zone_id = "ZROUTE53ID"
+region = "us-east-1"
+access_key = "AKIAIOSFODNN7EXAMPLE"
+secret_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
