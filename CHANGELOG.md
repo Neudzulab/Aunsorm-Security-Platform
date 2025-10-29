@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-server` HTTP hizmetine `tower-http` TraceLayer katmanı eklenerek
   her isteğin başlangıcı/yanıtı milisaniye gecikmesiyle stdout log'larına
   aktarılır.
+- GitHub Actions `ACME Staging Smoke` job'u Let’s Encrypt staging API’sine
+  karşı `tests/tests/acme_staging.rs` hesabı roundtrip testini çalıştırır;
+  secrets eksikse erken hata verilir ve sonuçlar `docs/src/operations/acme/production-deploy.md`
+  rehberinde belgelenir.
 - `endpoint-validator` kütüphanesi ve `aunsorm-cli validate-endpoints`
   komutu: OpenAPI/sitemap/HTML keşfi, otomatik gövde üretimi, geri çekilme
   politikaları ve Markdown/JSON raporlarıyla uzak API uçlarını doğrular.

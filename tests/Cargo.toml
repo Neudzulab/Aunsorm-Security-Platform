@@ -42,3 +42,5 @@ tower = { version = "0.4", features = ["util"] }
 http-body-util = "0.1"
 url = { workspace = true }
 time = { version = "0.3", features = ["macros"] }
+anyhow = "1"
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
