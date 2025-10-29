@@ -57,6 +57,10 @@ Aunsorm Cryptography Suite/
 │   │   ├── POST /acme/order/:order_id ✅ - POST-as-GET order durumu sorgusu
 │   │   ├── POST /acme/order/:order_id/finalize ✅ - CSR doğrulama ve sertifika URL'si üretimi
 │   │   ├── POST /acme/revoke-cert ✅ - Sertifika iptali (kid doğrulamalı ACME hesabı)
+│   │   ├── POST /acme/validation/http-01 🚧 - HTTP-01 challenge yayınlama
+│   │   ├── DELETE /acme/validation/http-01/:token 🚧 - HTTP-01 challenge geri çağırma
+│   │   ├── POST /acme/validation/dns-01 🚧 - DNS-01 TXT kaydı yayınlama
+│   │   ├── DELETE /acme/validation/dns-01/:token 🚧 - DNS-01 challenge geri çağırma
 │   │   └── OAuth 2.0 ek uçlar 📋 [Planlandı v0.5.x] - Standart kapsamını genişletme takibi
 │   │       ├── POST /oauth/token (grant_type=refresh_token) 📋 [Planlandı v0.5.0] - Refresh token döngüsü ve rotation (RFC 6749 §6)
 │   │       ├── POST /oauth/token (grant_type=client_credentials) 📋 [Planlandı v0.5.0] - Confidential client M2M erişimi (RFC 6749 §4.4)
@@ -793,8 +797,16 @@ aunsorm-server v0.4.5
    │                                       └─ İçerik tipi: `text/plain; charset=utf-8`
    │                                       └─ Leaf + Issuing CA PEM dizisi (finalize sonrası hazır)
    │
-   └─ POST   /acme/revoke-cert ✅       → Sertifika iptali (ACME hesabı kid doğrulaması ve reason kaydı)
-                                           └─ CRL management
+   ├─ POST   /acme/revoke-cert ✅       → Sertifika iptali (ACME hesabı kid doğrulaması ve reason kaydı)
+   │                                       └─ CRL management
+   ├─ POST   /acme/validation/http-01 🚧 → HTTP-01 challenge yayınlama API'si
+   │                                       └─ Dönen veri: resource path + key-authorization gövdesi
+   ├─ DELETE /acme/validation/http-01/{token} 🚧 → HTTP-01 challenge geri çağırma
+   │                                       └─ Yanıt: challenge durumu (`revoked`)
+   ├─ POST   /acme/validation/dns-01 🚧 → DNS-01 TXT kaydı yayınlama API'si
+   │                                       └─ Dönen veri: `_acme-challenge` adı + base64url değer
+   └─ DELETE /acme/validation/dns-01/{token} 🚧 → DNS-01 challenge geri çağırma
+                                           └─ Yanıt: challenge durumu (`revoked`)
 ```
 
 > **📌 NOT:** Bu ağaçta gösterilen her komut ve endpoint, ilerleyen sürümlerde **daha fazla özellik ve parametre** ile genişletilecektir.

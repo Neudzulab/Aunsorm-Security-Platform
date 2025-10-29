@@ -38,6 +38,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-pqc` KEM ve imza algoritması enum'ları `FromStr` implementasyonları ile
   kullanıcı girdilerini normalize ederek alias desteği sağlıyor ve derleme
   konfigürasyonu gerekliliklerini hata mesajlarıyla bildiriyor.
+- `aunsorm-acme` doğrulama modülü HTTP-01/DNS-01 durum makineleri, DNS sağlayıcı
+  arayüzü ve Cloudflare/Route53 adaptör iskeletleriyle genişletildi; `aunsorm-server`
+  tarafında challenge yayınlama/geri çağırma uçları ve eşlik eden entegrasyon testi eklendi.
 - Retention policy audit fixtures and regression tests ensuring PolicyStore
   sürümleri, `AuditAssetRegistry` kayıtları ve `kms_key_destroyed` olaylarıyla
   kronolojik olarak zincirleniyor.

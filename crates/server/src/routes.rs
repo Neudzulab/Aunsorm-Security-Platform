@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderMap, HeaderValue, Request, StatusCode},
     response::{IntoResponse, Response},
-    routing::{get, head, post},
+    routing::{delete, get, head, post},
     Json, Router,
 };
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
@@ -2230,7 +2230,14 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/acme/order/:id", post(acme_order_status))
                 .route("/acme/order/:id/finalize", post(acme_finalize_order))
                 .route("/acme/cert/:id", get(acme_get_certificate))
-                .route("/acme/revoke-cert", post(acme_revoke_certificate));
+                .route("/acme/revoke-cert", post(acme_revoke_certificate))
+                .route("/acme/validation/http-01", post(acme::publish_http01))
+                .route(
+                    "/acme/validation/http-01/:token",
+                    delete(acme::revoke_http01),
+                )
+                .route("/acme/validation/dns-01", post(acme::publish_dns01))
+                .route("/acme/validation/dns-01/:token", delete(acme::revoke_dns01));
         }
         Some("mdm-service") => {
             tracing::info!("📱 Building MDM SERVICE routes");
@@ -2280,6 +2287,13 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/acme/order/:id/finalize", post(acme_finalize_order))
                 .route("/acme/cert/:id", get(acme_get_certificate))
                 .route("/acme/revoke-cert", post(acme_revoke_certificate))
+                .route("/acme/validation/http-01", post(acme::publish_http01))
+                .route(
+                    "/acme/validation/http-01/:token",
+                    delete(acme::revoke_http01),
+                )
+                .route("/acme/validation/dns-01", post(acme::publish_dns01))
+                .route("/acme/validation/dns-01/:token", delete(acme::revoke_dns01))
                 // OAuth endpoints
                 .route("/oauth/begin-auth", post(begin_auth))
                 .route("/oauth/token", post(exchange_token))

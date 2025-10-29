@@ -37,8 +37,10 @@ use x509_parser::extensions::{GeneralName, ParsedExtension};
 use x509_parser::prelude::FromDer;
 
 use aunsorm_acme::{
-    AccountContact, AccountService, AcmeDirectory, AcmeDirectoryMeta, AcmeJws, DirectoryService,
-    IdentifierKind, NonceService, OrderIdentifier, OrderIdentifierError, OrderService, ReplayNonce,
+    AccountContact, AccountService, AcmeDirectory, AcmeDirectoryMeta, AcmeJws, ChallengeState,
+    DirectoryService, Dns01Publication, Dns01StateMachine, Dns01ValidationError, Http01Publication,
+    Http01StateMachine, Http01ValidationError, IdentifierKind, NonceService, OrderIdentifier,
+    OrderIdentifierError, OrderService, ReplayNonce,
 };
 
 use crate::error::ServerError;
@@ -57,6 +59,7 @@ pub struct AcmeService {
     issued_certificates: Mutex<HashMap<String, StoredCertificate>>,
     next_account: AtomicU64,
     next_order: AtomicU64,
+    validations: Mutex<ValidationStore>,
 }
 
 impl fmt::Debug for AcmeService {
@@ -69,6 +72,24 @@ impl fmt::Debug for AcmeService {
             .field("next_order", &self.next_order.load(Ordering::SeqCst))
             .finish_non_exhaustive()
     }
+}
+
+#[derive(Debug, Default)]
+struct ValidationStore {
+    http01: HashMap<String, Http01StateMachine>,
+    dns01: HashMap<String, Dns01StateMachine>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HttpChallengeInfo {
+    pub state: ChallengeState,
+    pub publication: Http01Publication,
+}
+
+#[derive(Debug, Clone)]
+pub struct DnsChallengeInfo {
+    pub state: ChallengeState,
+    pub publication: Dns01Publication,
 }
 
 impl AcmeService {
@@ -121,6 +142,7 @@ impl AcmeService {
             issued_certificates: Mutex::new(HashMap::new()),
             next_account: AtomicU64::new(0),
             next_order: AtomicU64::new(0),
+            validations: Mutex::new(ValidationStore::default()),
         })
     }
 
@@ -157,6 +179,65 @@ impl AcmeService {
     pub async fn next_nonce(&self) -> String {
         let mut guard = self.nonces.lock().await;
         guard.issue()
+    }
+
+    pub async fn publish_http01_challenge(
+        &self,
+        token: &str,
+        account_thumbprint: &str,
+    ) -> Result<HttpChallengeInfo, Http01ValidationError> {
+        let mut machine = Http01StateMachine::for_token(token, account_thumbprint)?;
+        let publication = machine.publication();
+        let state = machine.publish();
+        self.validations
+            .lock()
+            .await
+            .http01
+            .insert(token.to_owned(), machine);
+        Ok(HttpChallengeInfo { state, publication })
+    }
+
+    pub async fn revoke_http01_challenge(&self, token: &str) -> Option<ChallengeState> {
+        let mut guard = self.validations.lock().await;
+        guard
+            .http01
+            .remove(token)
+            .map(|mut machine| machine.revoke())
+    }
+
+    pub async fn publish_dns01_challenge(
+        &self,
+        token: &str,
+        identifier: &OrderIdentifier,
+        account_thumbprint: &str,
+    ) -> Result<DnsChallengeInfo, Dns01ValidationError> {
+        let mut machine = Dns01StateMachine::new(token, identifier, account_thumbprint)?;
+        let publication = machine.publication();
+        let state = machine.publish();
+        self.validations
+            .lock()
+            .await
+            .dns01
+            .insert(token.to_owned(), machine);
+        Ok(DnsChallengeInfo { state, publication })
+    }
+
+    pub async fn revoke_dns01_challenge(&self, token: &str) -> Option<ChallengeState> {
+        let mut guard = self.validations.lock().await;
+        guard
+            .dns01
+            .remove(token)
+            .map(|mut machine| machine.revoke())
+    }
+
+    pub async fn http01_state(&self, token: &str) -> Option<ChallengeState> {
+        let guard = self.validations.lock().await;
+        guard.http01.get(token).map(Http01StateMachine::state)
+    }
+
+    pub async fn dns01_state(&self, token: &str) -> Option<ChallengeState> {
+        let guard = self.validations.lock().await;
+        guard.dns01.get(token).map(Dns01StateMachine::state)
     }
 
     async fn consume_nonce(&self, nonce: &str) -> Result<(), AcmeProblem> {
