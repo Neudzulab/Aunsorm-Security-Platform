@@ -853,6 +853,10 @@ pub struct JwtPayload {
     pub audience: String,
     pub issuer: String,
     pub expiration: u64,
+    #[serde(rename = "issuedAt", skip_serializing_if = "Option::is_none")]
+    pub issued_at: Option<u64>,
+    #[serde(rename = "notBefore", skip_serializing_if = "Option::is_none")]
+    pub not_before: Option<u64>,
     #[serde(rename = "relatedId", skip_serializing_if = "Option::is_none")]
     pub related_id: Option<String>,
     #[serde(flatten)]
@@ -951,6 +955,8 @@ async fn verify_token_for_audience(
                 audience: audience_to_string(claims.audience.as_ref(), expected_audience),
                 issuer: claims.issuer.clone().unwrap_or_else(|| issuer.clone()),
                 expiration: claims.expiration.map_or(0, system_time_to_unix_seconds),
+                issued_at: claims.issued_at.map(system_time_to_unix_seconds),
+                not_before: claims.not_before.map(system_time_to_unix_seconds),
                 related_id,
                 claims: payload_value,
             };

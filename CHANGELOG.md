@@ -39,6 +39,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `aunsorm-server` güvenlik servisine `POST /security/jwt-verify` endpoint'i eklendi;
   Zasian medya token'larını imza/claim kontrolleriyle doğrulayıp payload veya hata
   mesajı döndürüyor ve kayıtlı olmayan `jti` değerlerini reddediyor.
+- `/security/jwt-verify` yanıtı `issuedAt` ve `notBefore` claim alanlarını saniye
+  cinsinden raporlayarak istemcilerin oturum penceresi değerlendirmesini
+  kolaylaştırıyor.
 - `aunsorm-pqc` KEM ve imza algoritması enum'ları `FromStr` implementasyonları ile
   kullanıcı girdilerini normalize ederek alias desteği sağlıyor ve derleme
   konfigürasyonu gerekliliklerini hata mesajlarıyla bildiriyor.

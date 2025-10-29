@@ -1878,6 +1878,11 @@ async fn jwt_verify_endpoint_accepts_valid_token() {
     assert!(verify.valid);
     assert!(verify.error.is_none());
     let payload = verify.payload.expect("payload");
+    let issued_at = payload
+        .get("issuedAt")
+        .and_then(serde_json::Value::as_u64)
+        .expect("issuedAt claim");
+    assert!(issued_at > 0);
     assert_eq!(
         payload.get("issuer").and_then(|value| value.as_str()),
         Some(state.issuer())
@@ -2092,6 +2097,87 @@ async fn jwt_verify_endpoint_rejects_tokens_missing_jti() {
     assert!(!verify.valid);
     assert!(verify.payload.is_none());
     assert_eq!(verify.error.as_deref(), Some("Token missing jti claim"));
+}
+
+#[tokio::test]
+async fn jwt_verify_endpoint_reports_temporal_claims() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let mut claims = Claims::new();
+    claims.subject = Some("participant-temporal".to_string());
+    claims.issuer = Some(state.issuer().to_owned());
+    claims.audience = Some(Audience::Single("zasian-media".to_owned()));
+    claims.ensure_jwt_id();
+    claims.set_issued_now();
+    let not_before = SystemTime::now()
+        .checked_sub(Duration::from_secs(15))
+        .unwrap_or_else(SystemTime::now);
+    claims.not_before = Some(not_before);
+    claims.set_expiration_from_now(state.token_ttl());
+    claims.extra.insert(
+        "roomId".to_string(),
+        Value::String("room-temporal".to_string()),
+    );
+
+    let signer = state.signer().clone();
+    let token = signer.sign(&claims).expect("token");
+
+    let jti = claims.jwt_id.clone().expect("jti");
+    let expiration = claims.expiration.expect("exp");
+    state
+        .record_token(
+            &jti,
+            expiration,
+            claims.subject.as_deref(),
+            Some("zasian-media"),
+        )
+        .await
+        .expect("record token");
+
+    let verify_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwt-verify")
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "token": token }).to_string()))
+                .expect("verify request"),
+        )
+        .await
+        .expect("verify response");
+
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let verify_body = to_bytes(verify_response.into_body(), usize::MAX)
+        .await
+        .expect("verify body");
+    let verify: JwtVerifyResponseBody = serde_json::from_slice(&verify_body).expect("verify json");
+    assert!(verify.valid);
+    let payload = verify.payload.expect("payload");
+
+    let issued_at_value = payload
+        .get("issuedAt")
+        .and_then(serde_json::Value::as_u64)
+        .expect("issuedAt field");
+    let expected_issued_at = claims
+        .issued_at
+        .expect("issued_at")
+        .duration_since(UNIX_EPOCH)
+        .expect("iat epoch")
+        .as_secs();
+    assert_eq!(issued_at_value, expected_issued_at);
+
+    let not_before_value = payload
+        .get("notBefore")
+        .and_then(serde_json::Value::as_u64)
+        .expect("notBefore field");
+    let expected_not_before = claims
+        .not_before
+        .expect("nbf")
+        .duration_since(UNIX_EPOCH)
+        .expect("nbf epoch")
+        .as_secs();
+    assert_eq!(not_before_value, expected_not_before);
 }
 
 #[allow(dead_code)]
