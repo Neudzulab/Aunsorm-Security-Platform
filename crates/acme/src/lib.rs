@@ -10,6 +10,7 @@ mod jws;
 mod nonce;
 mod order;
 mod providers;
+mod renewal;
 mod rng;
 mod storage;
 mod validation;
@@ -44,6 +45,10 @@ pub use order::{
 };
 pub use providers::dns::{
     CloudflareDnsProvider, DnsProvider, DnsProviderError, DnsRecordHandle, Route53DnsProvider,
+};
+pub use renewal::{
+    async_trait, ManagedCertificate, RenewalCandidate, RenewalInventory, RenewalJob,
+    RenewalJobError,
 };
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
 pub use storage::{

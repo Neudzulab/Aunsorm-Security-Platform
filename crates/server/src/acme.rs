@@ -32,6 +32,7 @@ use time::{Duration, OffsetDateTime};
 use tokio::sync::Mutex;
 use tracing::info;
 use url::{ParseError, Url};
+use x509_parser::certificate::X509Certificate;
 use x509_parser::certification_request::X509CertificationRequest;
 use x509_parser::extensions::{GeneralName, ParsedExtension};
 use x509_parser::prelude::FromDer;
@@ -39,13 +40,21 @@ use x509_parser::prelude::FromDer;
 use aunsorm_acme::{
     AccountContact, AccountService, AcmeDirectory, AcmeDirectoryMeta, AcmeJws, ChallengeState,
     DirectoryService, Dns01Publication, Dns01StateMachine, Dns01ValidationError, Http01Publication,
-    Http01StateMachine, Http01ValidationError, IdentifierKind, NonceService, OrderIdentifier,
-    OrderIdentifierError, OrderService, ReplayNonce,
+    Http01StateMachine, Http01ValidationError, IdentifierKind, ManagedCertificate, NonceService,
+    OrderIdentifier, OrderIdentifierError, OrderService, ReplayNonce,
 };
+
+use thiserror::Error;
 
 use crate::error::ServerError;
 
 const ORDER_EXPIRATION: Duration = Duration::hours(8);
+
+#[derive(Debug, Error)]
+pub enum RenewalInventoryError {
+    #[error("ACME sertifikası ayrıştırılamadı: {0}")]
+    CertificateParse(String),
+}
 
 pub struct AcmeService {
     endpoints: AcmeEndpoints,
@@ -749,6 +758,67 @@ impl AcmeService {
         Ok(stored.as_pem_bundle())
     }
 
+    pub async fn renewal_inventory(
+        &self,
+    ) -> Result<Vec<ManagedCertificate>, RenewalInventoryError> {
+        let orders_snapshot = {
+            let orders = self.orders.lock().await;
+            let mut snapshot = HashMap::with_capacity(orders.len());
+            for (order_id, order) in orders.iter() {
+                let identifiers = order
+                    .identifiers
+                    .iter()
+                    .map(|identifier| identifier.value().into_owned())
+                    .collect::<Vec<_>>();
+                snapshot.insert(
+                    order_id.clone(),
+                    (
+                        identifiers,
+                        order.account_id.clone(),
+                        order.finalize.clone(),
+                        order.certificate.clone(),
+                    ),
+                );
+            }
+            drop(orders);
+            snapshot
+        };
+        let issued_snapshot = {
+            let issued = self.issued_certificates.lock().await;
+            let snapshot = issued.clone();
+            drop(issued);
+            snapshot
+        };
+        let mut inventory = Vec::with_capacity(issued_snapshot.len());
+        for (order_id, stored) in issued_snapshot {
+            if stored.is_revoked() {
+                continue;
+            }
+            let expires_at = stored
+                .not_after()
+                .map_err(|err| RenewalInventoryError::CertificateParse(err.to_string()))?;
+            let Some((identifiers, account_id, finalize, certificate_url)) =
+                orders_snapshot.get(&order_id)
+            else {
+                continue;
+            };
+            let mut managed = ManagedCertificate::new(order_id, identifiers.clone(), expires_at);
+            managed
+                .metadata_mut()
+                .insert("account_id".to_string(), account_id.clone());
+            managed
+                .metadata_mut()
+                .insert("finalize_url".to_string(), finalize.clone());
+            if let Some(url) = certificate_url {
+                managed
+                    .metadata_mut()
+                    .insert("certificate_url".to_string(), url.clone());
+            }
+            inventory.push(managed);
+        }
+        Ok(inventory)
+    }
+
     pub async fn revoke_certificate(&self, jws: AcmeJws) -> Result<RevokeCertOutcome, AcmeProblem> {
         let header = parse_protected_header(&jws.protected)?;
         if header.url != self.endpoints.revoke_cert.as_str() {
@@ -1144,6 +1214,11 @@ impl StoredCertificate {
             append_pem_block(&mut bundle, certificate);
         }
         bundle
+    }
+
+    fn not_after(&self) -> Result<OffsetDateTime, x509_parser::error::X509Error> {
+        let (_, certificate) = X509Certificate::from_der(&self.leaf_der)?;
+        Ok(certificate.validity().not_after.to_datetime())
     }
 
     fn matches_der(&self, candidate: &[u8]) -> bool {
