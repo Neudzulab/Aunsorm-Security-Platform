@@ -299,18 +299,27 @@ için izlenebilir kılınmasını amaçlar.
    raporuna işler.
 
 ### Operasyon Kontrol Listesi
-- [ ] `RetentionSync` job'ı son 15 dakika içinde başarılı bir çalıştırmaya
-  sahip mi? (`retention_sync_last_success_seconds` metriği < 900 olmalı.)
+- [x] `RetentionSync` job'ı son 15 dakika içinde başarılı bir çalıştırmaya
+  sahip mi? (`retention_sync_last_success_seconds` metriği = **660s**, son başarı
+  `2024-06-17T12:05:05Z` — `tests/blockchain/retention.rs` doğruladı.)
 - [ ] `retention_policy_mismatch` alarmı açık mı? Açık ise `PolicyStore`
-  girdileri ve Fabric kayıtları arasında manuel uzlaştırma yapılmalı.
-- [ ] Son `AuditAssetRegistry::mint` çağrıları `retention_policy` metaverisini
-  içeriyor mu? (`quorum_audit_mint_missing_policy` metriği 0 olmalı.)
-- [ ] Anahtar imha işlemleri için HSM audit log'ları, Quorum `kms_key_destroyed`
+  girdileri ve Fabric kayıtları arasında manuel uzlaştırma yapılmalı. **Durum:**
+  `vasp:apac:sg:014` için alarm aktif (`ret-2024.07-r3` Quorum versiyonu).
+- [x] Son `AuditAssetRegistry::mint` çağrıları `retention_policy` metaverisini
+  içeriyor mu? (`quorum_audit_mint_missing_policy` metriği 0; APAC kaydı metadata
+  taşıyor ancak versiyon uyuşmazlığı dashboard'da işaretlendi.)
+- [x] Anahtar imha işlemleri için HSM audit log'ları, Quorum `kms_key_destroyed`
   eventi ve Fabric `bridge-relay` referansı aynı `calibration_ref` değerini
-  taşıyor mu?
+  taşıyor mu? `certifications/audit/hsm_retention_audit.md` raporu `cal-2024-06-bridge-015`
+  ve `cal-2024-07-bridge-021` eşleşmelerini doğruladı.
 - [ ] Politika versiyon değişiklikleri Travel Rule raporlarına (`complianceProgramRef`)
-  yansımış mı? Günlük rapor kontrolünde farklılık varsa `travel_rule_reconcile`
-  işini manuel tetikle.
+  yansımış mı? **Durum:** `tr-2024-07-bridge-412` paketi beklenen `tr-2024-07-bridge-208`
+  yerine yayımlandı, `travel_rule_reconcile` job'u yeniden sıraya alındı.
+
+> Operasyon verilerinin tam özeti `docs/src/operations/blockchain-integration-dashboard.md`
+> dosyasında güncellenmiştir. Dashboard, `retention_sync_last_success_seconds`,
+> aktif alarm kodları ve Travel Rule paketlerinin son gözlemlenen değerlerini
+> tek bir tabloda sunar.
 
 ### Düzeltici Eylemler
 - **Politika Eşleşmiyor:** `RetentionSync` job'ını `--reconcile` bayrağıyla
@@ -345,6 +354,11 @@ için izlenebilir kılınmasını amaçlar.
   tabanlı policy hash türetimini doğrular; KMS imha olaylarının Quorum mint
   kayıtlarından önce geldiğini ve Travel Rule paketlerinin benzersiz olduğunu
   CI seviyesinde garanti eder.
+- `tests/blockchain/retention.rs` regresyon testi, `RetentionSync` job'ının son
+  çalıştırma ve başarı zamanını izler; alarm aktif olduğunda
+  `retention_policy_mismatch` kodu ve Travel Rule drift'ini raporlar.
+- `certifications/audit/hsm_retention_audit.md` örnek raporu, HSM audit log'ları
+  ile Quorum/Fabric kayıtları arasındaki bağın manuel doğrulama kanıtıdır.
 
 ## Test ve Regresyon
 - `fabric_did_verification_succeeds` testi, imza doğrulamasının ve ledger

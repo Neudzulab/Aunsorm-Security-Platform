@@ -12,6 +12,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
+pub mod retention;
 mod serde_utils;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

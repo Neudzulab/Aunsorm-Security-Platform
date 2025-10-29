@@ -16,6 +16,7 @@
 - [ACME Sorun Giderme Rehberi](operations/acme/troubleshooting.md)
 - [HTTP/3 QUIC Güvenlik Değerlendirmesi](operations/http3-quic-security.md)
 - [Blockchain Entegrasyonu ve Runbook'u](operations/blockchain-integration.md)
+- [Blockchain Dashboard Snapshot](operations/blockchain-integration-dashboard.md)
 - [Operasyon Runbook'u: Müşteri Saklama & Anahtar İmha](operations/runbook-retention.md)
 - [OAuth API OpenAPI Şeması](operations/oauth-openapi.md)
 - [OAuth Web Entegrasyonu Rehberi](operations/oauth-web-integration.md)

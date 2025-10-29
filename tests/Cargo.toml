@@ -23,6 +23,7 @@ http = "0.2"
 aunsorm-kms = { path = "../crates/kms" }
 aunsorm-x509 = { path = "../crates/x509" }
 aunsorm-server = { path = "../crates/server" }
+aunsorm-mdm = { path = "../crates/mdm" }
 proptest = "1.4"
 base64 = { workspace = true }
 sha2 = { workspace = true }

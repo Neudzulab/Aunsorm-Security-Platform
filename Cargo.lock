@@ -615,6 +615,7 @@ dependencies = [
  "aunsorm-core",
  "aunsorm-jwt",
  "aunsorm-kms",
+ "aunsorm-mdm",
  "aunsorm-packet",
  "aunsorm-server",
  "aunsorm-x509",
