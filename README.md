@@ -730,7 +730,7 @@ aunsorm-server v0.4.5
 │  │                                            └─ Output: token, ttlSeconds, bridgeUrl, issuedAt, expiresAt
 │  └─ POST   /security/jwt-verify ✅         → JWT doğrula, payload + hata mesajı döndür
 │                                              └─ Input: token (string)
-│                                              └─ Output: { valid: boolean, payload?: Claims, error?: string }
+│                                              └─ Output: { valid: boolean, payload?: Claims (+ issuedAt/notBefore saniye), error?: string }
 │
 ├─ 🔍 Transparency & Audit
 │  └─ GET    /transparency/tree ✅      → Merkle tree audit log
