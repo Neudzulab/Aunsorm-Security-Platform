@@ -98,6 +98,7 @@ Aunsorm Cryptography Suite/
 │   ├── interop-sanity.sh              # Interop doğrulama komut dosyası ✅
 │   └── automation/                    # Plan ve operasyon otomasyon scriptleri (Rust & Python)
 ├── tests/
+│   ├── acme/                          # ACME protokol mock server ve smoke testleri ✅
 │   ├── blockchain/                    # Fabric ve zincirler arası PoC testleri 🚧
 │   ├── data/                          # Deterministik test fixture'ları
 │   └── identity/                      # Kimlik akış entegrasyon testleri ✅
@@ -809,6 +810,31 @@ aunsorm-server v0.4.5
                                            └─ Yanıt: challenge durumu (`revoked`)
 ```
 
+> 📚 **ACME Runbook'ları:**
+> - [ACME Protokol Rehberi](docs/src/operations/acme/protocol-guide.md)
+> - [ACME Domain Doğrulama Kılavuzu](docs/src/operations/acme/domain-validation.md)
+> - [ACME Sorun Giderme Rehberi](docs/src/operations/acme/troubleshooting.md)
+
+#### ACME Sertifika Akış Diyagramı
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Directory as ACME Directory
+    participant Account as Account API
+    participant Order as Order API
+    Client->>Directory: GET /acme/directory
+    Directory-->>Client: Replay-Nonce + endpoint URLs
+    Client->>Account: POST /acme/new-account
+    Account-->>Client: 201 Created + Location + Replay-Nonce
+    Client->>Order: POST /acme/new-order
+    Order-->>Client: Pending authorizations
+    Client->>Order: POST /acme/order/{id}/finalize
+    Order-->>Client: valid + certificate URL
+    Client->>Order: GET /acme/cert/{id}
+    Order-->>Client: fullchain.pem
+```
+
 > **📌 NOT:** Bu ağaçta gösterilen her komut ve endpoint, ilerleyen sürümlerde **daha fazla özellik ve parametre** ile genişletilecektir.
 > 
 > **🔜 GELECEK ENDPOINT'LER:**
@@ -1205,6 +1231,8 @@ cargo test --features http3-experimental --test http3_datagram -- --nocapture
 ```
 
 > 🛠️ Ops Notu: GitHub Actions üzerinde `ENABLE_HTTP3_POC=true` olarak tetiklenen akış, `http3-poc` işini çalıştırarak HTTP/3 canary testlerini (`aunsorm-server` + entegrasyon testleri) doğrular.
+
+> 🛠️ Ops Notu: `ACME Staging Smoke` workflow'u (`.github/workflows/ci/acme.yml`) `ACME_STAGING_DIRECTORY`, `ACME_STAGING_ACCOUNT_KEY` ve `ACME_STAGING_CONTACT` secrets değerlerini doğrular; eksik konfigurasyonda pipeline erken hatalar ve `cargo test -p aunsorm-tests mock_server` komutunu kaydeder.
 
 **Limitasyonlar (Experimental):**
 - ⚠️ Production kullanımı önerilmez (v0.4.4 - PoC stage)

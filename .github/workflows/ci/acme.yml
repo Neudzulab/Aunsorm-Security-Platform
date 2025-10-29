@@ -1,0 +1,48 @@
+name: ACME Staging Smoke
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "crates/acme/**"
+      - "tests/**"
+      - "docs/src/operations/acme/**"
+      - ".github/workflows/ci/acme.yml"
+      - "README.md"
+      - "ROADMAP.md"
+  workflow_dispatch:
+
+jobs:
+  acme-staging:
+    name: ACME staging smoke tests
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false }}
+    env:
+      ACME_STAGING_DIRECTORY: ${{ secrets.ACME_STAGING_DIRECTORY }}
+      ACME_STAGING_ACCOUNT_KEY: ${{ secrets.ACME_STAGING_ACCOUNT_KEY }}
+      ACME_STAGING_CONTACT: ${{ secrets.ACME_STAGING_CONTACT }}
+    steps:
+      - name: Validate staging secrets
+        run: |
+          missing=()
+          for var in ACME_STAGING_DIRECTORY ACME_STAGING_ACCOUNT_KEY ACME_STAGING_CONTACT; do
+            if [ -z "${!var}" ]; then
+              missing+=("$var")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::Missing required ACME staging secrets: %s\n' "${missing[*]}"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.76.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: acme-staging-${{ runner.os }}
+      - name: Run ACME mock staging tests
+        run: cargo test -p aunsorm-tests mock_server -- --nocapture

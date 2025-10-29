@@ -623,6 +623,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "http 0.2.12",
+ "http-body-util",
  "pem",
  "proptest",
  "serde",

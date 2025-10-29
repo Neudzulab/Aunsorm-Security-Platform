@@ -147,15 +147,15 @@
   - [ ] Generic DNS provider interface
   
 - [ ] Testing infrastructure
-  - [ ] Mock ACME server
+  - [x] Mock ACME server (happy/sad path senaryoları `tests/src/acme/mock_server.rs`)
   - [ ] Integration tests with Let's Encrypt staging
   - [ ] End-to-end renewal tests
   
 - [ ] Documentation
-  - [ ] ACME protocol guide
-  - [ ] Domain validation setup
+  - [x] ACME protocol guide (bkz. `docs/src/operations/acme/protocol-guide.md`)
+  - [x] Domain validation setup (bkz. `docs/src/operations/acme/domain-validation.md`)
   - [ ] Production deployment guide
-  - [ ] Troubleshooting FAQ
+  - [x] Troubleshooting FAQ (bkz. `docs/src/operations/acme/troubleshooting.md`)
 
 **Bağımlılıklar:**
 - `reqwest` - HTTPS client
