@@ -8,6 +8,7 @@
 - [Post-Kuantum Hazırlık Durumu](architecture/postquantum.md)
 - [Kilitli Bellek ve Güvenli Donanım](architecture/trusted_compute.md)
 - [Operasyonel Testler](operations/testing.md)
+- [Operasyonel Sorun Giderme Rehberi](operations/troubleshooting-guide.md)
 - [KMS/HSM Conformance Raporu](operations/kms-conformance.md)
 - [CA İmzalama Otomasyon Planı](operations/ca-automation.md)
 - [ACME Gateway Otomasyonu](operations/acme-gateway-automation.md)
