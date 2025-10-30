@@ -1040,17 +1040,12 @@ pub struct JwtPayload {
     pub not_before: Option<u64>,
     #[serde(rename = "relatedId", skip_serializing_if = "Option::is_none")]
     pub related_id: Option<String>,
-    /// Non-standard (extra) claim keys are exposed at the top-level for
-    /// backward-compatibility (e.g. roomId, participantName). These are
-    /// filtered to exclude standard JWT claim names so they don't collide
-    /// with the canonical fields above.
-    #[serde(flatten)]
-    pub extras: serde_json::Map<String, serde_json::Value>,
-    /// The full, raw claim set as produced by the signer/verifier. This is
-    /// provided under `rawClaims` to avoid key conflicts with the top-level
-    /// convenience fields.
-    #[serde(rename = "rawClaims")]
-    pub claims: serde_json::Value,
+    #[serde(rename = "jwtId", skip_serializing_if = "Option::is_none")]
+    pub jwt_id: Option<String>,
+    /// Non-standard claim keys (roomId, participantName, metadata, etc.) are
+    /// grouped under this object to avoid name collisions with standard JWT claims.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extras: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Serialize)]
@@ -1154,11 +1149,6 @@ async fn verify_token_for_audience(
                     }
                 }
             }
-            // Add an explicit convenience `jwt_id` top-level field for callers
-            // that expect it (legacy clients / tests).
-            if let Some(jti) = claims.jwt_id.clone() {
-                extras.insert("jwt_id".to_string(), serde_json::Value::String(jti));
-            }
 
             let payload = JwtPayload {
                 subject: claims
@@ -1171,8 +1161,8 @@ async fn verify_token_for_audience(
                 issued_at: claims.issued_at.map(system_time_to_unix_seconds),
                 not_before: claims.not_before.map(system_time_to_unix_seconds),
                 related_id,
-                extras,
-                claims: payload_value,
+                jwt_id: claims.jwt_id.clone(),
+                extras: if extras.is_empty() { None } else { Some(extras) },
             };
 
             JwtVerifyResponse {

@@ -174,21 +174,79 @@ cargo deny check   - Yarım/tamamlanmamış özellik bile olsa `[Planlandı v0.X
 
 
 
-### 5. Documentation Standards3. **Örnek Formatlar**
+### 5. Documentation Standards
 
-- Update `README.md` for any new endpoints or services   ```markdown
+- Update `README.md` for any new endpoints or services
+- Update `port-map.yaml` for any port changes
+- Add `CHANGELOG.md` entry for version changes
+- Technical architecture changes require `PROJECT_SUMMARY.md` updates
 
-- Update `port-map.yaml` for any port changes   - `POST /id/generate` 🚧 - Benzersiz kimlik oluştur (aunsorm-id crate hazır, endpoint bekliyor)
+### 6. JWT Response Structure - SEALED (v0.5.0+)
 
-- Add `CHANGELOG.md` entry for version changes   - `GET /acme/directory` 📋 [Planlandı v0.5.0] - ACME servis keşfi (RFC 8555)
+**⚠️ SEALED STRUCTURE - DO NOT MODIFY WITHOUT SECURITY REVIEW ⚠️**
 
-- Technical architecture changes require `PROJECT_SUMMARY.md` updates   - `POST /session/init` ✅ - Oturum başlatma (kalibrasyon gerektirir)
+The JWT verification response structure is **sealed** to prevent duplicate field serialization errors and maintain client compatibility.
 
-   ```
+**Canonical Structure (`crates/server/src/routes.rs`):**
+
+```rust
+#[derive(Serialize)]
+pub struct JwtPayload {
+    pub subject: String,
+    pub audience: String,
+    pub issuer: String,
+    pub expiration: u64,
+    #[serde(rename = "issuedAt", skip_serializing_if = "Option::is_none")]
+    pub issued_at: Option<u64>,
+    #[serde(rename = "notBefore", skip_serializing_if = "Option::is_none")]
+    pub not_before: Option<u64>,
+    #[serde(rename = "relatedId", skip_serializing_if = "Option::is_none")]
+    pub related_id: Option<String>,
+    #[serde(rename = "jwtId", skip_serializing_if = "Option::is_none")]
+    pub jwt_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extras: Option<serde_json::Map<String, serde_json::Value>>,
+}
+```
+
+**Example Response:**
+```json
+{
+  "valid": true,
+  "payload": {
+    "subject": "user123",
+    "audience": "zasian-media",
+    "issuer": "https://aunsorm.local",
+    "expiration": 1761791358,
+    "issuedAt": 1761787758,
+    "jwtId": "9a05c8cb00b52a2e79403e58d7f27b4e",
+    "extras": {
+      "roomId": "test-room",
+      "participantName": "TestUser",
+      "metadata": {
+        "codec": "vp9",
+        "appData": {
+          "role": "host"
+        }
+      }
+    }
+  },
+  "error": null
+}
+```
+
+**Critical Rules:**
+1. ❌ DO NOT flatten `extras` - causes duplicate field errors
+2. ❌ DO NOT add raw claims to top-level
+3. ✅ Standard JWT claims use canonical names at top-level
+4. ✅ Custom claims MUST be nested under `extras`
+5. ✅ Use camelCase for JSON fields
+
+**Modification requires:** Security review, client compatibility assessment, API version bump, CHANGELOG update.
 
 ---
 
-4. **Kontrol Noktaları**
+## 🚨 Servis Ağacı Güncelleme Direktifi
 
 ## Workflow   - Yeni crate eklendiğinde → README'de bahset, endpoint planı yaz
 

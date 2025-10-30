@@ -2077,18 +2077,18 @@ async fn jwt_verify_endpoint_accepts_valid_token() {
         payload.get("subject").and_then(|value| value.as_str()),
         Some("participant-42")
     );
+    // extras are now nested under "extras" object
+    let extras = payload.get("extras").and_then(|v| v.as_object()).expect("extras");
     assert_eq!(
-        payload.get("roomId").and_then(|value| value.as_str()),
+        extras.get("roomId").and_then(|value| value.as_str()),
         Some("room-hall-1")
     );
     assert_eq!(
-        payload
-            .get("participantName")
-            .and_then(|value| value.as_str()),
+        extras.get("participantName").and_then(|value| value.as_str()),
         Some("Test User")
     );
     assert!(payload
-        .get("jwt_id")
+        .get("jwtId")
         .and_then(|value| value.as_str())
         .is_some());
 }
