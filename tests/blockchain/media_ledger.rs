@@ -107,18 +107,21 @@ impl MediaLedgerRecord {
 
     /// Exposes the hashes for assertions without cloning the underlying strings.
     #[must_use]
+    #[allow(dead_code)]
     pub fn hashes(&self) -> (&str, &str, &str) {
         (&self.video_hash, &self.image_hash, &self.audio_hash)
     }
 
     /// Returns the calibration identifier.
     #[must_use]
+    #[allow(dead_code)]
     pub fn calibration_id(&self) -> &str {
         &self.calibration_id
     }
 
     /// Provides access to the timestamp for advanced checks without leaking mutability.
     #[must_use]
+    #[allow(dead_code)]
     pub fn captured_at(&self) -> OffsetDateTime {
         self.captured_at
     }

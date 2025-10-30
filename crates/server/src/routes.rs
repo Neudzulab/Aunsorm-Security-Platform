@@ -1040,7 +1040,16 @@ pub struct JwtPayload {
     pub not_before: Option<u64>,
     #[serde(rename = "relatedId", skip_serializing_if = "Option::is_none")]
     pub related_id: Option<String>,
+    /// Non-standard (extra) claim keys are exposed at the top-level for
+    /// backward-compatibility (e.g. roomId, participantName). These are
+    /// filtered to exclude standard JWT claim names so they don't collide
+    /// with the canonical fields above.
     #[serde(flatten)]
+    pub extras: serde_json::Map<String, serde_json::Value>,
+    /// The full, raw claim set as produced by the signer/verifier. This is
+    /// provided under `rawClaims` to avoid key conflicts with the top-level
+    /// convenience fields.
+    #[serde(rename = "rawClaims")]
     pub claims: serde_json::Value,
 }
 
@@ -1128,6 +1137,29 @@ async fn verify_token_for_audience(
             }
 
             let related_id = extract_related_id(&payload_value);
+
+            // Build extras map by removing standard JWT keys from the serialized
+            // claim object. This prevents key collisions when we also expose
+            // canonical top-level fields (subject/audience/issuer/etc.).
+            let mut extras = serde_json::Map::new();
+            if let serde_json::Value::Object(map) = &payload_value {
+                for (k, v) in map {
+                    match k.as_str() {
+                        "iss" | "sub" | "aud" | "exp" | "nbf" | "iat" | "jti" => {
+                            // skip standard JWT names
+                        }
+                        _ => {
+                            extras.insert(k.clone(), v.clone());
+                        }
+                    }
+                }
+            }
+            // Add an explicit convenience `jwt_id` top-level field for callers
+            // that expect it (legacy clients / tests).
+            if let Some(jti) = claims.jwt_id.clone() {
+                extras.insert("jwt_id".to_string(), serde_json::Value::String(jti));
+            }
+
             let payload = JwtPayload {
                 subject: claims
                     .subject
@@ -1139,6 +1171,7 @@ async fn verify_token_for_audience(
                 issued_at: claims.issued_at.map(system_time_to_unix_seconds),
                 not_before: claims.not_before.map(system_time_to_unix_seconds),
                 related_id,
+                extras,
                 claims: payload_value,
             };
 

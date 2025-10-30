@@ -75,6 +75,7 @@ pub enum LedgerError {
 pub trait LedgerBackend {
     fn append(&mut self, entry: LedgerEntry) -> Result<(), LedgerError>;
     fn latest(&self) -> &LedgerEntry;
+    #[allow(dead_code)]
     fn get(&self, index: u64) -> Option<&LedgerEntry>;
     fn len(&self) -> usize;
 }

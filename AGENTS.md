@@ -1,6 +1,16 @@
 # Aunsorm Agent Coordination# Aunsorm Repository Coordination
 
+### Principles
+All test errors must be fixed — even warnings are unacceptable.
+No deprecated dependencies are allowed.
+Issues must never be suppressed; instead, they should be resolved properly.
+Mocking must not be used as a replacement for actual implementations.
+Sealed classes, methods, or structures must remain intact and must not be modified.
 
+    In summary:
+
+    The codebase must maintain full integrity, with strict quality enforcement.
+    Every test should pass cleanly with zero warnings, no deprecated code, and no shortcuts that compromise design principles.
 
 **Version:** 0.5.0  Bu depo tek bir ajan tarafından değil, alan uzmanı takımlar tarafından yönetilecek şekilde tasarlanmalıdır. PLAN.md içerisindeki gereksinimler her sprintte küçük parçalara ayrılacak ve her iş öğesi için sorumlu ajan tanımlanacaktır.
 

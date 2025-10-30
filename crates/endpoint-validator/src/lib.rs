@@ -224,10 +224,10 @@ impl ValidationReport {
                 failure.path,
                 failure
                     .status
-                    .map_or("-".to_string(), |status| status.to_string()),
+                    .map_or_else(|| "-".to_string(), |status| status.to_string()),
                 failure
                     .latency_ms
-                    .map_or("-".to_string(), |latency| latency.to_string()),
+                    .map_or_else(|| "-".to_string(), |latency| latency.to_string()),
                 excerpt,
                 failure
                     .likely_cause

@@ -78,12 +78,15 @@ pub struct ServerConfig {
     pub(crate) clock_snapshot: SecureClockSnapshot,
 }
 
+use std::time::{SystemTime, UNIX_EPOCH};
+
 impl ServerConfig {
     /// Çevre değişkenlerinden yapılandırmayı oluşturur.
     ///
     /// # Errors
     ///
     /// Gerekli alanlar eksikse veya geçersizse `ServerError` döner.
+    #[allow(clippy::too_many_lines)]
     pub fn from_env() -> Result<Self, ServerError> {
         let listen = env::var("AUNSORM_LISTEN")
             .unwrap_or_else(|_| "127.0.0.1:8080".to_string())
@@ -178,20 +181,18 @@ impl ServerConfig {
 
         // Auto-update timestamp to current time (development mode)
         // Production should use NTP attestation server with real signatures
-        use std::time::{SystemTime, UNIX_EPOCH};
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(|err| {
-                ServerError::Configuration(format!("System time error: {err}"))
-            })?
+            .map_err(|err| ServerError::Configuration(format!("System time error: {err}")))?
             .as_millis()
             .try_into()
-            .map_err(|_| {
-                ServerError::Configuration("Timestamp overflow".to_string())
-            })?;
-        
+            .map_err(|_| ServerError::Configuration("Timestamp overflow".to_string()))?;
+
         clock_snapshot.unix_time_ms = now_ms;
-        tracing::debug!("🕐 Clock attestation timestamp updated to current time: {}", now_ms);
+        tracing::debug!(
+            "🕐 Clock attestation timestamp updated to current time: {}",
+            now_ms
+        );
 
         Self::new(
             listen,
