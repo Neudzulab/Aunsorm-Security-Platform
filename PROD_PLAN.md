@@ -16,7 +16,7 @@ This document tracks all remaining work required for production deployment.
 - [ ] Replace development mock signatures with production cryptographic proofs
 - [ ] Set `AUNSORM_CLOCK_MAX_AGE_SECS=30` in production environment
 - [ ] Configure health checks to monitor clock attestation freshness
-- [ ] Document clock attestation server deployment procedures
+- [x] Document clock attestation server deployment procedures
 
 ### Native RNG Compliance
 - [x] Aunsorm Native RNG implemented across all crates

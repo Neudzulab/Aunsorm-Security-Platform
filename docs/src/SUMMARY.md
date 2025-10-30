@@ -9,6 +9,7 @@
 - [Kilitli Bellek ve Güvenli Donanım](architecture/trusted_compute.md)
 - [Operasyonel Testler](operations/testing.md)
 - [Operasyonel Sorun Giderme Rehberi](operations/troubleshooting-guide.md)
+- [Clock Attestation Sunucu Runbook'u](operations/clock-attestation-deployment.md)
 - [KMS/HSM Conformance Raporu](operations/kms-conformance.md)
 - [CA İmzalama Otomasyon Planı](operations/ca-automation.md)
 - [ACME Gateway Otomasyonu](operations/acme-gateway-automation.md)
