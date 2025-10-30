@@ -7,7 +7,7 @@ reporting allows us to protect users quickly and transparently.
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | ✅         |
+| 0.5.x   | ✅         |
 | < 0.1   | ❌         |
 
 We currently support the latest patch release on the 0.1.x line. Older releases

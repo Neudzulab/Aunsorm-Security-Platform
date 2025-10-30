@@ -10,7 +10,7 @@ services:
     container_name: aun-gateway
     build:
       context: .
-      dockerfile: Dockerfile.gateway
+      dockerfile: docker/Dockerfile.gateway
     image: aunsorm-gateway:local
     env_file:
       - .env
@@ -42,7 +42,7 @@ services:
     container_name: aun-auth-service
     build:
       context: .
-      dockerfile: Dockerfile.auth
+      dockerfile: docker/Dockerfile.auth
     image: aunsorm-auth:local
     env_file:
       - .env
@@ -62,7 +62,7 @@ services:
     container_name: aun-crypto-service
     build:
       context: .
-      dockerfile: Dockerfile.crypto
+      dockerfile: docker/Dockerfile.crypto
     image: aunsorm-crypto:local
     env_file:
       - .env
@@ -80,7 +80,7 @@ services:
     container_name: aun-x509-service
     build:
       context: .
-      dockerfile: Dockerfile.x509
+      dockerfile: docker/Dockerfile.x509
     image: aunsorm-x509:local
     env_file:
       - .env
@@ -95,7 +95,7 @@ services:
     container_name: aun-kms-service
     build:
       context: .
-      dockerfile: Dockerfile.kms
+      dockerfile: docker/Dockerfile.kms
     image: aunsorm-kms:local
     env_file:
       - .env
@@ -110,7 +110,7 @@ services:
     container_name: aun-mdm-service
     build:
       context: .
-      dockerfile: Dockerfile.mdm
+      dockerfile: docker/Dockerfile.mdm
     image: aunsorm-mdm:local
     env_file:
       - .env
@@ -130,7 +130,7 @@ services:
     container_name: aun-acme-service
     build:
       context: .
-      dockerfile: Dockerfile.acme
+      dockerfile: docker/Dockerfile.acme
     image: aunsorm-acme:local
     env_file:
       - .env
@@ -150,7 +150,7 @@ services:
     container_name: aun-id-service
     build:
       context: .
-      dockerfile: Dockerfile.id
+      dockerfile: docker/Dockerfile.id
     image: aunsorm-id:local
     env_file:
       - .env
@@ -168,7 +168,7 @@ services:
     container_name: aun-pqc-service
     build:
       context: .
-      dockerfile: Dockerfile.pqc
+      dockerfile: docker/Dockerfile.pqc
     image: aunsorm-pqc:local
     env_file:
       - .env
@@ -183,7 +183,7 @@ services:
     container_name: aun-rng-service
     build:
       context: .
-      dockerfile: Dockerfile.rng
+      dockerfile: docker/Dockerfile.rng
     image: aunsorm-rng:local
     env_file:
       - .env
@@ -216,7 +216,7 @@ services:
     container_name: aun-blockchain-service
     build:
       context: .
-      dockerfile: Dockerfile.blockchain
+      dockerfile: docker/Dockerfile.blockchain
     image: aunsorm-blockchain:local
     env_file:
       - .env
@@ -231,7 +231,7 @@ services:
     container_name: aun-e2ee-service
     build:
       context: .
-      dockerfile: Dockerfile.e2ee
+      dockerfile: docker/Dockerfile.e2ee
     image: aunsorm-e2ee:local
     env_file:
       - .env
@@ -248,7 +248,7 @@ services:
     container_name: aun-metrics-service
     build:
       context: .
-      dockerfile: Dockerfile.metrics
+      dockerfile: docker/Dockerfile.metrics
     image: aunsorm-metrics:local
     env_file:
       - .env
@@ -263,7 +263,7 @@ services:
     container_name: aun-cli-gateway
     build:
       context: .
-      dockerfile: Dockerfile.cli-gateway
+      dockerfile: docker/Dockerfile.cli-gateway
     image: aunsorm-cli-gateway:local
     env_file:
       - .env
