@@ -575,16 +575,22 @@ fn unix_micros(time: SystemTime) -> Result<u64, IdError> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_head_id, HeadIdGenerator, IdError, FINGERPRINT_LEN, FINGERPRINT_PREFIX_BYTES,
-        PROCESS_ENTROPY,
+        parse_head_id, HeadIdGenerator, IdError, FINGERPRINT_LEN, PROCESS_ENTROPY,
+        DEFAULT_NAMESPACE, HEAD_ENV_KEYS,
     };
+    use super::{fingerprint_from_head, normalize_head};
     use base64::Engine;
     use sha2::{Digest, Sha256};
+    use std::sync::Mutex;
 
     #[cfg(feature = "serde")]
     use super::HeadStampedId;
 
+    use once_cell::sync::Lazy;
+
     const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    static ENV_GUARD: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     #[test]
     fn generates_unique_ids() {
@@ -735,62 +741,62 @@ mod tests {
 
     #[test]
     fn environment_integration_tests() {
-        // Save current environment state at the start
-        let prev_head = std::env::var("AUNSORM_HEAD").ok();
-        let prev_vergen = std::env::var("VERGEN_GIT_SHA").ok();
-        let prev_namespace = std::env::var("AUNSORM_ID_NAMESPACE").ok();
+        let _guard = ENV_GUARD.lock().expect("env guard");
 
-        // Test 1: env_fallbacks scenario
-        {
-            // Clear and set test environment for env_fallbacks
-            std::env::remove_var("AUNSORM_HEAD");
-            std::env::remove_var("AUNSORM_ID_NAMESPACE");
-            std::env::set_var("VERGEN_GIT_SHA", HEAD);
-            std::env::set_var("AUNSORM_ID_NAMESPACE", "ci/Flow");
+        let mut tracked_keys: Vec<&str> = HEAD_ENV_KEYS.iter().copied().collect();
+        tracked_keys.push("AUNSORM_ID_NAMESPACE");
 
-            let generator = HeadIdGenerator::from_env().expect("env");
-            assert_eq!(generator.namespace(), "ci-flow");
-            let expected_prefix = {
-                let digest = Sha256::digest(HEAD.as_bytes());
-                hex::encode(&digest[..FINGERPRINT_PREFIX_BYTES])
-            };
-            assert_eq!(generator.head_prefix(), expected_prefix);
+        let saved: Vec<(&str, Option<String>)> = tracked_keys
+            .iter()
+            .map(|&key| (key, std::env::var(key).ok()))
+            .collect();
+
+        for &key in &tracked_keys {
+            std::env::remove_var(key);
         }
 
-        // Test 2: from_env_with_namespace_overrides_request_namespace scenario
-        {
-            // Clear and set test environment for namespace override test
-            std::env::remove_var("AUNSORM_HEAD");
-            std::env::remove_var("VERGEN_GIT_SHA");
-            std::env::remove_var("AUNSORM_ID_NAMESPACE");
-            std::env::set_var("AUNSORM_HEAD", HEAD);
-            std::env::set_var("AUNSORM_ID_NAMESPACE", "default-ns");
+        const FALLBACK_HEAD: &str = "abcdef1234567890abcdef1234567890abcdef12";
+        std::env::set_var("GITHUB_SHA", FALLBACK_HEAD);
 
-            let generator =
-                HeadIdGenerator::from_env_with_namespace("Ops/Delivery").expect("generator");
-            assert_eq!(generator.namespace(), "ops-delivery");
-            let expected_prefix = {
-                let digest = Sha256::digest(HEAD.as_bytes());
-                hex::encode(&digest[..FINGERPRINT_PREFIX_BYTES])
-            };
-            assert_eq!(generator.head_prefix(), expected_prefix);
+        let fallback_generator = HeadIdGenerator::from_env().expect("fallback generator");
+        assert_eq!(fallback_generator.namespace(), DEFAULT_NAMESPACE);
+        let fallback_fp = fingerprint_from_head(
+            &normalize_head(FALLBACK_HEAD).expect("normalize fallback head"),
+        );
+        assert_eq!(fallback_generator.head_fingerprint_bytes(), fallback_fp);
+
+        std::env::set_var("VERGEN_GIT_SHA", HEAD);
+        std::env::set_var("AUNSORM_ID_NAMESPACE", "ci/Flow");
+
+        let env_namespace_generator = HeadIdGenerator::from_env().expect("env namespace generator");
+        assert_eq!(env_namespace_generator.namespace(), "ci-flow");
+        let vergen_fp = fingerprint_from_head(&normalize_head(HEAD).expect("normalize head"));
+        assert_eq!(env_namespace_generator.head_fingerprint_bytes(), vergen_fp);
+
+        let override_generator =
+            HeadIdGenerator::from_env_with_namespace("Ops/Delivery").expect("override generator");
+        assert_eq!(override_generator.namespace(), "ops-delivery");
+        assert_eq!(override_generator.head_fingerprint_bytes(), vergen_fp);
+
+        const PRIMARY_HEAD: &str = "11223344556677889900aabbccddeeff00112233";
+        std::env::set_var("AUNSORM_HEAD", PRIMARY_HEAD);
+        std::env::set_var("AUNSORM_ID_NAMESPACE", "Ops::Telemetry");
+
+        let primary_generator = HeadIdGenerator::from_env().expect("primary generator");
+        assert_eq!(primary_generator.namespace(), "ops-telemetry");
+        let primary_fp = fingerprint_from_head(
+            &normalize_head(PRIMARY_HEAD).expect("normalize primary head"),
+        );
+        assert_eq!(primary_generator.head_fingerprint_bytes(), primary_fp);
+
+        for &key in &tracked_keys {
+            std::env::remove_var(key);
         }
 
-        // Restore original environment state at the end
-        if let Some(value) = prev_head {
-            std::env::set_var("AUNSORM_HEAD", value);
-        } else {
-            std::env::remove_var("AUNSORM_HEAD");
-        }
-        if let Some(value) = prev_vergen {
-            std::env::set_var("VERGEN_GIT_SHA", value);
-        } else {
-            std::env::remove_var("VERGEN_GIT_SHA");
-        }
-        if let Some(value) = prev_namespace {
-            std::env::set_var("AUNSORM_ID_NAMESPACE", value);
-        } else {
-            std::env::remove_var("AUNSORM_ID_NAMESPACE");
+        for (key, value) in saved {
+            if let Some(val) = value {
+                std::env::set_var(key, val);
+            }
         }
     }
 
