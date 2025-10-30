@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-cli"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "assert_cmd",
  "aunsorm-acme",
@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-core"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "argon2",
  "base64 0.21.7",
@@ -434,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-id"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "base64 0.21.7",
  "hex",
@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-jwt"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "aunsorm-core",
  "aunsorm-kms",
@@ -471,7 +471,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-kms"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "aead",
  "aes-gcm",
@@ -494,7 +494,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-mdm"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -503,7 +503,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-packet"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "aead",
  "aes",
@@ -531,7 +531,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-pqc"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "base64 0.21.7",
  "hex",
@@ -546,7 +546,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-pytests"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "aunsorm-core",
  "aunsorm-packet",
@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-server"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "aunsorm-acme",
  "aunsorm-core",
@@ -611,7 +611,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-tests"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -646,7 +646,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-wasm"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "aunsorm-core",
  "aunsorm-packet",
@@ -663,7 +663,7 @@ dependencies = [
 
 [[package]]
 name = "aunsorm-x509"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "aunsorm-core",
  "base64 0.21.7",
@@ -1477,7 +1477,7 @@ dependencies = [
 
 [[package]]
 name = "endpoint-validator"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "axum",

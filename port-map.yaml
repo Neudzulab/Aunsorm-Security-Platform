@@ -1,0 +1,124 @@
+# Aunsorm Microservices Port Mapping
+# Version: 0.5.0
+# Last Updated: 2025-10-30
+
+services:
+  - name: gateway
+    port: 50010
+    protocol: HTTP
+    container: aun-gateway
+    description: API Gateway and routing
+    health_endpoint: /health
+    
+  - name: auth-service
+    port: 50011
+    protocol: HTTP
+    container: aun-auth-service
+    description: JWT token issuance and OAuth 2.0
+    health_endpoint: /health
+    
+  - name: crypto-service
+    port: 50012
+    protocol: HTTP
+    container: aun-crypto-service
+    description: Core cryptographic operations
+    health_endpoint: /health
+    
+  - name: x509-service
+    port: 50013
+    protocol: HTTP
+    container: aun-x509-service
+    description: X.509 certificate management
+    health_endpoint: /health
+    
+  - name: kms-service
+    port: 50014
+    protocol: HTTP
+    container: aun-kms-service
+    description: Key management system
+    health_endpoint: /health
+    
+  - name: mdm-service
+    port: 50015
+    protocol: HTTP
+    container: aun-mdm-service
+    description: Mobile device management
+    health_endpoint: /health
+    
+  - name: id-service
+    port: 50016
+    protocol: HTTP
+    container: aun-id-service
+    description: Unique ID generation
+    health_endpoint: /health
+    
+  - name: acme-service
+    port: 50017
+    protocol: HTTP
+    container: aun-acme-service
+    description: ACME protocol (Let's Encrypt)
+    health_endpoint: /health
+    
+  - name: pqc-service
+    port: 50018
+    protocol: HTTP
+    container: aun-pqc-service
+    description: Post-quantum cryptography
+    health_endpoint: /health
+    
+  - name: rng-service
+    port: 50019
+    protocol: HTTP
+    container: aun-rng-service
+    description: Random number generation (deprecated)
+    health_endpoint: /health
+    deprecation_note: Use native RNG in crates instead
+    
+  - name: blockchain-service
+    port: 50020
+    protocol: HTTP
+    container: aun-blockchain-service
+    description: DID registry (Hyperledger Fabric)
+    health_endpoint: /health
+    status: POC
+    
+  - name: e2ee-service
+    port: 50021
+    protocol: HTTP
+    container: aun-e2ee-service
+    description: End-to-end encryption sessions
+    health_endpoint: /health
+    
+  - name: metrics-service
+    port: 50022
+    protocol: HTTP
+    container: aun-metrics-service
+    description: Prometheus metrics aggregation
+    health_endpoint: /health
+    
+  - name: cli-gateway
+    port: 50023
+    protocol: HTTP
+    container: aun-cli-gateway
+    description: CLI tool backend
+    health_endpoint: /health
+
+# Internal network
+network:
+  name: aunsorm-network
+  driver: bridge
+  
+# Port allocation strategy
+port_allocation:
+  range_start: 50010
+  range_end: 50023
+  reserved_ports:
+    - 50024  # Future: WebRTC signaling
+    - 50025  # Future: gRPC gateway
+    - 50026  # Future: GraphQL endpoint
+    
+# External access
+external_access:
+  gateway_only: true
+  internal_service_mesh: true
+  tls_termination: gateway

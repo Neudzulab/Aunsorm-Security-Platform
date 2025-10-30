@@ -1,109 +1,253 @@
-# Aunsorm Repository Coordination
+# Aunsorm Agent Coordination# Aunsorm Repository Coordination
 
-Bu depo tek bir ajan tarafından değil, alan uzmanı takımlar tarafından yönetilecek şekilde tasarlanmalıdır. PLAN.md içerisindeki gereksinimler her sprintte küçük parçalara ayrılacak ve her iş öğesi için sorumlu ajan tanımlanacaktır.
+
+
+**Version:** 0.5.0  Bu depo tek bir ajan tarafından değil, alan uzmanı takımlar tarafından yönetilecek şekilde tasarlanmalıdır. PLAN.md içerisindeki gereksinimler her sprintte küçük parçalara ayrılacak ve her iş öğesi için sorumlu ajan tanımlanacaktır.
+
+**Last Updated:** 2025-10-30
 
 ## Genel İlkeler
-- Tüm kod MSRV 1.76 üzerinde derlenebilir olmalıdır.
+
+---- Tüm kod MSRV 1.76 üzerinde derlenebilir olmalıdır.
+
 - Güvenlik odaklı gereksinimler (kalibrasyon bağlamı, strict kipleri, sıfırlama vb.) uygulanırken formal dokümantasyon tutulmalıdır.
-- Her dizin altındaki ajanlar, bu dosyada belirtilen standartlara uymalıdır.
+
+## Primary Directive- Her dizin altındaki ajanlar, bu dosyada belirtilen standartlara uymalıdır.
+
 - Yeni bir alan açıldığında, o dizine özel ek `AGENTS.md` oluşturulmalıdır.
 
+**All development work must align with [PROD_PLAN.md](PROD_PLAN.md).**
+
 ## 🎲 AUNSORM NATIVE RNG ZORUNLU KULLANIMI (v0.4.5+)
-**KRITIK:** Tüm kriptografik rastgele sayı üretimleri artık Aunsorm'un kendi native RNG algoritmasını kullanmak zorundadır!
 
-### Yasak Kullanımlar:
+This repository is coordinated by specialized domain agents. All new features, refactoring, and infrastructure changes must be tracked as tasks in `PROD_PLAN.md` with checkbox format for progress tracking.**KRITIK:** Tüm kriptografik rastgele sayı üretimleri artık Aunsorm'un kendi native RNG algoritmasını kullanmak zorundadır!
+
+
+
+---### Yasak Kullanımlar:
+
 - ❌ **OsRng direkt kullanımı** (sadece initial entropy seeding için izin verilir)
-- ❌ **HTTP /random/number** endpoint çağrıları (6.4s overhead)  
+
+## Agent Responsibilities- ❌ **HTTP /random/number** endpoint çağrıları (6.4s overhead)  
+
 - ❌ **rand::thread_rng()** veya benzeri stdlib RNG'leri
-- ❌ **ChaCha8Rng** veya diğer harici RNG implementasyonları (test hariç)
 
-### Zorunlu Kullanım:
-- ✅ **AunsormNativeRng** - Tüm crate'lerde aynı implementation
+### Crypto Agent- ❌ **ChaCha8Rng** veya diğer harici RNG implementasyonları (test hariç)
+
+- **Scope:** `crates/core`, `crates/pqc`, `crates/packet`, `crates/crypto-service`
+
+- **Focus:** Cryptographic primitives, PQC implementations, Native RNG compliance### Zorunlu Kullanım:
+
+- **Current Priority:** Complete PQC security audit and NIST compliance validation- ✅ **AunsormNativeRng** - Tüm crate'lerde aynı implementation
+
 - ✅ **HKDF + NEUDZ-PCS + AACM mixing** - Server ile aynı algoritma
-- ✅ **4x Performance** - Native vs HTTP (1.5s vs 6.4s RSA-2048)
-- ✅ **Cross-Crate Standardization** - Aynı entropi kalitesi her yerde
 
-### Implementation Pattern:
+### Platform Agent- ✅ **4x Performance** - Native vs HTTP (1.5s vs 6.4s RSA-2048)
+
+- **Scope:** `crates/server`, `crates/cli`, `crates/wasm`, Docker/Kubernetes manifests- ✅ **Cross-Crate Standardization** - Aynı entropi kalitesi her yerde
+
+- **Focus:** Microservice orchestration, API gateway, deployment automation
+
+- **Current Priority:** Kubernetes migration and production infrastructure setup### Implementation Pattern:
+
 ```rust
-// ✅ DOĞRU - Her crate'te aynı pattern
-use crate::rng::AunsormNativeRng;
 
-pub fn generate_key() -> Result<Key, Error> {
+### Identity Agent// ✅ DOĞRU - Her crate'te aynı pattern
+
+- **Scope:** `crates/jwt`, `crates/x509`, `crates/kms`, `crates/acme`, `crates/mdm`use crate::rng::AunsormNativeRng;
+
+- **Focus:** Authentication, certificates, key management, device enrollment
+
+- **Current Priority:** HSM integration for KMS and OAuth 2.0 complete implementationpub fn generate_key() -> Result<Key, Error> {
+
     let mut rng = AunsormNativeRng::new();
-    Key::generate_with_rng(&mut rng)
+
+### Interop Agent    Key::generate_with_rng(&mut rng)
+
+- **Scope:** `benches/`, `fuzz/`, `tests/`, `examples/`, CI/CD pipelines}
+
+- **Focus:** Testing, benchmarking, security audits, documentation
+
+- **Current Priority:** Achieve >80% test coverage and third-party security audit// ❌ YANLIŞ - Artık yasak
+
+use rand_core::OsRng;
+
+---pub fn generate_key() -> Result<Key, Error> {
+
+    let mut rng = OsRng;  // YASAK!
+
+## Critical Rules    Key::generate_with_rng(&mut rng)
+
 }
 
-// ❌ YANLIŞ - Artık yasak
-use rand_core::OsRng;
-pub fn generate_key() -> Result<Key, Error> {
-    let mut rng = OsRng;  // YASAK!
-    Key::generate_with_rng(&mut rng)
-}
-```
+### 1. Native RNG Mandatory (v0.4.5+)```
+
+**All cryptographic random number generation MUST use `AunsormNativeRng`.**
 
 ### Crate-Specific Requirements:
-- **ACME**: Ed25519, P256, RSA account keys → `AunsormNativeRng`
-- **JWT**: Ed25519 signing keys, JTI generation → `AunsormNativeRng`  
-- **KMS**: AES-GCM nonce generation → `AunsormNativeRng`
-- **X509**: RSA key generation for certificates → `AunsormNativeRng`
-- **YENİ CRATE'LER**: Mutlaka kendi `src/rng.rs` modülü oluştur
 
-### Implementation Checklist:
-1. **src/rng.rs oluştur** (mevcut crate'lerden kopyala)
-2. **Cargo.toml'a hkdf dependency ekle** 
+❌ **Forbidden:**- **ACME**: Ed25519, P256, RSA account keys → `AunsormNativeRng`
+
+- Direct `OsRng` usage (except initial entropy seeding)- **JWT**: Ed25519 signing keys, JTI generation → `AunsormNativeRng`  
+
+- HTTP `/random/number` endpoint calls- **KMS**: AES-GCM nonce generation → `AunsormNativeRng`
+
+- `rand::thread_rng()` or other stdlib RNGs- **X509**: RSA key generation for certificates → `AunsormNativeRng`
+
+- External RNG implementations (except in tests)- **YENİ CRATE'LER**: Mutlaka kendi `src/rng.rs` modülü oluştur
+
+
+
+✅ **Required:**### Implementation Checklist:
+
+```rust1. **src/rng.rs oluştur** (mevcut crate'lerden kopyala)
+
+use crate::rng::AunsormNativeRng;2. **Cargo.toml'a hkdf dependency ekle** 
+
 3. **lib.rs'de mod rng; pub use rng::* ekle**
-4. **Tüm OsRng kullanımlarını AunsormNativeRng ile değiştir**
-5. **cargo test ile doğrula**
 
-Bu kural ihlal edilirse PR reject edilecektir!
+pub fn generate_key() -> Result<Key, Error> {4. **Tüm OsRng kullanımlarını AunsormNativeRng ile değiştir**
+
+    let mut rng = AunsormNativeRng::new();5. **cargo test ile doğrula**
+
+    Key::generate_with_rng(&mut rng)
+
+}Bu kural ihlal edilirse PR reject edilecektir!
+
+```
 
 ## İş Akışı
-1. README üzerindeki durum kutucuklarını (checklist) güncel tutun.
+
+**Performance:** Native RNG is 4x faster than HTTP-based RNG (1.5s vs 6.4s for RSA-2048).1. README üzerindeki durum kutucuklarını (checklist) güncel tutun.
+
 2. Her ajan kendi bölümünde çalışır; çakışma durumunda koordinasyon bu dosyada güncellenir.
-3. `cargo fmt --all`, `cargo clippy --all-targets --all-features`, `cargo test --all-features` komutları her değişiklikte çalıştırılmalıdır.
-4. Güvenlik gerekçesiyle `unsafe` kod yasaktır.
-5. README, PLAN.md, TODO.md veya diğer planlama dosyalarında **tamamlandı (`[x]` veya `done`)** olarak işaretlenmiş kalemler kilitlidir; ajanlar bu maddeleri tekrar açmak yerine yeni bir iş maddesi olarak revizyon talebi oluşturmalıdır.
-   - Revizyon ihtiyacı varsa, ilgili bölümde `Revize:` önekiyle yeni bir madde ekleyin ve eski maddeye referans verin.
-   - Kilitli maddelerdeki dosyalara dokunmanız gerekiyorsa, PLAN.md içerisinde yeni teslimat maddesi olarak belgeleyin ve yetkilendirme gelmeden değişiklik yapmayın.
+
+### 2. Production Plan Compliance3. `cargo fmt --all`, `cargo clippy --all-targets --all-features`, `cargo test --all-features` komutları her değişiklikte çalıştırılmalıdır.
+
+- All new work items must be added to `PROD_PLAN.md` with `[ ]` checkbox4. Güvenlik gerekçesiyle `unsafe` kod yasaktır.
+
+- Mark tasks as `[x]` only when fully completed and tested5. README, PLAN.md, TODO.md veya diğer planlama dosyalarında **tamamlandı (`[x]` veya `done`)** olarak işaretlenmiş kalemler kilitlidir; ajanlar bu maddeleri tekrar açmak yerine yeni bir iş maddesi olarak revizyon talebi oluşturmalıdır.
+
+- Do NOT modify completed tasks - create new revision tasks instead   - Revizyon ihtiyacı varsa, ilgili bölümde `Revize:` önekiyle yeni bir madde ekleyin ve eski maddeye referans verin.
+
+- Each PR must reference its `PROD_PLAN.md` task   - Kilitli maddelerdeki dosyalara dokunmanız gerekiyorsa, PLAN.md içerisinde yeni teslimat maddesi olarak belgeleyin ve yetkilendirme gelmeden değişiklik yapmayın.
+
 6. Ajanlar yalnızca yapılacak işleri, `README.md` ana planını ve kapsamlarındaki `AGENTS.md` yönergelerini esas almalıdır; tamamlanan maddeleri değiştirmek iş akışını bozduğundan kaçınılmalıdır.
 
-## 🚨 Servis Ağacı Güncelleme Direktifi
-**YENİ ÖZELLİK/ENDPOINT EKLENDİĞİNDE MUTLAKA YAPILACAKLAR:**
+### 3. Code Quality Gates
 
-1. **README.md Server Endpoint Ağacını Güncelle**
-   - Yeni endpoint eklendiğinde `README.md` içindeki endpoint ağacına ekle
-   - Yarım/tamamlanmamış özellik bile olsa `[Planlandı v0.X.0]` veya `[Devam Ediyor]` işaretiyle ekle
-   - Kaybolmasın! Ajan değişse bile sonraki ajan eksik olanı görebilmeli
+Every commit must pass:## 🚨 Servis Ağacı Güncelleme Direktifi
 
-2. **Servis Durumu İşaretleri**
-   - ✅ Aktif/Çalışıyor: Endpoint tamamen çalışıyor ve test edilmiş
-   - 🚧 Geliştirme: Kod var ama endpoint route'u henüz eklenmedi
-   - 📋 Planlandı: Crate var, servis entegrasyonu bekliyor
-   - 🔮 Gelecek: Henüz tasarım aşamasında
+```bash**YENİ ÖZELLİK/ENDPOINT EKLENDİĞİNDE MUTLAKA YAPILACAKLAR:**
 
-3. **Örnek Formatlar**
-   ```markdown
-   - `POST /id/generate` 🚧 - Benzersiz kimlik oluştur (aunsorm-id crate hazır, endpoint bekliyor)
-   - `GET /acme/directory` 📋 [Planlandı v0.5.0] - ACME servis keşfi (RFC 8555)
-   - `POST /session/init` ✅ - Oturum başlatma (kalibrasyon gerektirir)
+cargo fmt --all
+
+cargo clippy --all-targets --all-features1. **README.md Server Endpoint Ağacını Güncelle**
+
+cargo test --all-features   - Yeni endpoint eklendiğinde `README.md` içindeki endpoint ağacına ekle
+
+cargo deny check   - Yarım/tamamlanmamış özellik bile olsa `[Planlandı v0.X.0]` veya `[Devam Ediyor]` işaretiyle ekle
+
+```   - Kaybolmasın! Ajan değişse bile sonraki ajan eksik olanı görebilmeli
+
+
+
+### 4. Security Requirements2. **Servis Durumu İşaretleri**
+
+- **No `unsafe` code** - `#![forbid(unsafe_code)]` enforced   - ✅ Aktif/Çalışıyor: Endpoint tamamen çalışıyor ve test edilmiş
+
+- **MSRV 1.76+** - Minimum Supported Rust Version   - 🚧 Geliştirme: Kod var ama endpoint route'u henüz eklenmedi
+
+- **Dependency audits** - `cargo audit` must be clean   - 📋 Planlandı: Crate var, servis entegrasyonu bekliyor
+
+- **Fuzz testing** - All parsers/decoders must have fuzz targets   - 🔮 Gelecek: Henüz tasarım aşamasında
+
+
+
+### 5. Documentation Standards3. **Örnek Formatlar**
+
+- Update `README.md` for any new endpoints or services   ```markdown
+
+- Update `port-map.yaml` for any port changes   - `POST /id/generate` 🚧 - Benzersiz kimlik oluştur (aunsorm-id crate hazır, endpoint bekliyor)
+
+- Add `CHANGELOG.md` entry for version changes   - `GET /acme/directory` 📋 [Planlandı v0.5.0] - ACME servis keşfi (RFC 8555)
+
+- Technical architecture changes require `PROJECT_SUMMARY.md` updates   - `POST /session/init` ✅ - Oturum başlatma (kalibrasyon gerektirir)
+
    ```
 
-4. **Kontrol Noktaları**
-   - Yeni crate eklendiğinde → README'de bahset, endpoint planı yaz
-   - Yeni endpoint eklendiğinde → README ağacını güncelle, durum işareti koy
-   - Git commit öncesi → README ile routes.rs dosyasını karşılaştır
-   - Sprint sonunda → Tüm ağacı gözden geçir, eksik servisleri işaretle
+---
 
-5. **Sorumluluk**
-   - **Platform Agent**: Server endpoint ağacının sahibidir
-   - **Crypto Agent**: Core, PQC, Packet servislerini bildirmekle sorumludur
-   - **Identity Agent**: JWT, X509, KMS, ID servislerini bildirmekle sorumludur
+4. **Kontrol Noktaları**
+
+## Workflow   - Yeni crate eklendiğinde → README'de bahset, endpoint planı yaz
+
+   - Yeni endpoint eklendiğinde → README ağacını güncelle, durum işareti koy
+
+1. **Check `PROD_PLAN.md`** - Find unassigned tasks in your domain   - Git commit öncesi → README ile routes.rs dosyasını karşılaştır
+
+2. **Create branch** - Use format: `agent/crypto/task-description` or `agent/platform/feature-name`   - Sprint sonunda → Tüm ağacı gözden geçir, eksik servisleri işaretle
+
+3. **Implement** - Follow code quality gates
+
+4. **Test** - Unit, integration, and manual testing required5. **Sorumluluk**
+
+5. **Document** - Update all relevant documentation   - **Platform Agent**: Server endpoint ağacının sahibidir
+
+6. **PR Review** - Requires approval from domain agent lead   - **Crypto Agent**: Core, PQC, Packet servislerini bildirmekle sorumludur
+
+7. **Merge** - Update `PROD_PLAN.md` checkbox `[ ]` → `[x]`   - **Identity Agent**: JWT, X509, KMS, ID servislerini bildirmekle sorumludur
+
    - **Interop Agent**: Test/benchmark süreçlerinde eksik servisleri tespit etmekle sorumludur
 
-## Planlama Ajanları
-- **Crypto Agent**: `crates/core`, `crates/pqc`, `crates/packet`.
-- **Platform Agent**: `crates/cli`, `crates/server`, `crates/wasm`.
-- **Identity Agent**: `crates/jwt`, `crates/x509`, `crates/kms`.
-- **Interop Agent**: `benches`, `fuzz`, `crates/pytests`, `examples`, `.github`.
+---
 
-Bu ilk commit planlama ve altyapı başlangıcı içindir. Sonraki işler ilgili ajan tarafından üstlenilecek.
+## Planlama Ajanları
+
+## Communication- **Crypto Agent**: `crates/core`, `crates/pqc`, `crates/packet`.
+
+- **Platform Agent**: `crates/cli`, `crates/server`, `crates/wasm`.
+
+- **Questions:** Open GitHub issue with `[Agent Question]` prefix- **Identity Agent**: `crates/jwt`, `crates/x509`, `crates/kms`.
+
+- **Blockers:** Tag `@platform-lead` in issue- **Interop Agent**: `benches`, `fuzz`, `crates/pytests`, `examples`, `.github`.
+
+- **Security:** See `SECURITY.md` for disclosure process
+
+- **Urgent:** Tag `@all-agents` in issue (use sparingly)Bu ilk commit planlama ve altyapı başlangıcı içindir. Sonraki işler ilgili ajan tarafından üstlenilecek.
+
+
+---
+
+## Versioning
+
+Current version: **0.5.0**
+
+- **Patch (0.5.x):** Bug fixes, documentation updates
+- **Minor (0.x.0):** New features, backward-compatible API changes
+- **Major (x.0.0):** Breaking changes (target: 1.0.0 in Q2 2025)
+
+All version bumps require:
+1. Update all `Cargo.toml` files
+2. Update `CHANGELOG.md`
+3. Update version references in documentation
+4. Tag release in git: `v0.5.0`
+
+---
+
+## Production Readiness
+
+**See [PROD_PLAN.md](PROD_PLAN.md) for complete production deployment checklist.**
+
+Current blockers for v1.0.0:
+- Clock attestation production NTP server deployment
+- PostgreSQL migration from SQLite
+- Kubernetes manifests and Helm charts
+- Third-party security audit completion
+- HSM integration for key management
+
+---
+
+## Contact
+
+For urgent production issues or security concerns, see `SECURITY.md`.

@@ -1,445 +1,224 @@
-# Aunsorm Cryptographic Security Platform<!--
-
+<!--
   File: README.md
-
-**Version:** 0.5.0 | **License:** MIT/Apache-2.0 | **Language:** Rust (MSRV 1.76+)  Purpose: Primary onboarding, feature overview, and service topology for the Aunsorm cryptography workspace.
-
+  Purpose: Primary onboarding, feature overview, and service topology for the Aunsorm cryptography workspace.
   Last updated: Synced documentation structure and architecture tree with VibeCO v0.7.0 directives.
+-->
 
-Post-Quantum ready microservices platform for modern cryptographic operations.-->
+# Aunsorm Cryptography Suite
 
+**Modern, bağımsız ve production-ready kriptografi ve sertifika yönetim platformu.**
 
+Aunsorm, end-to-end encryption (E2EE), post-quantum cryptography (PQC), JWT token management, X.509 certificate authority ve **otomatik Let's Encrypt entegrasyonu** sağlayan kapsamlı bir güvenlik çözümüdür.
 
-> 📘 **Technical Details:** See [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)  # Aunsorm Cryptography Suite
+## Architecture tree and update discipline
 
-> 🗺️ **Port Mapping:** See [port-map.yaml](port-map.yaml)  
-
-> 🎯 **Production Roadmap:** See [PROD_PLAN.md](PROD_PLAN.md)**Modern, bağımsız ve production-ready kriptografi ve sertifika yönetim platformu.**
-
-
-
----Aunsorm, end-to-end encryption (E2EE), post-quantum cryptography (PQC), JWT token management, X.509 certificate authority ve **otomatik Let's Encrypt entegrasyonu** sağlayan kapsamlı bir güvenlik çözümüdür.
-
-
-
-## Quick Start## Architecture tree and update discipline
-
-
-
-### Docker Compose (Recommended)Mevcut depo yapısı ve servis durumları aşağıda özetlenmiştir. Yeni dizinler, endpoint'ler veya planlanan çalışmalar eklendiğinde bu ağaç aynı commit içinde güncellenmelidir.
-
-
-
-```powershell```
-
-# Start all 15 microservicesAunsorm Cryptography Suite/
-
-.\start-all.ps1├── apps/
-
-│   └── cli/                           # Komut satırı senaryoları ve bootstrap yardımcıları
-
-# Check service health├── benches/                           # Criterion benchmark senaryoları (interop ölçümleri)
-
-docker compose ps├── certifications/                    # Uyumluluk artefaktları ve kanıt dokümanları
-
-curl http://localhost:50010/health  # Gateway├── crates/
-
-│   ├── core/                          # Kriptografik primitifler ve kalibrasyon altyapısı ✅
-
-# View logs│   ├── pqc/                           # Post-quantum algoritma adaptörleri 🚧
-
-docker compose logs -f gateway│   ├── packet/                        # Paketleme ve taşıyıcı şemaları ✅
-
-│   ├── cli/                           # `aunsorm-cli` komutları ✅
-
-# Stop services│   ├── server/                        # HTTP API yüzeyi (Axum)
-
-docker compose down│   │   ├── GET /health ✅ - Liveness probe ve servis durumu
-
-```│   │   ├── GET /metrics ✅ - Prometheus uyumlu metrikler
-
-│   │   ├── GET /oauth/jwks.json ✅ - JWKS anahtar yayını
-
-### Manual Build│   │   ├── POST /oauth/begin-auth ✅ - OAuth2 + PKCE yetkilendirme başlangıcı
-
-│   │   ├── POST /oauth/token ✅ - Authorization code takası
-
-```bash│   │   ├── POST /oauth/introspect ✅ - Token doğrulama
-
-# Build all crates│   │   ├── GET /oauth/transparency ✅ - Şeffaflık günlükleri
-
-cargo build --release --all-features│   │   ├── POST /e2ee/context ✅ - End-to-End Encryption session başlatma
-
-│   │   ├── POST /e2ee/context/step ✅ - E2EE ratchet adımı ilerletme
-
-# Run server│   │   ├── POST /security/generate-media-token ✅ - Medya erişim token üretimi
-
-./target/release/aunsorm-server│   │   ├── POST /security/jwt-verify ✅ - Zasian JWT doğrulama ve payload dökümü
-
-│   │   ├── POST /security/jwe/encrypt 📋 [Planlandı v0.6.0] - WebRTC köprüsü için JWE kapsülleme servisi
-
-# Run CLI│   │   ├── POST /sfu/context ✅ - SFU E2EE context oluşturma
-
-./target/release/aunsorm-cli --help│   │   ├── POST /sfu/context/step ✅ - SFU session ratchet ilerletme
-
-```│   │   ├── POST /mdm/register ✅ - Cihaz kayıt akışı
-
-│   │   ├── GET /mdm/policy/:platform ✅ - Platform bazlı MDM politikası
-
----│   │   ├── GET /mdm/cert-plan/:device_id ✅ - Sertifika planı keşfi
-
-│   │   ├── POST /id/generate ✅ - Head damgalı kimlik üretimi
-
-## Service Endpoints│   │   ├── POST /id/parse ✅ - Kimlik çözümleme servisi
-
-│   │   ├── POST /id/verify-head ✅ - Head damgalı kimlik doğrulama
-
-### Gateway (Port 50010)│   │   ├── POST /validate/endpoint ✅ - Endpoint bağlantı doğrulaması
-
-```│   │   ├── POST /blockchain/fabric/did/verify ✅ - Hyperledger Fabric DID doğrulama PoC'u
-
-GET  /health                                # System health check│   │   ├── POST /blockchain/media/record 📋 [Planlandı v0.6.1] - Medya oturumu ledger kaydı ve şeffaflık izi
-
-GET  /metrics                               # Prometheus metrics│   │   ├── GET /http3/capabilities 🚧 - HTTP/3 PoC introspeksiyonu (`http3-experimental`)
-
-```│   │   ├── GET /pqc/capabilities ✅ - PQC algoritma durumu ve strict kip yönergeleri
-
-│   │   ├── GET /acme/directory ✅ - ACME directory keşfi ve meta bilgisi
-
-### Auth Service (Port 50011)│   │   ├── GET /acme/new-nonce ✅ - Replay-Nonce üretimi (JWS koruması için)
-
-```│   │   ├── POST /acme/new-account ✅ - Hesap kaydı (JWK doğrulamalı)
-
-POST /security/generate-media-token         # JWT token generation│   │   ├── POST /acme/new-order ✅ - Sertifika order oluşturma
-
-POST /security/jwt-verify                   # JWT validation│   │   ├── POST /acme/account/:account_id ✅ - POST-as-GET hesap durumu sorgusu
-
-GET  /oauth/jwks.json                       # JWKS key publication│   │   ├── POST /acme/order/:order_id ✅ - POST-as-GET order durumu sorgusu
-
-POST /oauth/begin-auth                      # OAuth 2.0 + PKCE flow│   │   ├── POST /acme/order/:order_id/finalize ✅ - CSR doğrulama ve sertifika URL'si üretimi
-
-POST /oauth/token                           # Token exchange│   │   ├── POST /acme/revoke-cert ✅ - Sertifika iptali (kid doğrulamalı ACME hesabı)
-
-POST /oauth/introspect                      # Token introspection│   │   ├── POST /acme/validation/http-01 🚧 - HTTP-01 challenge yayınlama
-
-GET  /oauth/transparency                    # Transparency logs│   │   ├── DELETE /acme/validation/http-01/:token 🚧 - HTTP-01 challenge geri çağırma
-
-```│   │   ├── POST /acme/validation/dns-01 🚧 - DNS-01 TXT kaydı yayınlama
-
-│   │   ├── DELETE /acme/validation/dns-01/:token 🚧 - DNS-01 challenge geri çağırma
-
-### Crypto Service (Port 50012)│   │   └── OAuth 2.0 ek uçlar 📋 [Planlandı v0.5.x] - Standart kapsamını genişletme takibi
-
-```│   │       ├── POST /oauth/token (grant_type=refresh_token) 📋 [Planlandı v0.5.0] - Refresh token döngüsü ve rotation (RFC 6749 §6)
-
-POST /encrypt                               # AES-256-GCM / ChaCha20-Poly1305│   │       ├── POST /oauth/token (grant_type=client_credentials) 📋 [Planlandı v0.5.0] - Confidential client M2M erişimi (RFC 6749 §4.4)
-
-POST /decrypt                               # AEAD decryption│   │       ├── POST /oauth/revoke 📋 [Planlandı v0.5.0] - Token iptali ve oturum sonlandırma (RFC 7009)
-
-POST /sign                                  # Ed25519 / RSA signing│   │       ├── POST /oauth/device/code 📋 [Planlandı v0.5.1] - Device Authorization Grant kod üretimi (RFC 8628)
-
-POST /verify                                # Signature verification│   │       ├── POST /oauth/device/activate 📋 [Planlandı v0.5.1] - Device code doğrulama ve kullanıcı onayı (RFC 8628)
-
-POST /derive-key                            # HKDF key derivation│   │       ├── GET /.well-known/oauth-authorization-server 📋 [Planlandı v0.5.1] - Authorization Server Metadata (RFC 8414)
-
-```│   │       ├── POST /oauth/register 📋 [Planlandı v0.5.1] - Dinamik istemci kaydı ve metadata yönetimi (RFC 7591/7592)
-
-│   │       ├── POST /oauth/par 📋 [Planlandı v0.5.2] - Pushed Authorization Requests ile hassas parametre koruması (RFC 9126)
-
-### PQC Service (Port 50018)│   │       ├── POST /oauth/token/exchange 📋 [Planlandı v0.5.2] - Token Exchange senaryoları (RFC 8693)
-
-```│   │       ├── OAuth client kimlik doğrulama güçlendirmesi 📋 [Planlandı v0.5.2] - Mutual TLS (RFC 8705) ve Private Key JWT (RFC 7521/7523)
-
-GET  /pqc/capabilities                      # Algorithm availability│   │       ├── OIDC ID token üretimi 📋 [Planlandı v0.5.3] - Access token'dan ayrı OpenID Connect ID token akışı
-
-POST /pqc/ml-kem/encapsulate                # ML-KEM-768 encapsulation│   │       └── DPoP desteği 📋 [Planlandı v0.5.3] - Proof-of-possession Bearer token koruması (RFC 9449)
-
-POST /pqc/ml-kem/decapsulate                # ML-KEM-768 decapsulation│   │   └── OAuth 3.0 deneysel uçlar 🔮 [Taslak v0.7.x] - HTTP/3 + Web3 uyumlu yetkilendirme planı
-
-POST /pqc/ml-dsa/sign                       # ML-DSA-65 signing│   │       ├── POST /oauth3/handshake 🔮 [Taslak v0.7.0] - QUIC üstünden istemci-başlatıcılı doğrulama el sıkışması
-
-POST /pqc/ml-dsa/verify                     # ML-DSA-65 verification│   │       ├── POST /oauth3/wallet-authorize 🔮 [Taslak v0.7.0] - Web3 cüzdan imzalı yetkilendirme talebi (EIP-4361 uyumlu)
-
-POST /pqc/slh-dsa/sign                      # SLH-DSA-128s signing│   │       ├── POST /oauth3/token 🔮 [Taslak v0.7.1] - DID temelli kanıtlarla erişim belirteci üretimi
-
-POST /pqc/slh-dsa/verify                    # SLH-DSA-128s verification│   │       ├── GET /.well-known/oauth3-configuration 🔮 [Taslak v0.7.1] - HTTP/3 endpoint keşfi ve QUIC parametreleri
-
-```│   │       └── POST /oauth3/revoke 🔮 [Taslak v0.7.2] - Zincir içi audit trail ile token iptali ve cüzdan bildirimleri
-
-│   ├── acme/                          # ACME istemcisi (directory/register/order CLI) ✅
-
-### X.509 Service (Port 50013)│   ├── id/                            # Head-stamped ID kütüphanesi ve testler ✅
-
-```│   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅
-
-POST /x509/generate-ca                      # Root CA generation│   ├── kms/                           # Anahtar yönetimi hizmeti adaptörleri ✅
-
-POST /x509/generate-cert                    # Certificate signing│   ├── x509/                          # Sertifika otoritesi (CA) bileşenleri ✅
-
-POST /x509/verify-chain                     # Chain validation│   ├── mdm/                           # Mobil cihaz yönetimi hizmetleri ✅
-
-POST /x509/csr/generate                     # CSR creation│   └── wasm/                          # WebAssembly hedefleri 📋 [Planlandı]
-
-POST /x509/csr/sign                         # CSR signing├── docs/
-
-```│   ├── src/                           # Operasyon, mimari, inovasyon dokümanları
-
-│   └── *.md                           # Politikalar ve runbook'lar
-
-### KMS Service (Port 50014)├── examples/                          # Örnek entegrasyonlar ve istemciler
-
-```├── fuzz/                              # cargo-fuzz hedefleri
-
-POST /kms/keys/generate                     # Key generation├── scripts/
-
-POST /kms/keys/encrypt                      # Key wrapping│   ├── ci/                            # CI orkestrasyon yardımcıları
-
-POST /kms/keys/decrypt                      # Key unwrapping│   ├── maintenance/                   # Bakım ve sağlık raporları
-
-POST /kms/keys/rotate                       # Key rotation│   ├── interop-sanity.sh              # Interop doğrulama komut dosyası ✅
-
-GET  /kms/keys/:id/metadata                 # Key metadata│   └── automation/                    # Plan ve operasyon otomasyon scriptleri (Rust & Python)
-
-DELETE /kms/keys/:id                        # Key deletion├── tests/
-
-```│   ├── acme/                          # ACME protokol mock server ve smoke testleri ✅
-
-│   ├── blockchain/                    # Fabric ve zincirler arası PoC testleri 🚧
-
-### ACME Service (Port 50017)│   ├── data/                          # Deterministik test fixture'ları
-
-```│   ├── tests/                         # Uçtan uca regresyon harness'leri ✅
-
-GET  /acme/directory                        # ACME directory (RFC 8555)│   │   └── acme_staging.rs ✅ - Let’s Encrypt staging account roundtrip smoke testi
-
-GET  /acme/new-nonce                        # Replay-Nonce generation│   └── identity/                      # Kimlik akış entegrasyon testleri ✅
-
-POST /acme/new-account                      # Account registration├── CHANGELOG.md                       # Semver değişiklik günlüğü (her sürümde güncelle)
-
-POST /acme/new-order                        # Certificate order├── PLAN.md                            # Teslimat planı ve sprint görevleri
-
-POST /acme/order/:id/finalize               # CSR finalization├── PROJECT_SUMMARY.md                 # Paydaş iletişim özeti
-
-POST /acme/revoke-cert                      # Certificate revocation└── README.md                          # Bu belge (mimari ağaç dahil)
-
-POST /acme/validation/http-01               # HTTP-01 challenge```
-
-POST /acme/validation/dns-01                # DNS-01 challenge
-
-```- Endpoint veya dizin durumu değiştiğinde bu ağacı ve ilgili açıklamaları aynı commit içinde güncelleyin.
-
-- Deneme aşamasındaki özellikleri `🚧`, planlanan çalışmaları `📋 [Planlandı vX.Y.Z]`, üretime alınmış servisleri `✅` ile işaretleyin.
-
-### MDM Service (Port 50015)- Yeni endpoint eklediğinizde README, CHANGELOG ve ilgili `AGENTS.md` dosyalarını senkron tutmayı unutmayın.
+Mevcut depo yapısı ve servis durumları aşağıda özetlenmiştir. Yeni dizinler, endpoint'ler veya planlanan çalışmalar eklendiğinde bu ağaç aynı commit içinde güncellenmelidir.
 
 ```
+Aunsorm Cryptography Suite/
+├── apps/
+│   └── cli/                           # Komut satırı senaryoları ve bootstrap yardımcıları
+├── benches/                           # Criterion benchmark senaryoları (interop ölçümleri)
+├── certifications/                    # Uyumluluk artefaktları ve kanıt dokümanları
+├── crates/
+│   ├── core/                          # Kriptografik primitifler ve kalibrasyon altyapısı ✅
+│   ├── pqc/                           # Post-quantum algoritma adaptörleri 🚧
+│   ├── packet/                        # Paketleme ve taşıyıcı şemaları ✅
+│   ├── cli/                           # `aunsorm-cli` komutları ✅
+│   ├── server/                        # HTTP API yüzeyi (Axum)
+│   │   ├── GET /health ✅ - Liveness probe ve servis durumu
+│   │   ├── GET /metrics ✅ - Prometheus uyumlu metrikler
+│   │   ├── GET /oauth/jwks.json ✅ - JWKS anahtar yayını
+│   │   ├── POST /oauth/begin-auth ✅ - OAuth2 + PKCE yetkilendirme başlangıcı
+│   │   ├── POST /oauth/token ✅ - Authorization code takası
+│   │   ├── POST /oauth/introspect ✅ - Token doğrulama
+│   │   ├── GET /oauth/transparency ✅ - Şeffaflık günlükleri
+│   │   ├── POST /e2ee/context ✅ - End-to-End Encryption session başlatma
+│   │   ├── POST /e2ee/context/step ✅ - E2EE ratchet adımı ilerletme
+│   │   ├── POST /security/generate-media-token ✅ - Medya erişim token üretimi
+│   │   ├── POST /security/jwt-verify ✅ - Zasian JWT doğrulama ve payload dökümü
+│   │   ├── POST /security/jwe/encrypt 📋 [Planlandı v0.6.0] - WebRTC köprüsü için JWE kapsülleme servisi
+│   │   ├── POST /sfu/context ✅ - SFU E2EE context oluşturma
+│   │   ├── POST /sfu/context/step ✅ - SFU session ratchet ilerletme
+│   │   ├── POST /mdm/register ✅ - Cihaz kayıt akışı
+│   │   ├── GET /mdm/policy/:platform ✅ - Platform bazlı MDM politikası
+│   │   ├── GET /mdm/cert-plan/:device_id ✅ - Sertifika planı keşfi
+│   │   ├── POST /id/generate ✅ - Head damgalı kimlik üretimi
+│   │   ├── POST /id/parse ✅ - Kimlik çözümleme servisi
+│   │   ├── POST /id/verify-head ✅ - Head damgalı kimlik doğrulama
+│   │   ├── POST /validate/endpoint ✅ - Endpoint bağlantı doğrulaması
+│   │   ├── POST /blockchain/fabric/did/verify ✅ - Hyperledger Fabric DID doğrulama PoC'u
+│   │   ├── POST /blockchain/media/record 📋 [Planlandı v0.6.1] - Medya oturumu ledger kaydı ve şeffaflık izi
+│   │   ├── GET /http3/capabilities 🚧 - HTTP/3 PoC introspeksiyonu (`http3-experimental`)
+│   │   ├── GET /pqc/capabilities ✅ - PQC algoritma durumu ve strict kip yönergeleri
+│   │   ├── GET /acme/directory ✅ - ACME directory keşfi ve meta bilgisi
+│   │   ├── GET /acme/new-nonce ✅ - Replay-Nonce üretimi (JWS koruması için)
+│   │   ├── POST /acme/new-account ✅ - Hesap kaydı (JWK doğrulamalı)
+│   │   ├── POST /acme/new-order ✅ - Sertifika order oluşturma
+│   │   ├── POST /acme/account/:account_id ✅ - POST-as-GET hesap durumu sorgusu
+│   │   ├── POST /acme/order/:order_id ✅ - POST-as-GET order durumu sorgusu
+│   │   ├── POST /acme/order/:order_id/finalize ✅ - CSR doğrulama ve sertifika URL'si üretimi
+│   │   ├── POST /acme/revoke-cert ✅ - Sertifika iptali (kid doğrulamalı ACME hesabı)
+│   │   ├── POST /acme/validation/http-01 🚧 - HTTP-01 challenge yayınlama
+│   │   ├── DELETE /acme/validation/http-01/:token 🚧 - HTTP-01 challenge geri çağırma
+│   │   ├── POST /acme/validation/dns-01 🚧 - DNS-01 TXT kaydı yayınlama
+│   │   ├── DELETE /acme/validation/dns-01/:token 🚧 - DNS-01 challenge geri çağırma
+│   │   └── OAuth 2.0 ek uçlar 📋 [Planlandı v0.5.x] - Standart kapsamını genişletme takibi
+│   │       ├── POST /oauth/token (grant_type=refresh_token) 📋 [Planlandı v0.5.0] - Refresh token döngüsü ve rotation (RFC 6749 §6)
+│   │       ├── POST /oauth/token (grant_type=client_credentials) 📋 [Planlandı v0.5.0] - Confidential client M2M erişimi (RFC 6749 §4.4)
+│   │       ├── POST /oauth/revoke 📋 [Planlandı v0.5.0] - Token iptali ve oturum sonlandırma (RFC 7009)
+│   │       ├── POST /oauth/device/code 📋 [Planlandı v0.5.1] - Device Authorization Grant kod üretimi (RFC 8628)
+│   │       ├── POST /oauth/device/activate 📋 [Planlandı v0.5.1] - Device code doğrulama ve kullanıcı onayı (RFC 8628)
+│   │       ├── GET /.well-known/oauth-authorization-server 📋 [Planlandı v0.5.1] - Authorization Server Metadata (RFC 8414)
+│   │       ├── POST /oauth/register 📋 [Planlandı v0.5.1] - Dinamik istemci kaydı ve metadata yönetimi (RFC 7591/7592)
+│   │       ├── POST /oauth/par 📋 [Planlandı v0.5.2] - Pushed Authorization Requests ile hassas parametre koruması (RFC 9126)
+│   │       ├── POST /oauth/token/exchange 📋 [Planlandı v0.5.2] - Token Exchange senaryoları (RFC 8693)
+│   │       ├── OAuth client kimlik doğrulama güçlendirmesi 📋 [Planlandı v0.5.2] - Mutual TLS (RFC 8705) ve Private Key JWT (RFC 7521/7523)
+│   │       ├── OIDC ID token üretimi 📋 [Planlandı v0.5.3] - Access token'dan ayrı OpenID Connect ID token akışı
+│   │       └── DPoP desteği 📋 [Planlandı v0.5.3] - Proof-of-possession Bearer token koruması (RFC 9449)
+│   │   └── OAuth 3.0 deneysel uçlar 🔮 [Taslak v0.7.x] - HTTP/3 + Web3 uyumlu yetkilendirme planı
+│   │       ├── POST /oauth3/handshake 🔮 [Taslak v0.7.0] - QUIC üstünden istemci-başlatıcılı doğrulama el sıkışması
+│   │       ├── POST /oauth3/wallet-authorize 🔮 [Taslak v0.7.0] - Web3 cüzdan imzalı yetkilendirme talebi (EIP-4361 uyumlu)
+│   │       ├── POST /oauth3/token 🔮 [Taslak v0.7.1] - DID temelli kanıtlarla erişim belirteci üretimi
+│   │       ├── GET /.well-known/oauth3-configuration 🔮 [Taslak v0.7.1] - HTTP/3 endpoint keşfi ve QUIC parametreleri
+│   │       └── POST /oauth3/revoke 🔮 [Taslak v0.7.2] - Zincir içi audit trail ile token iptali ve cüzdan bildirimleri
+│   ├── acme/                          # ACME istemcisi (directory/register/order CLI) ✅
+│   ├── id/                            # Head-stamped ID kütüphanesi ve testler ✅
+│   ├── jwt/                           # JWT işleme ve anahtar yönetimi ✅
+│   ├── kms/                           # Anahtar yönetimi hizmeti adaptörleri ✅
+│   ├── x509/                          # Sertifika otoritesi (CA) bileşenleri ✅
+│   ├── mdm/                           # Mobil cihaz yönetimi hizmetleri ✅
+│   └── wasm/                          # WebAssembly hedefleri 📋 [Planlandı]
+├── docs/
+│   ├── src/                           # Operasyon, mimari, inovasyon dokümanları
+│   └── *.md                           # Politikalar ve runbook'lar
+├── examples/                          # Örnek entegrasyonlar ve istemciler
+├── fuzz/                              # cargo-fuzz hedefleri
+├── scripts/
+│   ├── ci/                            # CI orkestrasyon yardımcıları
+│   ├── maintenance/                   # Bakım ve sağlık raporları
+│   ├── interop-sanity.sh              # Interop doğrulama komut dosyası ✅
+│   └── automation/                    # Plan ve operasyon otomasyon scriptleri (Rust & Python)
+├── tests/
+│   ├── acme/                          # ACME protokol mock server ve smoke testleri ✅
+│   ├── blockchain/                    # Fabric ve zincirler arası PoC testleri 🚧
+│   ├── data/                          # Deterministik test fixture'ları
+│   ├── tests/                         # Uçtan uca regresyon harness'leri ✅
+│   │   └── acme_staging.rs ✅ - Let’s Encrypt staging account roundtrip smoke testi
+│   └── identity/                      # Kimlik akış entegrasyon testleri ✅
+├── CHANGELOG.md                       # Semver değişiklik günlüğü (her sürümde güncelle)
+├── PLAN.md                            # Teslimat planı ve sprint görevleri
+├── PROJECT_SUMMARY.md                 # Paydaş iletişim özeti
+└── README.md                          # Bu belge (mimari ağaç dahil)
+```
 
-POST /mdm/register                          # Device enrollment## 🚀 Quick Start
+- Endpoint veya dizin durumu değiştiğinde bu ağacı ve ilgili açıklamaları aynı commit içinde güncelleyin.
+- Deneme aşamasındaki özellikleri `🚧`, planlanan çalışmaları `📋 [Planlandı vX.Y.Z]`, üretime alınmış servisleri `✅` ile işaretleyin.
+- Yeni endpoint eklediğinizde README, CHANGELOG ve ilgili `AGENTS.md` dosyalarını senkron tutmayı unutmayın.
 
-GET  /mdm/policy/:platform                  # Platform-specific policies
+## 🚀 Quick Start
 
-GET  /mdm/cert-plan/:device_id              # Certificate distribution plan### 🐳 Docker ile Hızlı Başlangıç
+### 🐳 Docker ile Hızlı Başlangıç
 
-POST /mdm/compliance/check                  # Compliance validation
+Tüm mikroservisleri tek komutla başlatın:
 
-```Tüm mikroservisleri tek komutla başlatın:
+```powershell
+# PowerShell
+.\start-all.ps1
+```
 
-
-
-### ID Service (Port 50016)```powershell
-
-```# PowerShell
-
-POST /id/generate                           # Unique ID generation.\start-all.ps1
-
-POST /id/parse                              # ID parsing```
-
-POST /id/verify-head                        # Head-stamped validation
-
-``````bash  
-
+```bash  
 # Linux/macOS
+chmod +x start-all.ps1
+./start-all.ps1
+```
 
-### E2EE Service (Port 50021)chmod +x start-all.ps1
-
-```./start-all.ps1
-
-POST /e2ee/context                          # Session initialization```
-
-POST /e2ee/context/step                     # Ratchet advancement
-
-POST /sfu/context                           # SFU context creation**Seçenekler:**
-
-POST /sfu/context/step                      # SFU ratchet step```bash
-
-```.\start-all.ps1           # Akıllı başlatma (gerekirse build eder)
-
-.\start-all.ps1 -Force    # Zorla yeniden build
-
-### Blockchain Service (Port 50020).\start-all.ps1 -Logs     # Başlattıktan sonra logları göster
-
-```.\start-all.ps1 -Help     # Yardım menüsü
-
-POST /blockchain/fabric/did/verify          # Hyperledger DID verification (POC)```
-
-POST /blockchain/media/record               # Audit trail recording [Planned v0.6.1]
-
-```**Servis durumu kontrol:**
-
+**Seçenekler:**
 ```bash
+.\start-all.ps1           # Akıllı başlatma (gerekirse build eder)
+.\start-all.ps1 -Force    # Zorla yeniden build
+.\start-all.ps1 -Logs     # Başlattıktan sonra logları göster
+.\start-all.ps1 -Help     # Yardım menüsü
+```
 
-### RNG Service (Port 50019)docker-compose ps               # Tüm servislerin durumu
-
-```curl http://localhost:50010     # Gateway health check
-
-POST /random/number                         # Random number generation (deprecated, use native)docker-compose logs -f          # Canlı loglar
-
-POST /random/bytes                          # Random byte generation```
-
+**Servis durumu kontrol:**
+```bash
+docker-compose ps               # Tüm servislerin durumu
+curl http://localhost:50010     # Gateway health check
+docker-compose logs -f          # Canlı loglar
 ```
 
 **Durdurma:**
-
-### Metrics Service (Port 50022)```bash
-
-```docker-compose down             # Servisleri durdur
-
-GET  /metrics                               # Aggregated Prometheus metricsdocker-compose down -v          # + Volumeleri sil
-
-GET  /health/aggregate                      # System-wide health status```
-
+```bash
+docker-compose down             # Servisleri durdur
+docker-compose down -v          # + Volumeleri sil
 ```
 
 ### 🌐 Mikroservis Endpoints
 
-### CLI Gateway (Port 50023)
-
-```| Servis | Port | Endpoint |
-
-POST /cli/jwt/verify                        # CLI JWT verification|--------|------|----------|
-
-POST /cli/execute                           # Command execution| Gateway | 50010 | http://localhost:50010 |
-
-```| Auth | 50011 | http://localhost:50011 |
-
+| Servis | Port | Endpoint |
+|--------|------|----------|
+| Gateway | 50010 | http://localhost:50010 |
+| Auth | 50011 | http://localhost:50011 |
 | Crypto | 50012 | http://localhost:50012 |
-
----| X509 | 50013 | http://localhost:50013 |
-
+| X509 | 50013 | http://localhost:50013 |
 | KMS | 50014 | http://localhost:50014 |
-
-## Environment Configuration| MDM | 50015 | http://localhost:50015 |
-
+| MDM | 50015 | http://localhost:50015 |
 | ID | 50016 | http://localhost:50016 |
-
-Key environment variables (see `.env`):| ACME | 50017 | http://localhost:50017 |
-
+| ACME | 50017 | http://localhost:50017 |
 | PQC | 50018 | http://localhost:50018 |
-
-```bash| RNG | 50019 | http://localhost:50019 |
-
-# Clock Attestation (required for all services)| Blockchain | 50020 | http://localhost:50020 |
-
-AUNSORM_CLOCK_MAX_AGE_SECS=30              # Production: 30s, Dev: 300s| E2EE | 50021 | http://localhost:50021 |
-
-AUNSORM_CALIBRATION_FINGERPRINT=...        # Calibration context ID| Metrics | 50022 | http://localhost:50022 |
-
-AUNSORM_CLOCK_ATTESTATION=...              # JSON clock snapshot
+| RNG | 50019 | http://localhost:50019 |
+| Blockchain | 50020 | http://localhost:50020 |
+| E2EE | 50021 | http://localhost:50021 |
+| Metrics | 50022 | http://localhost:50022 |
 
 > 📋 **Detaylar:** [`MICROSERVICES.md`](MICROSERVICES.md) - Kapsamlı mikroservis dokümantasyonu
 
-# Security
-
-AUNSORM_STRICT=false                        # Strict security mode## 🚀 Özellikler
-
-AUNSORM_JTI_DB=./data/tokens.db             # Token revocation database
+## 🚀 Özellikler
 
 ### ✅ Aktif Özellikler (v0.4.5)
 
-# Server
-
-AUNSORM_LISTEN=0.0.0.0:8080                 # Listen address#### 🏗️ Mikroservis Mimarisi
-
-AUNSORM_ISSUER=https://aunsorm.local        # JWT issuer- **13 Bağımsız Servis:** Port aralığı 50010-50022
-
-AUNSORM_AUDIENCE=aunsorm-clients            # JWT audience- **Docker Compose:** Production-ready orchestration
-
-```- **API Gateway:** Merkezi routing ve load balancing
-
+#### 🏗️ Mikroservis Mimarisi
+- **13 Bağımsız Servis:** Port aralığı 50010-50022
+- **Docker Compose:** Production-ready orchestration
+- **API Gateway:** Merkezi routing ve load balancing
 - **Service Discovery:** Docker network üzerinde otomatik çözüm
-
-> ⚠️ **Production:** Clock attestation timestamp auto-updates on startup. For production, deploy NTP attestation server with real signatures.- **Horizontal Scaling:** Servis başına ölçeklendirme
-
+- **Horizontal Scaling:** Servis başına ölçeklendirme
 - **Health Monitoring:** Her servis `/health` endpoint'i
-
----- **Graceful Shutdown:** SIGTERM/SIGINT desteği
-
+- **Graceful Shutdown:** SIGTERM/SIGINT desteği
 - **Volume Management:** Persistent data için Docker volumes
 
-## Testing
-
 > 📋 **Yeni Özellik Politikası:** v0.4.5 sonrası tüm yeni özellikler mikroservis olarak geliştirilecektir.
+> Detaylar: [`MICROSERVICES.md`](MICROSERVICES.md)
 
-```bash> Detaylar: [`MICROSERVICES.md`](MICROSERVICES.md)
-
-# Unit tests
-
-cargo test --all-features#### 🔐 X.509 Certificate Authority (CA)
-
+#### 🔐 X.509 Certificate Authority (CA)
 - **Self-Hosted CA:** Kendi sertifika otoritenizi kurun
-
-# Integration tests- **Ed25519 & RSA Sertifikalar:** Modern, hızlı ve güvenli algoritmalar
-
-cargo test --test '*' --all-features- **Root CA ve Intermediate CA:** Tam certificate chain management
-
+- **Ed25519 & RSA Sertifikalar:** Modern, hızlı ve güvenli algoritmalar
+- **Root CA ve Intermediate CA:** Tam certificate chain management
 - **Server Certificate Signing:** Domain sertifikaları oluşturma
-
-# Benchmarks- **RFC 5280 Compliant:** Tam Distinguished Name fields (CN, O, OU, C, ST, L)
-
-cargo bench- **Aunsorm Calibration Extension:** Benzersiz sertifika metadata
-
+- **RFC 5280 Compliant:** Tam Distinguished Name fields (CN, O, OU, C, ST, L)
+- **Aunsorm Calibration Extension:** Benzersiz sertifika metadata
 - **CLI Tools:** Komut satırından tam kontrol
 
-# Fuzz testing
-
-cargo +nightly fuzz run <target>**📊 Performans Karşılaştırması (v0.4.5 Benchmark Sonuçları):**
-
-```
+**📊 Performans Karşılaştırması (v0.4.5 Benchmark Sonuçları):**
 
 | Algoritma | Key Generation | Certificate Signing | Kullanım Önerisi |
-
----|-----------|---------------|-------------------|-------------------|
-
+|-----------|---------------|-------------------|-------------------|
 | **Ed25519** | ~100 µs | ~162 µs | ✅ **Önerilen** - Modern, hızlı, güvenli |
-
-## Documentation| **RSA-2048** | ~142 ms | ~147 ms | ⚠️ Legacy uyumluluk için |
-
+| **RSA-2048** | ~142 ms | ~147 ms | ⚠️ Legacy uyumluluk için |
 | **RSA-4096** | ~1.6s | ~1.7s | 🔒 Yüksek güvenlik gereken durumlar |
 
-- **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)** - Technical architecture and design
+> 🚀 **Performans Notu:** Ed25519, RSA-2048'den **~1,400x daha hızlı** ve aynı güvenlik seviyesi sağlar.
+> Yeni projeler için Ed25519 tercih edilmelidir. RSA sadece legacy sistem entegrasyonları için kullanın.
 
-- **[PROD_PLAN.md](PROD_PLAN.md)** - Production deployment checklist> 🚀 **Performans Notu:** Ed25519, RSA-2048'den **~1,400x daha hızlı** ve aynı güvenlik seviyesi sağlar.
-
-- **[port-map.yaml](port-map.yaml)** - Complete port mapping> Yeni projeler için Ed25519 tercih edilmelidir. RSA sadece legacy sistem entegrasyonları için kullanın.
-
-- **[SECURITY.md](SECURITY.md)** - Security policy and disclosures
-
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines```bash
-
-- **[CHANGELOG.md](CHANGELOG.md)** - Version history# 🚀 Modern, Hızlı Yaklaşım (Önerilen - Ed25519)
-
+```bash
+# 🚀 Modern, Hızlı Yaklaşım (Önerilen - Ed25519)
 aunsorm-cli x509 ca init --profile ca-profile.yaml \
-
----  --cert-out root-ca.crt --key-out root-ca.key \
-
+  --cert-out root-ca.crt --key-out root-ca.key \
   --algorithm ed25519
 
-## License
-
 aunsorm-cli x509 ca sign-server \
-
-Dual-licensed under [MIT](LICENSE-MIT) and [Apache-2.0](LICENSE-APACHE).  --ca-cert root-ca.crt --ca-key root-ca.key \
-
+  --ca-cert root-ca.crt --ca-key root-ca.key \
   --hostname example.com --cert-out server.crt --key-out server.key \
   --algorithm ed25519 \
   --organization "Company Name" --country US
