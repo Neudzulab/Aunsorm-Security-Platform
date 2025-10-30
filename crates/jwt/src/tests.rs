@@ -37,7 +37,7 @@ fn sign_and_verify_roundtrip() {
     claims.ensure_jwt_id();
     claims.extra.insert("role".into(), json!("admin"));
 
-    let token = signer.sign(&claims).expect("jwt");
+    let token = signer.sign(&mut claims).expect("jwt");
 
     let store = Arc::new(InMemoryJtiStore::default());
     let verifier =
@@ -50,13 +50,28 @@ fn sign_and_verify_roundtrip() {
 }
 
 #[test]
+fn signer_generates_missing_jti() {
+    let key = Ed25519KeyPair::generate("kid-auto").expect("key");
+    let signer = JwtSigner::new(key);
+    let mut claims = Claims::new();
+    assert!(claims.jwt_id.is_none(), "jti must start empty");
+
+    let token = signer.sign(&mut claims).expect("jwt");
+
+    let jti = claims.jwt_id.as_ref().expect("signer populated jti");
+    assert_eq!(jti.len(), 32, "jti should be 16-byte hex");
+    assert!(jti.chars().all(|c| c.is_ascii_hexdigit()));
+    assert_eq!(token.split('.').count(), 3, "token must be JWT format");
+}
+
+#[test]
 fn rejects_replay_in_memory_store() {
     let key = Ed25519KeyPair::generate("kid-replay").expect("key");
     let signer = JwtSigner::new(key.clone());
     let mut claims = Claims::new();
     claims.set_expiration_from_now(Duration::from_secs(60));
     claims.ensure_jwt_id();
-    let token = signer.sign(&claims).expect("jwt");
+    let token = signer.sign(&mut claims).expect("jwt");
     let store = Arc::new(InMemoryJtiStore::default());
     let verifier = JwtVerifier::new([key.public_key()]).with_store(store.clone());
     verifier
@@ -85,7 +100,7 @@ fn audience_and_claim_validation() {
     ]));
     claims.set_expiration_from_now(Duration::from_secs(120));
     claims.ensure_jwt_id();
-    let token = signer.sign(&claims).expect("jwt");
+    let token = signer.sign(&mut claims).expect("jwt");
     let store: Arc<dyn JtiStore> = Arc::new(InMemoryJtiStore::default());
     let verifier = JwtVerifier::new([key.public_key()]).with_store(store);
     let options = VerificationOptions {
@@ -113,7 +128,7 @@ fn expired_token_is_rejected() {
     let mut claims = Claims::new();
     claims.set_expiration_from_now(Duration::from_secs(1));
     claims.ensure_jwt_id();
-    let token = signer.sign(&claims).expect("jwt");
+    let token = signer.sign(&mut claims).expect("jwt");
     let store: Arc<dyn JtiStore> = Arc::new(InMemoryJtiStore::default());
     let verifier = JwtVerifier::new([key.public_key()])
         .with_store(store)
@@ -136,7 +151,7 @@ fn sqlite_store_roundtrip() {
     let mut claims = Claims::new();
     claims.set_expiration_from_now(Duration::from_secs(120));
     claims.ensure_jwt_id();
-    let token = signer.sign(&claims).expect("jwt");
+    let token = signer.sign(&mut claims).expect("jwt");
     let verifier = JwtVerifier::new([key.public_key()]).with_store(store.clone());
     verifier
         .verify(&token, &VerificationOptions::default())
@@ -194,7 +209,7 @@ fn kms_signer_roundtrip() {
     let mut claims = Claims::new();
     claims.ensure_jwt_id();
     claims.set_expiration_from_now(Duration::from_secs(30));
-    let token = signer.sign(&claims).expect("jwt");
+    let token = signer.sign(&mut claims).expect("jwt");
     let verifying = signer.public_key().expect("public");
     let jwk = crate::Jwk {
         kid: signer.kid().to_string(),
@@ -218,7 +233,7 @@ fn verify_requires_store_when_jti_enforced() {
     let mut claims = Claims::new();
     claims.set_expiration_from_now(Duration::from_secs(60));
     claims.ensure_jwt_id();
-    let token = signer.sign(&claims).expect("jwt");
+    let token = signer.sign(&mut claims).expect("jwt");
     let verifier = JwtVerifier::new([key.public_key()]);
     let err = verifier
         .verify(&token, &VerificationOptions::default())
