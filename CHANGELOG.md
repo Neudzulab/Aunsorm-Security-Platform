@@ -111,6 +111,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   yapılandırılmış JTI store olmadan `jti store not configured` hatası döndürür;
   `aunsorm-server` doğrulayıcısı yapılandırılan defter arka ucuna bağlı
   `JtiStore` ile tekrar saldırılarını engeller.
+- `aunsorm-jwt` imzalayıcıları eksik `jti` claim'lerini otomatik olarak
+  üretmek için mutable claim referansları kabul eder; CLI ve sunucu akışları
+  yeni API ile uyumlu olacak şekilde güncellendi.
 - `/security/generate-media-token` now issues Ed25519-signed JWTs via
   `aunsorm-jwt`, records issued JTIs in the ledger, and `/security/jwt-verify`
   performs full signature/claim validation with descriptive error mapping.

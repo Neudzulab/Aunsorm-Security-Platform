@@ -31,7 +31,8 @@ impl JwtSigner {
     /// # Errors
     ///
     /// Zaman alanları tutarsız ise veya serileştirme hatası oluşursa `JwtError` döner.
-    pub fn sign(&self, claims: &Claims) -> Result<String> {
+    pub fn sign(&self, claims: &mut Claims) -> Result<String> {
+        claims.ensure_jwt_id();
         claims.validate_temporal_consistency()?;
         let header = json!({
             "alg": "EdDSA",
@@ -115,7 +116,8 @@ impl<'a> KmsJwtSigner<'a> {
     ///
     /// Zaman alanları veya KMS imzalama işlemi başarısız olursa `JwtError`
     /// döner.
-    pub fn sign(&self, claims: &Claims) -> Result<String> {
+    pub fn sign(&self, claims: &mut Claims) -> Result<String> {
+        claims.ensure_jwt_id();
         claims.validate_temporal_consistency()?;
         let header = json!({
             "alg": "EdDSA",

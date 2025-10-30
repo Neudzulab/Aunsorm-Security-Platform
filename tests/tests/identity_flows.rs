@@ -200,7 +200,6 @@ fn identity_flow_alpha_roundtrip() {
     claims.audience = Some(Audience::Single(fixture.jwt.audience.clone()));
     claims.set_issued_now();
     claims.set_expiration_from_now(Duration::from_secs(fixture.jwt.ttl_seconds));
-    claims.ensure_jwt_id();
     import_extra_claims(&mut claims, &fixture.jwt.extra_claims);
     claims.extra.insert(
         "scope".to_string(),
@@ -215,7 +214,7 @@ fn identity_flow_alpha_roundtrip() {
         ),
     );
 
-    let token = signer.sign(&claims).expect("jwt token");
+    let token = signer.sign(&mut claims).expect("jwt token");
 
     let store = Arc::new(InMemoryJtiStore::default());
     let verifier = JwtVerifier::new([offline_public.clone()]).with_store(store.clone());

@@ -28,9 +28,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "scopes".to_owned(),
         json!(["encrypt", "decrypt", "session:manage"]),
     );
-    claims.ensure_jwt_id();
 
-    let token = signer.sign(&claims)?;
+    let token = signer.sign(&mut claims)?;
     println!("Generated JWT: {token}");
 
     let jwks = Jwks {

@@ -649,7 +649,6 @@ async fn exchange_token(
     claims.subject = Some(auth_request.subject);
     claims.issuer = Some(state.issuer().to_owned());
     claims.audience = Some(Audience::Single(state.audience().to_owned()));
-    claims.ensure_jwt_id();
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
 
@@ -676,7 +675,7 @@ async fn exchange_token(
         .transpose()?;
     let access_token = state
         .signer()
-        .sign(&claims)
+        .sign(&mut claims)
         .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
     let jti = claims
         .jwt_id
@@ -2037,7 +2036,7 @@ async fn generate_media_token(
     // Sign the token
     let token = state
         .signer()
-        .sign(&claims)
+        .sign(&mut claims)
         .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
 
     // Calculate timestamps

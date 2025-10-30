@@ -31,9 +31,8 @@ let mut claims = Claims::new();
 claims.issuer = Some("https://idp.aunsorm".into());
 claims.subject = Some("user-123".into());
 claims.set_expiration_from_now(std::time::Duration::from_secs(3600));
-claims.ensure_jwt_id();
 
-let token = signer.sign(&claims).expect("jwt");
+let token = signer.sign(&mut claims).expect("jwt");
 
 let store = Arc::new(InMemoryJtiStore::default());
 let verifier = JwtVerifier::new([key.public_key()]).with_store(store);
@@ -43,7 +42,8 @@ let verified = verifier
 assert_eq!(verified.subject.as_deref(), Some("user-123"));
 ```
 
-> **Not:** `VerificationOptions::default()` JTI alanını zorunlu kılar ve
+> **Not:** `JwtSigner::sign` eksik `jti` alanını otomatik olarak üretir.
+> `VerificationOptions::default()` JTI alanını zorunlu kılar ve
 > yapılandırılmış bir `JtiStore` olmadan doğrulama hatası döner.
 
 Detaylı API belgeleri için `cargo doc --open` komutunu kullanabilirsiniz.

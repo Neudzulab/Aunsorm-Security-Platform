@@ -2516,13 +2516,10 @@ fn handle_jwt_keygen(args: &JwtKeygenArgs) -> CliResult<()> {
 
 fn handle_jwt_sign(args: &JwtSignArgs) -> CliResult<()> {
     let mut claims = build_claims_from_args(args)?;
-    if args.jti.is_none() {
-        claims.ensure_jwt_id();
-    }
     let (kid, token, extra_info) = if let Some(path) = args.key.as_deref() {
         let key = load_jwt_keypair(path)?;
         let signer = JwtSigner::new(key.clone());
-        let token = signer.sign(&claims)?;
+        let token = signer.sign(&mut claims)?;
         (key.kid().to_string(), token, None)
     } else if let Some(backend) = args.kms_backend {
         let kms_key_id = args
@@ -2554,7 +2551,7 @@ fn handle_jwt_sign(args: &JwtSignArgs) -> CliResult<()> {
             KmsKeyDescriptor::new(primary)
         };
         let signer = aunsorm_jwt::KmsJwtSigner::new(&client, descriptor)?;
-        let token = signer.sign(&claims)?;
+        let token = signer.sign(&mut claims)?;
         let kms_info = format!(" | kms={backend}::{kms_key_id}");
         (signer.kid().to_string(), token, Some(kms_info))
     } else {

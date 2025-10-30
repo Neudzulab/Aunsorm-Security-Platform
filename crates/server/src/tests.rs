@@ -2259,10 +2259,21 @@ async fn jwt_verify_endpoint_rejects_tokens_missing_jti() {
         Value::String("room-missing-jti".to_string()),
     );
 
-    let signer = state.signer().clone();
-    let token = signer
-        .sign(&claims)
-        .expect("token without jti should still sign");
+    let header = json!({
+        "alg": "EdDSA",
+        "typ": "JWT",
+        "kid": state.signer().kid(),
+    });
+    let header_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).expect("header json"));
+    let payload_b64 = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).expect("claims json"));
+    let signing_input = format!("{header_b64}.{payload_b64}");
+
+    let signing_key = Ed25519KeyPair::from_seed("test", test_seed()).expect("seed");
+    let signature = signing_key.signing_key().sign(signing_input.as_bytes());
+    let token = format!(
+        "{signing_input}.{}",
+        URL_SAFE_NO_PAD.encode(signature.to_bytes())
+    );
 
     let verify_response = app
         .oneshot(
@@ -2295,7 +2306,6 @@ async fn jwt_verify_endpoint_reports_temporal_claims() {
     claims.subject = Some("participant-temporal".to_string());
     claims.issuer = Some(state.issuer().to_owned());
     claims.audience = Some(Audience::Single("zasian-media".to_owned()));
-    claims.ensure_jwt_id();
     claims.set_issued_now();
     let not_before = SystemTime::now()
         .checked_sub(Duration::from_secs(15))
@@ -2308,7 +2318,7 @@ async fn jwt_verify_endpoint_reports_temporal_claims() {
     );
 
     let signer = state.signer().clone();
-    let token = signer.sign(&claims).expect("token");
+    let token = signer.sign(&mut claims).expect("token");
 
     let jti = claims.jwt_id.clone().expect("jti");
     let expiration = claims.expiration.expect("exp");

@@ -86,9 +86,7 @@ const BEARER_KEYWORD: &str = "bearer";
 fn sanitize_token_input(token: &str) -> Cow<'_, str> {
     let trimmed = token.trim();
 
-    if trimmed.len() == BEARER_KEYWORD.len()
-        && trimmed.eq_ignore_ascii_case(BEARER_KEYWORD)
-    {
+    if trimmed.len() == BEARER_KEYWORD.len() && trimmed.eq_ignore_ascii_case(BEARER_KEYWORD) {
         return Cow::Owned(String::new());
     }
 
@@ -1244,7 +1242,6 @@ pub async fn generate_media_token(
     claims.subject = Some(request.identity.clone());
     claims.issuer = Some(state.issuer().to_owned());
     claims.audience = Some(Audience::Single(ZASIAN_MEDIA_AUDIENCE.to_owned()));
-    claims.ensure_jwt_id();
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
     claims
@@ -1260,7 +1257,7 @@ pub async fn generate_media_token(
 
     let token = state
         .signer()
-        .sign(&claims)
+        .sign(&mut claims)
         .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
     let issued_at = claims.issued_at.unwrap_or_else(SystemTime::now);
     let expires_at = claims
@@ -1738,7 +1735,6 @@ pub async fn exchange_token(
     claims.subject = Some(auth_request.subject);
     claims.issuer = Some(state.issuer().to_owned());
     claims.audience = Some(Audience::Single(state.audience().to_owned()));
-    claims.ensure_jwt_id();
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
     claims.extra.insert(
@@ -1753,7 +1749,7 @@ pub async fn exchange_token(
 
     let access_token = state
         .signer()
-        .sign(&claims)
+        .sign(&mut claims)
         .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
     let jti = claims
         .jwt_id
