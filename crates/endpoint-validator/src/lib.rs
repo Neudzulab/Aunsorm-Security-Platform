@@ -10,7 +10,9 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Context as _};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use futures::stream::{FuturesUnordered, StreamExt as FuturesStreamExt};
-use http::header::{HeaderName, HeaderValue, ALLOW, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
+use http::header::{
+    HeaderName, HeaderValue, InvalidHeaderValue, ALLOW, AUTHORIZATION, CONTENT_TYPE, USER_AGENT,
+};
 use http::{HeaderMap, Method};
 use openapiv3::{OpenAPI, Operation, ReferenceOr, RequestBody};
 use quick_xml::de::from_str as parse_xml;
@@ -45,27 +47,24 @@ pub enum Auth {
 }
 
 impl Auth {
-    fn apply(&self, headers: &mut HeaderMap) {
+    fn apply(&self, headers: &mut HeaderMap) -> Result<(), InvalidHeaderValue> {
         match self {
             Self::Basic { username, password } => {
                 let credentials = format!("{username}:{password}");
                 let value = format!("Basic {}", STANDARD.encode(credentials));
-                headers.insert(
-                    AUTHORIZATION,
-                    HeaderValue::from_str(&value).expect("basic header should be valid"),
-                );
+                let header_value = HeaderValue::from_str(&value)?;
+                headers.insert(AUTHORIZATION, header_value);
             }
             Self::Bearer(token) => {
                 let value = format!("Bearer {token}");
-                headers.insert(
-                    AUTHORIZATION,
-                    HeaderValue::from_str(&value).expect("bearer header should be valid"),
-                );
+                let header_value = HeaderValue::from_str(&value)?;
+                headers.insert(AUTHORIZATION, header_value);
             }
             Self::Header { name, value } => {
                 headers.insert(name.clone(), value.clone());
             }
         }
+        Ok(())
     }
 }
 /// Allowlist entry for known failing endpoints.
@@ -136,6 +135,8 @@ pub enum ValidatorError {
     Discovery(reqwest::Error),
     #[error("URL parse error: {0}")]
     Url(#[from] url::ParseError),
+    #[error("invalid auth header value: {0}")]
+    InvalidAuthHeader(#[from] InvalidHeaderValue),
     #[error("unexpected error: {0}")]
     Other(String),
 }
@@ -280,7 +281,7 @@ pub async fn validate(config: ValidatorConfig) -> Result<ValidationReport, Valid
     let mut default_headers = HeaderMap::new();
     default_headers.insert(USER_AGENT, HeaderValue::from_static(USER_AGENT_VALUE));
     if let Some(auth) = &config.auth {
-        auth.apply(&mut default_headers);
+        auth.apply(&mut default_headers)?;
     }
     for (name, value) in &config.additional_headers {
         default_headers.insert(name.clone(), value.clone());
