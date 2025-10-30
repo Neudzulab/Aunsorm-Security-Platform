@@ -11,7 +11,8 @@ use axum::response::{
 use axum::routing::{get, options, post};
 use axum::{Json, Router};
 use endpoint_validator::{
-    validate, AllowlistedFailure, ValidationOutcome, ValidationReport, ValidatorConfig,
+    validate, AllowlistedFailure, Auth, ValidationOutcome, ValidationReport, ValidatorConfig,
+    ValidatorError,
 };
 use futures::{Stream, StreamExt};
 use serde_json::{json, Value};
@@ -185,4 +186,17 @@ fn assert_successes(report: &ValidationReport) {
     assert!(found_health_get, "GET /health should be validated");
     assert!(found_items_post, "POST /items should be validated");
     assert!(allowed_broken, "broken endpoint should be allowlisted");
+}
+
+#[tokio::test]
+async fn invalid_auth_header_is_rejected() {
+    let base_url = Url::parse("http://example.com/").expect("url");
+    let mut config = ValidatorConfig::with_base_url(base_url);
+    config.auth = Some(Auth::Bearer("line\nbreak".to_string()));
+
+    let error = validate(config).await.expect_err("should fail");
+    match error {
+        ValidatorError::InvalidAuthHeader(_) => {}
+        other => panic!("unexpected error: {other:?}"),
+    }
 }
