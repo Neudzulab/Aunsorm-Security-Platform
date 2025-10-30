@@ -13,7 +13,7 @@ use aunsorm_core::{
     },
     CoreError, SessionRatchet,
 };
-use aunsorm_jwt::{Jwks, JwtSigner, JwtVerifier};
+use aunsorm_jwt::{InMemoryJtiStore, JtiStore, Jwks, JwtSigner, JwtVerifier, SqliteJtiStore};
 use aunsorm_mdm::{
     CertificateDistributionPlan, DevicePlatform, EnrollmentMode, MdmDirectory, MdmError,
     PolicyDocument, PolicyRule,
@@ -880,7 +880,11 @@ impl ServerState {
         let signer = JwtSigner::new(key_pair.clone());
         let public = key_pair.public_key();
         let public_jwk = public.to_jwk();
-        let verifier = JwtVerifier::new(vec![public.clone()]);
+        let store: Arc<dyn JtiStore> = match &ledger {
+            LedgerBackend::Memory => Arc::new(InMemoryJtiStore::default()),
+            LedgerBackend::Sqlite(path) => Arc::new(SqliteJtiStore::open(path)?),
+        };
+        let verifier = JwtVerifier::new(vec![public.clone()]).with_store(store);
         let jwks = Jwks {
             keys: vec![public_jwk.clone()],
         };

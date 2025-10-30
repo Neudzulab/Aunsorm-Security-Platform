@@ -107,6 +107,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `/metrics` endpoint now pulls live counts from the server state instead of
   returning placeholder metric values.
+- `aunsorm-jwt` doğrulaması varsayılan olarak `jti` alanını zorunlu kılar ve
+  yapılandırılmış JTI store olmadan `jti store not configured` hatası döndürür;
+  `aunsorm-server` doğrulayıcısı yapılandırılan defter arka ucuna bağlı
+  `JtiStore` ile tekrar saldırılarını engeller.
 - `/security/generate-media-token` now issues Ed25519-signed JWTs via
   `aunsorm-jwt`, records issued JTIs in the ledger, and `/security/jwt-verify`
   performs full signature/claim validation with descriptive error mapping.

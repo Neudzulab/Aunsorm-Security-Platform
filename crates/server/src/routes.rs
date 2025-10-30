@@ -1162,7 +1162,11 @@ async fn verify_token_for_audience(
                 not_before: claims.not_before.map(system_time_to_unix_seconds),
                 related_id,
                 jwt_id: claims.jwt_id.clone(),
-                extras: if extras.is_empty() { None } else { Some(extras) },
+                extras: if extras.is_empty() {
+                    None
+                } else {
+                    Some(extras)
+                },
             };
 
             JwtVerifyResponse {

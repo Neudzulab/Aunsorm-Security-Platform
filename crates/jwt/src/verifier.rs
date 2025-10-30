@@ -124,14 +124,21 @@ impl JwtVerifier {
             .map_err(|_| JwtError::Signature)?;
         let claims: Claims = serde_json::from_slice(&payload_raw)?;
         self.validate_claims(&claims, options)?;
-        if let Some(store) = &self.store {
-            let jti = claims.jwt_id.as_deref().ok_or(JwtError::MissingJti)?;
-            let expires_at = claims.expiration;
-            if !store.check_and_insert(jti, expires_at)? {
-                return Err(JwtError::Replay);
-            }
-        } else if options.require_jti && claims.jwt_id.is_none() {
+
+        let jti = claims.jwt_id.as_deref();
+        if options.require_jti && jti.is_none() {
             return Err(JwtError::MissingJti);
+        }
+
+        if let Some(store) = &self.store {
+            if let Some(jti_value) = jti {
+                let expires_at = claims.expiration;
+                if !store.check_and_insert(jti_value, expires_at)? {
+                    return Err(JwtError::Replay);
+                }
+            }
+        } else if options.require_jti {
+            return Err(JwtError::MissingJtiStore);
         }
         Ok(claims)
     }
@@ -189,13 +196,25 @@ impl JwtVerifier {
 }
 
 /// Doğrulama seçenekleri.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct VerificationOptions {
     pub issuer: Option<String>,
     pub subject: Option<String>,
     pub audience: Option<String>,
     pub require_jti: bool,
     pub now: Option<SystemTime>,
+}
+
+impl Default for VerificationOptions {
+    fn default() -> Self {
+        Self {
+            issuer: None,
+            subject: None,
+            audience: None,
+            require_jti: true,
+            now: None,
+        }
+    }
 }
 
 #[derive(Deserialize)]

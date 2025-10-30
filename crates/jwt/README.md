@@ -43,4 +43,7 @@ let verified = verifier
 assert_eq!(verified.subject.as_deref(), Some("user-123"));
 ```
 
+> **Not:** `VerificationOptions::default()` JTI alanını zorunlu kılar ve
+> yapılandırılmış bir `JtiStore` olmadan doğrulama hatası döner.
+
 Detaylı API belgeleri için `cargo doc --open` komutunu kullanabilirsiniz.

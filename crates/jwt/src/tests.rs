@@ -86,7 +86,8 @@ fn audience_and_claim_validation() {
     claims.set_expiration_from_now(Duration::from_secs(120));
     claims.ensure_jwt_id();
     let token = signer.sign(&claims).expect("jwt");
-    let verifier = JwtVerifier::new([key.public_key()]);
+    let store: Arc<dyn JtiStore> = Arc::new(InMemoryJtiStore::default());
+    let verifier = JwtVerifier::new([key.public_key()]).with_store(store);
     let options = VerificationOptions {
         issuer: Some("https://issuer".into()),
         subject: Some("user-123".into()),
@@ -113,7 +114,10 @@ fn expired_token_is_rejected() {
     claims.set_expiration_from_now(Duration::from_secs(1));
     claims.ensure_jwt_id();
     let token = signer.sign(&claims).expect("jwt");
-    let verifier = JwtVerifier::new([key.public_key()]).with_leeway(Duration::from_secs(0));
+    let store: Arc<dyn JtiStore> = Arc::new(InMemoryJtiStore::default());
+    let verifier = JwtVerifier::new([key.public_key()])
+        .with_store(store)
+        .with_leeway(Duration::from_secs(0));
     std::thread::sleep(Duration::from_millis(1500));
     let err = verifier
         .verify(&token, &VerificationOptions::default())
@@ -200,8 +204,24 @@ fn kms_signer_roundtrip() {
         x: URL_SAFE_NO_PAD.encode(verifying.as_bytes()),
     };
     let public = crate::Ed25519PublicKey::from_jwk(&jwk).expect("public jwk");
-    let verifier = JwtVerifier::new([public]);
+    let store: Arc<dyn JtiStore> = Arc::new(InMemoryJtiStore::default());
+    let verifier = JwtVerifier::new([public]).with_store(store);
     verifier
         .verify(&token, &VerificationOptions::default())
         .expect("verify");
+}
+
+#[test]
+fn verify_requires_store_when_jti_enforced() {
+    let key = Ed25519KeyPair::generate("kid-no-store").expect("key");
+    let signer = JwtSigner::new(key.clone());
+    let mut claims = Claims::new();
+    claims.set_expiration_from_now(Duration::from_secs(60));
+    claims.ensure_jwt_id();
+    let token = signer.sign(&claims).expect("jwt");
+    let verifier = JwtVerifier::new([key.public_key()]);
+    let err = verifier
+        .verify(&token, &VerificationOptions::default())
+        .expect_err("store required");
+    assert!(matches!(err, JwtError::MissingJtiStore));
 }

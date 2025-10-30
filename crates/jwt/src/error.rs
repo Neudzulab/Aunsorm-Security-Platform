@@ -54,6 +54,9 @@ pub enum JwtError {
     /// `jti` alanı zorunlu.
     #[error("jti claim missing")]
     MissingJti,
+    /// JTI store yapılandırılmamış.
+    #[error("jti store not configured")]
+    MissingJtiStore,
     /// Girdi/çıktı hatası.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
