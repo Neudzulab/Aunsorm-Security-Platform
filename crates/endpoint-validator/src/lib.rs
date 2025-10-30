@@ -974,3 +974,107 @@ fn normalize_path(input: &str) -> String {
         },
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        normalize_path, AllowlistedFailure, FailureKind, ValidationOutcome, ValidationReport,
+        ValidationResult,
+    };
+
+    #[test]
+    fn allowlisted_failure_matches_expected_cases() {
+        let allowlisted = AllowlistedFailure {
+            method: "GET".to_string(),
+            path: "/items".to_string(),
+            statuses: Vec::new(),
+        };
+
+        assert!(allowlisted.matches("get", "/items", None));
+        assert!(allowlisted.matches("GET", "/items", Some(404)));
+        assert!(!allowlisted.matches("POST", "/items", Some(404)));
+
+        let status_scoped = AllowlistedFailure {
+            method: "DELETE".to_string(),
+            path: "/archive".to_string(),
+            statuses: vec![410, 404],
+        };
+
+        assert!(status_scoped.matches("delete", "/archive", Some(410)));
+        assert!(!status_scoped.matches("delete", "/archive", Some(500)));
+        assert!(!status_scoped.matches("delete", "/archive", None));
+    }
+
+    #[test]
+    fn normalize_path_handles_relative_and_absolute_inputs() {
+        assert_eq!(normalize_path("/health"), "/health");
+        assert_eq!(normalize_path("status"), "/status");
+        assert_eq!(
+            normalize_path("http://example.com/api/v1/items"),
+            "/api/v1/items"
+        );
+        assert_eq!(
+            normalize_path("https://example.com/metrics?window=30s"),
+            "/metrics?window=30s"
+        );
+        assert_eq!(normalize_path("https://example.com"), "/");
+    }
+
+    #[test]
+    fn report_to_markdown_sanitizes_excerpts() {
+        let report = ValidationReport {
+            base_url: "https://validator.test".to_string(),
+            results: vec![
+                ValidationResult {
+                    method: "GET".to_string(),
+                    path: "/ok".to_string(),
+                    status: Some(200),
+                    latency_ms: Some(12),
+                    outcome: ValidationOutcome::Success,
+                    response_excerpt: None,
+                    likely_cause: None,
+                    suggested_fix: None,
+                    allowed: false,
+                },
+                ValidationResult {
+                    method: "POST".to_string(),
+                    path: "/broken".to_string(),
+                    status: Some(500),
+                    latency_ms: Some(34),
+                    outcome: ValidationOutcome::Failure(FailureKind::ServerError),
+                    response_excerpt: Some("pipe | content".to_string()),
+                    likely_cause: Some("backend".to_string()),
+                    suggested_fix: Some("restart".to_string()),
+                    allowed: false,
+                },
+            ],
+        };
+
+        let markdown = report.to_markdown();
+        assert!(markdown.contains("pipe ❘ content"));
+        assert!(!markdown.contains("pipe | content"));
+        assert!(markdown.contains("| Method | Path | Status |"));
+    }
+
+    #[test]
+    fn report_to_markdown_without_failures_is_minimal() {
+        let report = ValidationReport {
+            base_url: "https://validator.test".to_string(),
+            results: vec![ValidationResult {
+                method: "GET".to_string(),
+                path: "/ok".to_string(),
+                status: Some(200),
+                latency_ms: Some(10),
+                outcome: ValidationOutcome::Success,
+                response_excerpt: None,
+                likely_cause: None,
+                suggested_fix: None,
+                allowed: false,
+            }],
+        };
+
+        let markdown = report.to_markdown();
+        assert!(markdown.contains("No failing endpoints detected."));
+        assert!(!markdown.contains("| Method |"));
+    }
+}
