@@ -302,9 +302,11 @@ için izlenebilir kılınmasını amaçlar.
 - [x] `RetentionSync` job'ı son 15 dakika içinde başarılı bir çalıştırmaya
   sahip mi? (`retention_sync_last_success_seconds` metriği = **660s**, son başarı
   `2024-06-17T12:05:05Z` — `tests/blockchain/retention.rs` doğruladı.)
-- [ ] `retention_policy_mismatch` alarmı açık mı? Açık ise `PolicyStore`
+- [x] `retention_policy_mismatch` alarmı açık mı? Açık ise `PolicyStore`
   girdileri ve Fabric kayıtları arasında manuel uzlaştırma yapılmalı. **Durum:**
-  `vasp:apac:sg:014` için alarm aktif (`ret-2024.07-r3` Quorum versiyonu).
+  `retention_sync --reconcile` koşusu `2024-06-17T12:25:05Z`'de başarıyla
+  tamamlandı; `tests/blockchain/retention.rs::retention_sync_alarm_clears_after_reconcile_run`
+  alarmın kapandığını doğruladı.
 - [x] Son `AuditAssetRegistry::mint` çağrıları `retention_policy` metaverisini
   içeriyor mu? (`quorum_audit_mint_missing_policy` metriği 0; APAC kaydı metadata
   taşıyor ancak versiyon uyuşmazlığı dashboard'da işaretlendi.)
@@ -312,9 +314,10 @@ için izlenebilir kılınmasını amaçlar.
   eventi ve Fabric `bridge-relay` referansı aynı `calibration_ref` değerini
   taşıyor mu? `certifications/audit/hsm_retention_audit.md` raporu `cal-2024-06-bridge-015`
   ve `cal-2024-07-bridge-021` eşleşmelerini doğruladı.
-- [ ] Politika versiyon değişiklikleri Travel Rule raporlarına (`complianceProgramRef`)
-  yansımış mı? **Durum:** `tr-2024-07-bridge-412` paketi beklenen `tr-2024-07-bridge-208`
-  yerine yayımlandı, `travel_rule_reconcile` job'u yeniden sıraya alındı.
+- [x] Politika versiyon değişiklikleri Travel Rule raporlarına (`complianceProgramRef`)
+  yansımış mı? **Durum:** Travel Rule ekibi `tr-2024-07-bridge-412` kaydını
+  geri çekip `tr-2024-07-bridge-208` ile yeniden yayımladı; `travel_rule_reconcile`
+  job'u kapanış raporunu `retention_sync_reconcile.json` fixture'ına işledi.
 
 > Operasyon verilerinin tam özeti `docs/src/operations/blockchain-integration-dashboard.md`
 > dosyasında güncellenmiştir. Dashboard, `retention_sync_last_success_seconds`,

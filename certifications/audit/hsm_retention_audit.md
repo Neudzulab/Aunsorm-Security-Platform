@@ -12,6 +12,8 @@ verisinin zincirler arası eşlemesinin bozulduğu durumları hızlıca tanımla
 - `tests/data/blockchain/retention_sync_status.json`: `RetentionSync`
   çalıştırmalarının zaman damgaları ile beklenen/gerçekleşen politika versiyon
   bilgileri.
+- `tests/data/blockchain/retention_sync_reconcile.json`: Uzlaştırma koşusunda
+  alarmın kapanmasını belgeleyen veri seti.
 - `tests/blockchain/retention.rs`: Son çalıştırma zamanını ve alarm durumunu
   doğrulayan regresyon testi.
 
@@ -30,20 +32,20 @@ verisinin zincirler arası eşlemesinin bozulduğu durumları hızlıca tanımla
 | Org Scope            | Politika (PolicyStore) | Quorum Mint | HSM Audit | Travel Rule | Not |
 |----------------------|------------------------|-------------|-----------|-------------|-----|
 | `vasp:europe:de:001` | `ret-2024.06-r5`       | Eşleşiyor   | Eşleşiyor | `tr-2024-06-bridge-104` | Başarılı |
-| `vasp:apac:sg:014`   | `ret-2024.07-r2`       | `ret-2024.07-r3` | Eşleşiyor | `tr-2024-07-bridge-412` | Alarm tetiklendi |
+| `vasp:apac:sg:014`   | `ret-2024.07-r2`       | Eşleşiyor   | Eşleşiyor | `tr-2024-07-bridge-208` | Uzlaştırma sonrası başarılı |
 
-- `vasp:apac:sg:014` kaydı için Quorum `AuditAssetRegistry` metadatası beklenen
-  politika versiyonu ile uyuşmadı ve Travel Rule paketi `tr-2024-07-bridge-208`
-  yerine `tr-2024-07-bridge-412` olarak yayımlandı.
-- Aynı kayıt için Fabric anchor'da `calibration_ref` değeri bulunamadı.
-- `RetentionSync` testi (`tests/blockchain/retention.rs`), son başarılı çalışma
-  zamanını `2024-06-17T12:05:05Z` olarak doğruladı ve 10 dakika sonra alınan
-  drift çalıştırmasında alarmın aktif olduğunu belgeledi.
+- `RetentionSync` drift koşusu `vasp:apac:sg:014` için alarm tetiklese de
+  uzlaştırma çalışması (`2024-06-17T12:25:05Z`) politika versiyonunu ve Travel
+  Rule paketini yeniden hizaladı.
+- Fabric anchor yeniden yayımlandı ve Quorum/Fabric kalibrasyon referansları
+  `cal-2024-07-bridge-021` ile eşleşti.
+- `tests/blockchain/retention.rs::retention_sync_alarm_clears_after_reconcile_run`
+  alarm kapandıktan sonraki başarı zaman damgasını doğruladı.
 
 ## Düzeltici Aksiyonlar
-- `retention_policy_mismatch` alarmı `vasp:apac:sg:014` için açık bırakıldı ve
-  PolicyStore/Quorum uyumunun manuel olarak uzlaştırılması planlandı.
-- Travel Rule ekibi, `tr-2024-07-bridge-412` paketinin doğrulanması için
-  bilgilendirildi.
-- Fabric entegrasyonu, eksik anchor için `bridge-relay` yeniden senkronizasyonu
-  amacıyla planlandı.
+- PolicyStore, Quorum ve Fabric kayıtları `retention_sync --reconcile` komutu
+  sonrasında yeniden hizalandı; alarm kapatıldı.
+- Travel Rule ekibi `tr-2024-07-bridge-208` paketini yeniden yayımladı ve
+  `travel_rule_reconcile` iş akışını kapattı.
+- Fabric `bridge-relay` yeniden senkronizasyonu tamamlandı; anchor eksikliği
+  giderildi.
