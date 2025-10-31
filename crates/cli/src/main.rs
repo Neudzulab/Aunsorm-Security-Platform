@@ -75,6 +75,20 @@ use endpoint_validator::{
 };
 use tokio::runtime::Runtime;
 
+/// Environment-aware default URL for Aunsorm server
+fn default_server_url() -> String {
+    std::env::var("AUNSORM_SERVER_URL")
+        .or_else(|_| std::env::var("HOST").map(|host| format!("http://{}:8080", host)))
+        .unwrap_or_else(|_| "http://localhost:8080".to_string())
+}
+
+/// Environment-aware default hostname
+fn default_hostname() -> String {
+    std::env::var("HOSTNAME")
+        .or_else(|_| std::env::var("HOST"))
+        .unwrap_or_else(|_| "localhost".to_string())
+}
+
 #[derive(Parser)]
 #[command(
     name = "aunsorm-cli",
@@ -256,7 +270,7 @@ enum AcmeCommands {
 #[derive(Args)]
 struct AcmeDirectoryArgs {
     /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
-    #[arg(long, default_value = "http://localhost:8080")]
+    #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Directory çıktısını JSON olarak yazdır
     #[arg(long)]
@@ -269,7 +283,7 @@ struct AcmeDirectoryArgs {
 #[derive(Args)]
 struct AcmeRegisterArgs {
     /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
-    #[arg(long, default_value = "http://localhost:8080")]
+    #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
     #[arg(long, value_name = "PATH")]
@@ -291,7 +305,7 @@ struct AcmeRegisterArgs {
 #[derive(Args)]
 struct AcmeOrderArgs {
     /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
-    #[arg(long, default_value = "http://localhost:8080")]
+    #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
     #[arg(long, value_name = "PATH")]
@@ -307,7 +321,7 @@ struct AcmeOrderArgs {
 #[derive(Args)]
 struct AcmeFinalizeArgs {
     /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
-    #[arg(long, default_value = "http://localhost:8080")]
+    #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
     #[arg(long, value_name = "PATH")]
@@ -323,7 +337,7 @@ struct AcmeFinalizeArgs {
 #[derive(Args)]
 struct AcmeFetchCertArgs {
     /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
-    #[arg(long, default_value = "http://localhost:8080")]
+    #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
     #[arg(long, value_name = "PATH")]
@@ -336,7 +350,7 @@ struct AcmeFetchCertArgs {
 #[derive(Args)]
 struct AcmeRevokeArgs {
     /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
-    #[arg(long, default_value = "http://localhost:8080")]
+    #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
     #[arg(long, value_name = "PATH")]
@@ -890,7 +904,7 @@ struct X509SelfSignedArgs {
 #[derive(Args)]
 struct X509LocalDevArgs {
     /// Sertifika ortak adı ve varsayılan DNS SAN girdisi (Subject Alternative Name)
-    #[arg(long, default_value = "localhost")]
+    #[arg(long, default_value_t = default_hostname())]
     hostname: String,
     /// Kalibrasyon metni
     #[arg(

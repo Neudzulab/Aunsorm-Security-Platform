@@ -1280,6 +1280,7 @@ pub async fn generate_media_token(
 
     let ttl_seconds = state.token_ttl().as_secs();
     let bridge_url = std::env::var("ZASIAN_WEBSOCKET_URL")
+        .or_else(|_| std::env::var("ZASIAN_HOST").map(|host| format!("wss://{}:50036/zasian", host)))
         .unwrap_or_else(|_| "wss://localhost:50036/zasian".to_owned());
 
     Ok(Json(MediaTokenResponse {

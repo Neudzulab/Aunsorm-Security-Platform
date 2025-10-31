@@ -162,9 +162,16 @@ zasian_services:
 # Integration configuration
 integration:
   aunsorm_to_zasian:
-    bridge_url: "ws://localhost:50031/ws"  # Updated from 50031
-    signaling_url: "wss://localhost:50036/zasian"  # Updated from 50045
+    bridge_url: "ws://localhost:50031/ws"  # Override: BRIDGE_URL env var
+    signaling_url: "wss://localhost:50036/zasian"  # Override: ZASIAN_WEBSOCKET_URL env var
     jwt_audience: "zasian-media"
+    
+  environment_overrides:
+    production:
+      ZASIAN_HOST: "zasian.production.domain"  # Replaces localhost in Zasian URLs
+      HOST: "aunsorm.production.domain"        # Replaces 127.0.0.1 in Aunsorm bind
+      ZASIAN_WEBSOCKET_URL: "wss://zasian.production.domain:50036/zasian"
+      AUNSORM_LISTEN: "aunsorm.production.domain:8080"
     
 # External access
 external_access:

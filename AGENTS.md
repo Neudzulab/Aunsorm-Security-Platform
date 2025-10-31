@@ -263,6 +263,10 @@ pub struct JwtPayload {
 3. **Environment Değişkenleri (`.env`)**
    - `BRIDGE_URL=ws://localhost:50031/ws` (SFU Router)
    - `ZASIAN_WEBSOCKET_URL=wss://localhost:50036/zasian` (Signaling)
+   - **Production Override**: `ZASIAN_HOST` ve `HOST` environment variable'larıyla localhost hardcode'ları aşılabilir
+   - **OAuth Callbacks**: `OAUTH_PRODUCTION_CALLBACK` ile production callback URL'i belirlenebilir
+   - ❌ **Yasak**: Kod içine localhost/127.0.0.1 hardcode yazmak
+   - ✅ **Doğru**: Environment variable + fallback pattern kullanmak
 
 ## Workflow
 

@@ -242,16 +242,37 @@ fn generate_id() -> String {
 
 fn default_oauth_clients() -> HashMap<String, OAuthClient> {
     let mut clients = HashMap::new();
+    
+    // Build redirect URIs with environment variable support
+    let mut redirect_uris = vec![
+        "https://app.example.com/callback".to_string(),
+        "https://demo.example.com/oauth/callback".to_string(),
+    ];
+    
+    // Add localhost callbacks (development/testing)
+    if let Ok(host) = std::env::var("HOST") {
+        redirect_uris.extend(vec![
+            format!("http://{}:3000/callback", host),
+            format!("http://{}:8080/callback", host),
+        ]);
+    } else {
+        // Fallback to localhost for development
+        redirect_uris.extend(vec![
+            "http://localhost:3000/callback".to_string(),
+            "http://127.0.0.1:3000/callback".to_string(),
+            "http://localhost:8080/callback".to_string(),
+        ]);
+    }
+    
+    // Add production callback if configured
+    if let Ok(prod_callback) = std::env::var("OAUTH_PRODUCTION_CALLBACK") {
+        redirect_uris.push(prod_callback);
+    }
+    
     clients.insert(
         "demo-client".to_string(),
         OAuthClient::new(
-            vec![
-                "https://app.example.com/callback".to_string(),
-                "https://demo.example.com/oauth/callback".to_string(),
-                "http://localhost:3000/callback".to_string(),
-                "http://127.0.0.1:3000/callback".to_string(),
-                "http://localhost:8080/callback".to_string(),
-            ],
+            redirect_uris,
             vec![
                 "read".to_string(),
                 "write".to_string(),

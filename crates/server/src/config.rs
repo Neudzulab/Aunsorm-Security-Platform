@@ -89,6 +89,7 @@ impl ServerConfig {
     #[allow(clippy::too_many_lines)]
     pub fn from_env() -> Result<Self, ServerError> {
         let listen = env::var("AUNSORM_LISTEN")
+            .or_else(|_| env::var("HOST").map(|host| format!("{}:8080", host)))
             .unwrap_or_else(|_| "127.0.0.1:8080".to_string())
             .parse()
             .map_err(|err| ServerError::Configuration(format!("Dinleme adresi geçersiz: {err}")))?;
