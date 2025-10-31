@@ -238,9 +238,14 @@ fn identity_flow_alpha_roundtrip() {
             .map(|values| values.iter().map(Value::as_str).collect::<Vec<_>>()),
         Some(vec![Some("packet:read"), Some("session:manage")])
     );
+    let calibration_context = verified
+        .extra
+        .get("calibrationContext")
+        .or_else(|| verified.extra.get("calibration_context"))
+        .and_then(Value::as_str);
     assert_eq!(
-        verified.extra.get("calibration_context"),
-        Some(&Value::String(fixture.x509.calibration_text.clone()))
+        calibration_context,
+        Some(fixture.x509.calibration_text.as_str())
     );
 
     let replay = verifier

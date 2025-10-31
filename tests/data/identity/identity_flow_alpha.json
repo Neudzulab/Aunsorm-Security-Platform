@@ -17,7 +17,7 @@
     "ttl_seconds": 900,
     "extra_claims": {
       "tenant": "alpha-tenant",
-      "calibration_context": "Alpha Identity Flow 2025-11-01"
+      "calibrationContext": "Alpha Identity Flow 2025-11-01"
     }
   },
   "x509": {
