@@ -159,6 +159,21 @@ async fn validator_discovers_endpoints() {
     });
     let report = validate(config).await.expect("report");
     assert_successes(&report);
+    let summary = report.summary();
+    assert_eq!(summary.total, report.results.len());
+    assert!(
+        summary.successes >= 3,
+        "expected at least three successful endpoints"
+    );
+    assert!(
+        summary.allowed_failures >= 1,
+        "expected at least one allowlisted failure"
+    );
+    assert_eq!(
+        summary.successes + summary.failures + summary.allowed_failures + summary.skipped,
+        summary.total,
+        "summary counts should balance"
+    );
 }
 
 fn assert_successes(report: &ValidationReport) {

@@ -179,7 +179,46 @@ pub struct ValidationReport {
     pub results: Vec<ValidationResult>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ValidationSummary {
+    pub total: usize,
+    pub successes: usize,
+    pub failures: usize,
+    pub skipped: usize,
+    pub allowed_failures: usize,
+}
+
 impl ValidationReport {
+    #[must_use]
+    pub fn summary(&self) -> ValidationSummary {
+        let mut successes = 0usize;
+        let mut failures = 0usize;
+        let mut skipped = 0usize;
+        let mut allowed_failures = 0usize;
+
+        for result in &self.results {
+            match &result.outcome {
+                ValidationOutcome::Success => successes += 1,
+                ValidationOutcome::Skipped { .. } => skipped += 1,
+                ValidationOutcome::Failure(_) => {
+                    if result.allowed {
+                        allowed_failures += 1;
+                    } else {
+                        failures += 1;
+                    }
+                }
+            }
+        }
+
+        ValidationSummary {
+            total: self.results.len(),
+            successes,
+            failures,
+            skipped,
+            allowed_failures,
+        }
+    }
+
     #[must_use]
     pub fn failures(&self) -> Vec<&ValidationResult> {
         self.results
@@ -196,6 +235,16 @@ impl ValidationReport {
         writeln!(output, "# Endpoint Validation Report").expect("write should succeed");
         writeln!(output).expect("write should succeed");
         writeln!(output, "Base URL: {}", self.base_url).expect("write should succeed");
+        let summary = self.summary();
+        writeln!(output, "Total endpoints: {}", summary.total).expect("write should succeed");
+        writeln!(output, "Successful: {}", summary.successes).expect("write should succeed");
+        writeln!(output, "Skipped: {}", summary.skipped).expect("write should succeed");
+        writeln!(
+            output,
+            "Failures: {} (allowlisted: {})",
+            summary.failures, summary.allowed_failures
+        )
+        .expect("write should succeed");
         writeln!(output).expect("write should succeed");
 
         let failures = self.failures();
@@ -247,8 +296,10 @@ impl ValidationReport {
 
     #[must_use]
     pub fn to_json(&self) -> Value {
+        let summary = self.summary();
         json!({
             "base_url": self.base_url,
+            "summary": summary,
             "results": self.results,
         })
     }
@@ -980,7 +1031,7 @@ fn normalize_path(input: &str) -> String {
 mod tests {
     use super::{
         normalize_path, AllowlistedFailure, FailureKind, ValidationOutcome, ValidationReport,
-        ValidationResult,
+        ValidationResult, ValidationSummary,
     };
 
     #[test]
@@ -1054,6 +1105,9 @@ mod tests {
         let markdown = report.to_markdown();
         assert!(markdown.contains("pipe ❘ content"));
         assert!(!markdown.contains("pipe | content"));
+        assert!(markdown.contains("Total endpoints: 2"));
+        assert!(markdown.contains("Successful: 1"));
+        assert!(markdown.contains("Failures: 1 (allowlisted: 0)"));
         assert!(markdown.contains("| Method | Path | Status |"));
     }
 
@@ -1076,6 +1130,75 @@ mod tests {
 
         let markdown = report.to_markdown();
         assert!(markdown.contains("No failing endpoints detected."));
+        assert!(markdown.contains("Successful: 1"));
+        assert!(markdown.contains("Failures: 0 (allowlisted: 0)"));
         assert!(!markdown.contains("| Method |"));
+    }
+
+    #[test]
+    fn summary_counts_outcomes() {
+        let report = ValidationReport {
+            base_url: "https://validator.test".to_string(),
+            results: vec![
+                ValidationResult {
+                    method: "GET".to_string(),
+                    path: "/ok".to_string(),
+                    status: Some(200),
+                    latency_ms: Some(10),
+                    outcome: ValidationOutcome::Success,
+                    response_excerpt: None,
+                    likely_cause: None,
+                    suggested_fix: None,
+                    allowed: false,
+                },
+                ValidationResult {
+                    method: "GET".to_string(),
+                    path: "/allowed".to_string(),
+                    status: Some(500),
+                    latency_ms: Some(30),
+                    outcome: ValidationOutcome::Failure(FailureKind::ServerError),
+                    response_excerpt: None,
+                    likely_cause: None,
+                    suggested_fix: None,
+                    allowed: true,
+                },
+                ValidationResult {
+                    method: "GET".to_string(),
+                    path: "/fail".to_string(),
+                    status: Some(404),
+                    latency_ms: Some(15),
+                    outcome: ValidationOutcome::Failure(FailureKind::Missing),
+                    response_excerpt: None,
+                    likely_cause: None,
+                    suggested_fix: None,
+                    allowed: false,
+                },
+                ValidationResult {
+                    method: "DELETE".to_string(),
+                    path: "/skip".to_string(),
+                    status: None,
+                    latency_ms: None,
+                    outcome: ValidationOutcome::Skipped {
+                        reason: "dangerous".to_string(),
+                    },
+                    response_excerpt: None,
+                    likely_cause: None,
+                    suggested_fix: None,
+                    allowed: true,
+                },
+            ],
+        };
+
+        let summary = report.summary();
+        assert_eq!(
+            summary,
+            ValidationSummary {
+                total: 4,
+                successes: 1,
+                failures: 1,
+                skipped: 1,
+                allowed_failures: 1,
+            }
+        );
     }
 }
