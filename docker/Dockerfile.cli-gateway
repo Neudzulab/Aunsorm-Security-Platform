@@ -1,9 +1,15 @@
 FROM rustlang/rust:nightly AS builder
 
 WORKDIR /workspace
+
+# Copy Cargo.lock first for dependency caching layer
+COPY Cargo.lock ./
+
+# Copy all source code
 COPY . .
 
 # Build aunsorm-server with CLI gateway support
+# Docker layers will cache based on Cargo.lock changes
 RUN cargo build --release --bin aunsorm-server
 
 FROM debian:bookworm-slim
