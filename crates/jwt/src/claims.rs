@@ -115,6 +115,22 @@ impl Claims {
                 ));
             }
         }
+        if let (Some(exp), Some(iat)) = (self.expiration, self.issued_at) {
+            if exp < iat {
+                return Err(JwtError::InvalidClaim(
+                    "exp",
+                    "expiration must be after issued_at",
+                ));
+            }
+        }
+        if let (Some(nbf), Some(iat)) = (self.not_before, self.issued_at) {
+            if nbf < iat {
+                return Err(JwtError::InvalidClaim(
+                    "nbf",
+                    "not_before must be after issued_at",
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -188,5 +204,69 @@ mod serde_opt_timestamp {
         SystemTime(#[from] std::time::SystemTimeError),
         #[error("timestamp overflow")]
         Overflow,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    #[test]
+    fn temporal_consistency_accepts_monotonic_claims() {
+        let base = UNIX_EPOCH + Duration::from_secs(1_000);
+        let mut claims = Claims::new();
+        claims.issued_at = Some(base);
+        claims.not_before = Some(base + Duration::from_secs(30));
+        claims.expiration = Some(base + Duration::from_secs(120));
+        assert!(
+            claims.validate_temporal_consistency().is_ok(),
+            "monotonic claims should pass"
+        );
+    }
+
+    #[test]
+    fn temporal_consistency_rejects_exp_before_not_before() {
+        let base = UNIX_EPOCH + Duration::from_secs(1_000);
+        let mut claims = Claims::new();
+        claims.not_before = Some(base + Duration::from_secs(120));
+        claims.expiration = Some(base + Duration::from_secs(60));
+        let err = claims
+            .validate_temporal_consistency()
+            .expect_err("expiration before not_before must fail");
+        assert!(matches!(
+            err,
+            JwtError::InvalidClaim("exp", "expiration must be after not_before")
+        ));
+    }
+
+    #[test]
+    fn temporal_consistency_rejects_exp_before_issued() {
+        let base = UNIX_EPOCH + Duration::from_secs(1_000);
+        let mut claims = Claims::new();
+        claims.issued_at = Some(base + Duration::from_secs(120));
+        claims.expiration = Some(base + Duration::from_secs(60));
+        let err = claims
+            .validate_temporal_consistency()
+            .expect_err("expiration before issued_at must fail");
+        assert!(matches!(
+            err,
+            JwtError::InvalidClaim("exp", "expiration must be after issued_at")
+        ));
+    }
+
+    #[test]
+    fn temporal_consistency_rejects_not_before_before_issued() {
+        let base = UNIX_EPOCH + Duration::from_secs(1_000);
+        let mut claims = Claims::new();
+        claims.issued_at = Some(base + Duration::from_secs(120));
+        claims.not_before = Some(base + Duration::from_secs(60));
+        let err = claims
+            .validate_temporal_consistency()
+            .expect_err("not_before before issued_at must fail");
+        assert!(matches!(
+            err,
+            JwtError::InvalidClaim("nbf", "not_before must be after issued_at")
+        ));
     }
 }
