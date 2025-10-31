@@ -22,3 +22,7 @@ açıklar.
 - `retention_policy_audit.json`: Müşteri bazlı saklama/anahtar imha politikasının
   Quorum AuditAsset kayıtları ve KMS imha loglarıyla eşlenmesini kanıtlayan
   kayıtlar.
+- `retention_sync_status.json`: Drift tespiti sırasında alarm durumunu
+  gösteren zaman damgalı `RetentionSync` çıktısı.
+- `retention_sync_reconcile.json`: Uzlaştırma koşusunun alarmı nasıl kapattığını
+  gösteren üç aşamalı senaryo (bkz. `retention_sync_reconcile.md`).

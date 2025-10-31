@@ -11,6 +11,8 @@ use serde::Deserialize;
 struct RetentionSyncFixture {
     baseline: RunFixture,
     drift: RunFixture,
+    #[serde(default)]
+    reconcile: Option<RunFixture>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,13 +52,21 @@ impl From<SnapshotFixture> for RetentionPolicySnapshot {
     }
 }
 
-fn load_fixture() -> RetentionSyncFixture {
+fn load_fixture(name: &str) -> RetentionSyncFixture {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let path = manifest_dir.join("data/blockchain/retention_sync_status.json");
+    let path = manifest_dir.join("data/blockchain").join(name);
     let content = fs::read_to_string(&path)
         .unwrap_or_else(|err| panic!("failed to read retention sync fixture {path:?}: {err}"));
     serde_json::from_str(&content)
         .unwrap_or_else(|err| panic!("failed to parse retention sync fixture {path:?}: {err}"))
+}
+
+fn load_status_fixture() -> RetentionSyncFixture {
+    load_fixture("retention_sync_status.json")
+}
+
+fn load_reconcile_fixture() -> RetentionSyncFixture {
+    load_fixture("retention_sync_reconcile.json")
 }
 
 fn ms_to_system_time(value: u64) -> SystemTime {
@@ -65,14 +75,13 @@ fn ms_to_system_time(value: u64) -> SystemTime {
 
 #[test]
 fn retention_sync_last_run_timestamp_and_alarm_state() {
-    let fixture = load_fixture();
+    let RetentionSyncFixture { baseline, drift, .. } = load_status_fixture();
     let mut sync = RetentionSync::new();
 
-    let baseline_time = ms_to_system_time(fixture.baseline.evaluated_at_ms);
+    let baseline_time = ms_to_system_time(baseline.evaluated_at_ms);
     let baseline_eval = RetentionPolicyEvaluation::from_snapshots(
         baseline_time,
-        fixture
-            .baseline
+        baseline
             .snapshots
             .into_iter()
             .map(RetentionPolicySnapshot::from),
@@ -84,11 +93,10 @@ fn retention_sync_last_run_timestamp_and_alarm_state() {
     let metric_reference = baseline_time + Duration::from_secs(120);
     assert_eq!(sync.seconds_since_last_success(metric_reference), Some(120));
 
-    let drift_time = ms_to_system_time(fixture.drift.evaluated_at_ms);
+    let drift_time = ms_to_system_time(drift.evaluated_at_ms);
     let drift_eval = RetentionPolicyEvaluation::from_snapshots(
         drift_time,
-        fixture
-            .drift
+        drift
             .snapshots
             .into_iter()
             .map(RetentionPolicySnapshot::from),
@@ -123,5 +131,62 @@ fn retention_sync_last_run_timestamp_and_alarm_state() {
     assert_eq!(
         sync.seconds_since_last_success(minutes_after_alarm),
         Some(660)
+    );
+}
+
+#[test]
+fn retention_sync_alarm_clears_after_reconcile_run() {
+    let RetentionSyncFixture {
+        baseline,
+        drift,
+        reconcile,
+    } = load_reconcile_fixture();
+    let mut sync = RetentionSync::new();
+
+    let baseline_time = ms_to_system_time(baseline.evaluated_at_ms);
+    let baseline_eval = RetentionPolicyEvaluation::from_snapshots(
+        baseline_time,
+        baseline
+            .snapshots
+            .into_iter()
+            .map(RetentionPolicySnapshot::from),
+    );
+    sync.record_run(baseline_eval);
+
+    let drift_time = ms_to_system_time(drift.evaluated_at_ms);
+    let drift_eval = RetentionPolicyEvaluation::from_snapshots(
+        drift_time,
+        drift
+            .snapshots
+            .into_iter()
+            .map(RetentionPolicySnapshot::from),
+    );
+    sync.record_run(drift_eval);
+    assert!(sync.alarm_is_active());
+
+    let reconcile = reconcile.expect("fixture must contain reconciled run");
+    let reconcile_time = ms_to_system_time(reconcile.evaluated_at_ms);
+    let reconcile_eval = RetentionPolicyEvaluation::from_snapshots(
+        reconcile_time,
+        reconcile
+            .snapshots
+            .into_iter()
+            .map(RetentionPolicySnapshot::from),
+    );
+    sync.record_run(reconcile_eval);
+
+    assert_eq!(sync.last_run_at(), Some(reconcile_time));
+    assert_eq!(sync.last_success_at(), Some(reconcile_time));
+    assert!(!sync.alarm_is_active());
+
+    let alarm_snapshot = sync.retention_policy_alarm();
+    assert!(!alarm_snapshot.active);
+    assert_eq!(alarm_snapshot.last_triggered_at, Some(drift_time));
+    assert!(alarm_snapshot.mismatches.is_empty());
+
+    let reference_time = reconcile_time + Duration::from_secs(300);
+    assert_eq!(
+        sync.seconds_since_last_success(reference_time),
+        Some(300)
     );
 }
