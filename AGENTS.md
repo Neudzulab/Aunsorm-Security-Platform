@@ -248,13 +248,26 @@ pub struct JwtPayload {
 
 ## 🚨 Servis Ağacı Güncelleme Direktifi
 
-## Workflow   - Yeni crate eklendiğinde → README'de bahset, endpoint planı yaz
+**YENİ ÖZELLİK/ENDPOINT EKLENDİĞİNDE MUTLAKA YAPILACAKLAR:**
 
-   - Yeni endpoint eklendiğinde → README ağacını güncelle, durum işareti koy
+1. **README.md Server Endpoint Ağacını Güncelle**
+   - Yeni endpoint eklendiğinde `README.md` içindeki endpoint ağacına ekle
+   - Yarım/tamamlanmamış özellik bile olsa `[Planlandı v0.X.0]` işaretiyle ekle
 
-1. **Check `PROD_PLAN.md`** - Find unassigned tasks in your domain   - Git commit öncesi → README ile routes.rs dosyasını karşılaştır
+2. **Port Mapping Güncelleme (`port-map.yaml`)**
+   - Yeni port ekleme/değiştirme durumunda `port-map.yaml` güncelle
+   - **Zasian Media Platform portları: 50030-50037** (v0.6.0)
+   - **Aunsorm portları: 50010-50023** (mevcut)
+   - External service entegrasyonları için `integration` bölümünü güncelle
 
-2. **Create branch** - Use format: `agent/crypto/task-description` or `agent/platform/feature-name`   - Sprint sonunda → Tüm ağacı gözden geçir, eksik servisleri işaretle
+3. **Environment Değişkenleri (`.env`)**
+   - `BRIDGE_URL=ws://localhost:50031/ws` (SFU Router)
+   - `ZASIAN_WEBSOCKET_URL=wss://localhost:50036/zasian` (Signaling)
+
+## Workflow
+
+1. **Check `PROD_PLAN.md`** - Find unassigned tasks in your domain
+2. **Create branch** - Use format: `agent/crypto/task-description` or `agent/platform/feature-name`
 
 3. **Implement** - Follow code quality gates
 

@@ -110,12 +110,61 @@ network:
   
 # Port allocation strategy
 port_allocation:
-  range_start: 50010
-  range_end: 50023
+  aunsorm_range: "50010-50023"
+  zasian_range: "50030-50037"
   reserved_ports:
     - 50024  # Future: WebRTC signaling
     - 50025  # Future: gRPC gateway
     - 50026  # Future: GraphQL endpoint
+    
+# External dependencies (Zasian Media Platform v0.6.0)
+zasian_services:
+  - name: zas-gateway
+    port: 50030
+    protocol: HTTP
+    purpose: Zasian API Gateway
+    
+  - name: zas-sfu-router-ws
+    port: 50031
+    protocol: WebSocket
+    purpose: SFU Router WebSocket
+    
+  - name: zas-sfu-router-quic
+    port: 50032
+    protocol: UDP/QUIC
+    purpose: QUIC transport
+    
+  - name: zas-hybrid-mcu
+    port: 50033
+    protocol: TCP
+    purpose: GPU compositor
+    
+  - name: zas-publisher-service
+    port: 50034
+    protocol: TCP
+    purpose: Media publishing
+    
+  - name: zas-subscriber-service
+    port: 50035
+    protocol: TCP
+    purpose: Stream subscription
+    
+  - name: zas-signaling
+    port: 50036
+    protocol: WebSocket
+    purpose: WebRTC signaling
+    
+  - name: zas-router-web
+    port: 50037
+    protocol: HTTP
+    purpose: Router HTTP API
+
+# Integration configuration
+integration:
+  aunsorm_to_zasian:
+    bridge_url: "ws://localhost:50031/ws"  # Updated from 50031
+    signaling_url: "wss://localhost:50036/zasian"  # Updated from 50045
+    jwt_audience: "zasian-media"
     
 # External access
 external_access:
