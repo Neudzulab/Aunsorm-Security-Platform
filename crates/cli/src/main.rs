@@ -1261,6 +1261,8 @@ enum CliError {
     JwtKeyFile(&'static str),
     #[error("claim alanı rezerve edildi: {0}")]
     ClaimReserved(String),
+    #[error("claim anahtarı camelCase olmalıdır: {0}")]
+    ClaimInvalidFormat(String),
     #[error("jwt anahtar materyali belirtilmelidir")]
     MissingJwtMaterial,
     #[error("kms hatası: {0}")]
@@ -4458,17 +4460,72 @@ fn merge_extra_claims(claims: &mut Claims, path: &Path) -> CliResult<()> {
     let map = value
         .as_object()
         .ok_or(CliError::JwtClaimsFile("JSON object bekleniyordu"))?;
+    let mut staged: Vec<(String, Value)> = Vec::with_capacity(map.len());
     for (key, val) in map {
         match key.as_str() {
             "iss" | "sub" | "aud" | "exp" | "nbf" | "iat" | "jti" => {
                 return Err(CliError::ClaimReserved(key.clone()))
             }
-            _ => {
-                claims.extra.insert(key.clone(), val.clone());
-            }
+            _ => {}
         }
+        if !is_camel_case(key) {
+            return Err(CliError::ClaimInvalidFormat(key.clone()));
+        }
+        if let Some(invalid_path) = find_invalid_nested_key(val, key) {
+            return Err(CliError::ClaimInvalidFormat(invalid_path));
+        }
+        staged.push((key.clone(), val.clone()));
+    }
+    for (key, val) in staged {
+        claims.extra.insert(key, val);
     }
     Ok(())
+}
+
+fn is_camel_case(key: &str) -> bool {
+    let mut chars = key.chars();
+    match chars.next() {
+        Some(first) if first.is_ascii_lowercase() => {}
+        _ => return false,
+    }
+    chars.all(|ch| ch.is_ascii_alphanumeric() && ch != '_')
+}
+
+fn extend_path(parent: &str, segment: &str) -> String {
+    if parent.is_empty() {
+        segment.to_owned()
+    } else if segment.starts_with('[') {
+        format!("{parent}{segment}")
+    } else {
+        format!("{parent}.{segment}")
+    }
+}
+
+fn find_invalid_nested_key(value: &Value, parent: &str) -> Option<String> {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                if !is_camel_case(key) {
+                    return Some(extend_path(parent, key));
+                }
+                if let Some(invalid) = find_invalid_nested_key(child, &extend_path(parent, key)) {
+                    return Some(invalid);
+                }
+            }
+            None
+        }
+        Value::Array(items) => {
+            for (index, item) in items.iter().enumerate() {
+                let segment = format!("[{index}]");
+                if let Some(invalid) = find_invalid_nested_key(item, &extend_path(parent, &segment))
+                {
+                    return Some(invalid);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 fn load_verification_keys(args: &JwtVerifyArgs) -> CliResult<Vec<Ed25519PublicKey>> {
@@ -5365,6 +5422,32 @@ intermediates:
         let mut claims = Claims::new();
         let err = merge_extra_claims(&mut claims, file.path()).unwrap_err();
         assert!(matches!(err, CliError::ClaimReserved(_)));
+    }
+
+    #[test]
+    fn jwt_extra_claims_rejects_snake_case_keys() {
+        let file = NamedTempFile::new().expect("tmp");
+        fs::write(file.path(), "{\"custom_claim\":42}").expect("write");
+        let mut claims = Claims::new();
+        let err = merge_extra_claims(&mut claims, file.path()).unwrap_err();
+        assert!(matches!(err, CliError::ClaimInvalidFormat(key) if key == "custom_claim"));
+    }
+
+    #[test]
+    fn jwt_extra_claims_rejects_nested_invalid_keys() {
+        let file = NamedTempFile::new().expect("tmp");
+        let json = json!({
+            "metadata": {
+                "calibration_context": "demo"
+            }
+        });
+        let json_bytes = serde_json::to_vec(&json).expect("json bytes");
+        fs::write(file.path(), json_bytes).expect("write json");
+        let mut claims = Claims::new();
+        let err = merge_extra_claims(&mut claims, file.path()).unwrap_err();
+        assert!(
+            matches!(err, CliError::ClaimInvalidFormat(path) if path == "metadata.calibration_context")
+        );
     }
 
     #[test]
