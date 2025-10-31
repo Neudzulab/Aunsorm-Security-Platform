@@ -144,6 +144,7 @@ impl JwtVerifier {
     }
 
     fn validate_claims(&self, claims: &Claims, options: &VerificationOptions) -> Result<()> {
+        claims.validate_custom_claims()?;
         let now = options.now.unwrap_or_else(SystemTime::now);
         let leeway = self.leeway;
         claims.validate_temporal_consistency()?;
