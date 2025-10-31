@@ -1739,7 +1739,7 @@ pub async fn exchange_token(
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
     claims.extra.insert(
-        "client_id".to_string(),
+        "clientId".to_string(),
         Value::String(payload.client_id.clone()),
     );
     if let Some(scope) = auth_request.scope {
@@ -1844,7 +1844,8 @@ pub async fn introspect_token(
             let iat = claims.issued_at.map(system_time_to_unix_seconds);
             let client_id = claims
                 .extra
-                .get("client_id")
+                .get("clientId")
+                .or_else(|| claims.extra.get("client_id"))
                 .and_then(|value| value.as_str())
                 .map(str::to_owned);
             let scope = claims
