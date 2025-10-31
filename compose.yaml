@@ -85,6 +85,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50013
+      - SERVICE_MODE=x509-service
 
   # KMS Service - Key Management (Port 50014)
   kms-service:
@@ -99,6 +102,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50014
+      - SERVICE_MODE=kms-service
 
   # MDM Service - Mobile Device Management (Port 50015)
   mdm-service:
@@ -168,6 +174,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50018
+      - SERVICE_MODE=pqc-service
 
   # RNG Service - Cryptographic Random Number Generator (Port 50019)
   rng-service:
@@ -182,6 +191,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50019
+      - SERVICE_MODE=rng-service
 
   # Blockchain Service - DID verification and Fabric integration (Port 50020)
   # ------------------------------------------------------------------
@@ -214,6 +226,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50020
+      - SERVICE_MODE=blockchain-service
 
   # E2EE Service - End-to-End Encryption media sessions (Port 50021)
   e2ee-service:
@@ -230,6 +245,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50021
+      - SERVICE_MODE=e2ee-service
 
   # Metrics Service - Prometheus endpoints (Port 50022)
   metrics-service:
@@ -244,6 +262,9 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
+    environment:
+      - AUNSORM_LISTEN=0.0.0.0:50022
+      - SERVICE_MODE=metrics-service
 
   # CLI Gateway Service - REST API for CLI commands (Port 50023)
   cli-gateway:
