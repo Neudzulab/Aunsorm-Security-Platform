@@ -26,6 +26,12 @@ impl JwtSigner {
         Self { key }
     }
 
+    /// Kullanılan `kid` değerini döndürür.
+    #[must_use]
+    pub fn kid(&self) -> &str {
+        self.key.kid()
+    }
+
     /// Claims'i imzalayıp JWT üretir.
     ///
     /// # Errors
