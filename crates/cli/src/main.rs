@@ -12,7 +12,7 @@ use std::io::{self, Write as _};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
@@ -23,7 +23,7 @@ use hkdf::Hkdf;
 use http::{header::LOCATION, HeaderMap, HeaderName, HeaderValue, StatusCode};
 use rand_core::RngCore;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use sha2::Sha256;
 use thiserror::Error;
 use ureq::{Agent, Error as UreqError};
@@ -2636,9 +2636,10 @@ fn handle_jwt_verify(args: &JwtVerifyArgs) -> CliResult<()> {
         now: None,
     };
     let claims = verifier.verify(token, &options)?;
+    let normalized = NormalizedJwtClaims::from_claims(&claims);
     if let Some(out) = args.claims_out.as_deref() {
         let claims_to_stdout = is_stdout_path(out);
-        write_json_pretty(out, &claims)?;
+        write_json_pretty(out, &normalized)?;
         if claims_to_stdout {
             eprintln!(
                 "jwt doğrulandı: token={} | jti={} | claims={}",
@@ -2655,7 +2656,7 @@ fn handle_jwt_verify(args: &JwtVerifyArgs) -> CliResult<()> {
             );
         }
     } else {
-        let json = serde_json::to_string_pretty(&claims)?;
+        let json = serde_json::to_string_pretty(&normalized)?;
         println!("{json}");
     }
     Ok(())
@@ -4557,6 +4558,71 @@ where
     Ok(serde_json::from_slice(&data)?)
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct NormalizedJwtClaims {
+    subject: String,
+    audience: String,
+    issuer: String,
+    expiration: u64,
+    #[serde(rename = "issuedAt", skip_serializing_if = "Option::is_none")]
+    issued_at: Option<u64>,
+    #[serde(rename = "notBefore", skip_serializing_if = "Option::is_none")]
+    not_before: Option<u64>,
+    #[serde(rename = "relatedId", skip_serializing_if = "Option::is_none")]
+    related_id: Option<String>,
+    #[serde(rename = "jwtId", skip_serializing_if = "Option::is_none")]
+    jwt_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extras: Option<Map<String, Value>>,
+}
+
+impl NormalizedJwtClaims {
+    fn from_claims(claims: &Claims) -> Self {
+        let related_id = claims
+            .extra
+            .get("relatedId")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned);
+        let extras = if claims.extra.is_empty() {
+            None
+        } else {
+            let mut map = Map::with_capacity(claims.extra.len());
+            for (key, value) in &claims.extra {
+                map.insert(key.clone(), value.clone());
+            }
+            Some(map)
+        };
+        Self {
+            subject: claims.subject.clone().unwrap_or_default(),
+            audience: audience_to_string(claims.audience.as_ref()),
+            issuer: claims.issuer.clone().unwrap_or_default(),
+            expiration: claims
+                .expiration
+                .map(system_time_to_unix_seconds)
+                .unwrap_or(0),
+            issued_at: claims.issued_at.map(system_time_to_unix_seconds),
+            not_before: claims.not_before.map(system_time_to_unix_seconds),
+            related_id,
+            jwt_id: claims.jwt_id.clone(),
+            extras,
+        }
+    }
+}
+
+fn audience_to_string(audience: Option<&Audience>) -> String {
+    match audience {
+        Some(Audience::Single(value)) => value.clone(),
+        Some(Audience::Multiple(values)) => values.first().cloned().unwrap_or_default(),
+        None => String::new(),
+    }
+}
+
+fn system_time_to_unix_seconds(time: SystemTime) -> u64 {
+    time.duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4566,6 +4632,70 @@ mod tests {
     use std::thread;
     use tempfile::{tempdir, NamedTempFile};
     use tiny_http::{Header, Method, Request, Response, Server};
+
+    #[test]
+    fn normalized_claims_groups_extras() {
+        let mut claims = Claims::new();
+        claims.subject = Some("user123".to_string());
+        claims.audience = Some(Audience::Multiple(vec![
+            "zasian-media".to_string(),
+            "fallback".to_string(),
+        ]));
+        claims.issuer = Some("https://aunsorm.local".to_string());
+        claims.expiration = Some(UNIX_EPOCH + Duration::from_secs(1_761_791_358));
+        claims.issued_at = Some(UNIX_EPOCH + Duration::from_secs(1_761_787_758));
+        claims.not_before = Some(UNIX_EPOCH + Duration::from_secs(1_761_787_000));
+        claims.jwt_id = Some("token-123".to_string());
+        claims
+            .extra
+            .insert("roomId".to_string(), Value::String("room-a".to_string()));
+        claims.extra.insert(
+            "metadata".to_string(),
+            json!({
+                "codec": "vp9",
+                "appData": {
+                    "role": "host"
+                }
+            }),
+        );
+        claims
+            .extra
+            .insert("relatedId".to_string(), Value::String("rel-42".to_string()));
+
+        let normalized = NormalizedJwtClaims::from_claims(&claims);
+
+        assert_eq!(normalized.subject, "user123");
+        assert_eq!(normalized.audience, "zasian-media");
+        assert_eq!(normalized.issuer, "https://aunsorm.local");
+        assert_eq!(normalized.expiration, 1_761_791_358);
+        assert_eq!(normalized.issued_at, Some(1_761_787_758));
+        assert_eq!(normalized.not_before, Some(1_761_787_000));
+        assert_eq!(normalized.jwt_id.as_deref(), Some("token-123"));
+        assert_eq!(normalized.related_id.as_deref(), Some("rel-42"));
+        let extras = normalized.extras.expect("extras map");
+        assert_eq!(extras.len(), 3);
+        assert_eq!(extras.get("roomId").and_then(Value::as_str), Some("room-a"));
+        assert!(extras.get("metadata").is_some());
+        assert_eq!(
+            extras.get("relatedId").and_then(Value::as_str),
+            Some("rel-42")
+        );
+    }
+
+    #[test]
+    fn normalized_claims_handles_missing_fields() {
+        let claims = Claims::new();
+        let normalized = NormalizedJwtClaims::from_claims(&claims);
+        assert_eq!(normalized.subject, "");
+        assert_eq!(normalized.audience, "");
+        assert_eq!(normalized.issuer, "");
+        assert_eq!(normalized.expiration, 0);
+        assert_eq!(normalized.issued_at, None);
+        assert_eq!(normalized.not_before, None);
+        assert!(normalized.related_id.is_none());
+        assert!(normalized.jwt_id.is_none());
+        assert!(normalized.extras.is_none());
+    }
 
     #[test]
     fn host_to_server_url_formats_ipv6_hosts() {
@@ -5494,8 +5624,11 @@ intermediates:
         handle_jwt_verify(&verify_args).expect("verify");
 
         let claims_json = fs::read_to_string(claims_out.path()).expect("read claims");
-        let claims: Claims = serde_json::from_str(&claims_json).expect("claims json");
-        assert_eq!(claims.issuer.as_deref(), Some("aunsorm"));
+        let claims: NormalizedJwtClaims = serde_json::from_str(&claims_json).expect("claims json");
+        assert_eq!(claims.issuer, "aunsorm");
+        assert_eq!(claims.subject, "user-123");
+        assert_eq!(claims.audience, "cli");
         assert!(claims.jwt_id.is_some());
+        assert!(claims.extras.is_none());
     }
 }
