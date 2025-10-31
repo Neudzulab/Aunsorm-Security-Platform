@@ -70,9 +70,7 @@ use aunsorm_x509::{
     LocalHttpsCertParams as X509LocalHttpsParams, SelfSignedCertParams as X509SelfSignedParams,
     SubjectAltName as X509SubjectAltName,
 };
-use endpoint_validator::{
-    validate, AllowlistedFailure, Auth as EndpointAuth, ValidationOutcome, ValidatorConfig,
-};
+use endpoint_validator::{validate, AllowlistedFailure, Auth as EndpointAuth, ValidatorConfig};
 use tokio::runtime::Runtime;
 
 /// Environment-aware default URL for Aunsorm server
@@ -3506,16 +3504,13 @@ fn handle_validate_endpoints(args: EndpointValidatorArgs) -> CliResult<()> {
         fs::write(path, json_output)?;
     }
 
-    let total = report.results.len();
-    let allowlisted = report
-        .results
-        .iter()
-        .filter(|result| matches!(result.outcome, ValidationOutcome::Failure(_)) && result.allowed)
-        .count();
+    let summary = report.summary();
     let failures = report.failures();
     println!(
         "endpoint-validator: {total} kontrol, {} başarısız (allowlist dışı), {allowlisted} allowlist",
-        failures.len()
+        failures.len(),
+        total = summary.total,
+        allowlisted = summary.allowed_failures
     );
 
     if !failures.is_empty() {
@@ -5339,6 +5334,7 @@ intermediates:
         write_jwt_key_file(key_file.path(), &key).expect("write key");
 
         let token_file = NamedTempFile::new().expect("token file");
+        let store_file = NamedTempFile::new().expect("store file");
         let sign_args = JwtSignArgs {
             key: Some(key_file.path().to_path_buf()),
             out: token_file.path().to_path_buf(),
@@ -5370,7 +5366,7 @@ intermediates:
             audience: Some("cli".to_string()),
             allow_missing_jti: false,
             leeway: None,
-            sqlite_store: None,
+            sqlite_store: Some(store_file.path().to_path_buf()),
         };
         handle_jwt_verify(&verify_args).expect("verify");
 
