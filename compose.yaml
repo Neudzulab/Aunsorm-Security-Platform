@@ -11,7 +11,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.gateway
-    image: aunsorm-gateway:local
     env_file:
       - .env
     ports:
@@ -43,7 +42,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.auth
-    image: aunsorm-auth:local
     env_file:
       - .env
     ports:
@@ -63,7 +61,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.crypto
-    image: aunsorm-crypto:local
     env_file:
       - .env
     ports:
@@ -81,7 +78,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.x509
-    image: aunsorm-x509:local
     env_file:
       - .env
     ports:
@@ -96,7 +92,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.kms
-    image: aunsorm-kms:local
     env_file:
       - .env
     ports:
@@ -111,7 +106,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.mdm
-    image: aunsorm-mdm:local
     env_file:
       - .env
     ports:
@@ -131,7 +125,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.acme
-    image: aunsorm-acme:local
     env_file:
       - .env
     ports:
@@ -151,7 +144,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.id
-    image: aunsorm-id:local
     env_file:
       - .env
     ports:
@@ -169,7 +161,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.pqc
-    image: aunsorm-pqc:local
     env_file:
       - .env
     ports:
@@ -184,7 +175,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.rng
-    image: aunsorm-rng:local
     env_file:
       - .env
     ports:
@@ -217,7 +207,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.blockchain
-    image: aunsorm-blockchain:local
     env_file:
       - .env
     ports:
@@ -232,7 +221,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.e2ee
-    image: aunsorm-e2ee:local
     env_file:
       - .env
     ports:
@@ -249,7 +237,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.metrics
-    image: aunsorm-metrics:local
     env_file:
       - .env
     ports:
@@ -264,7 +251,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.cli-gateway
-    image: aunsorm-cli-gateway:local
     env_file:
       - .env
     ports:
