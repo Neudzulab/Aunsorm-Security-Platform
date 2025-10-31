@@ -7,6 +7,8 @@ Issues must never be suppressed; instead, they should be resolved properly.
 Mocking must not be used as a replacement for actual implementations.
 Sealed classes, methods, or structures must remain intact and must not be modified.
 
+**The production plan must be completed**
+
     In summary:
 
     The codebase must maintain full integrity, with strict quality enforcement.
