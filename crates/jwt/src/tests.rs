@@ -65,6 +65,44 @@ fn signer_generates_missing_jti() {
 }
 
 #[test]
+fn signer_rejects_reserved_extra_claims() {
+    let key = Ed25519KeyPair::generate("kid-extra-res").expect("key");
+    let signer = JwtSigner::new(key);
+    let mut claims = Claims::new();
+    claims.extra.insert("iss".into(), json!("override"));
+
+    let err = signer
+        .sign(&mut claims)
+        .expect_err("reserved claim must be rejected");
+    assert!(matches!(
+        err,
+        JwtError::InvalidClaim("extras", "reserved claim name must not appear in extras")
+    ));
+}
+
+#[test]
+fn signer_rejects_non_camel_case_custom_claims() {
+    let key = Ed25519KeyPair::generate("kid-extra-format").expect("key");
+    let signer = JwtSigner::new(key);
+    let mut claims = Claims::new();
+    claims.extra.insert(
+        "metadata".into(),
+        json!({
+            "codec": "vp9",
+            "app_data": {"role": "host"}
+        }),
+    );
+
+    let err = signer
+        .sign(&mut claims)
+        .expect_err("non-camelCase key must be rejected");
+    assert!(matches!(
+        err,
+        JwtError::InvalidClaim("extras", "custom claim keys must be camelCase alphanumeric")
+    ));
+}
+
+#[test]
 fn rejects_replay_in_memory_store() {
     let key = Ed25519KeyPair::generate("kid-replay").expect("key");
     let signer = JwtSigner::new(key.clone());
