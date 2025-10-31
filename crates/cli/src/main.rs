@@ -75,9 +75,27 @@ use tokio::runtime::Runtime;
 
 /// Environment-aware default URL for Aunsorm server
 fn default_server_url() -> String {
-    std::env::var("AUNSORM_SERVER_URL")
-        .or_else(|_| std::env::var("HOST").map(|host| format!("http://{}:8080", host)))
-        .unwrap_or_else(|_| "http://localhost:8080".to_string())
+    if let Ok(url) = std::env::var("AUNSORM_SERVER_URL") {
+        return url;
+    }
+
+    if let Ok(host) = std::env::var("HOST") {
+        return host_to_server_url(&host);
+    }
+
+    "http://localhost:8080".to_string()
+}
+
+fn host_to_server_url(host: &str) -> String {
+    let trimmed = host.trim();
+    if trimmed.is_empty() {
+        return "http://localhost:8080".to_string();
+    }
+
+    match trimmed.parse::<IpAddr>() {
+        Ok(IpAddr::V6(addr)) => format!("http://[{addr}]:8080"),
+        _ => format!("http://{trimmed}:8080"),
+    }
 }
 
 /// Environment-aware default hostname
@@ -4491,6 +4509,28 @@ mod tests {
     use std::thread;
     use tempfile::{tempdir, NamedTempFile};
     use tiny_http::{Header, Method, Request, Response, Server};
+
+    #[test]
+    fn host_to_server_url_formats_ipv6_hosts() {
+        assert_eq!(host_to_server_url("::1"), "http://[::1]:8080");
+        assert_eq!(
+            host_to_server_url("  fd00::feed  "),
+            "http://[fd00::feed]:8080"
+        );
+    }
+
+    #[test]
+    fn host_to_server_url_handles_ipv4_hostnames_and_empty_input() {
+        assert_eq!(
+            host_to_server_url("192.168.1.10"),
+            "http://192.168.1.10:8080"
+        );
+        assert_eq!(
+            host_to_server_url("aunsorm.local"),
+            "http://aunsorm.local:8080"
+        );
+        assert_eq!(host_to_server_url("   "), "http://localhost:8080");
+    }
 
     #[test]
     fn acme_account_state_roundtrip_key() {
