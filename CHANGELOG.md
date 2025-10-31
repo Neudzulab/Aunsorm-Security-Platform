@@ -137,6 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   akışı dokümante edildi.
 
 ### Fixed
+- `aunsorm-jwt` exposes `JwtSigner::kid()` again so server endpoints and tests
+  can report signer metadata after temporal claim validation tightened.
 - `/security/jwt-verify` artık JSON gövdesinde `Bearer` önekiyle gelen token
   değerlerini temizleyerek Authorization başlığına özgü formatı yeniden
   kullanan istemcilerin doğrulama sürecinde hata almamasını sağlıyor.

@@ -2306,10 +2306,9 @@ async fn jwt_verify_endpoint_reports_temporal_claims() {
     claims.subject = Some("participant-temporal".to_string());
     claims.issuer = Some(state.issuer().to_owned());
     claims.audience = Some(Audience::Single("zasian-media".to_owned()));
-    claims.set_issued_now();
-    let not_before = SystemTime::now()
-        .checked_sub(Duration::from_secs(15))
-        .unwrap_or_else(SystemTime::now);
+    let issued_at = SystemTime::now();
+    claims.issued_at = Some(issued_at);
+    let not_before = issued_at + Duration::from_secs(5);
     claims.not_before = Some(not_before);
     claims.set_expiration_from_now(state.token_ttl());
     claims.extra.insert(
@@ -2356,9 +2355,7 @@ async fn jwt_verify_endpoint_reports_temporal_claims() {
         .get("issuedAt")
         .and_then(serde_json::Value::as_u64)
         .expect("issuedAt field");
-    let expected_issued_at = claims
-        .issued_at
-        .expect("issued_at")
+    let expected_issued_at = issued_at
         .duration_since(UNIX_EPOCH)
         .expect("iat epoch")
         .as_secs();
@@ -2368,9 +2365,7 @@ async fn jwt_verify_endpoint_reports_temporal_claims() {
         .get("notBefore")
         .and_then(serde_json::Value::as_u64)
         .expect("notBefore field");
-    let expected_not_before = claims
-        .not_before
-        .expect("nbf")
+    let expected_not_before = not_before
         .duration_since(UNIX_EPOCH)
         .expect("nbf epoch")
         .as_secs();
