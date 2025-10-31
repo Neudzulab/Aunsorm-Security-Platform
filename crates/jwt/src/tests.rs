@@ -103,6 +103,44 @@ fn signer_rejects_non_camel_case_custom_claims() {
 }
 
 #[test]
+fn verifier_rejects_invalid_custom_claims() {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine as _;
+    use ed25519_dalek::Signer as _;
+
+    let mut rng = StdRng::seed_from_u64(1337);
+    let key = Ed25519KeyPair::generate_with_rng("kid-verify-extra", &mut rng).expect("key");
+
+    let header = json!({
+        "alg": "EdDSA",
+        "typ": "JWT",
+        "kid": key.kid(),
+    });
+
+    let mut claims = Claims::new();
+    claims.ensure_jwt_id();
+    claims
+        .extra
+        .insert("app_data".into(), json!({"role": "host"}));
+
+    let header_encoded = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).expect("header json"));
+    let payload_encoded = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&claims).expect("claims json"));
+    let signing_input = format!("{header_encoded}.{payload_encoded}");
+    let signature = key.signing_key().sign(signing_input.as_bytes()).to_bytes();
+    let token = format!("{signing_input}.{}", URL_SAFE_NO_PAD.encode(signature));
+
+    let store: Arc<dyn JtiStore> = Arc::new(InMemoryJtiStore::default());
+    let verifier = JwtVerifier::new([key.public_key()]).with_store(store);
+    let err = verifier
+        .verify(&token, &VerificationOptions::default())
+        .expect_err("invalid custom claims must be rejected");
+    assert!(matches!(
+        err,
+        JwtError::InvalidClaim("extras", "custom claim keys must be camelCase alphanumeric")
+    ));
+}
+
+#[test]
 fn rejects_replay_in_memory_store() {
     let key = Ed25519KeyPair::generate("kid-replay").expect("key");
     let signer = JwtSigner::new(key.clone());
