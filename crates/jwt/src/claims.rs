@@ -9,6 +9,10 @@ use serde_json::Value;
 
 use crate::error::{JwtError, Result};
 
+const RESERVED_STANDARD_CLAIMS: [&str; 7] = ["iss", "sub", "aud", "exp", "nbf", "iat", "jti"];
+const RESERVED_KEY_ERROR: &str = "reserved claim name must not appear in extras";
+const CUSTOM_KEY_FORMAT_ERROR: &str = "custom claim keys must be camelCase alphanumeric";
+
 /// JWT `aud` alanı tekil veya çoklu değer alabilir.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -101,6 +105,24 @@ impl Claims {
         }
     }
 
+    /// Özel claim alanlarının kurallara uyduğunu doğrular.
+    pub fn validate_custom_claims(&self) -> Result<()> {
+        for key in self.extra.keys() {
+            if RESERVED_STANDARD_CLAIMS.contains(&key.as_str()) {
+                return Err(JwtError::InvalidClaim("extras", RESERVED_KEY_ERROR));
+            }
+            if !is_camel_case(key) {
+                return Err(JwtError::InvalidClaim("extras", CUSTOM_KEY_FORMAT_ERROR));
+            }
+        }
+        for value in self.extra.values() {
+            if !validate_custom_value(value) {
+                return Err(JwtError::InvalidClaim("extras", CUSTOM_KEY_FORMAT_ERROR));
+            }
+        }
+        Ok(())
+    }
+
     /// Claim'lerin zaman tutarlılığını kontrol eder.
     ///
     /// # Errors
@@ -142,6 +164,25 @@ impl Claims {
     /// `exp` alanını, şu andan verilen süre kadar sonrasına ayarlar.
     pub fn set_expiration_from_now(&mut self, ttl: Duration) {
         self.expiration = Some(SystemTime::now() + ttl);
+    }
+}
+
+fn is_camel_case(key: &str) -> bool {
+    let mut chars = key.chars();
+    match chars.next() {
+        Some(first) if first.is_ascii_lowercase() => {}
+        _ => return false,
+    }
+    chars.all(|ch| ch.is_ascii_alphanumeric() && ch != '_')
+}
+
+fn validate_custom_value(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => {
+            map.keys().all(|key| is_camel_case(key)) && map.values().all(validate_custom_value)
+        }
+        Value::Array(list) => list.iter().all(validate_custom_value),
+        _ => true,
     }
 }
 
