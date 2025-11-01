@@ -1,0 +1,243 @@
+# Aunsorm OpenAPI Documentation
+
+Interactive API documentation for all Aunsorm microservices using OpenAPI 3.0 and Swagger UI.
+
+## 🚀 Quick Start
+
+### Start Documentation Server
+```bash
+cd openapi
+docker compose up -d
+```
+
+### Access Documentation
+- **Main Portal**: http://localhost:50024
+- **Swagger UI**: http://localhost:8080
+- **Individual Specs**: http://localhost:50024/[service-name].yaml
+
+## 📚 Available Services
+
+| Service | Port | Swagger UI Link | Description |
+|---------|------|-----------------|-------------|
+| **Auth** | 50011 | [Open](http://localhost:8080/?url=http://localhost:50024/auth-service.yaml) | JWT, OAuth 2.0 + PKCE |
+| **Crypto** | 50012 | [Open](http://localhost:8080/?url=http://localhost:50024/crypto-service.yaml) | AEAD, Signing, KDF |
+| **PQC** | 50018 | [Open](http://localhost:8080/?url=http://localhost:50024/pqc-service.yaml) | ML-KEM, ML-DSA, SLH-DSA |
+| **X509** | 50013 | Coming Soon | Certificate Management |
+| **KMS** | 50014 | Coming Soon | Key Management |
+
+## 📖 Interactive Testing
+
+### Using Swagger UI
+
+1. **Open Swagger UI**: Navigate to http://localhost:8080
+2. **Select Service**: Use dropdown to choose Auth/Crypto/PQC service
+3. **Try Endpoints**: 
+   - Click "Try it out" on any endpoint
+   - Fill in request parameters
+   - Click "Execute"
+   - View response
+
+### Example: Generate JWT Token
+
+```bash
+# Using curl
+curl -X POST http://localhost:50011/security/generate-media-token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "roomId": "test-room",
+    "identity": "user123",
+    "participantName": "TestUser"
+  }'
+
+# Using Swagger UI
+1. Go to http://localhost:8080/?url=http://localhost:50024/auth-service.yaml
+2. Navigate to POST /security/generate-media-token
+3. Click "Try it out"
+4. Fill in the request body
+5. Click "Execute"
+```
+
+## 📁 File Structure
+
+```
+openapi/
+├── auth-service.yaml          # Auth Service OpenAPI spec
+├── crypto-service.yaml        # Crypto Service OpenAPI spec
+├── pqc-service.yaml          # PQC Service OpenAPI spec
+├── docker-compose.yaml       # Swagger UI setup
+├── nginx.conf                # Nginx config for serving specs
+├── index.html                # Landing page
+└── README.md                 # This file
+```
+
+## 🔧 Development
+
+### Adding New Service Spec
+
+1. Create `[service-name]-service.yaml`:
+```yaml
+openapi: 3.0.3
+info:
+  title: Service Name API
+  version: 0.5.0
+  description: Service description
+servers:
+  - url: http://localhost:PORT
+paths:
+  /endpoint:
+    post:
+      summary: Endpoint description
+      # ... rest of spec
+```
+
+2. Update `index.html` to add service card
+
+3. Restart documentation server:
+```bash
+docker compose restart
+```
+
+### Validate OpenAPI Specs
+
+```bash
+# Install validator
+npm install -g @apidevtools/swagger-cli
+
+# Validate spec
+swagger-cli validate auth-service.yaml
+```
+
+## 🎨 Features
+
+### OpenAPI 3.0 Compliance
+- ✅ Complete schema definitions
+- ✅ Example requests/responses
+- ✅ Security schemes (Bearer JWT)
+- ✅ Error response models
+- ✅ Base64 format specifications
+
+### Interactive Swagger UI
+- ✅ Try endpoints directly from browser
+- ✅ Auto-completion for parameters
+- ✅ Response validation
+- ✅ Code generation (curl, Python, JS)
+
+### Beautiful Landing Page
+- ✅ Service cards with descriptions
+- ✅ Direct Swagger UI links
+- ✅ Quick start examples
+- ✅ Responsive design
+
+## 🔗 Integration
+
+### Import into Postman
+1. File → Import
+2. Choose OpenAPI spec URL: `http://localhost:50024/auth-service.yaml`
+3. Postman auto-generates collection
+
+### Import into Insomnia
+1. Create → Import from URL
+2. Paste: `http://localhost:50024/crypto-service.yaml`
+3. Test endpoints
+
+### Generate Client Code
+Swagger UI includes code generation for:
+- curl
+- Python (requests)
+- JavaScript (fetch)
+- Java
+- Go
+- And more...
+
+## 📝 Best Practices
+
+### Request Examples
+All endpoints include realistic example values:
+```yaml
+properties:
+  roomId:
+    type: string
+    example: test-room  # ✅ Helpful example
+```
+
+### Response Schemas
+Complete response models with nested objects:
+```yaml
+schema:
+  type: object
+  properties:
+    token:
+      type: string
+      example: eyJ0eXAiOiJKV1Q...
+```
+
+### Security Documentation
+JWT authentication clearly documented:
+```yaml
+securitySchemes:
+  BearerAuth:
+    type: http
+    scheme: bearer
+    bearerFormat: JWT
+```
+
+## 🐛 Troubleshooting
+
+### Swagger UI not loading
+```bash
+# Check if containers are running
+docker ps | grep swagger
+
+# View logs
+docker logs aunsorm-swagger-ui
+docker logs aunsorm-openapi-server
+```
+
+### CORS errors
+CORS is configured in `nginx.conf`:
+```nginx
+add_header Access-Control-Allow-Origin *;
+```
+
+### Port conflicts
+Edit `docker-compose.yaml` if ports 8080/50024 are in use:
+```yaml
+ports:
+  - "9080:8080"  # Change Swagger UI external port
+  - "50025:80"   # Change OpenAPI server external port
+```
+
+## 📚 Additional Resources
+
+- [OpenAPI 3.0 Specification](https://swagger.io/specification/)
+- [Swagger UI Documentation](https://swagger.io/tools/swagger-ui/)
+- [JWT Authentication Guide](../JWT_AUTHENTICATION_GUIDE.md)
+- [Aunsorm GitHub](https://github.com/Neudzulab/aunsorm-crypt)
+
+## 🚀 Production Deployment
+
+### Nginx Production Config
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name docs.aunsorm.production;
+    
+    ssl_certificate /etc/ssl/certs/docs.crt;
+    ssl_certificate_key /etc/ssl/private/docs.key;
+    
+    location / {
+        proxy_pass http://swagger-ui:8080;
+    }
+}
+```
+
+### Environment Variables
+```bash
+# Point to production APIs
+SWAGGER_JSON_URL=https://api.aunsorm.production/specs.json
+BASE_URL=/docs
+```
+
+## 📄 License
+
+MIT License - see [LICENSE](../LICENSE)

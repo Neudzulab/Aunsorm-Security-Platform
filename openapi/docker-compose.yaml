@@ -1,0 +1,50 @@
+services:
+  swagger-ui:
+    image: swaggerapi/swagger-ui:latest
+    container_name: aunsorm-swagger-ui
+    ports:
+      - "8080:8080"
+    environment:
+      - URLS=[
+          {"url":"/auth-service.yaml","name":"Auth Service (50011)"},
+          {"url":"/crypto-service.yaml","name":"Crypto Service (50012)"},
+          {"url":"/pqc-service.yaml","name":"PQC Service (50018)"}
+        ]
+    volumes:
+      - ./auth-service.yaml:/usr/share/nginx/html/auth-service.yaml:ro
+      - ./crypto-service.yaml:/usr/share/nginx/html/crypto-service.yaml:ro
+      - ./pqc-service.yaml:/usr/share/nginx/html/pqc-service.yaml:ro
+    networks:
+      - aunsorm-docs
+    restart: unless-stopped
+
+  nginx-openapi:
+    image: nginx:alpine
+    container_name: aunsorm-openapi-server
+    ports:
+      - "50024:80"
+    volumes:
+      - ./:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - aunsorm-docs
+    restart: unless-stopped
+
+  redoc:
+    image: redocly/redoc:latest
+    container_name: aunsorm-redoc
+    ports:
+      - "50025:80"
+    environment:
+      - SPEC_URL=/auth-service.yaml
+    volumes:
+      - ./auth-service.yaml:/usr/share/nginx/html/auth-service.yaml:ro
+      - ./crypto-service.yaml:/usr/share/nginx/html/crypto-service.yaml:ro
+      - ./pqc-service.yaml:/usr/share/nginx/html/pqc-service.yaml:ro
+    networks:
+      - aunsorm-docs
+    restart: unless-stopped
+
+networks:
+  aunsorm-docs:
+    driver: bridge

@@ -1,0 +1,303 @@
+openapi: 3.0.3
+info:
+  title: Aunsorm Crypto Service API
+  version: 0.5.0
+  description: |
+    Core cryptographic operations: encryption, decryption, signing, and key derivation.
+    
+    **Supported Algorithms:**
+    - **AEAD**: AES-256-GCM, ChaCha20-Poly1305
+    - **Signing**: Ed25519, RSA-PSS
+    - **KDF**: HKDF-SHA256
+  contact:
+    name: Aunsorm Security Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:50012
+    description: Local Development
+  - url: http://aunsorm-crypto:50012
+    description: Docker Internal Network
+
+tags:
+  - name: Encryption
+    description: AEAD encryption operations
+  - name: Signing
+    description: Digital signature operations
+  - name: Key Derivation
+    description: HKDF key derivation
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+
+  /encrypt:
+    post:
+      tags: [Encryption]
+      summary: Encrypt data with AEAD
+      description: |
+        Encrypts plaintext using AES-256-GCM or ChaCha20-Poly1305.
+        Returns ciphertext with authentication tag.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - plaintext
+                - key
+              properties:
+                plaintext:
+                  type: string
+                  format: base64
+                  description: Base64 encoded plaintext
+                  example: SGVsbG8gV29ybGQ=
+                key:
+                  type: string
+                  format: base64
+                  description: Base64 encoded encryption key (32 bytes)
+                  example: ZjRjOWIxYTI3ZTM4ZDM0ZDljMGY0ZjhhOTZiM2UyZjc=
+                algorithm:
+                  type: string
+                  enum: [AES-256-GCM, ChaCha20-Poly1305]
+                  default: AES-256-GCM
+                  example: AES-256-GCM
+                aad:
+                  type: string
+                  format: base64
+                  description: Additional authenticated data (optional)
+      responses:
+        '200':
+          description: Encryption successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ciphertext:
+                    type: string
+                    format: base64
+                  nonce:
+                    type: string
+                    format: base64
+                  tag:
+                    type: string
+                    format: base64
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /decrypt:
+    post:
+      tags: [Encryption]
+      summary: Decrypt AEAD ciphertext
+      description: Verifies authentication tag and decrypts ciphertext
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ciphertext
+                - key
+                - nonce
+                - tag
+              properties:
+                ciphertext:
+                  type: string
+                  format: base64
+                key:
+                  type: string
+                  format: base64
+                nonce:
+                  type: string
+                  format: base64
+                tag:
+                  type: string
+                  format: base64
+                algorithm:
+                  type: string
+                  enum: [AES-256-GCM, ChaCha20-Poly1305]
+                  default: AES-256-GCM
+                aad:
+                  type: string
+                  format: base64
+      responses:
+        '200':
+          description: Decryption successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plaintext:
+                    type: string
+                    format: base64
+        '401':
+          description: Authentication tag verification failed
+
+  /sign:
+    post:
+      tags: [Signing]
+      summary: Sign message
+      description: |
+        Creates digital signature using Ed25519 or RSA-PSS.
+        Returns detached signature.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+                - private_key
+              properties:
+                message:
+                  type: string
+                  format: base64
+                  description: Message to sign
+                private_key:
+                  type: string
+                  format: base64
+                  description: Base64 encoded private key
+                algorithm:
+                  type: string
+                  enum: [Ed25519, RSA-PSS]
+                  default: Ed25519
+                  example: Ed25519
+      responses:
+        '200':
+          description: Signature created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signature:
+                    type: string
+                    format: base64
+                  algorithm:
+                    type: string
+                    example: Ed25519
+
+  /verify:
+    post:
+      tags: [Signing]
+      summary: Verify signature
+      description: Verifies digital signature against message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+                - signature
+                - public_key
+              properties:
+                message:
+                  type: string
+                  format: base64
+                signature:
+                  type: string
+                  format: base64
+                public_key:
+                  type: string
+                  format: base64
+                algorithm:
+                  type: string
+                  enum: [Ed25519, RSA-PSS]
+                  default: Ed25519
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+
+  /derive-key:
+    post:
+      tags: [Key Derivation]
+      summary: Derive key using HKDF
+      description: |
+        Derives cryptographic key from input key material using HKDF-SHA256.
+        Supports multiple output keys.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ikm
+                - length
+              properties:
+                ikm:
+                  type: string
+                  format: base64
+                  description: Input key material
+                salt:
+                  type: string
+                  format: base64
+                  description: Optional salt value
+                info:
+                  type: string
+                  format: base64
+                  description: Context-specific info
+                length:
+                  type: integer
+                  description: Output key length in bytes
+                  example: 32
+                  minimum: 1
+                  maximum: 255
+      responses:
+        '200':
+          description: Key derived
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:
+                    type: string
+                    format: base64
+
+components:
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string

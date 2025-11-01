@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aunsorm API Documentation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 3rem;
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+        
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .service-card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .service-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .service-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .service-icon {
+            font-size: 2rem;
+            margin-right: 1rem;
+        }
+        
+        .service-title {
+            font-size: 1.5rem;
+            color: #333;
+        }
+        
+        .service-port {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            margin-bottom: 1rem;
+        }
+        
+        .service-description {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+        
+        .service-link {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: background 0.3s ease;
+        }
+        
+        .service-link:hover {
+            background: #764ba2;
+        }
+        
+        .quick-start {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .quick-start h2 {
+            color: #333;
+            margin-bottom: 1rem;
+        }
+        
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-top: 1rem;
+        }
+        
+        .code-block code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 3rem;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔐 Aunsorm API Documentation</h1>
+            <p class="subtitle">Interactive OpenAPI 3.0 Specifications</p>
+        </header>
+        
+        <div class="services-grid">
+            <div class="service-card">
+                <div class="service-header">
+                    <span class="service-icon">🎫</span>
+                    <h3 class="service-title">Auth Service</h3>
+                </div>
+                <span class="service-port">Port 50011</span>
+                <p class="service-description">
+                    JWT token generation, OAuth 2.0 + PKCE flows, JWKS key publication, 
+                    and token verification with JTI replay protection.
+                </p>
+                <a href="http://localhost:8080/?url=/auth-service.yaml" 
+                   class="service-link" target="_blank">
+                    Open Swagger UI →
+                </a>
+                <a href="http://localhost:50025/?url=/auth-service.yaml" 
+                   class="service-link" target="_blank" style="margin-left: 1rem; background: #e74c3c;">
+                    Open Redoc →
+                </a>
+            </div>
+            
+            <div class="service-card">
+                <div class="service-header">
+                    <span class="service-icon">🔒</span>
+                    <h3 class="service-title">Crypto Service</h3>
+                </div>
+                <span class="service-port">Port 50012</span>
+                <p class="service-description">
+                    AEAD encryption (AES-256-GCM, ChaCha20-Poly1305), digital signatures 
+                    (Ed25519, RSA-PSS), and HKDF key derivation.
+                </p>
+                <a href="http://localhost:8080/?url=/crypto-service.yaml" 
+                   class="service-link" target="_blank">
+                    Open Swagger UI →
+                </a>
+                <a href="http://localhost:50025/?url=/crypto-service.yaml" 
+                   class="service-link" target="_blank" style="margin-left: 1rem; background: #e74c3c;">
+                    Open Redoc →
+                </a>
+            </div>
+            
+            <div class="service-card">
+                <div class="service-header">
+                    <span class="service-icon">🛡️</span>
+                    <h3 class="service-title">PQC Service</h3>
+                </div>
+                <span class="service-port">Port 50018</span>
+                <p class="service-description">
+                    Post-quantum cryptography: ML-KEM-768 key encapsulation, ML-DSA-65 
+                    and SLH-DSA-128s digital signatures (NIST standards).
+                </p>
+                <a href="http://localhost:8080/?url=/pqc-service.yaml" 
+                   class="service-link" target="_blank">
+                    Open Swagger UI →
+                </a>
+                <a href="http://localhost:50025/?url=/pqc-service.yaml" 
+                   class="service-link" target="_blank" style="margin-left: 1rem; background: #e74c3c;">
+                    Open Redoc →
+                </a>
+            </div>
+            
+            <div class="service-card">
+                <div class="service-header">
+                    <span class="service-icon">📜</span>
+                    <h3 class="service-title">X509 Service</h3>
+                </div>
+                <span class="service-port">Port 50013</span>
+                <p class="service-description">
+                    Certificate authority operations: CA generation, certificate signing, 
+                    chain validation, and CSR management.
+                </p>
+                <a href="#" class="service-link" style="background: #999; cursor: not-allowed;">
+                    Coming Soon
+                </a>
+            </div>
+            
+            <div class="service-card">
+                <div class="service-header">
+                    <span class="service-icon">🔑</span>
+                    <h3 class="service-title">KMS Service</h3>
+                </div>
+                <span class="service-port">Port 50014</span>
+                <p class="service-description">
+                    Key management: generation, wrapping/unwrapping, rotation, 
+                    metadata management, and secure deletion.
+                </p>
+                <a href="#" class="service-link" style="background: #999; cursor: not-allowed;">
+                    Coming Soon
+                </a>
+            </div>
+        </div>
+        
+        <div class="quick-start">
+            <h2>🚀 Quick Start</h2>
+            <p>Start the Swagger UI server with Docker:</p>
+            <div class="code-block">
+                <code># Navigate to openapi directory
+cd openapi
+
+# Start Swagger UI and API documentation server
+docker compose up -d
+
+# Open in browser
+# Swagger UI: http://localhost:8080
+# API Specs: http://localhost:50024/
+
+# View specific service
+# Auth: http://localhost:8080/?url=/auth-service.yaml
+# Crypto: http://localhost:8080/?url=/crypto-service.yaml
+# PQC: http://localhost:8080/?url=/pqc-service.yaml</code>
+            </div>
+            
+            <h2 style="margin-top: 2rem;">📝 Example API Call</h2>
+            <div class="code-block">
+                <code># Generate JWT token
+curl -X POST http://localhost:50011/security/generate-media-token \
+  -H "Content-Type: application/json" \
+  -d '{
+    "roomId": "test-room",
+    "identity": "user123",
+    "participantName": "TestUser"
+  }'
+
+# Verify token
+curl -X POST http://localhost:50011/security/jwt-verify \
+  -H "Content-Type: application/json" \
+  -d '{"token": "YOUR_TOKEN_HERE"}'</code>
+            </div>
+        </div>
+        
+        <footer>
+            <p>Aunsorm Cryptographic Services v0.5.0</p>
+            <p style="margin-top: 0.5rem;">
+                <a href="https://github.com/Neudzulab/aunsorm-crypt" 
+                   style="color: white;">GitHub Repository</a> | 
+                <a href="./JWT_AUTHENTICATION_GUIDE.md" 
+                   style="color: white;">Authentication Guide</a>
+            </p>
+        </footer>
+    </div>
+</body>
+</html>
+

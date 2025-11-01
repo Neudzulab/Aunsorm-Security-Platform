@@ -1,0 +1,462 @@
+openapi: 3.0.3
+info:
+  title: Aunsorm Auth Service API
+  version: 0.5.0
+  description: |
+    JWT authentication, OAuth 2.0 + PKCE flows, and token management service.
+    
+    **Features:**
+    - JWT token generation and verification
+    - OAuth 2.0 authorization code flow with PKCE
+    - JWKS public key publication
+    - Token introspection and transparency logs
+    - JTI-based replay protection
+  contact:
+    name: Aunsorm Security Team
+    url: https://github.com/Neudzulab/aunsorm-crypt
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:50011
+    description: Local Development
+  - url: http://aunsorm-auth:50011
+    description: Docker Internal Network
+  - url: https://auth.aunsorm.production
+    description: Production (configure with HOST environment variable)
+
+tags:
+  - name: JWT
+    description: JWT token generation and verification
+  - name: OAuth 2.0
+    description: OAuth 2.0 authorization flows with PKCE
+  - name: Health
+    description: Service health and monitoring
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: Returns service health status
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+        '503':
+          description: Service unavailable
+
+  /security/generate-media-token:
+    post:
+      tags:
+        - JWT
+      summary: Generate JWT media token
+      description: |
+        Generates a JWT token for media session authentication (Zasian integration).
+        Token includes room metadata and participant information.
+      operationId: generateMediaToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roomId
+                - identity
+                - participantName
+              properties:
+                roomId:
+                  type: string
+                  description: Unique room identifier
+                  example: test-room
+                identity:
+                  type: string
+                  description: User identity
+                  example: user123
+                participantName:
+                  type: string
+                  description: Display name for participant
+                  example: TestUser
+                metadata:
+                  type: object
+                  description: Additional media session metadata
+                  properties:
+                    codec:
+                      type: string
+                      example: vp9
+                    appData:
+                      type: object
+                      properties:
+                        role:
+                          type: string
+                          example: host
+      responses:
+        '200':
+          description: Token generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT token string
+                    example: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9...
+                  expiresIn:
+                    type: integer
+                    description: Token expiration in seconds
+                    example: 3600
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+
+  /security/jwt-verify:
+    post:
+      tags:
+        - JWT
+      summary: Verify JWT token
+      description: |
+        Validates JWT signature, expiration, and claims.
+        Includes JTI replay protection.
+      operationId: verifyToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: JWT token to verify
+                  example: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9...
+      responses:
+        '200':
+          description: Token verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  payload:
+                    $ref: '#/components/schemas/JwtPayload'
+                  error:
+                    type: string
+                    nullable: true
+                    example: null
+        '400':
+          description: Invalid token format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /oauth/jwks.json:
+    get:
+      tags:
+        - OAuth 2.0
+      summary: Get JWKS public keys
+      description: |
+        Returns JSON Web Key Set (JWKS) containing public keys
+        for JWT signature verification.
+      operationId: getJwks
+      responses:
+        '200':
+          description: JWKS public keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JsonWebKey'
+
+  /oauth/begin-auth:
+    post:
+      tags:
+        - OAuth 2.0
+      summary: Begin OAuth 2.0 authorization
+      description: |
+        Initiates OAuth 2.0 authorization code flow with PKCE.
+        Returns authorization code for token exchange.
+      operationId: beginAuth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - client_id
+                - code_challenge
+                - code_challenge_method
+              properties:
+                client_id:
+                  type: string
+                  description: OAuth client identifier
+                  example: aunsorm-cli
+                code_challenge:
+                  type: string
+                  description: PKCE code challenge (base64url)
+                  example: E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+                code_challenge_method:
+                  type: string
+                  enum: [S256, plain]
+                  description: PKCE challenge method
+                  example: S256
+                scope:
+                  type: string
+                  description: Space-separated OAuth scopes
+                  example: encrypt decrypt session:manage
+                redirect_uri:
+                  type: string
+                  description: OAuth callback URI
+                  example: http://localhost:8080/callback
+      responses:
+        '200':
+          description: Authorization initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    description: Authorization code
+                    example: auth_code_12345
+                  expires_in:
+                    type: integer
+                    description: Code expiration in seconds
+                    example: 300
+
+  /oauth/token:
+    post:
+      tags:
+        - OAuth 2.0
+      summary: Exchange authorization code for token
+      description: |
+        Exchanges authorization code for access token.
+        Verifies PKCE code_verifier.
+      operationId: exchangeToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - grant_type
+                - client_id
+                - code
+                - code_verifier
+              properties:
+                grant_type:
+                  type: string
+                  enum: [authorization_code]
+                  example: authorization_code
+                client_id:
+                  type: string
+                  example: aunsorm-cli
+                code:
+                  type: string
+                  description: Authorization code from /oauth/begin-auth
+                  example: auth_code_12345
+                code_verifier:
+                  type: string
+                  description: PKCE code verifier
+                  example: dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk
+      responses:
+        '200':
+          description: Access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    example: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9...
+                  token_type:
+                    type: string
+                    example: Bearer
+                  expires_in:
+                    type: integer
+                    example: 3600
+                  scope:
+                    type: string
+                    example: encrypt decrypt session:manage
+
+  /oauth/introspect:
+    post:
+      tags:
+        - OAuth 2.0
+      summary: Introspect access token
+      description: Returns token metadata and validation status
+      operationId: introspectToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: Access token to introspect
+      responses:
+        '200':
+          description: Token introspection result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active:
+                    type: boolean
+                    example: true
+                  scope:
+                    type: string
+                    example: encrypt decrypt
+                  client_id:
+                    type: string
+                    example: aunsorm-cli
+                  exp:
+                    type: integer
+                    example: 1761791358
+
+  /oauth/transparency:
+    get:
+      tags:
+        - OAuth 2.0
+      summary: Get transparency logs
+      description: Returns OAuth transaction audit logs
+      operationId: getTransparencyLogs
+      responses:
+        '200':
+          description: Transparency logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: string
+                          format: date-time
+                        event:
+                          type: string
+                        client_id:
+                          type: string
+
+components:
+  schemas:
+    JwtPayload:
+      type: object
+      properties:
+        subject:
+          type: string
+          example: user123
+        audience:
+          type: string
+          example: zasian-media
+        issuer:
+          type: string
+          example: https://aunsorm.local
+        expiration:
+          type: integer
+          format: int64
+          example: 1761791358
+        issuedAt:
+          type: integer
+          format: int64
+          nullable: true
+          example: 1761787758
+        notBefore:
+          type: integer
+          format: int64
+          nullable: true
+        relatedId:
+          type: string
+          nullable: true
+        jwtId:
+          type: string
+          nullable: true
+          example: 9a05c8cb00b52a2e79403e58d7f27b4e
+        extras:
+          type: object
+          nullable: true
+          additionalProperties: true
+          example:
+            roomId: test-room
+            participantName: TestUser
+
+    JsonWebKey:
+      type: object
+      properties:
+        kty:
+          type: string
+          example: OKP
+        use:
+          type: string
+          example: sig
+        kid:
+          type: string
+          example: demo-key
+        crv:
+          type: string
+          example: Ed25519
+        x:
+          type: string
+          description: Base64url encoded public key
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Invalid request
+        message:
+          type: string
+          example: Missing required field 'token'
+        code:
+          type: string
+          example: BAD_REQUEST
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token from /oauth/token
+
+security:
+  - BearerAuth: []

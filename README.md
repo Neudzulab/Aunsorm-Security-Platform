@@ -6,7 +6,9 @@ Post-Quantum ready microservices platform for modern cryptographic operations.
 
 > 📘 **Technical Details:** See [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)  
 > 🗺️ **Port Mapping:** See [port-map.yaml](port-map.yaml)  
-> 🎯 **Production Roadmap:** See [PROD_PLAN.md](PROD_PLAN.md)
+> 🎯 **Production Roadmap:** See [PROD_PLAN.md](PROD_PLAN.md)  
+> 📖 **API Documentation:** [Interactive Swagger UI](http://localhost:50024) (OpenAPI 3.0)  
+> 🎫 **JWT Guide:** See [JWT_AUTHENTICATION_GUIDE.md](JWT_AUTHENTICATION_GUIDE.md)
 
 ---
 
@@ -18,6 +20,9 @@ Post-Quantum ready microservices platform for modern cryptographic operations.
 # Start all 15 microservices
 .\scripts\docker\start-all.ps1
 
+# Start API documentation server
+cd openapi && docker compose up -d
+
 # Check service health
 docker compose ps
 curl http://localhost:50010/health  # Gateway
@@ -27,6 +32,21 @@ docker compose logs -f gateway
 
 # Stop services
 docker compose down
+```
+
+### API Documentation
+
+```bash
+# Start Swagger UI (OpenAPI 3.0)
+cd openapi
+docker compose up -d
+
+# Access documentation
+# Main Portal: http://localhost:50024
+# Swagger UI: http://localhost:8080
+# Auth Service: http://localhost:8080/?url=http://localhost:50024/auth-service.yaml
+# Crypto Service: http://localhost:8080/?url=http://localhost:50024/crypto-service.yaml
+# PQC Service: http://localhost:8080/?url=http://localhost:50024/pqc-service.yaml
 ```
 
 ### Manual Build

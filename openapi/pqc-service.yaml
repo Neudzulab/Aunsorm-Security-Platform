@@ -1,0 +1,363 @@
+openapi: 3.0.3
+info:
+  title: Aunsorm PQC Service API
+  version: 0.5.0
+  description: |
+    Post-Quantum Cryptography service supporting NIST-standardized algorithms.
+    
+    **Supported Algorithms:**
+    - **ML-KEM-768**: Key encapsulation mechanism
+    - **ML-DSA-65**: Digital signature algorithm
+    - **SLH-DSA-128s**: Stateless hash-based signatures
+    
+    **NIST Compliance:** FIPS 203, FIPS 204, FIPS 205
+  contact:
+    name: Aunsorm Security Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:50018
+    description: Local Development
+  - url: http://aunsorm-pqc:50018
+    description: Docker Internal Network
+
+tags:
+  - name: Capabilities
+    description: Algorithm availability and version info
+  - name: ML-KEM
+    description: Module-Lattice Key Encapsulation Mechanism
+  - name: ML-DSA
+    description: Module-Lattice Digital Signature Algorithm
+  - name: SLH-DSA
+    description: Stateless Hash-Based Digital Signature Algorithm
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+
+  /pqc/capabilities:
+    get:
+      tags: [Capabilities]
+      summary: Get supported PQC algorithms
+      description: Returns available post-quantum algorithms and their versions
+      responses:
+        '200':
+          description: Algorithm capabilities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  algorithms:
+                    type: object
+                    properties:
+                      ml_kem:
+                        type: object
+                        properties:
+                          available:
+                            type: boolean
+                            example: true
+                          variants:
+                            type: array
+                            items:
+                              type: string
+                            example: [ML-KEM-768]
+                          nist_standard:
+                            type: string
+                            example: FIPS 203
+                      ml_dsa:
+                        type: object
+                        properties:
+                          available:
+                            type: boolean
+                            example: true
+                          variants:
+                            type: array
+                            items:
+                              type: string
+                            example: [ML-DSA-65]
+                          nist_standard:
+                            type: string
+                            example: FIPS 204
+                      slh_dsa:
+                        type: object
+                        properties:
+                          available:
+                            type: boolean
+                            example: true
+                          variants:
+                            type: array
+                            items:
+                              type: string
+                            example: [SLH-DSA-128s]
+                          nist_standard:
+                            type: string
+                            example: FIPS 205
+
+  /pqc/ml-kem/encapsulate:
+    post:
+      tags: [ML-KEM]
+      summary: ML-KEM-768 encapsulation
+      description: |
+        Generates shared secret and ciphertext using recipient's public key.
+        Returns ephemeral ciphertext for key exchange.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - public_key
+              properties:
+                public_key:
+                  type: string
+                  format: base64
+                  description: Recipient's ML-KEM-768 public key
+                  example: YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo=
+      responses:
+        '200':
+          description: Encapsulation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ciphertext:
+                    type: string
+                    format: base64
+                    description: Encapsulated key ciphertext
+                  shared_secret:
+                    type: string
+                    format: base64
+                    description: Shared symmetric key (32 bytes)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /pqc/ml-kem/decapsulate:
+    post:
+      tags: [ML-KEM]
+      summary: ML-KEM-768 decapsulation
+      description: |
+        Extracts shared secret using recipient's private key.
+        Verifies ciphertext authenticity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ciphertext
+                - private_key
+              properties:
+                ciphertext:
+                  type: string
+                  format: base64
+                  description: Encapsulated key from /encapsulate
+                private_key:
+                  type: string
+                  format: base64
+                  description: Recipient's ML-KEM-768 private key
+      responses:
+        '200':
+          description: Decapsulation successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  shared_secret:
+                    type: string
+                    format: base64
+                    description: Shared symmetric key (32 bytes)
+        '400':
+          description: Invalid ciphertext or private key
+
+  /pqc/ml-dsa/sign:
+    post:
+      tags: [ML-DSA]
+      summary: ML-DSA-65 signing
+      description: |
+        Creates post-quantum digital signature using ML-DSA-65.
+        Provides ~128-bit quantum security.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+                - private_key
+              properties:
+                message:
+                  type: string
+                  format: base64
+                  description: Message to sign
+                private_key:
+                  type: string
+                  format: base64
+                  description: ML-DSA-65 private key
+                context:
+                  type: string
+                  format: base64
+                  description: Optional domain separation context
+      responses:
+        '200':
+          description: Signature created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signature:
+                    type: string
+                    format: base64
+                    description: ML-DSA-65 signature
+
+  /pqc/ml-dsa/verify:
+    post:
+      tags: [ML-DSA]
+      summary: ML-DSA-65 verification
+      description: Verifies ML-DSA-65 signature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+                - signature
+                - public_key
+              properties:
+                message:
+                  type: string
+                  format: base64
+                signature:
+                  type: string
+                  format: base64
+                public_key:
+                  type: string
+                  format: base64
+                  description: ML-DSA-65 public key
+                context:
+                  type: string
+                  format: base64
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+
+  /pqc/slh-dsa/sign:
+    post:
+      tags: [SLH-DSA]
+      summary: SLH-DSA-128s signing
+      description: |
+        Creates stateless hash-based signature using SLH-DSA-128s.
+        Smaller signatures, conservative security.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+                - private_key
+              properties:
+                message:
+                  type: string
+                  format: base64
+                private_key:
+                  type: string
+                  format: base64
+                  description: SLH-DSA-128s private key
+      responses:
+        '200':
+          description: Signature created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  signature:
+                    type: string
+                    format: base64
+
+  /pqc/slh-dsa/verify:
+    post:
+      tags: [SLH-DSA]
+      summary: SLH-DSA-128s verification
+      description: Verifies SLH-DSA-128s signature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+                - signature
+                - public_key
+              properties:
+                message:
+                  type: string
+                  format: base64
+                signature:
+                  type: string
+                  format: base64
+                public_key:
+                  type: string
+                  format: base64
+                  description: SLH-DSA-128s public key
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+
+components:
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string

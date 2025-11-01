@@ -113,8 +113,8 @@ port_allocation:
   aunsorm_range: "50010-50023"
   zasian_range: "50030-50037"
   reserved_ports:
-    - 50024  # Future: WebRTC signaling
-    - 50025  # Future: gRPC gateway
+    - 50024  # OpenAPI Documentation Server (Swagger UI backend)
+    - 50025  # Redoc API Documentation UI
     - 50026  # Future: GraphQL endpoint
     
 # External dependencies (Zasian Media Platform v0.6.0)

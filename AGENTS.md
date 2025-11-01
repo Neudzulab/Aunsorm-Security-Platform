@@ -16,7 +16,7 @@ Sealed classes, methods, or structures must remain intact and must not be modifi
 
 **Version:** 0.5.0  Bu depo tek bir ajan tarafından değil, alan uzmanı takımlar tarafından yönetilecek şekilde tasarlanmalıdır. PLAN.md içerisindeki gereksinimler her sprintte küçük parçalara ayrılacak ve her iş öğesi için sorumlu ajan tanımlanacaktır.
 
-**Last Updated:** 2025-10-30
+**Last Updated:** 2025-11-01
 
 ## Genel İlkeler
 
@@ -148,31 +148,21 @@ pub fn generate_key() -> Result<Key, Error> {4. **Tüm OsRng kullanımlarını A
 
 ### 3. Code Quality Gates
 
-Every commit must pass:## 🚨 Servis Ağacı Güncelleme Direktifi
+Every commit must pass:
 
-```bash**YENİ ÖZELLİK/ENDPOINT EKLENDİĞİNDE MUTLAKA YAPILACAKLAR:**
-
+```bash
 cargo fmt --all
+cargo clippy --all-targets --all-features
+cargo test --all-features
+cargo deny check
+```
 
-cargo clippy --all-targets --all-features1. **README.md Server Endpoint Ağacını Güncelle**
+### 4. Security Requirements
 
-cargo test --all-features   - Yeni endpoint eklendiğinde `README.md` içindeki endpoint ağacına ekle
-
-cargo deny check   - Yarım/tamamlanmamış özellik bile olsa `[Planlandı v0.X.0]` veya `[Devam Ediyor]` işaretiyle ekle
-
-```   - Kaybolmasın! Ajan değişse bile sonraki ajan eksik olanı görebilmeli
-
-
-
-### 4. Security Requirements2. **Servis Durumu İşaretleri**
-
-- **No `unsafe` code** - `#![forbid(unsafe_code)]` enforced   - ✅ Aktif/Çalışıyor: Endpoint tamamen çalışıyor ve test edilmiş
-
-- **MSRV 1.76+** - Minimum Supported Rust Version   - 🚧 Geliştirme: Kod var ama endpoint route'u henüz eklenmedi
-
-- **Dependency audits** - `cargo audit` must be clean   - 📋 Planlandı: Crate var, servis entegrasyonu bekliyor
-
-- **Fuzz testing** - All parsers/decoders must have fuzz targets   - 🔮 Gelecek: Henüz tasarım aşamasında
+- **No `unsafe` code** - `#![forbid(unsafe_code)]` enforced
+- **MSRV 1.76+** - Minimum Supported Rust Version
+- **Dependency audits** - `cargo audit` must be clean
+- **Fuzz testing** - All parsers/decoders must have fuzz targets
 
 
 
@@ -254,21 +244,37 @@ pub struct JwtPayload {
 
 1. **README.md Server Endpoint Ağacını Güncelle**
    - Yeni endpoint eklendiğinde `README.md` içindeki endpoint ağacına ekle
-   - Yarım/tamamlanmamış özellik bile olsa `[Planlandı v0.X.0]` işaretiyle ekle
+   - Yarım/tamamlanmamış özellik bile olsa `[Planlandı v0.X.0]` veya `[Devam Ediyor]` işaretiyle ekle
+   - Kaybolmasın! Ajan değişse bile sonraki ajan eksik olanı görebilmeli
 
-2. **Port Mapping Güncelleme (`port-map.yaml`)**
+2. **Servis Durumu İşaretleri**
+   - ✅ Aktif/Çalışıyor: Endpoint tamamen çalışıyor ve test edilmiş
+   - 🚧 Geliştirme: Kod var ama endpoint route'u henüz eklenmedi
+   - 📋 Planlandı: Crate var, servis entegrasyonu bekliyor
+   - 🔮 Gelecek: Henüz tasarım aşamasında
+
+3. **Port Mapping Güncelleme (`port-map.yaml`)**
    - Yeni port ekleme/değiştirme durumunda `port-map.yaml` güncelle
    - **Zasian Media Platform portları: 50030-50037** (v0.6.0)
    - **Aunsorm portları: 50010-50023** (mevcut)
    - External service entegrasyonları için `integration` bölümünü güncelle
 
-3. **Environment Değişkenleri (`.env`)**
+4. **Environment Değişkenleri (`.env`)**
    - `BRIDGE_URL=ws://localhost:50031/ws` (SFU Router)
    - `ZASIAN_WEBSOCKET_URL=wss://localhost:50036/zasian` (Signaling)
    - **Production Override**: `ZASIAN_HOST` ve `HOST` environment variable'larıyla localhost hardcode'ları aşılabilir
    - **OAuth Callbacks**: `OAUTH_PRODUCTION_CALLBACK` ile production callback URL'i belirlenebilir
    - ❌ **Yasak**: Kod içine localhost/127.0.0.1 hardcode yazmak
    - ✅ **Doğru**: Environment variable + fallback pattern kullanmak
+
+5. **OpenAPI Dokümantasyon Güncelleme (`openapi/`)**
+   - Yeni endpoint eklendiğinde ilgili `{service}-service.yaml` dosyasını güncelle
+   - Request/response schema'ları, örnek payloadlar ve hata kodları ekle
+   - `openapi/index.html` içindeki servis kartlarına yeni endpoint'i ekle
+   - **Swagger UI**: http://localhost:8080 - İnteraktif API testi
+   - **Redoc**: http://localhost:50025 - Temiz dokümantasyon görünümü
+   - **Spec Server**: http://localhost:50024 - YAML dosyaları
+   - OpenAPI 3.0 standartlarına uygunluk kontrol et
 
 ## Workflow
 
@@ -277,15 +283,24 @@ pub struct JwtPayload {
 
 3. **Implement** - Follow code quality gates
 
-4. **Test** - Unit, integration, and manual testing required5. **Sorumluluk**
+4. **Test** - Unit, integration, and manual testing required
 
-5. **Document** - Update all relevant documentation   - **Platform Agent**: Server endpoint ağacının sahibidir
+5. **Document** - Update all relevant documentation
+   - README.md endpoint ağacı
+   - port-map.yaml port tahsisleri
+   - OpenAPI YAML spec'leri (`openapi/{service}-service.yaml`)
+   - index.html servis kartları (Swagger UI + Redoc linkleri)
 
-6. **PR Review** - Requires approval from domain agent lead   - **Crypto Agent**: Core, PQC, Packet servislerini bildirmekle sorumludur
+6. **PR Review** - Requires approval from domain agent lead
 
-7. **Merge** - Update `PROD_PLAN.md` checkbox `[ ]` → `[x]`   - **Identity Agent**: JWT, X509, KMS, ID servislerini bildirmekle sorumludur
+7. **Merge** - Update `PROD_PLAN.md` checkbox `[ ]` → `[x]`
 
-   - **Interop Agent**: Test/benchmark süreçlerinde eksik servisleri tespit etmekle sorumludur
+### Sorumluluk Matrisi
+
+- **Platform Agent**: Server endpoint ağacının sahibidir
+- **Crypto Agent**: Core, PQC, Packet servislerini bildirmekle sorumludur
+- **Identity Agent**: JWT, X509, KMS, ID servislerini bildirmekle sorumludur
+- **Interop Agent**: Test/benchmark süreçlerinde eksik servisleri tespit etmekle sorumludur
 
 ---
 
