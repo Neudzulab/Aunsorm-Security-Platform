@@ -21,6 +21,7 @@ use base64::{
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use hkdf::Hkdf;
 use http::{header::LOCATION, HeaderMap, HeaderName, HeaderValue, StatusCode};
+use humantime::format_rfc3339;
 use rand_core::RngCore;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -841,9 +842,12 @@ struct JwtVerifyArgs {
     /// Gizli anahtar dosyaları (public anahtar çıkarmak için)
     #[arg(long = "key", value_name = "PATH")]
     key_files: Vec<PathBuf>,
-    /// Doğrulanan claim çıktısı (JSON); belirtilmezse stdout'a yazılır
+    /// Doğrulanan claim çıktısı; belirtilmezse stdout'a yazılır
     #[arg(long, value_name = "PATH")]
     claims_out: Option<PathBuf>,
+    /// Çıktı formatı (json veya text)
+    #[arg(long, value_enum, default_value_t = JwtVerifyFormat::Json)]
+    format: JwtVerifyFormat,
     /// issuer beklenen değeri
     #[arg(long)]
     issuer: Option<String>,
@@ -862,6 +866,20 @@ struct JwtVerifyArgs {
     /// `SQLite` JTI store dosyası; belirtilirse replay koruması sağlanır
     #[arg(long, value_name = "PATH")]
     sqlite_store: Option<PathBuf>,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
+enum JwtVerifyFormat {
+    /// JSON çıktısı
+    Json,
+    /// Metin tabanlı çıktı
+    Text,
+}
+
+impl Default for JwtVerifyFormat {
+    fn default() -> Self {
+        Self::Json
+    }
 }
 
 #[derive(Args)]
@@ -2637,27 +2655,9 @@ fn handle_jwt_verify(args: &JwtVerifyArgs) -> CliResult<()> {
     };
     let claims = verifier.verify(token, &options)?;
     let normalized = NormalizedJwtClaims::from_claims(&claims);
-    if let Some(out) = args.claims_out.as_deref() {
-        let claims_to_stdout = is_stdout_path(out);
-        write_json_pretty(out, &normalized)?;
-        if claims_to_stdout {
-            eprintln!(
-                "jwt doğrulandı: token={} | jti={} | claims={}",
-                args.token.display(),
-                claims.jwt_id.as_deref().unwrap_or("<none>"),
-                out.display(),
-            );
-        } else {
-            println!(
-                "jwt doğrulandı: token={} | jti={} | claims={}",
-                args.token.display(),
-                claims.jwt_id.as_deref().unwrap_or("<none>"),
-                out.display(),
-            );
-        }
-    } else {
-        let json = serde_json::to_string_pretty(&normalized)?;
-        println!("{json}");
+    match args.format {
+        JwtVerifyFormat::Json => emit_jwt_verify_json(args, &claims, &normalized)?,
+        JwtVerifyFormat::Text => emit_jwt_verify_text(args, &claims, &normalized)?,
     }
     Ok(())
 }
@@ -4609,6 +4609,155 @@ impl NormalizedJwtClaims {
     }
 }
 
+fn emit_jwt_verify_json(
+    args: &JwtVerifyArgs,
+    claims: &Claims,
+    normalized: &NormalizedJwtClaims,
+) -> CliResult<()> {
+    if let Some(out) = args.claims_out.as_deref() {
+        let claims_to_stdout = is_stdout_path(out);
+        write_json_pretty(out, normalized)?;
+        log_jwt_verify_result(
+            args.token.as_path(),
+            claims.jwt_id.as_deref(),
+            out,
+            JwtVerifyFormat::Json,
+            claims_to_stdout,
+        );
+    } else {
+        let json = serde_json::to_string_pretty(normalized)?;
+        println!("{json}");
+    }
+    Ok(())
+}
+
+fn emit_jwt_verify_text(
+    args: &JwtVerifyArgs,
+    claims: &Claims,
+    normalized: &NormalizedJwtClaims,
+) -> CliResult<()> {
+    let rendered = render_normalized_claims_text(normalized);
+    if let Some(out) = args.claims_out.as_deref() {
+        let claims_to_stdout = is_stdout_path(out);
+        emit_text(&rendered, Some(out))?;
+        log_jwt_verify_result(
+            args.token.as_path(),
+            claims.jwt_id.as_deref(),
+            out,
+            JwtVerifyFormat::Text,
+            claims_to_stdout,
+        );
+    } else {
+        println!("{rendered}");
+    }
+    Ok(())
+}
+
+fn log_jwt_verify_result(
+    token_path: &Path,
+    jti: Option<&str>,
+    output: &Path,
+    format: JwtVerifyFormat,
+    to_stdout: bool,
+) {
+    let message = format!(
+        "jwt doğrulandı: token={} | jti={} | claims={} | format={}",
+        token_path.display(),
+        jti.unwrap_or("<none>"),
+        output.display(),
+        format_label(format),
+    );
+    if to_stdout {
+        eprintln!("{message}");
+    } else {
+        println!("{message}");
+    }
+}
+
+fn format_label(format: JwtVerifyFormat) -> &'static str {
+    match format {
+        JwtVerifyFormat::Json => "json",
+        JwtVerifyFormat::Text => "text",
+    }
+}
+
+fn render_normalized_claims_text(claims: &NormalizedJwtClaims) -> String {
+    let mut lines = Vec::new();
+    lines.push(format!("subject: {}", display_or_none(&claims.subject)));
+    lines.push(format!("audience: {}", display_or_none(&claims.audience)));
+    lines.push(format!("issuer: {}", display_or_none(&claims.issuer)));
+    lines.push(format!(
+        "expiration: {}",
+        format_timestamp(claims.expiration)
+    ));
+    lines.push(format!(
+        "issuedAt: {}",
+        format_optional_timestamp(claims.issued_at)
+    ));
+    lines.push(format!(
+        "notBefore: {}",
+        format_optional_timestamp(claims.not_before)
+    ));
+    lines.push(format!(
+        "jwtId: {}",
+        format_optional_str(claims.jwt_id.as_deref())
+    ));
+    lines.push(format!(
+        "relatedId: {}",
+        format_optional_str(claims.related_id.as_deref())
+    ));
+    match claims.extras.as_ref() {
+        Some(map) if !map.is_empty() => {
+            lines.push("extras:".to_string());
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            for key in keys {
+                if let Some(value) = map.get(key) {
+                    let rendered = serde_json::to_string(value)
+                        .unwrap_or_else(|_| "\"<serde error>\"".to_string());
+                    lines.push(format!("  {key}: {rendered}"));
+                }
+            }
+        }
+        _ => lines.push("extras: <none>".to_string()),
+    }
+    lines.join("\n")
+}
+
+fn display_or_none(value: &str) -> String {
+    if value.is_empty() {
+        "<none>".to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn format_optional_str(value: Option<&str>) -> String {
+    value
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "<none>".to_string())
+}
+
+fn format_timestamp(epoch: u64) -> String {
+    if epoch == 0 {
+        "<none>".to_string()
+    } else {
+        let time = UNIX_EPOCH + Duration::from_secs(epoch);
+        format!("{} ({epoch})", format_rfc3339(time))
+    }
+}
+
+fn format_optional_timestamp(value: Option<u64>) -> String {
+    value
+        .filter(|secs| *secs != 0)
+        .map(|secs| {
+            let time = UNIX_EPOCH + Duration::from_secs(secs);
+            format!("{} ({secs})", format_rfc3339(time))
+        })
+        .unwrap_or_else(|| "<none>".to_string())
+}
+
 fn audience_to_string(audience: Option<&Audience>) -> String {
     match audience {
         Some(Audience::Single(value)) => value.clone(),
@@ -4695,6 +4844,42 @@ mod tests {
         assert!(normalized.related_id.is_none());
         assert!(normalized.jwt_id.is_none());
         assert!(normalized.extras.is_none());
+    }
+
+    #[test]
+    fn render_normalized_claims_text_includes_all_fields() {
+        let mut extras = Map::new();
+        extras.insert("flag".to_string(), Value::Bool(true));
+        extras.insert(
+            "count".to_string(),
+            Value::Number(serde_json::Number::from(2)),
+        );
+        let claims = NormalizedJwtClaims {
+            subject: "alice".to_string(),
+            audience: "media".to_string(),
+            issuer: "https://issuer".to_string(),
+            expiration: 1_700_000_000,
+            issued_at: Some(1_699_999_000),
+            not_before: None,
+            related_id: Some("rel-1".to_string()),
+            jwt_id: Some("jwt-1".to_string()),
+            extras: Some(extras),
+        };
+
+        let rendered = render_normalized_claims_text(&claims);
+
+        assert!(rendered.contains("subject: alice"));
+        assert!(rendered.contains("audience: media"));
+        assert!(rendered.contains("issuer: https://issuer"));
+        assert!(rendered.contains("expiration: "));
+        assert!(rendered.contains("(1700000000)"));
+        assert!(rendered.contains("issuedAt: "));
+        assert!(rendered.contains("(1699999000)"));
+        assert!(rendered.contains("jwtId: jwt-1"));
+        assert!(rendered.contains("relatedId: rel-1"));
+        assert!(rendered.contains("extras:"));
+        assert!(rendered.contains("  count: 2"));
+        assert!(rendered.contains("  flag: true"));
     }
 
     #[test]
@@ -5614,6 +5799,7 @@ intermediates:
             jwk_files: Vec::new(),
             key_files: vec![key_file.path().to_path_buf()],
             claims_out: Some(claims_out.path().to_path_buf()),
+            format: JwtVerifyFormat::Json,
             issuer: Some("aunsorm".to_string()),
             subject: Some("user-123".to_string()),
             audience: Some("cli".to_string()),
@@ -5630,5 +5816,57 @@ intermediates:
         assert_eq!(claims.audience, "cli");
         assert!(claims.jwt_id.is_some());
         assert!(claims.extras.is_none());
+    }
+
+    #[test]
+    fn jwt_verify_writes_text_output_when_requested() {
+        let key = Ed25519KeyPair::generate("cli-text").expect("key");
+        let key_file = NamedTempFile::new().expect("key file");
+        write_jwt_key_file(key_file.path(), &key).expect("write key");
+
+        let token_file = NamedTempFile::new().expect("token file");
+        let sign_args = JwtSignArgs {
+            key: Some(key_file.path().to_path_buf()),
+            out: token_file.path().to_path_buf(),
+            issuer: Some("issuer-text".to_string()),
+            subject: Some("user-text".to_string()),
+            audience: vec!["cli".to_string()],
+            expires_in: Some(Duration::from_secs(30)),
+            not_before_in: None,
+            no_issued_at: false,
+            jti: None,
+            claims: None,
+            kms_backend: None,
+            kms_key_id: None,
+            kms_fallback_backend: None,
+            kms_fallback_key_id: None,
+            kms_store: None,
+        };
+        handle_jwt_sign(&sign_args).expect("sign");
+
+        let claims_out = NamedTempFile::new().expect("claims text");
+        let verify_args = JwtVerifyArgs {
+            token: token_file.path().to_path_buf(),
+            jwks_files: Vec::new(),
+            jwk_files: Vec::new(),
+            key_files: vec![key_file.path().to_path_buf()],
+            claims_out: Some(claims_out.path().to_path_buf()),
+            format: JwtVerifyFormat::Text,
+            issuer: Some("issuer-text".to_string()),
+            subject: Some("user-text".to_string()),
+            audience: Some("cli".to_string()),
+            allow_missing_jti: true,
+            leeway: None,
+            sqlite_store: None,
+        };
+        handle_jwt_verify(&verify_args).expect("verify");
+
+        let claims_text = fs::read_to_string(claims_out.path()).expect("read claims text");
+        assert!(claims_text.contains("subject: user-text"));
+        assert!(claims_text.contains("audience: cli"));
+        assert!(claims_text.contains("issuer: issuer-text"));
+        assert!(claims_text.contains("extras: <none>"));
+        assert!(claims_text.contains("jwtId: "));
+        assert!(!claims_text.contains("jwtId: <none>"));
     }
 }

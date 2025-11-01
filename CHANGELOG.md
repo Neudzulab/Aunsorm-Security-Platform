@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `aunsorm-cli jwt verify` komutu `--format text` seçeneğiyle normalize
+  edilmiş claim çıktısını insan okunur biçimde raporlar; varsayılan JSON
+  formatı korunur ve `claims_out` hedefi loglarda kullanılan format bilgisiyle
+  birlikte bildirilir.
 - `aunsorm-server` HTTP hizmetine `tower-http` TraceLayer katmanı eklenerek
   her isteğin başlangıcı/yanıtı milisaniye gecikmesiyle stdout log'larına
   aktarılır.
