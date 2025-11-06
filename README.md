@@ -66,120 +66,102 @@ cargo build --release --all-features
 
 ## Service Endpoints
 
-### Gateway (Port 50010)
-```
-GET  /health                                # System health check
-GET  /metrics                               # Prometheus metrics
-```
+Durum işaretleri:
+- ✅ Aktif ve üretimde çalışıyor
+- 🚧 Aktif geliştirme veya üretim hazırlığı devam ediyor
+- 📋 Planlandı, entegrasyon bekleniyor
+- 🔮 Tasarım aşamasında / gelecek sürüm
 
-### Auth Service (Port 50011)
-```
-POST /security/generate-media-token         # JWT token generation
-POST /security/jwt-verify                   # JWT validation
-GET  /oauth/jwks.json                       # JWKS key publication
-POST /oauth/begin-auth                      # OAuth 2.0 + PKCE flow
-POST /oauth/token                           # Token exchange
-POST /oauth/introspect                      # Token introspection
-GET  /oauth/transparency                    # Transparency logs
-```
+### Çekirdek Servisler
+- ✅ **Gateway** (`50010`, `aun-gateway`)
+  - `GET /health` — sistem sağlık kontrolü
+  - `GET /metrics` — Prometheus metrikleri
 
-### Crypto Service (Port 50012)
-```
-POST /encrypt                               # AES-256-GCM / ChaCha20-Poly1305
-POST /decrypt                               # AEAD decryption
-POST /sign                                  # Ed25519 / RSA signing
-POST /verify                                # Signature verification
-POST /derive-key                            # HKDF key derivation
-```
+- ✅ **Auth Service** (`50011`, `aun-auth-service`)
+  - `POST /security/generate-media-token` — JWT üretimi
+  - `POST /security/jwt-verify` — JWT doğrulama
+  - `GET /oauth/jwks.json` — JWKS anahtar yayını
+  - `POST /oauth/begin-auth` — OAuth 2.0 + PKCE başlangıcı
+  - `POST /oauth/token` — Token değişimi
+  - `POST /oauth/introspect` — Token inceleme
+  - `GET /oauth/transparency` — Şeffaflık logları
 
-### PQC Service (Port 50018)
-```
-GET  /pqc/capabilities                      # Algorithm availability
-POST /pqc/ml-kem/encapsulate                # ML-KEM-768 encapsulation
-POST /pqc/ml-kem/decapsulate                # ML-KEM-768 decapsulation
-POST /pqc/ml-dsa/sign                       # ML-DSA-65 signing
-POST /pqc/ml-dsa/verify                     # ML-DSA-65 verification
-POST /pqc/slh-dsa/sign                      # SLH-DSA-128s signing
-POST /pqc/slh-dsa/verify                    # SLH-DSA-128s verification
-```
+- ✅ **Crypto Service** (`50012`, `aun-crypto-service`)
+  - `POST /encrypt` — AES-256-GCM / ChaCha20-Poly1305
+  - `POST /decrypt` — AEAD çözme
+  - `POST /sign` — Ed25519 / RSA imzalama
+  - `POST /verify` — İmza doğrulama
+  - `POST /derive-key` — HKDF türetme
 
-### X.509 Service (Port 50013)
-```
-POST /x509/generate-ca                      # Root CA generation
-POST /x509/generate-cert                    # Certificate signing
-POST /x509/verify-chain                     # Chain validation
-POST /x509/csr/generate                     # CSR creation
-POST /x509/csr/sign                         # CSR signing
-```
+- 🚧 **PQC Service** (`50018`, `aun-pqc-service`)
+  - `GET /pqc/capabilities` — Algoritma kullanılabilirliği
+  - `POST /pqc/ml-kem/encapsulate` — ML-KEM-768 kapsülleme
+  - `POST /pqc/ml-kem/decapsulate` — ML-KEM-768 kapsül çözme
+  - `POST /pqc/ml-dsa/sign` — ML-DSA-65 imzalama
+  - `POST /pqc/ml-dsa/verify` — ML-DSA-65 doğrulama
+  - `POST /pqc/slh-dsa/sign` — SLH-DSA-128s imzalama
+  - `POST /pqc/slh-dsa/verify` — SLH-DSA-128s doğrulama
 
-### KMS Service (Port 50014)
-```
-POST /kms/keys/generate                     # Key generation
-POST /kms/keys/encrypt                      # Key wrapping
-POST /kms/keys/decrypt                      # Key unwrapping
-POST /kms/keys/rotate                       # Key rotation
-GET  /kms/keys/:id/metadata                 # Key metadata
-DELETE /kms/keys/:id                        # Key deletion
-```
+### Kimlik ve Sertifika Servisleri
+- ✅ **X.509 Service** (`50013`, `aun-x509-service`)
+  - `POST /x509/generate-ca` — Root CA üretimi
+  - `POST /x509/generate-cert` — Sertifika imzalama
+  - `POST /x509/verify-chain` — Zincir doğrulama
+  - `POST /x509/csr/generate` — CSR oluşturma
+  - `POST /x509/csr/sign` — CSR imzalama
 
-### ACME Service (Port 50017)
-```
-GET  /acme/directory                        # ACME directory (RFC 8555)
-GET  /acme/new-nonce                        # Replay-Nonce generation
-POST /acme/new-account                      # Account registration
-POST /acme/new-order                        # Certificate order
-POST /acme/order/:id/finalize               # CSR finalization
-POST /acme/revoke-cert                      # Certificate revocation
-POST /acme/validation/http-01               # HTTP-01 challenge
-POST /acme/validation/dns-01                # DNS-01 challenge
-```
+- ✅ **KMS Service** (`50014`, `aun-kms-service`)
+  - `POST /kms/keys/generate` — Anahtar üretimi
+  - `POST /kms/keys/encrypt` — Anahtar sarma
+  - `POST /kms/keys/decrypt` — Anahtar açma
+  - `POST /kms/keys/rotate` — Anahtar rotasyonu
+  - `GET /kms/keys/:id/metadata` — Anahtar metadatası
+  - `DELETE /kms/keys/:id` — Anahtar silme
 
-### MDM Service (Port 50015)
-```
-POST /mdm/register                          # Device enrollment
-GET  /mdm/policy/:platform                  # Platform-specific policies
-GET  /mdm/cert-plan/:device_id              # Certificate distribution plan
-POST /mdm/compliance/check                  # Compliance validation
-```
+- ✅ **MDM Service** (`50015`, `aun-mdm-service`)
+  - `POST /mdm/register` — Cihaz kaydı
+  - `GET /mdm/policy/:platform` — Platform politikaları
+  - `GET /mdm/cert-plan/:device_id` — Sertifika dağıtım planı
+  - `POST /mdm/compliance/check` — Uyumluluk doğrulama
 
-### ID Service (Port 50016)
-```
-POST /id/generate                           # Unique ID generation
-POST /id/parse                              # ID parsing
-POST /id/verify-head                        # Head-stamped validation
-```
+- ✅ **ID Service** (`50016`, `aun-id-service`)
+  - `POST /id/generate` — Benzersiz ID üretimi
+  - `POST /id/parse` — ID ayrıştırma
+  - `POST /id/verify-head` — Head-stamped doğrulama
 
-### E2EE Service (Port 50021)
-```
-POST /e2ee/context                          # Session initialization
-POST /e2ee/context/step                     # Ratchet advancement
-POST /sfu/context                           # SFU context creation
-POST /sfu/context/step                      # SFU ratchet step
-```
+- 🚧 **ACME Service** (`50017`, `aun-acme-service`)
+  - `GET /acme/directory` — ACME dizini (RFC 8555)
+  - `GET /acme/new-nonce` — Replay-Nonce üretimi
+  - `POST /acme/new-account` — Hesap kaydı
+  - `POST /acme/new-order` — Sertifika siparişi
+  - `POST /acme/order/:id/finalize` — CSR finalizasyonu
+  - `POST /acme/revoke-cert` — Sertifika iptali
+  - `POST /acme/validation/http-01` — HTTP-01 doğrulaması
+  - `POST /acme/validation/dns-01` — DNS-01 doğrulaması
 
-### Blockchain Service (Port 50020)
-```
-POST /blockchain/fabric/did/verify          # Hyperledger DID verification (POC)
-POST /blockchain/media/record               # Audit trail recording [Planned v0.6.1]
-```
+### İletişim ve Şifreleme Servisleri
+- 🚧 **E2EE Service** (`50021`, `aun-e2ee-service`)
+  - `POST /e2ee/context` — Oturum başlatma
+  - `POST /e2ee/context/step` — Ratchet ilerletme
+  - `POST /sfu/context` — SFU bağlamı oluşturma
+  - `POST /sfu/context/step` — SFU ratchet adımı
 
-### RNG Service (Port 50019)
-```
-GET  /random/number                         # Random number generation (deprecated, use native; supports min/max query bounds)
-POST /random/bytes                          # Random byte generation
-```
+- 🚧 **Blockchain Service** (`50020`, `aun-blockchain-service`)
+  - `POST /blockchain/fabric/did/verify` — Hyperledger DID doğrulama (POC)
+  - `POST /blockchain/media/record` — Audit trail kaydı `[Planlandı v0.6.1]`
 
-### Metrics Service (Port 50022)
-```
-GET  /metrics                               # Aggregated Prometheus metrics
-GET  /health/aggregate                      # System-wide health status
-```
+- 🚧 **RNG Service** (`50019`, `aun-rng-service`, **deprecated**)
+  - `GET /random/number` — Rastgele sayı üretimi (native RNG kullanın)
+  - `POST /random/bytes` — Rastgele bayt üretimi
 
-### CLI Gateway (Port 50023)
-```
-POST /cli/jwt/verify                        # CLI JWT verification
-POST /cli/execute                           # Command execution
-```
+### Gözlemlenebilirlik ve CLI
+- ✅ **Metrics Service** (`50022`, `aun-metrics-service`)
+  - `GET /metrics` — Prometheus metrikleri
+  - `GET /health/aggregate` — Sistem genelinde sağlık durumu
+
+- ✅ **CLI Gateway** (`50023`, `aun-cli-gateway`)
+  - `POST /cli/jwt/verify` — CLI JWT doğrulama
+  - `POST /cli/execute` — Komut yürütme
 
 ---
 
