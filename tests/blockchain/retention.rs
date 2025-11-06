@@ -75,7 +75,9 @@ fn ms_to_system_time(value: u64) -> SystemTime {
 
 #[test]
 fn retention_sync_last_run_timestamp_and_alarm_state() {
-    let RetentionSyncFixture { baseline, drift, .. } = load_status_fixture();
+    let RetentionSyncFixture {
+        baseline, drift, ..
+    } = load_status_fixture();
     let mut sync = RetentionSync::new();
 
     let baseline_time = ms_to_system_time(baseline.evaluated_at_ms);
@@ -185,8 +187,5 @@ fn retention_sync_alarm_clears_after_reconcile_run() {
     assert!(alarm_snapshot.mismatches.is_empty());
 
     let reference_time = reconcile_time + Duration::from_secs(300);
-    assert_eq!(
-        sync.seconds_since_last_success(reference_time),
-        Some(300)
-    );
+    assert_eq!(sync.seconds_since_last_success(reference_time), Some(300));
 }
