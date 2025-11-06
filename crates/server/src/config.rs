@@ -75,6 +75,7 @@ pub struct ServerConfig {
     pub(crate) ledger: LedgerBackend,
     pub(crate) fabric: Option<FabricChaincodeConfig>,
     pub(crate) calibration_fingerprint: String,
+    pub(crate) clock_max_age: Duration,
     pub(crate) clock_snapshot: SecureClockSnapshot,
 }
 
@@ -106,6 +107,40 @@ impl ServerConfig {
             .unwrap_or(false);
 
         let ledger = LedgerBackend::from_env(strict)?;
+
+        let clock_max_age_secs = match env::var("AUNSORM_CLOCK_MAX_AGE_SECS") {
+            Ok(value) => value.parse::<u64>().map_err(|err| {
+                ServerError::Configuration(format!(
+                    "AUNSORM_CLOCK_MAX_AGE_SECS geçerli bir sayı değil: {err}"
+                ))
+            })?,
+            Err(env::VarError::NotPresent) => {
+                if strict {
+                    30
+                } else {
+                    300
+                }
+            }
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(ServerError::Configuration(
+                    "AUNSORM_CLOCK_MAX_AGE_SECS ASCII olmayan karakterler içeriyor".to_string(),
+                ));
+            }
+        };
+
+        if clock_max_age_secs == 0 {
+            return Err(ServerError::Configuration(
+                "AUNSORM_CLOCK_MAX_AGE_SECS değeri 0 olamaz".to_string(),
+            ));
+        }
+
+        if strict && clock_max_age_secs > 30 {
+            return Err(ServerError::Configuration(format!(
+                "Strict kipte AUNSORM_CLOCK_MAX_AGE_SECS en fazla 30 saniye olabilir (şu an {clock_max_age_secs})"
+            )));
+        }
+
+        let clock_max_age = Duration::from_secs(clock_max_age_secs);
 
         let kid = env::var("AUNSORM_JWT_KID").unwrap_or_else(|_| "aunsorm-server".to_string());
         let seed_b64 = env::var("AUNSORM_JWT_SEED_B64");
@@ -205,6 +240,7 @@ impl ServerConfig {
             ledger,
             fabric,
             calibration_fingerprint,
+            clock_max_age,
             clock_snapshot,
         )
     }
@@ -225,12 +261,24 @@ impl ServerConfig {
         ledger: LedgerBackend,
         fabric: Option<FabricChaincodeConfig>,
         calibration_fingerprint: impl Into<String>,
+        clock_max_age: Duration,
         clock_snapshot: SecureClockSnapshot,
     ) -> Result<Self, ServerError> {
         if strict && matches!(ledger, LedgerBackend::Memory) {
             return Err(ServerError::Configuration(
                 "Strict kipte bellek içi JTI deposu kullanılamaz".to_string(),
             ));
+        }
+        if clock_max_age.is_zero() {
+            return Err(ServerError::Configuration(
+                "Saat doğrulama penceresi 0 olamaz".to_string(),
+            ));
+        }
+        if strict && clock_max_age > Duration::from_secs(30) {
+            return Err(ServerError::Configuration(format!(
+                "Strict kipte saat doğrulama penceresi en fazla 30 saniye olabilir (şu an {} saniye)",
+                clock_max_age.as_secs()
+            )));
         }
         if clock_snapshot.signature_b64.trim().is_empty() {
             return Err(ServerError::Configuration(
@@ -257,6 +305,7 @@ impl ServerConfig {
             ledger,
             fabric,
             calibration_fingerprint,
+            clock_max_age,
             clock_snapshot,
         })
     }
@@ -282,5 +331,81 @@ impl ServerConfig {
     #[allow(dead_code)] // Available for clock refresh service integration
     pub(crate) fn clock_snapshot(&self) -> &SecureClockSnapshot {
         &self.clock_snapshot
+    }
+
+    #[must_use]
+    #[allow(dead_code)] // Exposed for background refresh scheduling
+    pub(crate) fn clock_max_age(&self) -> Duration {
+        self.clock_max_age
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::path::PathBuf;
+
+    use aunsorm_core::clock::SecureClockSnapshot;
+    use aunsorm_jwt::Ed25519KeyPair;
+
+    fn sample_snapshot() -> SecureClockSnapshot {
+        SecureClockSnapshot {
+            authority_id: "ntp.test.aunsorm".to_string(),
+            authority_fingerprint_hex:
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            unix_time_ms: 1_730_000_000_000,
+            stratum: 2,
+            round_trip_ms: 8,
+            dispersion_ms: 12,
+            estimated_offset_ms: 0,
+            signature_b64: "dGVzdC1zaWduYXR1cmU=".to_string(),
+        }
+    }
+
+    fn sample_calibration() -> String {
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()
+    }
+
+    #[test]
+    fn strict_mode_rejects_large_clock_max_age() {
+        let result = ServerConfig::new(
+            "127.0.0.1:18080".parse().expect("socket"),
+            "https://strict.test",
+            "strict-audience",
+            Duration::from_secs(300),
+            true,
+            Ed25519KeyPair::generate("strict-test").expect("key pair"),
+            LedgerBackend::Sqlite(PathBuf::from("./strict-ledger.db")),
+            None,
+            sample_calibration(),
+            Duration::from_secs(45),
+            sample_snapshot(),
+        );
+
+        assert!(
+            matches!(result, Err(ServerError::Configuration(message)) if message.contains("30 saniye"))
+        );
+    }
+
+    #[test]
+    fn rejects_zero_clock_max_age() {
+        let result = ServerConfig::new(
+            "127.0.0.1:18081".parse().expect("socket"),
+            "https://dev.test",
+            "dev-audience",
+            Duration::from_secs(300),
+            false,
+            Ed25519KeyPair::generate("dev-test").expect("key pair"),
+            LedgerBackend::Memory,
+            None,
+            sample_calibration(),
+            Duration::from_secs(0),
+            sample_snapshot(),
+        );
+
+        assert!(
+            matches!(result, Err(ServerError::Configuration(message)) if message.contains("0 olamaz"))
+        );
     }
 }

@@ -66,7 +66,7 @@ services:
       - ntp-attestation
     environment:
       - AUNSORM_NTP_URL=http://ntp-attestation:5000/attestation
-      - AUNSORM_CLOCK_MAX_AGE_SECS=30  # Production strict
+      - AUNSORM_CLOCK_MAX_AGE_SECS=30  # Production strict (server rejects >30s when strict)
 ```
 
 ### Option 2: Manual Script Refresh
@@ -118,7 +118,8 @@ For development environments where NTP refresh isn't available:
 
 ```bash
 # .env
-AUNSORM_CLOCK_MAX_AGE_SECS=300  # 5 minutes tolerance
+# Strict mode defaults to 30 seconds automatically; non-strict deployments fall back to 300 seconds when unset.
+AUNSORM_CLOCK_MAX_AGE_SECS=300  # 5 minutes tolerance (development/staging)
 
 # Manually update timestamp occasionally:
 AUNSORM_CLOCK_ATTESTATION={"authority_id":"ntp.dev.aunsorm",...,"unix_time_ms":1730236800000,...}
@@ -160,7 +161,7 @@ let current_snapshot = refresh_service.get_current().await;
 | Variable | Default | Production | Description |
 |----------|---------|------------|-------------|
 | `AUNSORM_CLOCK_ATTESTATION` | *required* | From NTP | JSON clock snapshot |
-| `AUNSORM_CLOCK_MAX_AGE_SECS` | `30` | `30` | Max attestation age (seconds) |
+| `AUNSORM_CLOCK_MAX_AGE_SECS` | `30` (strict) / `300` (non-strict) | `30` | Max attestation age (seconds) |
 | `AUNSORM_NTP_URL` | `None` | `http://ntp:5000/attestation` | NTP service endpoint |
 | `AUNSORM_CALIBRATION_FINGERPRINT` | *required* | Production cert | Calibration cert fingerprint |
 

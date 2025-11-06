@@ -242,13 +242,13 @@ fn generate_id() -> String {
 
 fn default_oauth_clients() -> HashMap<String, OAuthClient> {
     let mut clients = HashMap::new();
-    
+
     // Build redirect URIs with environment variable support
     let mut redirect_uris = vec![
         "https://app.example.com/callback".to_string(),
         "https://demo.example.com/oauth/callback".to_string(),
     ];
-    
+
     // Add localhost callbacks (development/testing)
     if let Ok(host) = std::env::var("HOST") {
         redirect_uris.extend(vec![
@@ -263,12 +263,12 @@ fn default_oauth_clients() -> HashMap<String, OAuthClient> {
             "http://localhost:8080/callback".to_string(),
         ]);
     }
-    
+
     // Add production callback if configured
     if let Ok(prod_callback) = std::env::var("OAUTH_PRODUCTION_CALLBACK") {
         redirect_uris.push(prod_callback);
     }
-    
+
     clients.insert(
         "demo-client".to_string(),
         OAuthClient::new(
@@ -897,6 +897,7 @@ impl ServerState {
             fabric: _fabric,
             calibration_fingerprint,
             clock_snapshot,
+            clock_max_age,
         } = config;
         let signer = JwtSigner::new(key_pair.clone());
         let public = key_pair.public_key();
@@ -914,13 +915,8 @@ impl ServerState {
             clock_snapshot.authority_fingerprint_hex.clone(),
         );
 
-        // Parse max_age from environment (default: 30s for production)
-        let max_age_secs = std::env::var("AUNSORM_CLOCK_MAX_AGE_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(30); // Production default: 30 seconds
-
-        let max_age = Duration::from_secs(max_age_secs);
+        let max_age = clock_max_age;
+        let max_age_secs = max_age.as_secs();
 
         if max_age_secs > 60 {
             tracing::warn!(

@@ -101,7 +101,7 @@ Aunsorm operates as **15 independent microservices** communicating over an inter
 **Data Persistence:** SQLite (development), PostgreSQL/MySQL-ready  
 
 **Environment Variables:**
-- `AUNSORM_CLOCK_MAX_AGE_SECS`: Clock attestation validation window
+- `AUNSORM_CLOCK_MAX_AGE_SECS`: Clock attestation validation window (strict mode enforces ≤30s, dev default 300s when unset)
 - `AUNSORM_CALIBRATION_FINGERPRINT`: Calibration context identifier
 - `AUNSORM_CLOCK_ATTESTATION`: JSON-encoded secure clock snapshot
 - `AUNSORM_STRICT`: Enable strict security mode

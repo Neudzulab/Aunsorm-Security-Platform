@@ -47,6 +47,7 @@ fn demo_state() -> Arc<ServerState> {
         LedgerBackend::Memory,
         None,
         calibration_fingerprint,
+        Duration::from_secs(300),
         clock_snapshot,
     )
     .expect("config");
