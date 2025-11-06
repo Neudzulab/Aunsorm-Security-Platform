@@ -775,4 +775,41 @@ describe('resolveAunsormBaseUrlDiagnostics', () => {
       ]),
     );
   });
+
+  it('warns when production deployments rely on insecure direct overrides', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_URL: 'http://api.aunsorm.dev/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    const diagnostics = resolveAunsormBaseUrlDiagnostics(env);
+
+    expect(diagnostics.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message:
+            'In production environments HTTPS must be used for non-loopback hosts; current base URL resolves to http://.',
+          keys: ['AUNSORM_BASE_URL'],
+        }),
+      ]),
+    );
+  });
+
+  it('does not warn about http overrides for loopback hosts', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_URL: 'http://127.0.0.1:4100/custom',
+    } satisfies NodeJS.ProcessEnv;
+
+    const diagnostics = resolveAunsormBaseUrlDiagnostics(env);
+
+    expect(diagnostics.warnings).toEqual(
+      expect.not.arrayContaining([
+        expect.objectContaining({
+          message:
+            'In production environments HTTPS must be used for non-loopback hosts; current base URL resolves to http://.',
+        }),
+      ]),
+    );
+  });
 });

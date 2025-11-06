@@ -697,6 +697,7 @@ export function resolveAunsormBaseUrlDiagnostics(
   readFile: FileReader = defaultReadFile,
 ): AunsormBaseUrlDiagnostics {
   const details = resolveAunsormBaseUrlDetails(env, readFile);
+  const nodeEnv = resolveNodeEnv(env);
 
   const directFileEntries = snapshotGroup(DIRECT_BASE_URL_FILE_KEYS, env);
   const directEntries = snapshotGroup(DIRECT_BASE_URL_KEYS, env);
@@ -790,6 +791,34 @@ export function resolveAunsormBaseUrlDiagnostics(
     if (ignoredDirect) {
       warnings.push(ignoredDirect);
     }
+  }
+
+  if (
+    nodeEnv === 'production' &&
+    details.origin.startsWith('http://') &&
+    !isLoopbackHost(details.origin)
+  ) {
+    const insecureKeys = new Set<string>();
+
+    if (details.source.kind === 'direct' || details.source.kind === 'direct-file') {
+      if (details.source.key) {
+        insecureKeys.add(details.source.key);
+      }
+    } else if (details.source.kind === 'domain-path') {
+      if (details.source.domainKey) {
+        insecureKeys.add(details.source.domainKey);
+      }
+
+      if (details.source.pathKey) {
+        insecureKeys.add(details.source.pathKey);
+      }
+    }
+
+    warnings.push({
+      message:
+        'In production environments HTTPS must be used for non-loopback hosts; current base URL resolves to http://.',
+      keys: sortKeys(Array.from(insecureKeys)),
+    });
   }
 
   const uniqueWarnings = new Map<string, WarningCandidate>();
