@@ -4598,8 +4598,7 @@ impl NormalizedJwtClaims {
             issuer: claims.issuer.clone().unwrap_or_default(),
             expiration: claims
                 .expiration
-                .map(system_time_to_unix_seconds)
-                .unwrap_or(0),
+                .map_or(0, system_time_to_unix_seconds),
             issued_at: claims.issued_at.map(system_time_to_unix_seconds),
             not_before: claims.not_before.map(system_time_to_unix_seconds),
             related_id,
@@ -4674,7 +4673,7 @@ fn log_jwt_verify_result(
     }
 }
 
-fn format_label(format: JwtVerifyFormat) -> &'static str {
+const fn format_label(format: JwtVerifyFormat) -> &'static str {
     match format {
         JwtVerifyFormat::Json => "json",
         JwtVerifyFormat::Text => "text",
@@ -4735,8 +4734,7 @@ fn display_or_none(value: &str) -> String {
 fn format_optional_str(value: Option<&str>) -> String {
     value
         .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| "<none>".to_string())
+        .map_or_else(|| "<none>".to_string(), ToString::to_string)
 }
 
 fn format_timestamp(epoch: u64) -> String {
@@ -4751,11 +4749,13 @@ fn format_timestamp(epoch: u64) -> String {
 fn format_optional_timestamp(value: Option<u64>) -> String {
     value
         .filter(|secs| *secs != 0)
-        .map(|secs| {
-            let time = UNIX_EPOCH + Duration::from_secs(secs);
-            format!("{} ({secs})", format_rfc3339(time))
-        })
-        .unwrap_or_else(|| "<none>".to_string())
+        .map_or_else(
+            || "<none>".to_string(),
+            |secs| {
+                let time = UNIX_EPOCH + Duration::from_secs(secs);
+                format!("{} ({secs})", format_rfc3339(time))
+            },
+        )
 }
 
 fn audience_to_string(audience: Option<&Audience>) -> String {
