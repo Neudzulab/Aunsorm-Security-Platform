@@ -1,103 +1,124 @@
 # Aunsorm Microservices Port Mapping
 # Version: 0.5.0
-# Last Updated: 2025-10-30
+# Last Updated: 2025-11-06
+
+status_legend:
+  active: "✅ Aktif / Çalışıyor"
+  development: "🚧 Geliştirme"
+  planned: "📋 Planlandı"
+  future: "🔮 Gelecek"
+  deprecated: "⚠️ Kullanımdan Kaldırılıyor"
 
 services:
   - name: gateway
     port: 50010
+    status: active
     protocol: HTTP
     container: aun-gateway
     description: API Gateway and routing
     health_endpoint: /health
-    
+
   - name: auth-service
     port: 50011
+    status: active
     protocol: HTTP
     container: aun-auth-service
     description: JWT token issuance and OAuth 2.0
     health_endpoint: /health
-    
+
   - name: crypto-service
     port: 50012
+    status: active
     protocol: HTTP
     container: aun-crypto-service
     description: Core cryptographic operations
     health_endpoint: /health
-    
+
   - name: x509-service
     port: 50013
+    status: active
     protocol: HTTP
     container: aun-x509-service
     description: X.509 certificate management
     health_endpoint: /health
-    
+
   - name: kms-service
     port: 50014
+    status: active
     protocol: HTTP
     container: aun-kms-service
     description: Key management system
     health_endpoint: /health
-    
+
   - name: mdm-service
     port: 50015
+    status: active
     protocol: HTTP
     container: aun-mdm-service
     description: Mobile device management
     health_endpoint: /health
-    
+
   - name: id-service
     port: 50016
+    status: active
     protocol: HTTP
     container: aun-id-service
     description: Unique ID generation
     health_endpoint: /health
-    
+
   - name: acme-service
     port: 50017
+    status: development
     protocol: HTTP
     container: aun-acme-service
     description: ACME protocol (Let's Encrypt)
     health_endpoint: /health
-    
+
   - name: pqc-service
     port: 50018
+    status: development
     protocol: HTTP
     container: aun-pqc-service
     description: Post-quantum cryptography
     health_endpoint: /health
-    
+
   - name: rng-service
     port: 50019
+    status: deprecated
     protocol: HTTP
     container: aun-rng-service
     description: Random number generation (deprecated)
     health_endpoint: /health
     deprecation_note: Use native RNG in crates instead
-    
+
   - name: blockchain-service
     port: 50020
+    status: development
     protocol: HTTP
     container: aun-blockchain-service
     description: DID registry (Hyperledger Fabric)
     health_endpoint: /health
-    status: POC
-    
+    status_note: Proof of concept
+
   - name: e2ee-service
     port: 50021
+    status: development
     protocol: HTTP
     container: aun-e2ee-service
     description: End-to-end encryption sessions
     health_endpoint: /health
-    
+
   - name: metrics-service
     port: 50022
+    status: active
     protocol: HTTP
     container: aun-metrics-service
     description: Prometheus metrics aggregation
     health_endpoint: /health
-    
+
   - name: cli-gateway
     port: 50023
+    status: active
     protocol: HTTP
     container: aun-cli-gateway
     description: CLI tool backend
@@ -107,7 +128,7 @@ services:
 network:
   name: aunsorm-network
   driver: bridge
-  
+
 # Port allocation strategy
 port_allocation:
   aunsorm_range: "50010-50023"
@@ -116,44 +137,44 @@ port_allocation:
     - 50024  # OpenAPI Documentation Server (Swagger UI backend)
     - 50025  # Redoc API Documentation UI
     - 50026  # Future: GraphQL endpoint
-    
+
 # External dependencies (Zasian Media Platform v0.6.0)
 zasian_services:
   - name: zas-gateway
     port: 50030
     protocol: HTTP
     purpose: Zasian API Gateway
-    
+
   - name: zas-sfu-router-ws
     port: 50031
     protocol: WebSocket
     purpose: SFU Router WebSocket
-    
+
   - name: zas-sfu-router-quic
     port: 50032
     protocol: UDP/QUIC
     purpose: QUIC transport
-    
+
   - name: zas-hybrid-mcu
     port: 50033
     protocol: TCP
     purpose: GPU compositor
-    
+
   - name: zas-publisher-service
     port: 50034
     protocol: TCP
     purpose: Media publishing
-    
+
   - name: zas-subscriber-service
     port: 50035
     protocol: TCP
     purpose: Stream subscription
-    
+
   - name: zas-signaling
     port: 50036
     protocol: WebSocket
     purpose: WebRTC signaling
-    
+
   - name: zas-router-web
     port: 50037
     protocol: HTTP
@@ -165,14 +186,14 @@ integration:
     bridge_url: "ws://localhost:50031/ws"  # Override: BRIDGE_URL env var
     signaling_url: "wss://localhost:50036/zasian"  # Override: ZASIAN_WEBSOCKET_URL env var
     jwt_audience: "zasian-media"
-    
+
   environment_overrides:
     production:
       ZASIAN_HOST: "zasian.production.domain"  # Replaces localhost in Zasian URLs
       HOST: "aunsorm.production.domain"        # Replaces 127.0.0.1 in Aunsorm bind
       ZASIAN_WEBSOCKET_URL: "wss://zasian.production.domain:50036/zasian"
       AUNSORM_LISTEN: "aunsorm.production.domain:8080"
-    
+
 # External access
 external_access:
   gateway_only: true
