@@ -153,7 +153,7 @@ This document tracks all remaining work required for production deployment.
 - [x] port-map.yaml - Service port mapping
 - [ ] API reference documentation (OpenAPI spec)
 - [ ] Architecture decision records (ADRs)
-- [ ] Disaster recovery runbook
+- [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
 - [ ] Incident response playbook
 - [ ] Production deployment guide
 
