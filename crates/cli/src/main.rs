@@ -4596,9 +4596,7 @@ impl NormalizedJwtClaims {
             subject: claims.subject.clone().unwrap_or_default(),
             audience: audience_to_string(claims.audience.as_ref()),
             issuer: claims.issuer.clone().unwrap_or_default(),
-            expiration: claims
-                .expiration
-                .map_or(0, system_time_to_unix_seconds),
+            expiration: claims.expiration.map_or(0, system_time_to_unix_seconds),
             issued_at: claims.issued_at.map(system_time_to_unix_seconds),
             not_before: claims.not_before.map(system_time_to_unix_seconds),
             related_id,
@@ -4747,15 +4745,13 @@ fn format_timestamp(epoch: u64) -> String {
 }
 
 fn format_optional_timestamp(value: Option<u64>) -> String {
-    value
-        .filter(|secs| *secs != 0)
-        .map_or_else(
-            || "<none>".to_string(),
-            |secs| {
-                let time = UNIX_EPOCH + Duration::from_secs(secs);
-                format!("{} ({secs})", format_rfc3339(time))
-            },
-        )
+    value.filter(|secs| *secs != 0).map_or_else(
+        || "<none>".to_string(),
+        |secs| {
+            let time = UNIX_EPOCH + Duration::from_secs(secs);
+            format!("{} ({secs})", format_rfc3339(time))
+        },
+    )
 }
 
 fn audience_to_string(audience: Option<&Audience>) -> String {
