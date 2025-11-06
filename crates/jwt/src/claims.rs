@@ -106,6 +106,13 @@ impl Claims {
     }
 
     /// Özel claim alanlarının kurallara uyduğunu doğrular.
+    ///
+    /// # Errors
+    ///
+    /// `JwtError::InvalidClaim` döner:
+    /// - `extras` içindeki anahtarlardan biri standart claim adlarıyla çakışırsa.
+    /// - Anahtar camelCase biçimini bozarsa veya iç içe JSON değerleri camelCase
+    ///   zorunluluğunu ihlal ederse.
     pub fn validate_custom_claims(&self) -> Result<()> {
         for key in self.extra.keys() {
             if RESERVED_STANDARD_CLAIMS.contains(&key.as_str()) {
