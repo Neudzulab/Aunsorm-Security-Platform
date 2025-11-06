@@ -301,6 +301,11 @@ fn setup_state_with_profile(
         ledger,
         None,
         calibration_fingerprint,
+        if strict {
+            Duration::from_secs(30)
+        } else {
+            Duration::from_secs(300)
+        },
         clock_snapshot,
     )
     .expect("config");

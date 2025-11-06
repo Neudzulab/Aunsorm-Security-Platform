@@ -189,7 +189,7 @@ Key environment variables (see `.env`):
 
 ```bash
 # Clock Attestation (required for all services)
-AUNSORM_CLOCK_MAX_AGE_SECS=30              # Production: 30s, Dev: 300s
+AUNSORM_CLOCK_MAX_AGE_SECS=30              # Strict mode requires ≤30s; dev default is 300s when unset
 AUNSORM_CALIBRATION_FINGERPRINT=...        # Calibration context ID
 AUNSORM_CLOCK_ATTESTATION=...              # JSON clock snapshot
 
