@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Disaster recovery runbook documenting RTO/RPO hedefleri, DR aktivasyonu ve failback adımlarını kapsayan operasyon rehberi.
 - `aunsorm-cli jwt verify` komutu `--format text` seçeneğiyle normalize
   edilmiş claim çıktısını insan okunur biçimde raporlar; varsayılan JSON
   formatı korunur ve `claims_out` hedefi loglarda kullanılan format bilgisiyle
