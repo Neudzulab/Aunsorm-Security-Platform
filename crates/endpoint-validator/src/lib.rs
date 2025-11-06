@@ -497,11 +497,14 @@ struct RateLimiter {
 
 impl RateLimiter {
     fn new(limit_per_second: Option<u32>) -> Self {
-        let inner = limit_per_second.map(|limit| {
-            let mut interval = interval(Duration::from_secs_f64(1.0 / f64::from(limit.max(1))));
+        let inner = limit_per_second.and_then(|limit| {
+            if limit == 0 {
+                return None;
+            }
+            let mut interval = interval(Duration::from_secs_f64(1.0 / f64::from(limit)));
             // Tick once to avoid immediate wait on the first call.
             interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-            Arc::new(Mutex::new(interval))
+            Some(Arc::new(Mutex::new(interval)))
         });
         Self { inner }
     }
@@ -1030,9 +1033,10 @@ fn normalize_path(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_path, AllowlistedFailure, FailureKind, ValidationOutcome, ValidationReport,
-        ValidationResult, ValidationSummary,
+        normalize_path, AllowlistedFailure, FailureKind, RateLimiter, ValidationOutcome,
+        ValidationReport, ValidationResult, ValidationSummary,
     };
+    use tokio::time::{timeout, Duration};
 
     #[test]
     fn allowlisted_failure_matches_expected_cases() {
@@ -1200,5 +1204,13 @@ mod tests {
                 allowed_failures: 1,
             }
         );
+    }
+
+    #[tokio::test]
+    async fn rate_limiter_disables_when_limit_is_zero() {
+        let limiter = RateLimiter::new(Some(0));
+        timeout(Duration::from_millis(25), limiter.wait())
+            .await
+            .expect("zero limit should disable rate limiting");
     }
 }

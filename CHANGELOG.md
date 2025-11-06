@@ -112,6 +112,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Linux/macOS ortamları için `cargo fmt`/`cargo clippy`/`cargo test` adımlarını tek komutla çalıştıran `scripts/test-all.sh` betiği.
 
 ### Changed
+- `endpoint-validator` rate limiter artık `0` değeri verildiğinde sınırsız
+  istek kabul ederek CLI yapılandırmalarındaki "0 = kapalı" semantiğiyle
+  tutarlılık sağlıyor ve gereksiz yavaşlamayı önlüyor.
 - `/metrics` endpoint now pulls live counts from the server state instead of
   returning placeholder metric values.
 - `aunsorm-jwt` doğrulaması varsayılan olarak `jti` alanını zorunlu kılar ve
