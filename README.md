@@ -165,7 +165,7 @@ POST /blockchain/media/record               # Audit trail recording [Planned v0.
 
 ### RNG Service (Port 50019)
 ```
-POST /random/number                         # Random number generation (deprecated, use native)
+GET  /random/number                         # Random number generation (deprecated, use native; supports min/max query bounds)
 POST /random/bytes                          # Random byte generation
 ```
 
