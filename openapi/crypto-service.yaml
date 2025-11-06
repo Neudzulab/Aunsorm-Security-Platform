@@ -21,12 +21,16 @@ servers:
     description: Docker Internal Network
 
 tags:
+  - name: Health
+    description: Service status endpoints
   - name: Encryption
     description: AEAD encryption operations
   - name: Signing
     description: Digital signature operations
   - name: Key Derivation
     description: HKDF key derivation
+  - name: Randomness
+    description: Entropy sampling endpoints (HTTP fallback; prefer native RNG integration)
 
 paths:
   /health:
@@ -44,6 +48,79 @@ paths:
                   status:
                     type: string
                     example: OK
+
+  /random/number:
+    get:
+      tags: [Randomness]
+      summary: Sample random number with audit entropy
+      description: |
+        Generates a uniformly distributed random number in the inclusive range `[min, max]`
+        and returns the sampled value together with the entropy proof hex string. This HTTP
+        endpoint is maintained for backwards compatibility while clients migrate to the
+        native RNG pipeline.
+      deprecated: true
+      parameters:
+        - in: query
+          name: min
+          description: Inclusive lower bound for the random draw (defaults to 0)
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            default: 0
+          required: false
+        - in: query
+          name: max
+          description: Inclusive upper bound for the random draw (defaults to 100)
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+            default: 100
+          required: false
+      responses:
+        '200':
+          description: Random number generated successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: no-store, no-cache, must-revalidate
+            Pragma:
+              schema:
+                type: string
+              example: no-cache
+            Expires:
+              schema:
+                type: string
+              example: "0"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [value, min, max, entropy]
+                properties:
+                  value:
+                    type: integer
+                    format: int64
+                    description: Sampled random value
+                    example: 42
+                  min:
+                    type: integer
+                    format: int64
+                    description: Inclusive lower bound used for sampling
+                    example: 0
+                  max:
+                    type: integer
+                    format: int64
+                    description: Inclusive upper bound used for sampling
+                    example: 100
+                  entropy:
+                    type: string
+                    description: Hex-encoded 32-byte entropy proof derived from AunsormNativeRng
+                    example: "5d6c2fa1870e47f0c7f1e6d4220fb7fa3a9b8a914320c1b19b8adfb701d8a4c2"
+        '400':
+          $ref: '#/components/responses/BadRequest'
 
   /encrypt:
     post:
