@@ -23,6 +23,7 @@
 - [Operasyon Runbook'u: Müşteri Saklama & Anahtar İmha](operations/runbook-retention.md)
 - [OAuth API OpenAPI Şeması](operations/oauth-openapi.md)
 - [OAuth Web Entegrasyonu Rehberi](operations/oauth-web-integration.md)
+- [JWT Özel Claim Uyumluluk Rehberi](operations/jwt-custom-claims.md)
 - [Pazar İstihbaratı ve Gelecek Vizyonu Çalıştayı](operations/market-intelligence.md)
 - [KMS Conformance ve Sertifikasyon Raporları](operations/kms-certification.md)
 - [Regülasyon Uyumluluk Kontrol Listesi](operations/compliance-checklist.md)

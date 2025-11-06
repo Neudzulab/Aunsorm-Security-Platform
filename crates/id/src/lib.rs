@@ -574,11 +574,11 @@ fn unix_micros(time: SystemTime) -> Result<u64, IdError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        parse_head_id, HeadIdGenerator, IdError, FINGERPRINT_LEN, PROCESS_ENTROPY,
-        DEFAULT_NAMESPACE, HEAD_ENV_KEYS,
-    };
     use super::{fingerprint_from_head, normalize_head};
+    use super::{
+        parse_head_id, HeadIdGenerator, IdError, DEFAULT_NAMESPACE, FINGERPRINT_LEN, HEAD_ENV_KEYS,
+        PROCESS_ENTROPY,
+    };
     use base64::Engine;
     use sha2::{Digest, Sha256};
     use std::sync::Mutex;
@@ -589,6 +589,8 @@ mod tests {
     use once_cell::sync::Lazy;
 
     const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
+    const FALLBACK_HEAD: &str = "abcdef1234567890abcdef1234567890abcdef12";
+    const PRIMARY_HEAD: &str = "11223344556677889900aabbccddeeff00112233";
 
     static ENV_GUARD: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
@@ -743,7 +745,7 @@ mod tests {
     fn environment_integration_tests() {
         let _guard = ENV_GUARD.lock().expect("env guard");
 
-        let mut tracked_keys: Vec<&str> = HEAD_ENV_KEYS.iter().copied().collect();
+        let mut tracked_keys: Vec<&str> = HEAD_ENV_KEYS.to_vec();
         tracked_keys.push("AUNSORM_ID_NAMESPACE");
 
         let saved: Vec<(&str, Option<String>)> = tracked_keys
@@ -755,14 +757,12 @@ mod tests {
             std::env::remove_var(key);
         }
 
-        const FALLBACK_HEAD: &str = "abcdef1234567890abcdef1234567890abcdef12";
         std::env::set_var("GITHUB_SHA", FALLBACK_HEAD);
 
         let fallback_generator = HeadIdGenerator::from_env().expect("fallback generator");
         assert_eq!(fallback_generator.namespace(), DEFAULT_NAMESPACE);
-        let fallback_fp = fingerprint_from_head(
-            &normalize_head(FALLBACK_HEAD).expect("normalize fallback head"),
-        );
+        let fallback_fp =
+            fingerprint_from_head(&normalize_head(FALLBACK_HEAD).expect("normalize fallback head"));
         assert_eq!(fallback_generator.head_fingerprint_bytes(), fallback_fp);
 
         std::env::set_var("VERGEN_GIT_SHA", HEAD);
@@ -778,15 +778,13 @@ mod tests {
         assert_eq!(override_generator.namespace(), "ops-delivery");
         assert_eq!(override_generator.head_fingerprint_bytes(), vergen_fp);
 
-        const PRIMARY_HEAD: &str = "11223344556677889900aabbccddeeff00112233";
         std::env::set_var("AUNSORM_HEAD", PRIMARY_HEAD);
         std::env::set_var("AUNSORM_ID_NAMESPACE", "Ops::Telemetry");
 
         let primary_generator = HeadIdGenerator::from_env().expect("primary generator");
         assert_eq!(primary_generator.namespace(), "ops-telemetry");
-        let primary_fp = fingerprint_from_head(
-            &normalize_head(PRIMARY_HEAD).expect("normalize primary head"),
-        );
+        let primary_fp =
+            fingerprint_from_head(&normalize_head(PRIMARY_HEAD).expect("normalize primary head"));
         assert_eq!(primary_generator.head_fingerprint_bytes(), primary_fp);
 
         for &key in &tracked_keys {
