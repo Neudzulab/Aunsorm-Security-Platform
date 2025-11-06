@@ -164,6 +164,54 @@ fn rejects_replay_in_memory_store() {
 }
 
 #[test]
+fn purge_expired_allows_reuse_after_expiration() {
+    let store = Arc::new(InMemoryJtiStore::default());
+
+    let jti = "replay-id";
+    let expires_soon = SystemTime::now() + Duration::from_millis(50);
+
+    assert!(
+        store
+            .check_and_insert(jti, Some(expires_soon))
+            .expect("first insert"),
+        "initial insert must succeed"
+    );
+
+    assert!(
+        !store
+            .check_and_insert(jti, Some(expires_soon))
+            .expect("second insert"),
+        "duplicate insert before expiration must be rejected"
+    );
+
+    // Purging before expiration should leave the entry intact.
+    assert_eq!(
+        store
+            .purge_expired(SystemTime::now())
+            .expect("purge before expiration"),
+        0,
+        "entry should remain until it actually expires"
+    );
+
+    // Wait slightly past the expiration boundary and purge again.
+    std::thread::sleep(Duration::from_millis(60));
+    assert_eq!(
+        store
+            .purge_expired(SystemTime::now())
+            .expect("purge after expiration"),
+        1,
+        "expired entry must be removed"
+    );
+
+    assert!(
+        store
+            .check_and_insert(jti, Some(SystemTime::now() + Duration::from_secs(1)))
+            .expect("insert after purge"),
+        "JTI should be reusable after purge removes expired entry"
+    );
+}
+
+#[test]
 fn audience_and_claim_validation() {
     let key = Ed25519KeyPair::generate("kid-claim").expect("key");
     let signer = JwtSigner::new(key.clone());
