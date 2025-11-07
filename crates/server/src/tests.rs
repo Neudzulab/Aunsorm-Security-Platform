@@ -2268,7 +2268,7 @@ async fn jwt_verify_endpoint_rejects_tokens_missing_jti() {
     claims.audience = Some(Audience::Single("zasian-media".to_owned()));
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
-    claims.extra.insert(
+    claims.extras.insert(
         "roomId".to_string(),
         Value::String("room-missing-jti".to_string()),
     );
@@ -2325,7 +2325,7 @@ async fn jwt_verify_endpoint_reports_temporal_claims() {
     let not_before = issued_at + Duration::from_secs(5);
     claims.not_before = Some(not_before);
     claims.set_expiration_from_now(state.token_ttl());
-    claims.extra.insert(
+    claims.extras.insert(
         "roomId".to_string(),
         Value::String("room-temporal".to_string()),
     );

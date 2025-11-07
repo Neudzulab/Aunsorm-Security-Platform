@@ -144,7 +144,7 @@ fn import_extra_claims(claims: &mut Claims, extras: &Map<String, Value>) {
     for (key, value) in extras {
         map.insert(key.clone(), value.clone());
     }
-    claims.extra = map;
+    claims.extras = map;
 }
 
 #[test]
@@ -201,7 +201,7 @@ fn identity_flow_alpha_roundtrip() {
     claims.set_issued_now();
     claims.set_expiration_from_now(Duration::from_secs(fixture.jwt.ttl_seconds));
     import_extra_claims(&mut claims, &fixture.jwt.extra_claims);
-    claims.extra.insert(
+    claims.extras.insert(
         "scope".to_string(),
         Value::Array(
             fixture
@@ -232,16 +232,16 @@ fn identity_flow_alpha_roundtrip() {
     );
     assert_eq!(
         verified
-            .extra
+            .extras
             .get("scope")
             .and_then(Value::as_array)
             .map(|values| values.iter().map(Value::as_str).collect::<Vec<_>>()),
         Some(vec![Some("packet:read"), Some("session:manage")])
     );
     let calibration_context = verified
-        .extra
+        .extras
         .get("calibrationContext")
-        .or_else(|| verified.extra.get("calibration_context"))
+        .or_else(|| verified.extras.get("calibration_context"))
         .and_then(Value::as_str);
     assert_eq!(
         calibration_context,

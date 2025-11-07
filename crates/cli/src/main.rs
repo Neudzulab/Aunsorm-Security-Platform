@@ -4478,7 +4478,7 @@ fn merge_extra_claims(claims: &mut Claims, path: &Path) -> CliResult<()> {
         staged.push((key.clone(), val.clone()));
     }
     for (key, val) in staged {
-        claims.extra.insert(key, val);
+        claims.extras.insert(key, val);
     }
     Ok(())
 }
@@ -4579,15 +4579,15 @@ struct NormalizedJwtClaims {
 impl NormalizedJwtClaims {
     fn from_claims(claims: &Claims) -> Self {
         let related_id = claims
-            .extra
+            .extras
             .get("relatedId")
             .and_then(Value::as_str)
             .map(ToOwned::to_owned);
-        let extras = if claims.extra.is_empty() {
+        let extras = if claims.extras.is_empty() {
             None
         } else {
-            let mut map = Map::with_capacity(claims.extra.len());
-            for (key, value) in &claims.extra {
+            let mut map = Map::with_capacity(claims.extras.len());
+            for (key, value) in &claims.extras {
                 map.insert(key.clone(), value.clone());
             }
             Some(map)
@@ -4792,9 +4792,9 @@ mod tests {
         claims.not_before = Some(UNIX_EPOCH + Duration::from_secs(1_761_787_000));
         claims.jwt_id = Some("token-123".to_string());
         claims
-            .extra
+            .extras
             .insert("roomId".to_string(), Value::String("room-a".to_string()));
-        claims.extra.insert(
+        claims.extras.insert(
             "metadata".to_string(),
             json!({
                 "codec": "vp9",
@@ -4804,7 +4804,7 @@ mod tests {
             }),
         );
         claims
-            .extra
+            .extras
             .insert("relatedId".to_string(), Value::String("rel-42".to_string()));
 
         let normalized = NormalizedJwtClaims::from_claims(&claims);

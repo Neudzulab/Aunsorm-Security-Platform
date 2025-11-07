@@ -22,9 +22,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     claims.set_issued_now();
     claims.set_expiration_from_now(Duration::from_secs(300));
     claims
-        .extra
+        .extras
         .insert("role".to_owned(), json!("platform-admin"));
-    claims.extra.insert(
+    claims.extras.insert(
         "scopes".to_owned(),
         json!(["encrypt", "decrypt", "session:manage"]),
     );
@@ -50,7 +50,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let validated = verifier.verify(&token, &options)?;
     let role = validated
-        .extra
+        .extras
         .get("role")
         .and_then(|value| value.as_str())
         .unwrap_or("<missing role>");
