@@ -65,6 +65,22 @@ fn signer_generates_missing_jti() {
 }
 
 #[test]
+fn signer_rejects_blank_jti() {
+    let key = Ed25519KeyPair::generate("kid-blank").expect("key");
+    let signer = JwtSigner::new(key);
+    let mut claims = Claims::new();
+    claims.jwt_id = Some("  \t".into());
+
+    let err = signer
+        .sign(&mut claims)
+        .expect_err("blank jti must be rejected before signing");
+    assert!(matches!(
+        err,
+        JwtError::InvalidClaim("jti", "must not be blank")
+    ));
+}
+
+#[test]
 fn signer_rejects_reserved_extra_claims() {
     let key = Ed25519KeyPair::generate("kid-extra-res").expect("key");
     let signer = JwtSigner::new(key);
@@ -169,7 +185,10 @@ fn verifier_rejects_blank_jti() {
     let err = verifier
         .verify(&token, &VerificationOptions::default())
         .expect_err("blank jti must be rejected");
-    assert!(matches!(err, JwtError::InvalidClaim("jti", "must not be blank")));
+    assert!(matches!(
+        err,
+        JwtError::InvalidClaim("jti", "must not be blank")
+    ));
 }
 
 #[test]

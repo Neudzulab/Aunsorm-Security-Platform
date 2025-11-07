@@ -12,6 +12,7 @@ use crate::error::{JwtError, Result};
 const RESERVED_STANDARD_CLAIMS: [&str; 7] = ["iss", "sub", "aud", "exp", "nbf", "iat", "jti"];
 const RESERVED_KEY_ERROR: &str = "reserved claim name must not appear in extras";
 const CUSTOM_KEY_FORMAT_ERROR: &str = "custom claim keys must be camelCase alphanumeric";
+pub(crate) const BLANK_JTI_ERROR: &str = "must not be blank";
 
 /// JWT `aud` alanı tekil veya çoklu değer alabilir.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +92,11 @@ impl Claims {
     /// - Anahtar camelCase biçimini bozarsa veya iç içe JSON değerleri camelCase
     ///   zorunluluğunu ihlal ederse.
     pub fn validate_custom_claims(&self) -> Result<()> {
+        if let Some(jti) = self.jwt_id.as_deref() {
+            if jti.trim().is_empty() {
+                return Err(JwtError::InvalidClaim("jti", BLANK_JTI_ERROR));
+            }
+        }
         for key in self.extras.keys() {
             if RESERVED_STANDARD_CLAIMS.contains(&key.as_str()) {
                 return Err(JwtError::InvalidClaim("extras", RESERVED_KEY_ERROR));
