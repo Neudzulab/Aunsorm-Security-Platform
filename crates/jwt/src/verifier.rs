@@ -12,6 +12,8 @@ use crate::error::{JwtError, Result};
 use crate::jti::JtiStore;
 use crate::jwk::{Ed25519PublicKey, Jwks};
 
+const BLANK_JTI_ERROR: &str = "must not be blank";
+
 /// JWT doğrulayıcı yapılandırması.
 #[derive(Clone)]
 pub struct JwtVerifier {
@@ -126,6 +128,11 @@ impl JwtVerifier {
         self.validate_claims(&claims, options)?;
 
         let jti = claims.jwt_id.as_deref();
+        if let Some(value) = jti {
+            if value.trim().is_empty() {
+                return Err(JwtError::InvalidClaim("jti", BLANK_JTI_ERROR));
+            }
+        }
         if options.require_jti && jti.is_none() {
             return Err(JwtError::MissingJti);
         }
