@@ -447,7 +447,10 @@ export class AunsormOAuthClient {
     };
   }
 
-  handleCallback(callback: string | URL | URLSearchParams): { code: string; state?: string } {
+  handleCallback(
+    callback: string | URL | URLSearchParams,
+    expectedStateOverride?: string,
+  ): { code: string; state?: string } {
     const params =
       callback instanceof URLSearchParams
         ? callback
@@ -462,7 +465,14 @@ export class AunsormOAuthClient {
       throw new Error('Callback URL missing authorization code.');
     }
 
-    const expectedState = this.state;
+    const storedState = this.state;
+
+    if (storedState && expectedStateOverride && expectedStateOverride !== storedState) {
+      throw new Error('Provided expectedStateOverride does not match stored state value.');
+    }
+
+    const expectedState = storedState ?? expectedStateOverride;
+
     if (expectedState && returnedState !== expectedState) {
       throw new Error('State mismatch detected during callback handling.');
     }

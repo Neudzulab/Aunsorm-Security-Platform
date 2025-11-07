@@ -43,3 +43,16 @@ remains consistent.
 All helpers ship with Vitest coverage in
 [`experimental-integrations.test.ts`](./lib/experimental-integrations.test.ts).
 Run `npm test` from this directory to execute the suite.
+
+## OAuth client usage notes
+
+`AunsormOAuthClient` persists the PKCE verifier and state in the configured
+storage adapter when `beginAuthorization` is invoked. If the consumer does not
+provide a storage implementation (for example in frameworks where session
+storage is unavailable) the helper now accepts an optional `expectedState`
+override when calling `handleCallback`. This allows clients to compare the
+state value received from the authorization server against the state returned by
+`beginAuthorization` without giving up on CSRF protection.
+
+When both a storage adapter and an explicit override are supplied the helper
+verifies that the values match to prevent confusing state mismatches.
