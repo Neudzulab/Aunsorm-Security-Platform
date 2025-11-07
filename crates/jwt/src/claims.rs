@@ -334,6 +334,7 @@ mod serde_opt_timestamp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::time::{Duration, UNIX_EPOCH};
 
     #[test]
@@ -391,6 +392,72 @@ mod tests {
         assert!(matches!(
             err,
             JwtError::InvalidClaim("nbf", "not_before must be after issued_at")
+        ));
+    }
+
+    #[test]
+    fn validate_custom_claims_accepts_nested_camel_case_extras() {
+        let mut claims = Claims::new();
+        claims.extras.insert(
+            "sessionInfo".into(),
+            json!({
+                "deviceId": "abc123",
+                "accessLevels": [{"scopeName": "adminPortal"}]
+            }),
+        );
+        assert!(
+            claims.validate_custom_claims().is_ok(),
+            "camelCase extras must be accepted"
+        );
+    }
+
+    #[test]
+    fn validate_custom_claims_rejects_reserved_key_in_extras() {
+        let mut claims = Claims::new();
+        claims
+            .extras
+            .insert("iss".into(), json!("malicious issuer"));
+        let err = claims
+            .validate_custom_claims()
+            .expect_err("reserved keys must be rejected");
+        assert!(matches!(err, JwtError::InvalidClaim("extras", _)));
+    }
+
+    #[test]
+    fn validate_custom_claims_rejects_non_camel_case_keys() {
+        let mut claims = Claims::new();
+        claims.extras.insert("snake_case".into(), json!(true));
+        let err = claims
+            .validate_custom_claims()
+            .expect_err("non camelCase key must fail");
+        assert!(matches!(err, JwtError::InvalidClaim("extras", _)));
+    }
+
+    #[test]
+    fn validate_custom_claims_rejects_nested_non_camel_case_keys() {
+        let mut claims = Claims::new();
+        claims.extras.insert(
+            "sessionInfo".into(),
+            json!({
+                "bad_key": "value"
+            }),
+        );
+        let err = claims
+            .validate_custom_claims()
+            .expect_err("nested non camelCase key must fail");
+        assert!(matches!(err, JwtError::InvalidClaim("extras", _)));
+    }
+
+    #[test]
+    fn validate_custom_claims_rejects_blank_jti() {
+        let mut claims = Claims::new();
+        claims.jwt_id = Some("   ".into());
+        let err = claims
+            .validate_custom_claims()
+            .expect_err("blank jti must fail");
+        assert!(matches!(
+            err,
+            JwtError::InvalidClaim("jti", super::BLANK_JTI_ERROR)
         ));
     }
 }
