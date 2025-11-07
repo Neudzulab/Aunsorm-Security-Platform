@@ -4774,9 +4774,127 @@ mod tests {
     use aunsorm_packet::{AeadAlgorithm, HeaderKem, HeaderProfile, HeaderSalts};
     use pem::Pem;
     use serde_json::{json, Value};
+    use std::sync::{Mutex, OnceLock};
     use std::thread;
     use tempfile::{tempdir, NamedTempFile};
     use tiny_http::{Header, Method, Request, Response, Server};
+
+    const SERVER_URL_VAR: &str = "AUNSORM_SERVER_URL";
+    const HOST_VAR: &str = "HOST";
+    const HOSTNAME_VAR: &str = "HOSTNAME";
+
+    fn env_lock() -> &'static Mutex<()> {
+        static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        ENV_LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EnvOverride {
+        originals: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl EnvOverride {
+        fn apply(overrides: &[(&'static str, Option<&str>)]) -> Self {
+            let mut originals = Vec::with_capacity(overrides.len());
+            for (key, value) in overrides {
+                let original = std::env::var(key).ok();
+                match value {
+                    Some(val) => std::env::set_var(key, val),
+                    None => std::env::remove_var(key),
+                }
+                originals.push((*key, original));
+            }
+            Self { originals }
+        }
+    }
+
+    impl Drop for EnvOverride {
+        fn drop(&mut self) {
+            for (key, value) in &self.originals {
+                if let Some(original) = value {
+                    std::env::set_var(*key, original);
+                } else {
+                    std::env::remove_var(*key);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn default_server_url_prefers_explicit_env() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, Some("https://prod.aunsorm.example")),
+            (HOST_VAR, Some("10.0.0.1")),
+            (HOSTNAME_VAR, Some("cli-host")),
+        ]);
+        assert_eq!(default_server_url(), "https://prod.aunsorm.example");
+    }
+
+    #[test]
+    fn default_server_url_uses_host_when_url_missing() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, Some("10.42.0.8")),
+            (HOSTNAME_VAR, Some("cli-host")),
+        ]);
+        assert_eq!(default_server_url(), "http://10.42.0.8:8080");
+    }
+
+    #[test]
+    fn default_server_url_formats_ipv6_host() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, Some("2001:db8::1")),
+            (HOSTNAME_VAR, None),
+        ]);
+        assert_eq!(default_server_url(), "http://[2001:db8::1]:8080");
+    }
+
+    #[test]
+    fn default_server_url_defaults_when_no_env() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, None),
+            (HOSTNAME_VAR, None),
+        ]);
+        assert_eq!(default_server_url(), "http://localhost:8080");
+    }
+
+    #[test]
+    fn default_hostname_prefers_hostname_env() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, Some("10.0.0.2")),
+            (HOSTNAME_VAR, Some("primary-host")),
+        ]);
+        assert_eq!(default_hostname(), "primary-host");
+    }
+
+    #[test]
+    fn default_hostname_uses_host_when_hostname_missing() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, Some("backup-host")),
+            (HOSTNAME_VAR, None),
+        ]);
+        assert_eq!(default_hostname(), "backup-host");
+    }
+
+    #[test]
+    fn default_hostname_defaults_to_localhost() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, None),
+            (HOSTNAME_VAR, None),
+        ]);
+        assert_eq!(default_hostname(), "localhost");
+    }
 
     #[test]
     fn normalized_claims_groups_extras() {
