@@ -21,4 +21,4 @@
 ## Açık Kalibrasyon Güvenlik İşleri (Sıralı)
 - [x] (Sıra 1) `POST /calib/inspect` ve `POST /calib/verify` uçlarını `crates/server` içinde uygulayıp README sunucu endpoint ağacını güncelle. Endpointler CLI `calib inspect`/`calib verify` çıktılarıyla uyumlu JSON döndürür, Strict kipte parmak izi eşleşmesi başarısız olduğunda 422 döner; `docs/src/architecture/calibration.md` güncellendi.
 - [x] (Sıra 2) Kalibrasyon uçları için entegrasyon testleri yaz; yanlış kalibrasyon parmak izi gönderildiğinde Strict kipte isteğin reddedildiğini ve audit telemetrisi tetiklendiğini doğrula.
-- [ ] (Sıra 3) Kalibrasyon bağlama zincirini belgeleyip `docs/src/architecture/calibration.md` içine sunucu uçlarının nasıl çağrılacağını ekle; README kullanım örnekleriyle senkron tut.
+- [x] (Sıra 3) Kalibrasyon bağlama zincirini belgeleyip `docs/src/architecture/calibration.md` içine sunucu uçlarının nasıl çağrılacağını ekle; README kullanım örnekleriyle senkron tut.
