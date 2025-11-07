@@ -307,6 +307,7 @@ fn setup_state_with_profile(
             Duration::from_secs(300)
         },
         clock_snapshot,
+        None,
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))
@@ -333,6 +334,14 @@ async fn acme_directory_and_order_flow() {
         "DEBUG: Health endpoint status: {}",
         health_response.status()
     );
+
+    let body = to_bytes(health_response.into_body(), usize::MAX)
+        .await
+        .expect("health body");
+    let health_json: Value = serde_json::from_slice(&body).expect("health json");
+    assert_eq!(health_json["status"], "OK");
+    assert_eq!(health_json["clock"]["status"], "ok");
+    assert!(health_json["clock"]["refreshEnabled"].is_boolean());
 
     let app = build_router(&state);
 
@@ -990,7 +999,7 @@ async fn calibration_verify_accepts_matching_calibration() {
         .expect("body");
     let report: CalibrationVerifyBody = serde_json::from_slice(&body).expect("verify json");
 
-    let expected_hex = state.audit_proof_document().calibration_fingerprint;
+    let expected_hex = state.audit_proof_document().await.calibration_fingerprint;
     assert_eq!(
         report.expectations.fingerprint_hex.as_deref(),
         Some(expected_hex.as_str())

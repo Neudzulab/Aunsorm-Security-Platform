@@ -112,7 +112,7 @@ use crate::fabric::{FabricDidError, FabricDidVerificationRequest};
 use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
 #[cfg(feature = "http3-experimental")]
 use crate::quic::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
-use crate::state::{AuditProofDocument, ServerState};
+use crate::state::{AuditProofDocument, ClockHealthStatus, ServerState};
 use crate::transparency::TransparencyEvent as LedgerTransparencyEvent;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -127,10 +127,17 @@ const MIN_ORG_SALT_LEN: usize = 8;
 #[derive(Serialize)]
 pub struct HealthResponse {
     status: &'static str,
+    clock: ClockHealthStatus,
 }
 
-pub async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse { status: "OK" })
+pub async fn health(State(state): State<Arc<ServerState>>) -> Json<HealthResponse> {
+    let clock = state.clock_health_status().await;
+    let status = if clock.status == "ok" {
+        "OK"
+    } else {
+        "DEGRADED"
+    };
+    Json(HealthResponse { status, clock })
 }
 
 pub async fn metrics(State(state): State<Arc<ServerState>>) -> Result<impl IntoResponse, ApiError> {
@@ -253,7 +260,7 @@ pub async fn calib_verify(
     Json(request): Json<CalibrationRequest>,
 ) -> Result<(StatusCode, Json<CalibrationVerifyResponse>), ApiError> {
     let (calibration, _) = parse_calibration_request(&request)?;
-    let expected_hex = state.audit_proof_document().calibration_fingerprint;
+    let expected_hex = state.audit_proof_document().await.calibration_fingerprint;
     let expected_b64 = hex_to_fingerprint_b64(&expected_hex)?;
     let actual_hex = calibration.fingerprint_hex();
     let actual_b64 = calibration.fingerprint_b64();
@@ -2274,14 +2281,14 @@ pub async fn blockchain_media_record(
         return Err(ApiError::invalid_request("sessionId boş olamaz"));
     }
 
-    if let Err(err) = state.verify_audit_proof(&request.audit_proof) {
+    if let Err(err) = state.verify_audit_proof(&request.audit_proof).await {
         return Err(ApiError::unprocessable_entity(err.to_string()));
     }
 
     let response = BlockchainMediaRecordResponse {
         status: "not-implemented",
         queued: false,
-        expected_audit_proof: state.audit_proof_document(),
+        expected_audit_proof: state.audit_proof_document().await,
     };
 
     Ok((StatusCode::NOT_IMPLEMENTED, Json(response)))
@@ -2770,6 +2777,7 @@ pub async fn serve(config: ServerConfig) -> Result<(), ServerError> {
     let listen = config.listen;
     tracing::info!("🚀 Starting server on {}", listen);
     let state = Arc::new(ServerState::try_new(config)?);
+    state.start_clock_refresh();
     let _renewal_task = crate::jobs::spawn_default_acme_renewal_job(Arc::clone(&state));
     #[cfg(feature = "http3-experimental")]
     let _http3_guard = {
@@ -2931,6 +2939,7 @@ fn build_test_state() -> Arc<ServerState> {
         calibration_fingerprint,
         Duration::from_secs(300),
         clock_snapshot,
+        None,
     )
     .expect("config is valid");
     Arc::new(ServerState::try_new(config).expect("state is constructed"))

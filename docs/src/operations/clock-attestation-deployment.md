@@ -19,7 +19,8 @@ Bu runbook, Aunsorm üretim ortamında clock attestation hizmetinin hatasız şe
 2. Üretim `calibration_cert.pem` dosyası ve SHA-256 parmak izi.
 3. Vault'ta saklanan `ntp-signing-key.pem`; yalnızca init konteyneri tarafından okunabilir.
 4. `AUNSORM_CLOCK_MAX_AGE_SECS=30` politikası için orkestrasyon düzeyi konfigürasyonu.
-5. Prometheus ve Loki endpoint'lerinin yazma izinleri doğrulanmış olmalıdır.
+5. `AUNSORM_CLOCK_REFRESH_URL` ve `AUNSORM_CLOCK_REFRESH_INTERVAL_SECS` değerleri için production ortam değişkenleri (yalnızca HTTPS URL'leri kabul edilir).
+6. Prometheus ve Loki endpoint'lerinin yazma izinleri doğrulanmış olmalıdır.
 
 ## 🚀 Docker Compose Dağıtımı
 
@@ -41,17 +42,19 @@ services:
     configs:
       - calibration_cert
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:5000/health"]
+      test: ["CMD", "curl", "-f", "https://127.0.0.1:5443/health"]
       interval: 10s
       timeout: 2s
       retries: 3
     ports:
-      - "5001:5000"
+      - "5443:5443"
 
   auth-service:
     environment:
-      AUNSORM_NTP_URL: http://ntp-attestation:5000/attestation
+      AUNSORM_NTP_URL: https://ntp-attestation:5443/attestation
       AUNSORM_CLOCK_MAX_AGE_SECS: "30"
+      AUNSORM_CLOCK_REFRESH_URL: https://ntp-attestation:5443/attestation
+      AUNSORM_CLOCK_REFRESH_INTERVAL_SECS: "15"
       AUNSORM_CALIBRATION_FINGERPRINT: "${CALIBRATION_FP}"
     depends_on:
       ntp-attestation:
@@ -176,6 +179,7 @@ spec:
 2. `crates/core/src/clock.rs` içindeki `ClockSnapshot::validate_age` fonksiyonu 30 saniyeden eski attestation'ı reddetmelidir; entegrasyon testinde `Clock(StaleAttestation { ... })` beklenir.
 3. Uygulama podlarında `AUNSORM_CLOCK_MAX_AGE_SECS=30` değeri için `kubectl exec` ile doğrulama yapın.
 4. Loki loglarında `Clock attestation validated` mesajı 15 saniyeden sık görünmelidir.
+5. `curl -s http://auth-service.security.svc.cluster.local:50011/health | jq .clock` çıktısında `status="ok"` ve `refreshEnabled=true` değerlerini doğrulayın.
 
 ## 🆘 Olay Müdahale
 

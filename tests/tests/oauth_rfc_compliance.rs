@@ -84,6 +84,7 @@ fn demo_state() -> Arc<ServerState> {
         calibration_fingerprint,
         Duration::from_secs(300),
         clock_snapshot,
+        None,
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))

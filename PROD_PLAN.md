@@ -12,10 +12,11 @@ This document tracks all remaining work required for production deployment.
 
 ### Clock Attestation System
 - [ ] Deploy NTP attestation server with real certificate signatures
-- [ ] Implement automatic clock refresh service (ClockRefreshService integration)
-- [ ] Replace development mock signatures with production cryptographic proofs
-- [ ] Set `AUNSORM_CLOCK_MAX_AGE_SECS=30` in production environment
-- [ ] Configure health checks to monitor clock attestation freshness
+ - [ ] Replace development mock signatures with production cryptographic proofs
+ - [ ] Set `AUNSORM_CLOCK_MAX_AGE_SECS=30` in production environment
+- [x] Implement automatic clock refresh service (ClockRefreshService integration)
+- [x] Configure health checks to monitor clock attestation freshness
+- [x] Enforce HTTPS-only refresh endpoints and verifier gating before publishing snapshots
 - [x] Document clock attestation server deployment procedures
 
 ### Native RNG Compliance

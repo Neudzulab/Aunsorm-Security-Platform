@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::rng::AunsormNativeRng;
 use aunsorm_core::{
-    clock::{ClockAuthority, ClockValidation, SecureClockVerifier},
+    clock::{ClockAuthority, ClockValidation, SecureClockSnapshot, SecureClockVerifier},
     transparency::{
         unix_timestamp, KeyTransparencyLog, TransparencyError,
         TransparencyEvent as CoreTransparencyEvent, TransparencyRecord,
@@ -22,8 +22,10 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, RwLock};
+use tokio::task::JoinHandle;
 
 use crate::acme::AcmeService;
+use crate::clock_refresh::ClockRefreshService;
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::error::ServerError;
 use crate::fabric::FabricDidRegistry;
@@ -857,6 +859,18 @@ fn default_mdm_directory() -> Result<MdmDirectory, ServerError> {
     Ok(directory)
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClockHealthStatus {
+    pub status: &'static str,
+    pub age_ms: u128,
+    pub max_ms: u128,
+    pub authority: String,
+    pub attested_unix_ms: u64,
+    pub refresh_enabled: bool,
+    pub message: Option<String>,
+}
+
 pub struct ServerState {
     listen_port: u16,
     issuer: String,
@@ -876,7 +890,14 @@ pub struct ServerState {
     fabric: FabricDidRegistry,
     acme: AcmeService,
     rng: StdMutex<AunsormNativeRng>,
-    audit_proof: AuditProof,
+    audit_proof: Arc<RwLock<AuditProof>>,
+    calibration_fingerprint: String,
+    clock_max_age: Duration,
+    clock_snapshot: Arc<RwLock<SecureClockSnapshot>>,
+    clock_verifier: Arc<SecureClockVerifier>,
+    clock_refresh_service: Option<Arc<ClockRefreshService>>,
+    clock_refresh_task: OnceLock<JoinHandle<()>>,
+    clock_monitor_task: OnceLock<JoinHandle<()>>,
 }
 
 impl ServerState {
@@ -898,6 +919,7 @@ impl ServerState {
             calibration_fingerprint,
             clock_snapshot,
             clock_max_age,
+            clock_refresh,
         } = config;
         let signer = JwtSigner::new(key_pair.clone());
         let public = key_pair.public_key();
@@ -925,9 +947,26 @@ impl ServerState {
             );
         }
 
-        let clock_verifier = SecureClockVerifier::configurable(vec![authority], max_age)?;
+        let clock_verifier = Arc::new(SecureClockVerifier::configurable(vec![authority], max_age)?);
         let validation = clock_verifier.verify(&clock_snapshot)?;
-        let audit_proof = AuditProof::new(calibration_fingerprint, validation);
+        let calibration_fingerprint_owned = calibration_fingerprint.clone();
+        let audit_proof = Arc::new(RwLock::new(AuditProof::new(
+            calibration_fingerprint_owned.clone(),
+            validation,
+        )));
+
+        let (clock_refresh_service, clock_snapshot_store) = if let Some(refresh) = clock_refresh {
+            let service = Arc::new(ClockRefreshService::new(
+                clock_snapshot.clone(),
+                Some(refresh.url().to_string()),
+                refresh.interval(),
+                Arc::clone(&clock_verifier),
+            )?);
+            let store = service.attestation();
+            (Some(service), store)
+        } else {
+            (None, Arc::new(RwLock::new(clock_snapshot.clone())))
+        };
 
         let transparency_backend = ledger.clone();
         let ledger = TokenLedger::new(ledger)?;
@@ -968,6 +1007,13 @@ impl ServerState {
             acme,
             rng: StdMutex::new(AunsormNativeRng::new()),
             audit_proof,
+            calibration_fingerprint: calibration_fingerprint_owned,
+            clock_max_age: max_age,
+            clock_snapshot: clock_snapshot_store,
+            clock_verifier,
+            clock_refresh_service,
+            clock_refresh_task: OnceLock::new(),
+            clock_monitor_task: OnceLock::new(),
         })
     }
 
@@ -999,8 +1045,8 @@ impl ServerState {
         &self.jwks
     }
 
-    pub fn audit_proof_document(&self) -> AuditProofDocument {
-        self.audit_proof.document()
+    pub async fn audit_proof_document(&self) -> AuditProofDocument {
+        self.audit_proof.read().await.document()
     }
 
     /// Verilen audit kanıtını beklenen değerlerle karşılaştırır.
@@ -1008,11 +1054,108 @@ impl ServerState {
     /// # Errors
     /// Sağlanan kanıtın herhangi bir bileşeni uyuşmadığında
     /// [`AuditProofValidationError`] döndürür.
-    pub fn verify_audit_proof(
+    pub async fn verify_audit_proof(
         &self,
         candidate: &AuditProofDocument,
     ) -> Result<(), AuditProofValidationError> {
-        self.audit_proof.verify_document(candidate)
+        self.audit_proof.read().await.verify_document(candidate)
+    }
+
+    fn attestation_age_ms(&self, unix_ms: u64) -> u128 {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis())
+            .unwrap_or(0);
+        now_ms.saturating_sub(u128::from(unix_ms))
+    }
+
+    pub async fn current_clock_snapshot(&self) -> SecureClockSnapshot {
+        if let Some(service) = &self.clock_refresh_service {
+            service.get_current().await
+        } else {
+            self.clock_snapshot.read().await.clone()
+        }
+    }
+
+    pub fn clock_refresh_enabled(&self) -> bool {
+        self.clock_refresh_service.is_some()
+    }
+
+    pub fn clock_max_age(&self) -> Duration {
+        self.clock_max_age
+    }
+
+    pub async fn clock_health_status(&self) -> ClockHealthStatus {
+        let snapshot = self.current_clock_snapshot().await;
+        let refresh_enabled = self.clock_refresh_enabled();
+        match self.clock_verifier.verify(&snapshot) {
+            Ok(validation) => {
+                let age_ms = self.attestation_age_ms(validation.unix_time_ms);
+                ClockHealthStatus {
+                    status: "ok",
+                    age_ms,
+                    max_ms: self.clock_max_age.as_millis(),
+                    authority: validation.authority_id,
+                    attested_unix_ms: validation.unix_time_ms,
+                    refresh_enabled,
+                    message: None,
+                }
+            }
+            Err(err) => {
+                let age_ms = self.attestation_age_ms(snapshot.unix_time_ms);
+                ClockHealthStatus {
+                    status: "error",
+                    age_ms,
+                    max_ms: self.clock_max_age.as_millis(),
+                    authority: snapshot.authority_id.clone(),
+                    attested_unix_ms: snapshot.unix_time_ms,
+                    refresh_enabled,
+                    message: Some(err.to_string()),
+                }
+            }
+        }
+    }
+
+    pub fn start_clock_refresh(self: &Arc<Self>) {
+        if let Some(service) = &self.clock_refresh_service {
+            if self.clock_refresh_task.get().is_none() {
+                let refresh_handle = Arc::clone(service).start();
+                let _ = self.clock_refresh_task.set(refresh_handle);
+
+                let mut receiver = service.subscribe();
+                let verifier = Arc::clone(&self.clock_verifier);
+                let audit_proof = Arc::clone(&self.audit_proof);
+                let calibration_fingerprint = self.calibration_fingerprint.clone();
+                let snapshot_store: Arc<RwLock<SecureClockSnapshot>> =
+                    Arc::clone(&self.clock_snapshot);
+                let monitor = tokio::spawn(async move {
+                    while receiver.changed().await.is_ok() {
+                        let snapshot = receiver.borrow().clone();
+                        match verifier.verify(&snapshot) {
+                            Ok(validation) => {
+                                {
+                                    let mut guard = audit_proof.write().await;
+                                    *guard = AuditProof::new(
+                                        calibration_fingerprint.clone(),
+                                        validation.clone(),
+                                    );
+                                }
+                                *snapshot_store.write().await = snapshot.clone();
+                                tracing::info!(
+                                    unix_ms = validation.unix_time_ms,
+                                    authority = %validation.authority_id,
+                                    "Clock attestation validated"
+                                );
+                            }
+                            Err(err) => {
+                                tracing::error!("Clock attestation validation failed: {}", err);
+                            }
+                        }
+                    }
+                });
+                let _ = self.clock_monitor_task.set(monitor);
+            }
+        }
     }
 
     pub fn oauth_client(&self, client_id: &str) -> Option<&OAuthClient> {
