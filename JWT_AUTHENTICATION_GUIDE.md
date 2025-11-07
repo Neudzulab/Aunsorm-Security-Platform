@@ -156,7 +156,8 @@ AUNSORM_CLOCK_ATTESTATION={"authority_id":"production-ntp",...}
 ```
 
 ### Security Notes:
-1. **JTI Replay Protection**: Her token bir kez kullanılabilir
+1. **JTI Replay Protection**: Her token bir kez kullanılabilir ve boş/whitespace `jti`
+   değerleri imzalama ve doğrulama sırasında reddedilir
 2. **Clock Attestation**: Secure timestamp verification zorunlu
 3. **PKCE**: OAuth flow'da code injection attacks prevention
 4. **Key Rotation**: Ed25519 key'ler düzenli rotate edilmeli

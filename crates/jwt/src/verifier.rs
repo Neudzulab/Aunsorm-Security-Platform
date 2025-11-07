@@ -7,12 +7,10 @@ use base64::Engine;
 use ed25519_dalek::{Signature, Verifier as _};
 use serde::Deserialize;
 
-use crate::claims::{Audience, Claims};
+use crate::claims::{Audience, Claims, BLANK_JTI_ERROR};
 use crate::error::{JwtError, Result};
 use crate::jti::JtiStore;
 use crate::jwk::{Ed25519PublicKey, Jwks};
-
-const BLANK_JTI_ERROR: &str = "must not be blank";
 
 /// JWT doğrulayıcı yapılandırması.
 #[derive(Clone)]

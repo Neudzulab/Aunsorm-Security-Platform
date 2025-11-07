@@ -159,6 +159,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   akışı dokümante edildi.
 
 ### Fixed
+- `aunsorm-jwt` signer now rejects blank `jti` values before generating a token,
+  matching verifier-side validation and preventing replay bypass attempts with
+  whitespace identifiers.
 - Pinned `ed25519-dalek` dependencies to the 2.1 release line so builds continue
   to target the repository MSRV of Rust 1.76 without requiring newer toolchains.
 - `aunsorm-jwt` exposes `JwtSigner::kid()` again so server endpoints and tests
