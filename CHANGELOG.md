@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `aunsorm-server` clock attestation now runs the background `ClockRefreshService`
+  when `AUNSORM_CLOCK_REFRESH_URL` is configured, enforcing production refresh
+  intervals (`AUNSORM_CLOCK_REFRESH_INTERVAL_SECS`) and exposing freshness
+  telemetry via the `/health` endpoint (`clock.status`, `ageMs`, `refreshEnabled`).
 - Disaster recovery runbook documenting RTO/RPO hedefleri, DR aktivasyonu ve failback adımlarını kapsayan operasyon rehberi.
 - `aunsorm-cli jwt verify` komutu `--format text` seçeneğiyle normalize
   edilmiş claim çıktısını insan okunur biçimde raporlar; varsayılan JSON
@@ -163,6 +167,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ACME directory parser artık `newNonce`/`newAccount`/`newOrder`/`revokeCert`/`keyChange` uç noktaları için HTTPS dışı URL'leri reddederek yanlış yapılandırmalardan kaynaklanan güvensiz istekleri engelliyor.
 - ACME directory parser bilinmeyen/ek uç noktaları da HTTPS zorunluluğuna tabi tutarak directory belgelerindeki HTTP şemalı linkleri reddediyor.
 - `GET /http3/capabilities` yeniden yönlendiriciye bağlanarak Alt-Svc başlığı ve datagram metrikleri `http3-experimental` bayrağı aktif sunumlarda doğru şekilde ilan ediliyor.
+
+### Security
+- Clock refresh worker enforces HTTPS endpoints, caps attestation payloads, and validates refreshed snapshots with the configured `SecureClockVerifier` before publishing them to subscribers.
 
 ### Documentation
 - README ACME roadmap anlatımı, yayınlanan onboarding uçlarını ve v0.5.0 için kalan authorization/finalize/revoke planını yansıtacak şekilde güncellendi.

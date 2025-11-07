@@ -31,7 +31,7 @@ mod state;
 mod telemetry;
 mod transparency;
 
-pub use clock_refresh::ClockRefreshService;
+pub use clock_refresh::{ClockRefreshError, ClockRefreshService};
 pub use config::{FabricChaincodeConfig, LedgerBackend, ServerConfig};
 pub use error::{ApiError, ServerError};
 pub use quic::datagram::{

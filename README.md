@@ -172,6 +172,8 @@ Key environment variables (see `.env`):
 ```bash
 # Clock Attestation (required for all services)
 AUNSORM_CLOCK_MAX_AGE_SECS=30              # Strict mode requires ≤30s; dev default is 300s when unset
+AUNSORM_CLOCK_REFRESH_URL=https://ntp.prod.aunsorm/attestation
+AUNSORM_CLOCK_REFRESH_INTERVAL_SECS=15     # Must be ≤ max_age/2 in strict mode
 AUNSORM_CALIBRATION_FINGERPRINT=...        # Calibration context ID
 AUNSORM_CLOCK_ATTESTATION=...              # JSON clock snapshot
 
@@ -185,7 +187,7 @@ AUNSORM_ISSUER=https://aunsorm.local        # JWT issuer
 AUNSORM_AUDIENCE=aunsorm-clients            # JWT audience
 ```
 
-> ⚠️ **Production:** Clock attestation timestamp auto-updates on startup. For production, deploy NTP attestation server with real signatures.
+> ⚠️ **Production:** Clock attestation timestamp auto-updates on startup. For production, deploy NTP attestation server with real signatures and expose it via `AUNSORM_CLOCK_REFRESH_URL`. `/health` will report `clock.status=ok` when the attestation is fresh.
 
 ---
 

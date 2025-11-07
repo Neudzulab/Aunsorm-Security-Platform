@@ -67,6 +67,8 @@ services:
     environment:
       - AUNSORM_NTP_URL=http://ntp-attestation:5000/attestation
       - AUNSORM_CLOCK_MAX_AGE_SECS=30  # Production strict (server rejects >30s when strict)
+      - AUNSORM_CLOCK_REFRESH_URL=http://ntp-attestation:5000/attestation
+      - AUNSORM_CLOCK_REFRESH_INTERVAL_SECS=15
 ```
 
 ### Option 2: Manual Script Refresh
@@ -120,6 +122,10 @@ For development environments where NTP refresh isn't available:
 # .env
 # Strict mode defaults to 30 seconds automatically; non-strict deployments fall back to 300 seconds when unset.
 AUNSORM_CLOCK_MAX_AGE_SECS=300  # 5 minutes tolerance (development/staging)
+# Disable the refresh worker entirely when no NTP authority is available
+# (omit both variables for static/manual testing)
+# AUNSORM_CLOCK_REFRESH_URL=https://localhost:5001/attestation
+# AUNSORM_CLOCK_REFRESH_INTERVAL_SECS=15
 
 # Manually update timestamp occasionally:
 AUNSORM_CLOCK_ATTESTATION={"authority_id":"ntp.dev.aunsorm",...,"unix_time_ms":1730236800000,...}
@@ -133,24 +139,52 @@ AUNSORM_CLOCK_ATTESTATION={"authority_id":"ntp.dev.aunsorm",...,"unix_time_ms":1
 
 ### Automatic Refresh (Future Implementation)
 
-The `ClockRefreshService` can automatically fetch fresh attestations:
+The `ClockRefreshService` can automatically fetch fresh attestations while reusing
+the same [`SecureClockVerifier`](https://docs.rs/aunsorm-core/latest/aunsorm_core/clock/struct.SecureClockVerifier.html)
+that guards the `/health` endpoint. The worker rejects non-HTTPS transport and
+any attestation that fails validation, so make sure to pass the verifier instance
+used by your server state:
 
 ```rust
 use aunsorm_server::ClockRefreshService;
 use std::sync::Arc;
 use std::time::Duration;
 
-// Initialize refresh service
-let refresh_service = Arc::new(ClockRefreshService::new(
-    initial_snapshot,
-    Some("http://ntp-server:5000/attestation".to_string()),
-    Duration::from_secs(15),  // Refresh every 15s
-));
+use aunsorm_core::clock::{ClockAuthority, SecureClockVerifier};
 
-// Start background refresh task
+let verifier = Arc::new(
+    SecureClockVerifier::configurable(
+        vec![ClockAuthority::new(
+            initial_snapshot.authority_id.clone(),
+            initial_snapshot.authority_fingerprint_hex.clone(),
+        )],
+        Duration::from_secs(300),
+    )?
+);
+
+// Initialize refresh service (requires HTTPS endpoint)
+let refresh_service = Arc::new(
+    ClockRefreshService::new(
+        initial_snapshot,
+        Some("https://ntp-server:5000/attestation".to_string()),
+        Duration::from_secs(15), // Refresh every 15s
+        verifier,
+    )?
+);
+
+// Subscribe to attestation updates and start the worker
+let mut updates = refresh_service.subscribe();
 let _refresh_handle = refresh_service.clone().start();
 
-// Get current attestation
+// React to refresh events
+tokio::spawn(async move {
+    while updates.changed().await.is_ok() {
+        let snapshot = updates.borrow().clone();
+        tracing::debug!("fresh attestation", unix = snapshot.unix_time_ms);
+    }
+});
+
+// Access the current attestation on demand
 let current_snapshot = refresh_service.get_current().await;
 ```
 
@@ -162,8 +196,31 @@ let current_snapshot = refresh_service.get_current().await;
 |----------|---------|------------|-------------|
 | `AUNSORM_CLOCK_ATTESTATION` | *required* | From NTP | JSON clock snapshot |
 | `AUNSORM_CLOCK_MAX_AGE_SECS` | `30` (strict) / `300` (non-strict) | `30` | Max attestation age (seconds) |
-| `AUNSORM_NTP_URL` | `None` | `http://ntp:5000/attestation` | NTP service endpoint |
+| `AUNSORM_CLOCK_REFRESH_URL` | `None` | `https://ntp:5000/attestation` | Enables automatic refresh worker |
+| `AUNSORM_CLOCK_REFRESH_INTERVAL_SECS` | `15` | `≤ max_age / 2` | Refresh cadence (seconds) |
+| `AUNSORM_NTP_URL` | `None` | `https://ntp:5000/attestation` | NTP service endpoint |
 | `AUNSORM_CALIBRATION_FINGERPRINT` | *required* | Production cert | Calibration cert fingerprint |
+
+### Observability
+
+The `/health` endpoint now includes detailed clock information:
+
+```json
+{
+  "status": "OK",
+  "clock": {
+    "status": "ok",
+    "ageMs": 942,
+    "maxMs": 30000,
+    "authority": "ntp.prod.aunsorm",
+    "attestedUnixMs": 1730236812345,
+    "refreshEnabled": true
+  }
+}
+```
+
+If validation fails the top-level status degrades to `DEGRADED` and the error
+message is exposed under `clock.message`.
 
 ---
 
@@ -195,7 +252,7 @@ docker compose logs auth-service | grep "Clock"
 1. **Production**: Always use `max_age ≤ 30` seconds
 2. **NTP Authority**: Use trusted, authenticated NTP source
 3. **Signature Validation**: Verify NTP signatures cryptographically (future)
-4. **Monitoring**: Alert on attestation refresh failures
+4. **Monitoring**: Alert on attestation refresh failures (watch `/health`)
 5. **Rotation**: Rotate NTP signing keys regularly
 
 ---

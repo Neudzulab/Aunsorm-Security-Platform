@@ -48,6 +48,34 @@ paths:
                   status:
                     type: string
                     example: OK
+                  clock:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+                      ageMs:
+                        type: integer
+                        format: int64
+                        example: 942
+                      maxMs:
+                        type: integer
+                        format: int64
+                        example: 30000
+                      authority:
+                        type: string
+                        example: ntp.prod.aunsorm
+                      attestedUnixMs:
+                        type: integer
+                        format: int64
+                        example: 1730236812345
+                      refreshEnabled:
+                        type: boolean
+                        example: true
+                      message:
+                        type: string
+                        nullable: true
+                        example: Clock attestation stale by 5000ms (max 30000ms)
 
   /random/number:
     get:

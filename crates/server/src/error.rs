@@ -28,6 +28,9 @@ pub enum ServerError {
     /// Güvenilir saat doğrulaması hatası.
     #[error(transparent)]
     Clock(#[from] aunsorm_core::clock::ClockError),
+    /// Clock refresh worker configuration/runtime error.
+    #[error(transparent)]
+    ClockRefresh(#[from] crate::clock_refresh::ClockRefreshError),
 }
 
 /// RFC 6749 uyumlu API hata yanıtı.

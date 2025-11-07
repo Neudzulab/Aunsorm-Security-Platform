@@ -77,6 +77,34 @@ pub struct ServerConfig {
     pub(crate) calibration_fingerprint: String,
     pub(crate) clock_max_age: Duration,
     pub(crate) clock_snapshot: SecureClockSnapshot,
+    pub(crate) clock_refresh: Option<ClockRefreshConfig>,
+}
+
+/// Configuration for the background clock refresh worker.
+#[derive(Debug, Clone)]
+pub struct ClockRefreshConfig {
+    pub(crate) url: String,
+    pub(crate) interval: Duration,
+}
+
+impl ClockRefreshConfig {
+    #[must_use]
+    pub fn new(url: impl Into<String>, interval: Duration) -> Self {
+        Self {
+            url: url.into(),
+            interval,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn url(&self) -> &str {
+        &self.url
+    }
+
+    #[must_use]
+    pub(crate) fn interval(&self) -> Duration {
+        self.interval
+    }
 }
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -141,6 +169,66 @@ impl ServerConfig {
         }
 
         let clock_max_age = Duration::from_secs(clock_max_age_secs);
+
+        let clock_refresh = match env::var("AUNSORM_CLOCK_REFRESH_URL") {
+            Ok(value) => {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    return Err(ServerError::Configuration(
+                        "AUNSORM_CLOCK_REFRESH_URL boş olamaz".to_string(),
+                    ));
+                }
+
+                let interval_secs = match env::var("AUNSORM_CLOCK_REFRESH_INTERVAL_SECS") {
+                    Ok(raw) => raw.parse::<u64>().map_err(|err| {
+                        ServerError::Configuration(format!(
+                            "AUNSORM_CLOCK_REFRESH_INTERVAL_SECS geçerli bir sayı değil: {err}"
+                        ))
+                    })?,
+                    Err(env::VarError::NotPresent) => 15,
+                    Err(env::VarError::NotUnicode(_)) => {
+                        return Err(ServerError::Configuration(
+                            "AUNSORM_CLOCK_REFRESH_INTERVAL_SECS ASCII olmayan karakterler içeriyor"
+                                .to_string(),
+                        ));
+                    }
+                };
+
+                if interval_secs == 0 {
+                    return Err(ServerError::Configuration(
+                        "AUNSORM_CLOCK_REFRESH_INTERVAL_SECS 0 olamaz".to_string(),
+                    ));
+                }
+
+                if strict {
+                    let half_window = clock_max_age_secs / 2;
+                    if half_window == 0 || interval_secs > half_window {
+                        return Err(ServerError::Configuration(format!(
+                            "Strict kipte AUNSORM_CLOCK_REFRESH_INTERVAL_SECS en fazla {} saniye olabilir (şu an {interval_secs})",
+                            half_window.max(1)
+                        )));
+                    }
+                }
+
+                Some(ClockRefreshConfig::new(
+                    trimmed.to_string(),
+                    Duration::from_secs(interval_secs),
+                ))
+            }
+            Err(env::VarError::NotPresent) => {
+                if strict {
+                    return Err(ServerError::Configuration(
+                        "Strict kipte AUNSORM_CLOCK_REFRESH_URL zorunludur".to_string(),
+                    ));
+                }
+                None
+            }
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(ServerError::Configuration(
+                    "AUNSORM_CLOCK_REFRESH_URL ASCII olmayan karakterler içeriyor".to_string(),
+                ));
+            }
+        };
 
         let kid = env::var("AUNSORM_JWT_KID").unwrap_or_else(|_| "aunsorm-server".to_string());
         let seed_b64 = env::var("AUNSORM_JWT_SEED_B64");
@@ -215,20 +303,22 @@ impl ServerConfig {
             ));
         }
 
-        // Auto-update timestamp to current time (development mode)
-        // Production should use NTP attestation server with real signatures
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|err| ServerError::Configuration(format!("System time error: {err}")))?
-            .as_millis()
-            .try_into()
-            .map_err(|_| ServerError::Configuration("Timestamp overflow".to_string()))?;
+        if !strict && clock_refresh.is_none() {
+            // Auto-update timestamp to current time (development mode)
+            // Production should use NTP attestation server with real signatures
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|err| ServerError::Configuration(format!("System time error: {err}")))?
+                .as_millis()
+                .try_into()
+                .map_err(|_| ServerError::Configuration("Timestamp overflow".to_string()))?;
 
-        clock_snapshot.unix_time_ms = now_ms;
-        tracing::debug!(
-            "🕐 Clock attestation timestamp updated to current time: {}",
-            now_ms
-        );
+            clock_snapshot.unix_time_ms = now_ms;
+            tracing::debug!(
+                "🕐 Clock attestation timestamp updated to current time: {}",
+                now_ms
+            );
+        }
 
         Self::new(
             listen,
@@ -242,6 +332,7 @@ impl ServerConfig {
             calibration_fingerprint,
             clock_max_age,
             clock_snapshot,
+            clock_refresh,
         )
     }
 
@@ -263,6 +354,7 @@ impl ServerConfig {
         calibration_fingerprint: impl Into<String>,
         clock_max_age: Duration,
         clock_snapshot: SecureClockSnapshot,
+        clock_refresh: Option<ClockRefreshConfig>,
     ) -> Result<Self, ServerError> {
         if strict && matches!(ledger, LedgerBackend::Memory) {
             return Err(ServerError::Configuration(
@@ -307,6 +399,7 @@ impl ServerConfig {
             calibration_fingerprint,
             clock_max_age,
             clock_snapshot,
+            clock_refresh,
         })
     }
 
@@ -381,6 +474,7 @@ mod tests {
             sample_calibration(),
             Duration::from_secs(45),
             sample_snapshot(),
+            None,
         );
 
         assert!(
@@ -402,6 +496,7 @@ mod tests {
             sample_calibration(),
             Duration::from_secs(0),
             sample_snapshot(),
+            None,
         );
 
         assert!(
