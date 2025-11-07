@@ -166,3 +166,64 @@ impl RngCore for AunsormNativeRng {
 pub fn create_aunsorm_rng() -> AunsormNativeRng {
     AunsormNativeRng::new()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::AunsormNativeRng;
+    use rand_core::RngCore;
+
+    fn approx_eq(left: f64, right: f64) -> bool {
+        (left - right).abs() < 1.0e-9
+    }
+
+    #[test]
+    fn neudz_pcs_mix_matches_reference_values() {
+        let cases = [
+            (0.5, 0.5),
+            (1.0, 1.0),
+            (2.0, 1.195_167_704_609_232),
+            (10.0, 1.596_225_342_918_410_1),
+            (256.0, 40.395_461_144_890_97),
+            (1000.0, 135.609_095_714_036_93),
+        ];
+
+        for (input, expected) in cases {
+            let actual = AunsormNativeRng::neudz_pcs_mix(input);
+            assert!(
+                approx_eq(actual, expected),
+                "unexpected mix for {input}: {actual} vs {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn apply_mathematical_mixing_transforms_entropy() {
+        let mut entropy = [0u8; 32];
+        AunsormNativeRng::apply_mathematical_mixing(&mut entropy);
+
+        let expected = [
+            1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3,
+            3, 3, 3, 3,
+        ];
+
+        assert_eq!(entropy, expected);
+    }
+
+    #[test]
+    fn fill_bytes_populates_destination_buffer() {
+        let mut rng = AunsormNativeRng::new();
+        let mut buf = [0u8; 96];
+        rng.fill_bytes(&mut buf);
+
+        assert!(buf.iter().any(|&byte| byte != 0), "entropy block should not be all zeros");
+    }
+
+    #[test]
+    fn try_fill_bytes_reports_success() {
+        let mut rng = AunsormNativeRng::new();
+        let mut buf = [0u8; 32];
+        rng.try_fill_bytes(&mut buf).expect("try_fill_bytes should succeed");
+
+        assert!(buf.iter().any(|&byte| byte != 0));
+    }
+}
