@@ -95,6 +95,8 @@ impl AllowlistedFailure {
 pub struct ValidatorConfig {
     pub base_url: Url,
     pub auth: Option<Auth>,
+    /// Optional value used to override the default User-Agent header.
+    pub user_agent: Option<String>,
     pub seed_paths: Vec<String>,
     pub include_destructive: bool,
     pub concurrency: usize,
@@ -113,6 +115,7 @@ impl ValidatorConfig {
         Self {
             base_url,
             auth: None,
+            user_agent: None,
             seed_paths: Vec::new(),
             include_destructive: false,
             concurrency: 4,
@@ -136,7 +139,9 @@ pub enum ValidatorError {
     #[error("URL parse error: {0}")]
     Url(#[from] url::ParseError),
     #[error("invalid auth header value: {0}")]
-    InvalidAuthHeader(#[from] InvalidHeaderValue),
+    InvalidAuthHeader(InvalidHeaderValue),
+    #[error("invalid user agent header value: {0}")]
+    InvalidUserAgent(InvalidHeaderValue),
     #[error("unexpected error: {0}")]
     Other(String),
 }
@@ -330,9 +335,15 @@ struct EndpointSpec {
 #[allow(clippy::too_many_lines)]
 pub async fn validate(config: ValidatorConfig) -> Result<ValidationReport, ValidatorError> {
     let mut default_headers = HeaderMap::new();
-    default_headers.insert(USER_AGENT, HeaderValue::from_static(USER_AGENT_VALUE));
+    if let Some(user_agent) = &config.user_agent {
+        let header = HeaderValue::from_str(user_agent).map_err(ValidatorError::InvalidUserAgent)?;
+        default_headers.insert(USER_AGENT, header);
+    } else {
+        default_headers.insert(USER_AGENT, HeaderValue::from_static(USER_AGENT_VALUE));
+    }
     if let Some(auth) = &config.auth {
-        auth.apply(&mut default_headers)?;
+        auth.apply(&mut default_headers)
+            .map_err(ValidatorError::InvalidAuthHeader)?;
     }
     for (name, value) in &config.additional_headers {
         default_headers.insert(name.clone(), value.clone());

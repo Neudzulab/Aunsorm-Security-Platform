@@ -1,9 +1,11 @@
 #![allow(clippy::too_many_lines)]
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use axum::extract::State;
-use axum::http::{Method, StatusCode};
+use axum::http::header::USER_AGENT;
+use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::{
     sse::{Event, KeepAlive},
     IntoResponse, Response, Sse,
@@ -16,13 +18,24 @@ use endpoint_validator::{
 };
 use futures::{Stream, StreamExt};
 use serde_json::{json, Value};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Mutex};
 use tokio_stream::wrappers::BroadcastStream;
 use url::Url;
 
 #[derive(Clone)]
 struct AppState {
     sender: broadcast::Sender<&'static str>,
+    user_agents: Arc<Mutex<Vec<String>>>,
+}
+
+impl AppState {
+    async fn record_user_agent(&self, headers: &HeaderMap) {
+        if let Some(value) = headers.get(USER_AGENT) {
+            if let Ok(text) = value.to_str() {
+                self.user_agents.lock().await.push(text.to_string());
+            }
+        }
+    }
 }
 
 async fn health_handler() -> impl IntoResponse {
@@ -110,9 +123,15 @@ async fn home() -> impl IntoResponse {
         .unwrap()
 }
 
-fn router() -> Router {
-    let (sender, _) = broadcast::channel(16);
-    let state = AppState { sender };
+async fn user_agent_handler(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    state.record_user_agent(&headers).await;
+    Json(json!({ "status": "captured" }))
+}
+
+fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(home))
         .route("/openapi.json", get(openapi))
@@ -130,25 +149,50 @@ fn router() -> Router {
             get(broken_handler).options(options(|| options_allow("GET,OPTIONS"))),
         )
         .route("/stream", get(stream_handler))
+        .route(
+            "/ua-check",
+            get(user_agent_handler).options(options(|| options_allow("GET,OPTIONS"))),
+        )
         .with_state(state)
 }
 
-async fn spawn_server() -> SocketAddr {
+struct TestServer {
+    addr: SocketAddr,
+    user_agents: Arc<Mutex<Vec<String>>>,
+}
+
+impl TestServer {
+    fn base_url(&self) -> Url {
+        Url::parse(&format!("http://{}:{}", self.addr.ip(), self.addr.port())).expect("url")
+    }
+
+    async fn recorded_user_agents(&self) -> Vec<String> {
+        self.user_agents.lock().await.clone()
+    }
+}
+
+async fn spawn_server() -> TestServer {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind");
     let addr = listener.local_addr().expect("addr");
-    let app = router();
+    let (sender, _) = broadcast::channel(16);
+    let user_agents = Arc::new(Mutex::new(Vec::new()));
+    let state = AppState {
+        sender,
+        user_agents: Arc::clone(&user_agents),
+    };
+    let app = router(state);
     tokio::spawn(async move {
         axum::serve(listener, app).await.expect("server");
     });
-    addr
+    TestServer { addr, user_agents }
 }
 
 #[tokio::test]
 async fn validator_discovers_endpoints() {
-    let addr = spawn_server().await;
-    let base_url = Url::parse(&format!("http://{}:{}", addr.ip(), addr.port())).expect("url");
+    let server = spawn_server().await;
+    let base_url = server.base_url();
     let mut config = ValidatorConfig::with_base_url(base_url);
     config.include_destructive = true;
     config.seed_paths.push("/stream".to_string());
@@ -214,4 +258,47 @@ async fn invalid_auth_header_is_rejected() {
         ValidatorError::InvalidAuthHeader(_) => {}
         other => panic!("unexpected error: {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn validator_uses_default_user_agent() {
+    let server = spawn_server().await;
+    let base_url = server.base_url();
+    let mut config = ValidatorConfig::with_base_url(base_url);
+    config.seed_paths.push("/ua-check".to_string());
+
+    let report = validate(config).await.expect("report");
+    assert!(!report.results.is_empty(), "expected validation results");
+
+    let user_agents = server.recorded_user_agents().await;
+    assert!(
+        user_agents
+            .iter()
+            .any(|value| value == "aunsorm-endpoint-validator/0.1"),
+        "default user agent not observed: {user_agents:?}"
+    );
+}
+
+#[tokio::test]
+async fn validator_respects_custom_user_agent() {
+    let server = spawn_server().await;
+    let base_url = server.base_url();
+    let mut config = ValidatorConfig::with_base_url(base_url);
+    config.seed_paths.push("/ua-check".to_string());
+    config.user_agent = Some("custom-validator/9.9".to_string());
+
+    let report = validate(config).await.expect("report");
+    assert!(!report.results.is_empty(), "expected validation results");
+
+    let user_agents = server.recorded_user_agents().await;
+    assert!(
+        !user_agents.is_empty(),
+        "expected recorded user agents for /ua-check"
+    );
+    assert!(
+        user_agents
+            .iter()
+            .all(|value| value == "custom-validator/9.9"),
+        "unexpected user agent values: {user_agents:?}"
+    );
 }

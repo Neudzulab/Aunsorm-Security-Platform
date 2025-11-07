@@ -32,4 +32,4 @@ println!("{} kontrol tamamlandı", report.results.len());
 ```
 
 Daha gelişmiş senaryolarda `ValidatorConfig` üzerinden eş zamanlılık, rate
-limit, allowlist ve ek HTTP başlıkları yapılandırılabilir.
+limit, allowlist, özel `User-Agent` ve ek HTTP başlıkları yapılandırılabilir.
