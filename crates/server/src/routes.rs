@@ -483,6 +483,10 @@ pub async fn random_number(
     );
     headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
     headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
+    headers.insert(
+        "x-aunsorm-rng-policy",
+        HeaderValue::from_static("external-only"),
+    );
 
     Ok(response)
 }

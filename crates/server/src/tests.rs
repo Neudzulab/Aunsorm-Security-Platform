@@ -1780,6 +1780,11 @@ async fn random_number_endpoint_returns_entropy() {
     assert_eq!(pragma, "no-cache");
     let expires = parts.headers.get(header::EXPIRES).expect("expires header");
     assert_eq!(expires, "0");
+    let policy = parts
+        .headers
+        .get("x-aunsorm-rng-policy")
+        .expect("rng policy header");
+    assert_eq!(policy, "external-only");
     let body = to_bytes(body, usize::MAX).await.expect("body");
     let payload: RandomNumberPayload = serde_json::from_slice(&body).expect("random json");
     assert!((0..=100).contains(&payload.value));
@@ -1811,6 +1816,11 @@ async fn random_number_endpoint_returns_entropy() {
     assert_eq!(pragma2, "no-cache");
     let expires2 = parts2.headers.get(header::EXPIRES).expect("expires header");
     assert_eq!(expires2, "0");
+    let policy2 = parts2
+        .headers
+        .get("x-aunsorm-rng-policy")
+        .expect("rng policy header");
+    assert_eq!(policy2, "external-only");
     let body2 = to_bytes(body2, usize::MAX).await.expect("body");
     let payload2: RandomNumberPayload = serde_json::from_slice(&body2).expect("random json");
     assert!((15..=5000).contains(&payload2.value));
@@ -1857,6 +1867,11 @@ async fn random_number_endpoint_returns_entropy() {
     assert_eq!(pragma4, "no-cache");
     let expires4 = parts4.headers.get(header::EXPIRES).expect("expires header");
     assert_eq!(expires4, "0");
+    let policy4 = parts4
+        .headers
+        .get("x-aunsorm-rng-policy")
+        .expect("rng policy header");
+    assert_eq!(policy4, "external-only");
     let body4 = to_bytes(body4, usize::MAX).await.expect("body");
     let payload4: RandomNumberPayload = serde_json::from_slice(&body4).expect("random json");
     assert!((high_min..=high_max).contains(&payload4.value));

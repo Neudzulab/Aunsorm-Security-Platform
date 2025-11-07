@@ -84,9 +84,10 @@ paths:
       description: |
         Generates a uniformly distributed random number in the inclusive range `[min, max]`
         and returns the sampled value together with the entropy proof hex string. This HTTP
-        endpoint is maintained for backwards compatibility while clients migrate to the
-        native RNG pipeline.
-      deprecated: true
+        endpoint remains available for third-party integrations that cannot embed the native
+        RNG pipeline. All Aunsorm services must consume randomness via the in-process
+        `AunsormNativeRng`; responses include the `X-Aunsorm-Rng-Policy: external-only`
+        header to surface the policy at runtime.
       parameters:
         - in: query
           name: min
@@ -122,6 +123,11 @@ paths:
               schema:
                 type: string
               example: "0"
+            X-Aunsorm-Rng-Policy:
+              schema:
+                type: string
+              example: external-only
+              description: Declares that the HTTP fallback is limited to external clients; internal Aunsorm services must use the native RNG.
           content:
             application/json:
               schema:

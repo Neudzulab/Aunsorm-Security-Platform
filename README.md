@@ -198,9 +198,8 @@ Durum işaretleri:
   - `POST /blockchain/fabric/did/verify` — Hyperledger DID doğrulama (POC)
   - `POST /blockchain/media/record` — Audit trail kaydı `[Planlandı v0.6.1]`
 
-- 🚧 **RNG Service** (`50019`, `aun-rng-service`, **deprecated**)
-  - `GET /random/number` — Rastgele sayı üretimi (native RNG kullanın)
-  - `POST /random/bytes` — Rastgele bayt üretimi
+- 🚧 **RNG Service** (`50019`, `aun-rng-service`, **external fallback**)
+  - `GET /random/number` — Üçüncü taraf istemciler için entropy fallback'i (Aunsorm servisleri native RNG kullanır)
 
 ### Gözlemlenebilirlik ve CLI
 - ✅ **Metrics Service** (`50022`, `aun-metrics-service`)
