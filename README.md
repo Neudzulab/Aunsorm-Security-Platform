@@ -62,6 +62,54 @@ cargo build --release --all-features
 ./target/release/aunsorm-cli --help
 ```
 
+### Calibration Workflow (CLI + API)
+
+1. **Inspect calibration locally**
+
+   ```bash
+   aunsorm-cli calib inspect \
+     --org-salt V2VBcmVLdXQuZXU= \
+     --calib-text "Neudzulab | Prod | 2025-08" \
+     --format json
+   ```
+
+   Çıktıdaki `fingerprint_hex` değeri (`671023bc1061591b72923f7f9f97abb04fe3ab3767bb8b21895912995d1a3298`)
+   sunucu tarafında `AUNSORM_CALIBRATION_FINGERPRINT` ortam değişkeni olarak
+   yapılandırılmalıdır.
+
+2. **Beklentiyi kilitle**
+
+   ```bash
+   aunsorm-cli calib verify \
+     --org-salt V2VBcmVLdXQuZXU= \
+     --calib-text "Neudzulab | Prod | 2025-08" \
+     --expect-fingerprint-hex 671023bc1061591b72923f7f9f97abb04fe3ab3767bb8b21895912995d1a3298
+   ```
+
+   Komut hata kodu 0 döndürdüğünde fingerprint eşleşmiştir; aksi durumda CLI
+   ayrıntılı rapor üretir.
+
+3. **Sunucu uçlarını çağır**
+
+   ```bash
+   curl -sS http://localhost:8080/calib/inspect \
+     -H 'Content-Type: application/json' \
+     -d '{
+           "org_salt": "V2VBcmVLdXQuZXU=",
+           "calib_text": "Neudzulab | Prod | 2025-08"
+         }'
+
+   curl -sS -w '\nHTTP %{http_code}\n' http://localhost:8080/calib/verify \
+     -H 'Content-Type: application/json' \
+     -d '{
+           "org_salt": "V2VBcmVLdXQuZXU=",
+           "calib_text": "Neudzulab | Prod | 2025-08"
+         }'
+   ```
+
+   Strict kip aktifteyken fingerprint uyuşmazlığı `HTTP 422` ile döner ve
+   telemetriye kalibrasyon başarısızlığı kaydedilir.
+
 ---
 
 ## Service Endpoints
