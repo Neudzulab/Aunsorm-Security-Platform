@@ -81,6 +81,9 @@ This document tracks all remaining work required for production deployment.
 - [ ] Create operational dashboards for each service
 - [ ] Configure uptime monitoring and SLA tracking
 
+### Tooling & CLI
+- [x] Harden CLI default server URL inference so HOST-provided port/path/query hints are preserved
+
 ---
 
 ## API & Integration Tasks
