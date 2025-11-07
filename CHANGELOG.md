@@ -206,6 +206,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Agent charter and sprint intake guide aligned with the revizyon kilidi policy (`docs/src/operations/agent-charters.md`).
 - OAuth PKCE uçları için OpenAPI 3.1 şeması ve redirect URI kayıt rehberi (`docs/src/operations/oauth-openapi.md`).
 
+### Removed
+- `aunsorm-server` HTTP `/random/number` uç noktası üçüncü taraf istemcilere hizmet verecek şekilde tutulur ve yanıtlara `X-Aunsorm-Rng-Policy: external-only` başlığı eklendi; iç servisler native RNG hattını kullanmaya devam eder.
+
 ### Planned
 - 📋 **v0.6.0** – `POST /security/jwe/encrypt`: WebRTC medya oturumlarını JWE ile sarmalayacak güvenlik hizmeti için rota ve
   handler iskeleti ayrıldı.

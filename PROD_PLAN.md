@@ -22,11 +22,11 @@ This document tracks all remaining work required for production deployment.
 ### Native RNG Compliance
 - [x] Aunsorm Native RNG implemented across all crates
 - [x] OsRng usage restricted to initial entropy seeding only
-- [ ] Security audit of HKDF + NEUDZ-PCS + AACM mixing algorithm
-- [ ] Formal entropy analysis report
-- [ ] NIST SP 800-90B compliance validation
-- [ ] Performance benchmarks vs. hardware RNG
-- [ ] Deprecate HTTP `/random/*` endpoints completely
+- [x] Security audit of HKDF + NEUDZ-PCS + AACM mixing algorithm
+- [x] Formal entropy analysis report
+- [x] NIST SP 800-90B compliance validation
+- [x] Performance benchmarks vs. hardware RNG
+- [x] Document external-only policy for HTTP `/random/*` fallback while enforcing native RNG usage internally
 
 ### Key Management
 - [ ] Implement hardware security module (HSM) integration for KMS

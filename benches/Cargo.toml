@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 criterion = { workspace = true }
 aunsorm-core = { path = "../crates/core" }
+aunsorm-packet = { path = "../crates/packet" }
 aunsorm-x509 = { path = "../crates/x509" }
 rand_core = "0.6"
 

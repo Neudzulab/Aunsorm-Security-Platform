@@ -2228,6 +2228,7 @@ name = "interop-benches"
 version = "0.1.0"
 dependencies = [
  "aunsorm-core",
+ "aunsorm-packet",
  "aunsorm-x509",
  "criterion",
  "rand_core 0.6.4",

@@ -247,6 +247,7 @@ curl -X POST http://localhost:8080/mdm/register \
 - **Parametric Range**: Custom min/max via query parameters (0-100 default)
 - **Statistical Validation**: χ² = 101.18 ≈ 100.0 (4M samples tested)
 - **Performance**: ~78,000 samples/second
+- **HTTP Availability**: `/random/number` yanıtları `X-Aunsorm-Rng-Policy: external-only` başlığını taşır; bu uç sadece üçüncü taraf istemciler için tutulur.
 
 ### 📹 SFU E2EE Key Management
 - **Session Ratcheting**: Forward secrecy with automatic key rotation
@@ -262,7 +263,7 @@ curl -X POST http://localhost:8080/mdm/register \
 
 ## Kriptografik Rastgele Sayı Üretimi
 
-Sunucu, `/random/number` endpoint'i üzerinden matematiksel olarak geliştirilmiş kriptografik rastgele sayılar üretir. Endpoint, `min` ve `max` query parametreleri ile özelleştirilebilir sayı aralıklarını destekler.
+Sunucu, `/random/number` endpoint'i üzerinden matematiksel olarak geliştirilmiş kriptografik rastgele sayılar üretir. Endpoint, `min` ve `max` query parametreleri ile özelleştirilebilir sayı aralıklarını destekler ve HTTP üzerinden erişmesi gereken üçüncü taraf sistemlere yöneliktir; iç servislerin tamamı `AunsormNativeRng` API'sini kullanmalıdır.
 
 ### Entropy Pipeline
 

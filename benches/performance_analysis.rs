@@ -3,6 +3,7 @@ use std::time::Instant;
 use aunsorm_x509::ca::{generate_root_ca, KeyAlgorithm, RootCaParams};
 use aunsorm_x509::optimizations::RsaPerformanceMetrics;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use rand_core::RngCore;
 
 /// Enhanced benchmark with performance monitoring
 fn bench_root_generation_with_metrics(c: &mut Criterion) {
@@ -105,11 +106,25 @@ fn bench_root_generation_with_metrics(c: &mut Criterion) {
 fn bench_entropy_performance(c: &mut Criterion) {
     let mut group = c.benchmark_group("entropy_analysis");
 
-    group.bench_function("os_rng_entropy", |b| {
+    group.bench_function("aunsorm_native_rng_entropy", |b| {
+        use aunsorm_packet::AunsormNativeRng;
+
+        let mut rng = AunsormNativeRng::new();
+        let mut buffer = [0u8; 32];
+
         b.iter(|| {
-            use rand_core::{OsRng, RngCore};
-            let mut rng = OsRng;
-            let mut buffer = [0u8; 32];
+            rng.fill_bytes(&mut buffer);
+            black_box(buffer)
+        });
+    });
+
+    group.bench_function("os_rng_entropy", |b| {
+        use rand_core::OsRng;
+
+        let mut rng = OsRng;
+        let mut buffer = [0u8; 32];
+
+        b.iter(|| {
             rng.fill_bytes(&mut buffer);
             black_box(buffer)
         });
