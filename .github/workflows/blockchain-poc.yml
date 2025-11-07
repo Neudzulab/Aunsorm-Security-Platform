@@ -10,12 +10,11 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BLOCKCHAIN_POC_ENABLED: "false"
 
 jobs:
   poc-tests:
     name: Blockchain integrity checks
-    if: ${{ env.BLOCKCHAIN_POC_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.enable == 'true') }}
+    if: ${{ vars.BLOCKCHAIN_POC_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.enable == 'true') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
