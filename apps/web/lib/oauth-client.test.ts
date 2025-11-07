@@ -142,6 +142,45 @@ describe('AunsormOAuthClient', () => {
     ).toThrow(/State mismatch/);
   });
 
+  it('validates callback state using explicit override when storage is unavailable', () => {
+    const client = new AunsormOAuthClient({
+      baseUrl: 'https://auth.example.com',
+      randomSource: deterministicRandom,
+    });
+
+    expect(() =>
+      client.handleCallback(
+        'https://app.example.com/callback?code=def&state=expected-state',
+        'expected-state',
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      client.handleCallback(
+        'https://app.example.com/callback?code=def&state=unexpected-state',
+        'expected-state',
+      ),
+    ).toThrow(/State mismatch/);
+  });
+
+  it('rejects mismatched override when stored state is present', () => {
+    const store = new MemoryStore();
+    store.setItem('aunsorm.oauth.state', 'stored-state');
+
+    const client = new AunsormOAuthClient({
+      baseUrl: 'https://auth.example.com',
+      storage: store,
+      randomSource: deterministicRandom,
+    });
+
+    expect(() =>
+      client.handleCallback(
+        'https://app.example.com/callback?code=ghi&state=stored-state',
+        'override',
+      ),
+    ).toThrow(/expectedStateOverride does not match stored state/);
+  });
+
   it('exchanges the authorization code for a token and stores it', async () => {
     const store = new MemoryStore();
     store.setItem('aunsorm.oauth.state', 'state-123');
