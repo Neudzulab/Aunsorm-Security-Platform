@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `aunsorm-server` Strict kipte kalibrasyon doğrulama hatalarını audit telemetri
+  olayları (`AuditEvent::Failure`) olarak kaydeder; entegrasyon testleri HTTP
+  422 yanıtını ve telemetri tetikleyicisini doğrular.
 - `aunsorm-server` clock attestation now runs the background `ClockRefreshService`
   when `AUNSORM_CLOCK_REFRESH_URL` is configured, enforcing production refresh
   intervals (`AUNSORM_CLOCK_REFRESH_INTERVAL_SECS`) and exposing freshness

@@ -81,8 +81,9 @@ Aunsorm sunucusu, CLI çıktılarıyla birebir uyumlu JSON döndüren iki uç sa
   izini sunucunun yapılandırılmış `AUNSORM_CALIBRATION_FINGERPRINT` değeriyle
   kıyaslar. Yanıt `expectations`/`results` alanlarını içerir; Strict kip aktifse
   eşleşmeyen parmak izleri HTTP 422 durum kodu ve başarısız sonuç bayraklarıyla
-  döner. Strict kip devre dışıysa yanıt 200 kalır ancak sonuç alanı `false`
-  olarak işaretlenir.
+  döner. Bu durumda sistem ayrıca `AuditEvent::Failure` telemetri girdisi
+  yayımlar ve denetim izlerini güncel tutar. Strict kip devre dışıysa yanıt 200
+  kalır ancak sonuç alanı `false` olarak işaretlenir.
 
 Her iki uç da CLI'ya eşlik eden denetim kanıtı zincirini (`audit_proof`) baz
 alarak istemcinin doğru kalibrasyon bağlamı ile konuştuğunu doğrular.

@@ -266,6 +266,12 @@ pub async fn calib_verify(
     let actual_b64 = calibration.fingerprint_b64();
     let matches = actual_hex == expected_hex;
 
+    if !matches {
+        state
+            .record_calibration_failure(calibration.id.as_str(), &expected_hex, &actual_hex)
+            .await;
+    }
+
     let response = CalibrationVerifyResponse {
         calibration_id: calibration.id.as_str().to_owned(),
         fingerprint_b64: actual_b64,

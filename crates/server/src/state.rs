@@ -29,10 +29,10 @@ use crate::clock_refresh::ClockRefreshService;
 use crate::config::{LedgerBackend, ServerConfig};
 use crate::error::ServerError;
 use crate::fabric::FabricDidRegistry;
+use crate::quic::datagram::{AuditEvent, AuditOutcome};
 #[cfg(feature = "http3-experimental")]
 use crate::quic::datagram::{
-    AuditEvent, AuditOutcome, DatagramPayload, OtelPayload, QuicDatagramV1, RatchetProbe,
-    RatchetStatus,
+    DatagramPayload, OtelPayload, QuicDatagramV1, RatchetProbe, RatchetStatus,
 };
 use crate::transparency::{
     TransparencyEvent as LedgerTransparencyEvent, TransparencyLedger,
@@ -891,6 +891,7 @@ pub struct ServerState {
     acme: AcmeService,
     rng: StdMutex<AunsormNativeRng>,
     audit_proof: Arc<RwLock<AuditProof>>,
+    audit_events: RwLock<Vec<AuditEvent>>,
     calibration_fingerprint: String,
     clock_max_age: Duration,
     clock_snapshot: Arc<RwLock<SecureClockSnapshot>>,
@@ -1007,6 +1008,7 @@ impl ServerState {
             acme,
             rng: StdMutex::new(AunsormNativeRng::new()),
             audit_proof,
+            audit_events: RwLock::new(Vec::new()),
             calibration_fingerprint: calibration_fingerprint_owned,
             clock_max_age: max_age,
             clock_snapshot: clock_snapshot_store,
@@ -1492,6 +1494,31 @@ impl ServerState {
             head: guard.tree_head(),
             records: guard.records().to_vec(),
         }
+    }
+
+    pub async fn record_calibration_failure(
+        &self,
+        calibration_id: &str,
+        expected_hex: &str,
+        actual_hex: &str,
+    ) {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let event = AuditEvent {
+            event_id: format!("calibration::{timestamp:016x}:{calibration_id}"),
+            principal_id: "system@aunsorm".to_owned(),
+            outcome: AuditOutcome::Failure,
+            resource: format!(
+                "calibration://{calibration_id}?expected={expected_hex}&actual={actual_hex}"
+            ),
+        };
+        self.audit_events.write().await.push(event);
+    }
+
+    pub async fn audit_events(&self) -> Vec<AuditEvent> {
+        self.audit_events.read().await.clone()
     }
 }
 
