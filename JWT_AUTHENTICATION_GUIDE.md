@@ -89,8 +89,8 @@ claims.set_issued_now();
 claims.set_expiration_from_now(Duration::from_secs(3600));
 
 // Custom claims
-claims.extra.insert("role".to_string(), json!("admin"));
-claims.extra.insert("scopes".to_string(), json!(["encrypt", "decrypt"]));
+claims.extras.insert("role".to_string(), json!("admin"));
+claims.extras.insert("scopes".to_string(), json!(["encrypt", "decrypt"]));
 
 // Sign token
 let token = signer.sign(&mut claims)?;

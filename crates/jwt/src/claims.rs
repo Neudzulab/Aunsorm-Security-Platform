@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rand_core::RngCore;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::error::{JwtError, Result};
@@ -35,47 +35,24 @@ impl Audience {
 }
 
 /// JWT claim set'ini temsil eder.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Claims {
     /// `iss`
-    #[serde(skip_serializing_if = "Option::is_none", rename = "iss")]
     pub issuer: Option<String>,
     /// `sub`
-    #[serde(skip_serializing_if = "Option::is_none", rename = "sub")]
     pub subject: Option<String>,
     /// `aud`
-    #[serde(skip_serializing_if = "Option::is_none", rename = "aud")]
     pub audience: Option<Audience>,
     /// `exp`
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        default,
-        with = "serde_opt_timestamp",
-        rename = "exp"
-    )]
     pub expiration: Option<SystemTime>,
     /// `nbf`
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        default,
-        with = "serde_opt_timestamp",
-        rename = "nbf"
-    )]
     pub not_before: Option<SystemTime>,
     /// `iat`
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        default,
-        with = "serde_opt_timestamp",
-        rename = "iat"
-    )]
     pub issued_at: Option<SystemTime>,
     /// `jti`
-    #[serde(skip_serializing_if = "Option::is_none", rename = "jti")]
     pub jwt_id: Option<String>,
     /// Ek claim alanları.
-    #[serde(flatten)]
-    pub extra: BTreeMap<String, Value>,
+    pub extras: BTreeMap<String, Value>,
 }
 
 impl Claims {
@@ -90,7 +67,7 @@ impl Claims {
             not_before: None,
             issued_at: None,
             jwt_id: None,
-            extra: BTreeMap::new(),
+            extras: BTreeMap::new(),
         }
     }
 
@@ -114,7 +91,7 @@ impl Claims {
     /// - Anahtar camelCase biçimini bozarsa veya iç içe JSON değerleri camelCase
     ///   zorunluluğunu ihlal ederse.
     pub fn validate_custom_claims(&self) -> Result<()> {
-        for key in self.extra.keys() {
+        for key in self.extras.keys() {
             if RESERVED_STANDARD_CLAIMS.contains(&key.as_str()) {
                 return Err(JwtError::InvalidClaim("extras", RESERVED_KEY_ERROR));
             }
@@ -122,7 +99,7 @@ impl Claims {
                 return Err(JwtError::InvalidClaim("extras", CUSTOM_KEY_FORMAT_ERROR));
             }
         }
-        for value in self.extra.values() {
+        for value in self.extras.values() {
             if !validate_custom_value(value) {
                 return Err(JwtError::InvalidClaim("extras", CUSTOM_KEY_FORMAT_ERROR));
             }
@@ -172,6 +149,99 @@ impl Claims {
     pub fn set_expiration_from_now(&mut self, ttl: Duration) {
         self.expiration = Some(SystemTime::now() + ttl);
     }
+}
+
+impl Serialize for Claims {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let helper = ClaimsSer {
+            issuer: self.issuer.as_deref(),
+            subject: self.subject.as_deref(),
+            audience: self.audience.as_ref(),
+            expiration: self.expiration,
+            not_before: self.not_before,
+            issued_at: self.issued_at,
+            jwt_id: self.jwt_id.as_deref(),
+            extras: &self.extras,
+        };
+
+        helper.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Claims {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let helper = ClaimsDe::deserialize(deserializer)?;
+        Ok(Self {
+            issuer: helper.issuer,
+            subject: helper.subject,
+            audience: helper.audience,
+            expiration: helper.expiration,
+            not_before: helper.not_before,
+            issued_at: helper.issued_at,
+            jwt_id: helper.jwt_id,
+            extras: helper.extras.unwrap_or_default(),
+        })
+    }
+}
+
+#[derive(Serialize)]
+#[serde(crate = "serde")]
+struct ClaimsSer<'a> {
+    #[serde(skip_serializing_if = "Option::is_none", rename = "iss")]
+    issuer: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "sub")]
+    subject: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "aud")]
+    audience: Option<&'a Audience>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "serde_opt_timestamp",
+        rename = "exp"
+    )]
+    expiration: Option<SystemTime>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "serde_opt_timestamp",
+        rename = "nbf"
+    )]
+    not_before: Option<SystemTime>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "serde_opt_timestamp",
+        rename = "iat"
+    )]
+    issued_at: Option<SystemTime>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "jti")]
+    jwt_id: Option<&'a str>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", rename = "extras")]
+    extras: &'a BTreeMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "serde")]
+struct ClaimsDe {
+    #[serde(default, rename = "iss")]
+    issuer: Option<String>,
+    #[serde(default, rename = "sub")]
+    subject: Option<String>,
+    #[serde(default, rename = "aud")]
+    audience: Option<Audience>,
+    #[serde(default, with = "serde_opt_timestamp", rename = "exp")]
+    expiration: Option<SystemTime>,
+    #[serde(default, with = "serde_opt_timestamp", rename = "nbf")]
+    not_before: Option<SystemTime>,
+    #[serde(default, with = "serde_opt_timestamp", rename = "iat")]
+    issued_at: Option<SystemTime>,
+    #[serde(default, rename = "jti")]
+    jwt_id: Option<String>,
+    #[serde(default, rename = "extras")]
+    extras: Option<BTreeMap<String, Value>>,
 }
 
 fn is_camel_case(key: &str) -> bool {

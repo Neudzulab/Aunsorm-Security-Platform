@@ -35,7 +35,7 @@ fn sign_and_verify_roundtrip() {
     claims.set_issued_now();
     claims.set_expiration_from_now(Duration::from_secs(600));
     claims.ensure_jwt_id();
-    claims.extra.insert("role".into(), json!("admin"));
+    claims.extras.insert("role".into(), json!("admin"));
 
     let token = signer.sign(&mut claims).expect("jwt");
 
@@ -46,7 +46,7 @@ fn sign_and_verify_roundtrip() {
         .verify(&token, &VerificationOptions::default())
         .expect("verified");
     assert_eq!(verified_claims.subject, claims.subject);
-    assert_eq!(verified_claims.extra.get("role"), Some(&json!("admin")));
+    assert_eq!(verified_claims.extras.get("role"), Some(&json!("admin")));
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn signer_rejects_reserved_extra_claims() {
     let key = Ed25519KeyPair::generate("kid-extra-res").expect("key");
     let signer = JwtSigner::new(key);
     let mut claims = Claims::new();
-    claims.extra.insert("iss".into(), json!("override"));
+    claims.extras.insert("iss".into(), json!("override"));
 
     let err = signer
         .sign(&mut claims)
@@ -85,7 +85,7 @@ fn signer_rejects_non_camel_case_custom_claims() {
     let key = Ed25519KeyPair::generate("kid-extra-format").expect("key");
     let signer = JwtSigner::new(key);
     let mut claims = Claims::new();
-    claims.extra.insert(
+    claims.extras.insert(
         "metadata".into(),
         json!({
             "codec": "vp9",
@@ -120,7 +120,7 @@ fn verifier_rejects_invalid_custom_claims() {
     let mut claims = Claims::new();
     claims.ensure_jwt_id();
     claims
-        .extra
+        .extras
         .insert("app_data".into(), json!({"role": "host"}));
 
     let header_encoded = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&header).expect("header json"));

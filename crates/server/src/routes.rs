@@ -1157,6 +1157,13 @@ async fn verify_token_for_audience(
                         "iss" | "sub" | "aud" | "exp" | "nbf" | "iat" | "jti" => {
                             // skip standard JWT names
                         }
+                        "extras" => {
+                            if let serde_json::Value::Object(inner) = v {
+                                for (inner_key, inner_value) in inner {
+                                    extras.insert(inner_key.clone(), inner_value.clone());
+                                }
+                            }
+                        }
                         _ => {
                             extras.insert(k.clone(), v.clone());
                         }
@@ -1252,14 +1259,14 @@ pub async fn generate_media_token(
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
     claims
-        .extra
+        .extras
         .insert("roomId".to_owned(), Value::String(request.room_id.clone()));
-    claims.extra.insert(
+    claims.extras.insert(
         "participantName".to_owned(),
         Value::String(participant_name.clone()),
     );
     if let Some(metadata_value) = request.metadata.clone() {
-        claims.extra.insert("metadata".to_owned(), metadata_value);
+        claims.extras.insert("metadata".to_owned(), metadata_value);
     }
 
     let token = state
@@ -1745,13 +1752,13 @@ pub async fn exchange_token(
     claims.audience = Some(Audience::Single(state.audience().to_owned()));
     claims.set_issued_now();
     claims.set_expiration_from_now(state.token_ttl());
-    claims.extra.insert(
+    claims.extras.insert(
         "clientId".to_string(),
         Value::String(payload.client_id.clone()),
     );
     if let Some(scope) = auth_request.scope {
         claims
-            .extra
+            .extras
             .insert("scope".to_string(), Value::String(scope));
     }
 
@@ -1850,13 +1857,13 @@ pub async fn introspect_token(
             let exp = claims.expiration.map(system_time_to_unix_seconds);
             let iat = claims.issued_at.map(system_time_to_unix_seconds);
             let client_id = claims
-                .extra
+                .extras
                 .get("clientId")
-                .or_else(|| claims.extra.get("client_id"))
+                .or_else(|| claims.extras.get("client_id"))
                 .and_then(|value| value.as_str())
                 .map(str::to_owned);
             let scope = claims
-                .extra
+                .extras
                 .get("scope")
                 .and_then(|value| value.as_str())
                 .map(str::to_owned);
