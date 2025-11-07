@@ -175,6 +175,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ACME directory parser artık `newNonce`/`newAccount`/`newOrder`/`revokeCert`/`keyChange` uç noktaları için HTTPS dışı URL'leri reddederek yanlış yapılandırmalardan kaynaklanan güvensiz istekleri engelliyor.
 - ACME directory parser bilinmeyen/ek uç noktaları da HTTPS zorunluluğuna tabi tutarak directory belgelerindeki HTTP şemalı linkleri reddediyor.
 - `GET /http3/capabilities` yeniden yönlendiriciye bağlanarak Alt-Svc başlığı ve datagram metrikleri `http3-experimental` bayrağı aktif sunumlarda doğru şekilde ilan ediliyor.
+- `aunsorm-cli` varsayılan sunucu URL'si artık `HOST` ortam değişkeninden gelen port/path/query bilgilerinin tümünü koruyarak `http://host:port:8080` gibi hatalı URL'lerin oluşmasını engelliyor.
 
 ### Security
 - Clock refresh worker enforces HTTPS endpoints, caps attestation payloads, and validates refreshed snapshots with the configured `SecureClockVerifier` before publishing them to subscribers.

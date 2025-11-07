@@ -93,10 +93,72 @@ fn host_to_server_url(host: &str) -> String {
         return "http://localhost:8080".to_string();
     }
 
-    match trimmed.parse::<IpAddr>() {
-        Ok(IpAddr::V6(addr)) => format!("http://[{addr}]:8080"),
-        _ => format!("http://{trimmed}:8080"),
+    if let Ok(url) = Url::parse(trimmed) {
+        if matches!(url.scheme(), "http" | "https") {
+            return trimmed.to_string();
+        }
     }
+
+    if let Ok(ip) = trimmed.parse::<IpAddr>() {
+        return match ip {
+            IpAddr::V6(addr) => format!("http://[{addr}]:8080"),
+            IpAddr::V4(_) => format!("http://{trimmed}:8080"),
+        };
+    }
+
+    let has_path_segment = trimmed.contains('/');
+    let has_query = trimmed.contains('?');
+    let has_fragment = trimmed.contains('#');
+    let requires_structured_format =
+        trimmed.contains(':') || has_path_segment || has_query || has_fragment;
+    if requires_structured_format {
+        if let Ok(url) = Url::parse(&format!("http://{trimmed}")) {
+            let mut rendered = String::from("http://");
+            match url.host() {
+                Some(url::Host::Ipv6(addr)) => {
+                    rendered.push('[');
+                    rendered.push_str(&addr.to_string());
+                    rendered.push(']');
+                }
+                Some(_) => rendered.push_str(url.host_str().unwrap_or("localhost")),
+                None => return "http://localhost:8080".to_string(),
+            }
+
+            if let Some(port) = url.port() {
+                rendered.push(':');
+                rendered.push_str(&port.to_string());
+            } else {
+                rendered.push_str(":8080");
+            }
+
+            if has_path_segment {
+                let path = url.path();
+                if path != "/" {
+                    rendered.push_str(path);
+                } else if trimmed.ends_with('/') {
+                    rendered.push('/');
+                }
+            }
+
+            if has_query {
+                if let Some(query) = url.query() {
+                    rendered.push('?');
+                    rendered.push_str(query);
+                }
+            }
+
+            if has_fragment {
+                if let Some(fragment) = url.fragment() {
+                    rendered.push('#');
+                    rendered.push_str(fragment);
+                }
+            }
+
+            return rendered;
+        }
+    }
+
+    format!("http://{trimmed}:8080")
 }
 
 /// Environment-aware default hostname
@@ -4864,6 +4926,17 @@ mod tests {
     }
 
     #[test]
+    fn default_server_url_respects_host_with_port() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, Some("gateway:9090")),
+            (HOSTNAME_VAR, Some("gateway-host")),
+        ]);
+        assert_eq!(default_server_url(), "http://gateway:9090");
+    }
+
+    #[test]
     fn default_hostname_prefers_hostname_env() {
         let _guard = env_lock().lock().unwrap();
         let _env = EnvOverride::apply(&[
@@ -5016,6 +5089,23 @@ mod tests {
             "http://aunsorm.local:8080"
         );
         assert_eq!(host_to_server_url("   "), "http://localhost:8080");
+    }
+
+    #[test]
+    fn host_to_server_url_preserves_port_and_routing_hints() {
+        assert_eq!(host_to_server_url("gateway:9090"), "http://gateway:9090");
+        assert_eq!(
+            host_to_server_url("gateway:9090/api/v1"),
+            "http://gateway:9090/api/v1"
+        );
+        assert_eq!(
+            host_to_server_url("[2001:db8::1]:9443?tls=1"),
+            "http://[2001:db8::1]:9443?tls=1"
+        );
+        assert_eq!(
+            host_to_server_url("https://secure-gateway:9443"),
+            "https://secure-gateway:9443"
+        );
     }
 
     #[test]
