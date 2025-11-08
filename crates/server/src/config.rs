@@ -102,7 +102,7 @@ impl ClockRefreshConfig {
     }
 
     #[must_use]
-    pub(crate) fn interval(&self) -> Duration {
+    pub(crate) const fn interval(&self) -> Duration {
         self.interval
     }
 }
@@ -428,7 +428,7 @@ impl ServerConfig {
 
     #[must_use]
     #[allow(dead_code)] // Exposed for background refresh scheduling
-    pub(crate) fn clock_max_age(&self) -> Duration {
+    pub(crate) const fn clock_max_age(&self) -> Duration {
         self.clock_max_age
     }
 }

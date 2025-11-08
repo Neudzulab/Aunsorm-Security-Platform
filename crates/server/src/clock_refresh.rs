@@ -31,7 +31,13 @@ pub struct ClockRefreshService {
 }
 
 impl ClockRefreshService {
-    /// Create a new refresh service
+    /// Create a new refresh service.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ClockRefreshError`] when the provided NTP URL is not a
+    /// valid HTTPS endpoint. The URL validation occurs before the service is
+    /// constructed so misconfigurations are surfaced immediately.
     pub fn new(
         initial: SecureClockSnapshot,
         ntp_url: Option<String>,
