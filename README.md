@@ -62,6 +62,26 @@ cargo build --release --all-features
 ./target/release/aunsorm-cli --help
 ```
 
+### Native RNG Compliance Checklist
+
+All production binaries must derive entropy exclusively through `AunsormNativeRng`.
+This RNG seeds itself from the operating system only during instantiation and then
+mixes state via HKDF + NEUDZ-PCS + AACM, aligning with the security architecture
+documented in `certifications/audit/native_rng_entropy_analysis.md` and the
+repository-wide agent directives. Before rolling out new features, verify:
+
+1. **No direct `OsRng` usage** — search for `OsRng` in the touched crates and
+   confirm that it appears only inside `AunsormNativeRng::new` implementations or
+   initial seeding helpers.
+2. **Consistent helper import** — ensure modules call `create_aunsorm_rng()` or
+   instantiate `AunsormNativeRng::new()` from their crate-specific `rng` module
+   instead of third-party RNGs.
+3. **Entropy provenance logged** — extend service/CLI diagnostics to report that
+   the native RNG path was used (without leaking secret material) when new
+   commands or endpoints are added.
+4. **Tests mirror production** — integration and fuzz tests should exercise the
+   same RNG helper to prevent drift between test and release binaries.
+
 ### Calibration Workflow (CLI + API)
 
 1. **Inspect calibration locally**
