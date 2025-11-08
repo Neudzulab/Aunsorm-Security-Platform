@@ -64,6 +64,82 @@ impl FabricChaincodeConfig {
     }
 }
 
+fn invalid_listen_address(err: impl std::fmt::Display) -> ServerError {
+    ServerError::Configuration(format!("Dinleme adresi geçersiz: {err}"))
+}
+
+fn derive_listen_addr(
+    listen_raw: Option<String>,
+    host_raw: Option<String>,
+) -> Result<SocketAddr, ServerError> {
+    if let Some(raw) = listen_raw {
+        return raw.parse().map_err(invalid_listen_address);
+    }
+
+    if let Some(host_value) = host_raw {
+        let normalized = normalize_host_value(host_value)?;
+        return normalized.parse().map_err(invalid_listen_address);
+    }
+
+    Ok(SocketAddr::from(([127, 0, 0, 1], 8080)))
+}
+
+fn normalize_host_value(host_raw: String) -> Result<String, ServerError> {
+    let trimmed = host_raw.trim();
+    if trimmed.is_empty() {
+        return Err(ServerError::Configuration(
+            "HOST değeri boş olamaz".to_string(),
+        ));
+    }
+
+    if trimmed.parse::<SocketAddr>().is_ok() {
+        return Ok(trimmed.to_string());
+    }
+
+    let without_scheme = match trimmed.split_once("://") {
+        Some((_, rest)) => rest,
+        None => trimmed,
+    };
+
+    let authority = without_scheme
+        .split(|ch| matches!(ch, '/' | '?'))
+        .next()
+        .unwrap_or("")
+        .trim();
+
+    if authority.is_empty() {
+        return Err(ServerError::Configuration(
+            "HOST değeri geçerli bir adres içermiyor".to_string(),
+        ));
+    }
+
+    if authority.parse::<SocketAddr>().is_ok() {
+        return Ok(authority.to_string());
+    }
+
+    if authority.contains(':') && !authority.contains('[') && !authority.contains(']') {
+        if authority.matches(':').count() == 1 {
+            return Err(invalid_listen_address(authority));
+        }
+    }
+
+    let host_body = authority.trim_matches(['[', ']']);
+    if host_body.is_empty() {
+        return Err(ServerError::Configuration(
+            "HOST değeri geçerli bir ana bilgisayar içermiyor".to_string(),
+        ));
+    }
+
+    let default_port = 8080;
+    let candidate = if host_body.contains(':') {
+        format!("[{host_body}]:{default_port}")
+    } else {
+        format!("{host_body}:{default_port}")
+    };
+
+    Ok(candidate)
+}
+
 /// Sunucu yapılandırması.
 pub struct ServerConfig {
     pub(crate) listen: SocketAddr,
@@ -117,11 +193,7 @@ impl ServerConfig {
     /// Gerekli alanlar eksikse veya geçersizse `ServerError` döner.
     #[allow(clippy::too_many_lines)]
     pub fn from_env() -> Result<Self, ServerError> {
-        let listen = env::var("AUNSORM_LISTEN")
-            .or_else(|_| env::var("HOST").map(|host| format!("{host}:8080")))
-            .unwrap_or_else(|_| "127.0.0.1:8080".to_string())
-            .parse()
-            .map_err(|err| ServerError::Configuration(format!("Dinleme adresi geçersiz: {err}")))?;
+        let listen = derive_listen_addr(env::var("AUNSORM_LISTEN").ok(), env::var("HOST").ok())?;
         let issuer =
             env::var("AUNSORM_ISSUER").unwrap_or_else(|_| "https://aunsorm.local".to_string());
         let audience =
@@ -502,5 +574,49 @@ mod tests {
         assert!(
             matches!(result, Err(ServerError::Configuration(message)) if message.contains("0 olamaz"))
         );
+    }
+
+    #[test]
+    fn derive_listen_addr_prefers_aunsorm_listen() {
+        let addr = derive_listen_addr(
+            Some("0.0.0.0:18080".to_string()),
+            Some("127.0.0.1".to_string()),
+        )
+        .expect("listen address");
+
+        assert_eq!(addr, "0.0.0.0:18080".parse().expect("addr"));
+    }
+
+    #[test]
+    fn derive_listen_addr_uses_host_with_port() {
+        let addr =
+            derive_listen_addr(None, Some("0.0.0.0:19090".to_string())).expect("listen address");
+
+        assert_eq!(addr, "0.0.0.0:19090".parse().expect("addr"));
+    }
+
+    #[test]
+    fn derive_listen_addr_appends_default_port_when_missing() {
+        let addr = derive_listen_addr(None, Some("0.0.0.0".to_string())).expect("listen address");
+
+        assert_eq!(addr, "0.0.0.0:8080".parse().expect("addr"));
+    }
+
+    #[test]
+    fn derive_listen_addr_respects_scheme_and_path() {
+        let addr = derive_listen_addr(
+            None,
+            Some("https://0.0.0.0:50010/api/v1?token=1".to_string()),
+        )
+        .expect("listen address");
+
+        assert_eq!(addr, "0.0.0.0:50010".parse().expect("addr"));
+    }
+
+    #[test]
+    fn derive_listen_addr_supports_ipv6_without_port() {
+        let addr = derive_listen_addr(None, Some("::1".to_string())).expect("listen address");
+
+        assert_eq!(addr, "[::1]:8080".parse().expect("addr"));
     }
 }
