@@ -13,7 +13,7 @@ use aunsorm_core::{
     },
     CoreError, SessionRatchet,
 };
-use aunsorm_jwt::{InMemoryJtiStore, JtiStore, Jwks, JwtSigner, JwtVerifier, SqliteJtiStore};
+use aunsorm_jwt::{InMemoryJtiStore, JtiStore, Jwk, Jwks, JwtSigner, JwtVerifier, SqliteJtiStore};
 use aunsorm_mdm::{
     CertificateDistributionPlan, DevicePlatform, EnrollmentMode, MdmDirectory, MdmError,
     PolicyDocument, PolicyRule,
@@ -26,7 +26,7 @@ use tokio::task::JoinHandle;
 
 use crate::acme::AcmeService;
 use crate::clock_refresh::ClockRefreshService;
-use crate::config::{LedgerBackend, ServerConfig};
+use crate::config::{ClockRefreshConfig, LedgerBackend, ServerConfig};
 use crate::error::ServerError;
 use crate::fabric::FabricDidRegistry;
 use crate::quic::datagram::{AuditEvent, AuditOutcome};
@@ -901,6 +901,14 @@ pub struct ServerState {
     clock_monitor_task: OnceLock<JoinHandle<()>>,
 }
 
+struct ClockRuntime {
+    verifier: Arc<SecureClockVerifier>,
+    audit_proof: Arc<RwLock<AuditProof>>,
+    snapshot_store: Arc<RwLock<SecureClockSnapshot>>,
+    refresh_service: Option<Arc<ClockRefreshService>>,
+    calibration_fingerprint: String,
+}
+
 impl ServerState {
     /// Yapılandırmadan sunucu durumunu üretir.
     ///
@@ -933,57 +941,27 @@ impl ServerState {
         let jwks = Jwks {
             keys: vec![public_jwk.clone()],
         };
-        let authority = ClockAuthority::new(
-            clock_snapshot.authority_id.clone(),
-            clock_snapshot.authority_fingerprint_hex.clone(),
-        );
 
-        let max_age = clock_max_age;
-        let max_age_secs = max_age.as_secs();
-
-        if max_age_secs > 60 {
-            tracing::warn!(
-                "⚠️  Clock max_age set to {} seconds (production should use ≤30s with NTP refresh)",
-                max_age_secs
-            );
-        }
-
-        let clock_verifier = Arc::new(SecureClockVerifier::configurable(vec![authority], max_age)?);
-        let validation = clock_verifier.verify(&clock_snapshot)?;
-        let calibration_fingerprint_owned = calibration_fingerprint.clone();
-        let audit_proof = Arc::new(RwLock::new(AuditProof::new(
-            calibration_fingerprint_owned.clone(),
-            validation,
-        )));
-
-        let (clock_refresh_service, clock_snapshot_store) = if let Some(refresh) = clock_refresh {
-            let service = Arc::new(ClockRefreshService::new(
-                clock_snapshot.clone(),
-                Some(refresh.url().to_string()),
-                refresh.interval(),
-                Arc::clone(&clock_verifier),
-            )?);
-            let store = service.attestation();
-            (Some(service), store)
-        } else {
-            (None, Arc::new(RwLock::new(clock_snapshot.clone())))
-        };
-
-        let transparency_backend = ledger.clone();
-        let ledger = TokenLedger::new(ledger)?;
-        let mut transparency_tree = KeyTransparencyLog::new("aunsorm-server");
-        let timestamp = unix_timestamp(SystemTime::now())?;
-        let publish = CoreTransparencyEvent::publish(
-            key_pair.kid().to_owned(),
-            public.verifying_key().as_bytes(),
-            timestamp,
-            Some("initial-jwks".to_string()),
-        );
-        transparency_tree.append(publish)?;
-        let transparency_ledger = TransparencyLedger::new(
-            transparency_backend,
-            vec![LedgerTransparencyEvent::key_published(public_jwk)],
+        let ClockRuntime {
+            verifier: clock_verifier,
+            audit_proof,
+            snapshot_store: clock_snapshot_store,
+            refresh_service: clock_refresh_service,
+            calibration_fingerprint: calibration_fingerprint_owned,
+        } = Self::build_clock_components(
+            clock_snapshot,
+            clock_max_age,
+            calibration_fingerprint,
+            clock_refresh,
         )?;
+
+        let (ledger, transparency_tree, transparency_ledger) = Self::build_transparency_components(
+            ledger,
+            key_pair.kid(),
+            public.verifying_key().as_bytes(),
+            public_jwk,
+        )?;
+
         let mdm = default_mdm_directory()?;
         let fabric = FabricDidRegistry::poc()?;
         let acme = AcmeService::new(&issuer)?;
@@ -1010,13 +988,86 @@ impl ServerState {
             audit_proof,
             audit_events: RwLock::new(Vec::new()),
             calibration_fingerprint: calibration_fingerprint_owned,
-            clock_max_age: max_age,
+            clock_max_age,
             clock_snapshot: clock_snapshot_store,
             clock_verifier,
             clock_refresh_service,
             clock_refresh_task: OnceLock::new(),
             clock_monitor_task: OnceLock::new(),
         })
+    }
+
+    fn build_clock_components(
+        clock_snapshot: SecureClockSnapshot,
+        clock_max_age: Duration,
+        calibration_fingerprint: String,
+        clock_refresh: Option<ClockRefreshConfig>,
+    ) -> Result<ClockRuntime, ServerError> {
+        let authority = ClockAuthority::new(
+            clock_snapshot.authority_id.clone(),
+            clock_snapshot.authority_fingerprint_hex.clone(),
+        );
+        let max_age_secs = clock_max_age.as_secs();
+        if max_age_secs > 60 {
+            tracing::warn!(
+                "⚠️  Clock max_age set to {} seconds (production should use ≤30s with NTP refresh)",
+                max_age_secs
+            );
+        }
+        let clock_verifier = Arc::new(SecureClockVerifier::configurable(
+            vec![authority],
+            clock_max_age,
+        )?);
+        let validation = clock_verifier.verify(&clock_snapshot)?;
+        let calibration_fingerprint_owned = calibration_fingerprint;
+        let audit_proof = Arc::new(RwLock::new(AuditProof::new(
+            calibration_fingerprint_owned.clone(),
+            validation,
+        )));
+        let (clock_refresh_service, clock_snapshot_store) = match (clock_refresh, clock_snapshot) {
+            (Some(refresh), snapshot) => {
+                let service = Arc::new(ClockRefreshService::new(
+                    snapshot,
+                    Some(refresh.url().to_string()),
+                    refresh.interval(),
+                    Arc::clone(&clock_verifier),
+                )?);
+                let store = service.attestation();
+                (Some(service), store)
+            }
+            (None, snapshot) => (None, Arc::new(RwLock::new(snapshot))),
+        };
+        Ok(ClockRuntime {
+            verifier: clock_verifier,
+            audit_proof,
+            snapshot_store: clock_snapshot_store,
+            refresh_service: clock_refresh_service,
+            calibration_fingerprint: calibration_fingerprint_owned,
+        })
+    }
+
+    fn build_transparency_components(
+        ledger: LedgerBackend,
+        key_id: &str,
+        public_key_bytes: &[u8],
+        public_jwk: Jwk,
+    ) -> Result<(TokenLedger, KeyTransparencyLog, TransparencyLedger), ServerError> {
+        let transparency_backend = ledger.clone();
+        let token_ledger = TokenLedger::new(ledger)?;
+        let mut transparency_tree = KeyTransparencyLog::new("aunsorm-server");
+        let timestamp = unix_timestamp(SystemTime::now())?;
+        let publish = CoreTransparencyEvent::publish(
+            key_id.to_owned(),
+            public_key_bytes,
+            timestamp,
+            Some("initial-jwks".to_string()),
+        );
+        transparency_tree.append(publish)?;
+        let transparency_ledger = TransparencyLedger::new(
+            transparency_backend,
+            vec![LedgerTransparencyEvent::key_published(public_jwk)],
+        )?;
+        Ok((token_ledger, transparency_tree, transparency_ledger))
     }
 
     pub fn issuer(&self) -> &str {
@@ -1063,7 +1114,7 @@ impl ServerState {
         self.audit_proof.read().await.verify_document(candidate)
     }
 
-    fn attestation_age_ms(&self, unix_ms: u64) -> u128 {
+    fn attestation_age_ms(unix_ms: u64) -> u128 {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_millis())
@@ -1079,11 +1130,11 @@ impl ServerState {
         }
     }
 
-    pub fn clock_refresh_enabled(&self) -> bool {
+    pub const fn clock_refresh_enabled(&self) -> bool {
         self.clock_refresh_service.is_some()
     }
 
-    pub fn clock_max_age(&self) -> Duration {
+    pub const fn clock_max_age(&self) -> Duration {
         self.clock_max_age
     }
 
@@ -1092,7 +1143,7 @@ impl ServerState {
         let refresh_enabled = self.clock_refresh_enabled();
         match self.clock_verifier.verify(&snapshot) {
             Ok(validation) => {
-                let age_ms = self.attestation_age_ms(validation.unix_time_ms);
+                let age_ms = Self::attestation_age_ms(validation.unix_time_ms);
                 ClockHealthStatus {
                     status: "ok",
                     age_ms,
@@ -1104,7 +1155,7 @@ impl ServerState {
                 }
             }
             Err(err) => {
-                let age_ms = self.attestation_age_ms(snapshot.unix_time_ms);
+                let age_ms = Self::attestation_age_ms(snapshot.unix_time_ms);
                 ClockHealthStatus {
                     status: "error",
                     age_ms,

@@ -12,7 +12,7 @@ use crate::error::{JwtError, Result};
 const RESERVED_STANDARD_CLAIMS: [&str; 7] = ["iss", "sub", "aud", "exp", "nbf", "iat", "jti"];
 const RESERVED_KEY_ERROR: &str = "reserved claim name must not appear in extras";
 const CUSTOM_KEY_FORMAT_ERROR: &str = "custom claim keys must be camelCase alphanumeric";
-pub(crate) const BLANK_JTI_ERROR: &str = "must not be blank";
+pub const BLANK_JTI_ERROR: &str = "must not be blank";
 
 /// JWT `aud` alanı tekil veya çoklu değer alabilir.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -169,16 +169,16 @@ fn session_nonce_for_algorithm(
     base_nonce: &[u8; 12],
     step_secret: &[u8],
 ) -> Result<Vec<u8>, PacketError> {
+    const STEP_SECRET_LEN: usize = 32;
+
+    if step_secret.len() != STEP_SECRET_LEN {
+        return Err(PacketError::Aead("step secret must be 32 bytes"));
+    }
+
     match algorithm {
-        AeadAlgorithm::AesGcm | AeadAlgorithm::Chacha20Poly1305 => {
-            let _ = step_secret;
-            Ok(base_nonce.to_vec())
-        }
+        AeadAlgorithm::AesGcm | AeadAlgorithm::Chacha20Poly1305 => Ok(base_nonce.to_vec()),
         #[cfg(feature = "aes-siv")]
         AeadAlgorithm::AesSiv => {
-            if step_secret.len() != 32 {
-                return Err(PacketError::Aead("step secret must be 32 bytes"));
-            }
             let mut nonce = vec![0_u8; nonce_length(algorithm)];
             let hk = Hkdf::<Sha256>::new(Some(step_secret), base_nonce);
             hk.expand(b"Aunsorm/1.01/session-siv-nonce", &mut nonce)
@@ -496,6 +496,22 @@ mod tests {
             session_nonce_for_algorithm(AeadAlgorithm::Chacha20Poly1305, &base_nonce, &step_secret)
                 .expect("chacha nonce");
         assert_eq!(chacha, base_nonce);
+    }
+
+    #[test]
+    fn nonce_generation_enforces_step_secret_length() {
+        let base_nonce = [0xAB_u8; 12];
+        let short_secret = [0x11_u8; 16];
+        let long_secret = [0x22_u8; 64];
+
+        let err = session_nonce_for_algorithm(AeadAlgorithm::AesGcm, &base_nonce, &short_secret)
+            .expect_err("short secret must be rejected");
+        assert!(matches!(err, PacketError::Aead(_)));
+
+        let err =
+            session_nonce_for_algorithm(AeadAlgorithm::Chacha20Poly1305, &base_nonce, &long_secret)
+                .expect_err("long secret must be rejected");
+        assert!(matches!(err, PacketError::Aead(_)));
     }
 
     #[cfg(feature = "aes-siv")]

@@ -202,8 +202,8 @@ mod tests {
         AunsormNativeRng::apply_mathematical_mixing(&mut entropy);
 
         let expected = [
-            1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3,
-            3, 3, 3, 3,
+            1, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3,
+            3, 3, 3,
         ];
 
         assert_eq!(entropy, expected);
@@ -215,14 +215,18 @@ mod tests {
         let mut buf = [0u8; 96];
         rng.fill_bytes(&mut buf);
 
-        assert!(buf.iter().any(|&byte| byte != 0), "entropy block should not be all zeros");
+        assert!(
+            buf.iter().any(|&byte| byte != 0),
+            "entropy block should not be all zeros"
+        );
     }
 
     #[test]
     fn try_fill_bytes_reports_success() {
         let mut rng = AunsormNativeRng::new();
         let mut buf = [0u8; 32];
-        rng.try_fill_bytes(&mut buf).expect("try_fill_bytes should succeed");
+        rng.try_fill_bytes(&mut buf)
+            .expect("try_fill_bytes should succeed");
 
         assert!(buf.iter().any(|&byte| byte != 0));
     }
