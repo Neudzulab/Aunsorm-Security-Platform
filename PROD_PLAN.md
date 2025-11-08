@@ -210,7 +210,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Clock attestation auto-update on server startup
 - [x] Native RNG implementation across all crates
 - [ ] Complete port-map.yaml and documentation restructure
-- [ ] Version bump to 0.5.0 in all Cargo.toml files
+- [x] Version bump to 0.5.0 in all Cargo.toml files
 - [ ] Archive legacy planning documents
 
 ### Next Sprint (v0.5.1)

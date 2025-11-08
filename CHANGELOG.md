@@ -120,6 +120,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Linux/macOS ortamları için `cargo fmt`/`cargo clippy`/`cargo test` adımlarını tek komutla çalıştıran `scripts/test-all.sh` betiği.
 
 ### Changed
+- `aunsorm-acme` crate version bumped to 0.5.0 so all published crates share
+  the 0.5.x release line and documentation references remain consistent.
 - `endpoint-validator` rate limiter artık `0` değeri verildiğinde sınırsız
   istek kabul ederek CLI yapılandırmalarındaki "0 = kapalı" semantiğiyle
   tutarlılık sağlıyor ve gereksiz yavaşlamayı önlüyor.
