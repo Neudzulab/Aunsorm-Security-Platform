@@ -14,8 +14,7 @@ use serde_json::json;
 use tempfile::TempDir;
 use tower::ServiceExt;
 
-const ROLE_BINDINGS_JSON: &str =
-    r#"{"alice":["user","admin"],"client:demo-client":["service","user"],"client:webapp-123":["user"]}"#;
+const ROLE_BINDINGS_JSON: &str = r#"{"alice":["user","admin"],"client:demo-client":["service","user"],"client:webapp-123":["user"]}"#;
 const MFA_SECRETS_JSON: &str =
     r#"{"alice":{"secret":"YWRtaW4tc2hhcmVkLXNlY3JldC1vdHA=","digits":6}}"#;
 

@@ -158,7 +158,7 @@ This document tracks all remaining work required for production deployment.
 - [ ] API reference documentation (OpenAPI spec)
 - [ ] Architecture decision records (ADRs)
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
-- [ ] Incident response playbook
+- [x] Incident response playbook
 - [ ] Production deployment guide
 
 ### Compliance & Certifications
