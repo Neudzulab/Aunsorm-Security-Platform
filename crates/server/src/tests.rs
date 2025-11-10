@@ -1617,6 +1617,286 @@ async fn reject_non_s256_method() {
 }
 
 #[tokio::test]
+async fn revoke_refresh_token_prevents_reuse() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let code_verifier = "oauth-refresh-revoke-verifier-aaaaaaaaaaaaaaaaaa";
+    let digest = Sha256::digest(code_verifier.as_bytes());
+    let code_challenge = URL_SAFE_NO_PAD.encode(digest);
+    let begin_payload = json!({
+        "subject": "alice",
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
+    });
+    let begin_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/begin-auth")
+                .header("content-type", "application/json")
+                .body(Body::from(begin_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(begin_response.status(), StatusCode::OK);
+    let begin_body = to_bytes(begin_response.into_body(), usize::MAX)
+        .await
+        .expect("begin body");
+    let begin: BeginAuthResponse = serde_json::from_slice(&begin_body).expect("begin json");
+
+    let token_payload = json!({
+        "grant_type": "authorization_code",
+        "code": begin.code,
+        "code_verifier": code_verifier,
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback"
+    });
+    let token_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/token")
+                .header("content-type", "application/json")
+                .body(Body::from(token_payload.to_string()))
+                .expect("token request"),
+        )
+        .await
+        .expect("token response");
+    assert_eq!(token_response.status(), StatusCode::OK);
+    let token_body = to_bytes(token_response.into_body(), usize::MAX)
+        .await
+        .expect("token body");
+    let token: TokenResponse = serde_json::from_slice(&token_body).expect("token json");
+
+    let revoke_payload = json!({
+        "token": token.refresh_token,
+        "token_type_hint": "refresh_token"
+    });
+    let revoke_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/revoke")
+                .header("content-type", "application/json")
+                .body(Body::from(revoke_payload.to_string()))
+                .expect("revoke request"),
+        )
+        .await
+        .expect("revoke response");
+    assert_eq!(revoke_response.status(), StatusCode::OK);
+
+    let refresh_payload = json!({
+        "grant_type": "refresh_token",
+        "refresh_token": token.refresh_token,
+        "client_id": "demo-client"
+    });
+    let refresh_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/token")
+                .header("content-type", "application/json")
+                .body(Body::from(refresh_payload.to_string()))
+                .expect("refresh request"),
+        )
+        .await
+        .expect("refresh response");
+    assert_eq!(refresh_response.status(), StatusCode::BAD_REQUEST);
+    let refresh_body = to_bytes(refresh_response.into_body(), usize::MAX)
+        .await
+        .expect("refresh body");
+    let refresh_error: ApiErrorBody =
+        serde_json::from_slice(&refresh_body).expect("refresh error json");
+    assert_eq!(refresh_error.error, "invalid_grant");
+    assert_eq!(
+        refresh_error.error_description,
+        "Refresh token geçersiz veya süresi dolmuş"
+    );
+
+    let introspect_payload = json!({ "token": token.access_token });
+    let introspect_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/introspect")
+                .header("content-type", "application/json")
+                .body(Body::from(introspect_payload.to_string()))
+                .expect("introspect request"),
+        )
+        .await
+        .expect("introspect response");
+    assert_eq!(introspect_response.status(), StatusCode::OK);
+    let introspect_body = to_bytes(introspect_response.into_body(), usize::MAX)
+        .await
+        .expect("introspect body");
+    let introspect: IntrospectResponse =
+        serde_json::from_slice(&introspect_body).expect("introspect json");
+    assert!(introspect.active);
+}
+
+#[tokio::test]
+async fn revoke_access_token_marks_introspection_inactive() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let code_verifier = "oauth-access-revoke-verifier-aaaaaaaaaaaaaaaaaaa";
+    let digest = Sha256::digest(code_verifier.as_bytes());
+    let code_challenge = URL_SAFE_NO_PAD.encode(digest);
+    let begin_payload = json!({
+        "subject": "alice",
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
+    });
+    let begin_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/begin-auth")
+                .header("content-type", "application/json")
+                .body(Body::from(begin_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(begin_response.status(), StatusCode::OK);
+    let begin_body = to_bytes(begin_response.into_body(), usize::MAX)
+        .await
+        .expect("begin body");
+    let begin: BeginAuthResponse = serde_json::from_slice(&begin_body).expect("begin json");
+
+    let token_payload = json!({
+        "grant_type": "authorization_code",
+        "code": begin.code,
+        "code_verifier": code_verifier,
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback"
+    });
+    let token_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/token")
+                .header("content-type", "application/json")
+                .body(Body::from(token_payload.to_string()))
+                .expect("token request"),
+        )
+        .await
+        .expect("token response");
+    assert_eq!(token_response.status(), StatusCode::OK);
+    let token_body = to_bytes(token_response.into_body(), usize::MAX)
+        .await
+        .expect("token body");
+    let token: TokenResponse = serde_json::from_slice(&token_body).expect("token json");
+
+    let introspect_payload = json!({ "token": token.access_token });
+    let introspect_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/introspect")
+                .header("content-type", "application/json")
+                .body(Body::from(introspect_payload.to_string()))
+                .expect("introspect request"),
+        )
+        .await
+        .expect("introspect response");
+    assert_eq!(introspect_response.status(), StatusCode::OK);
+    let introspect_body = to_bytes(introspect_response.into_body(), usize::MAX)
+        .await
+        .expect("introspect body");
+    let introspect: IntrospectResponse =
+        serde_json::from_slice(&introspect_body).expect("introspect json");
+    assert!(introspect.active);
+
+    let revoke_payload = json!({
+        "token": token.access_token,
+        "token_type_hint": "access_token"
+    });
+    let revoke_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/revoke")
+                .header("content-type", "application/json")
+                .body(Body::from(revoke_payload.to_string()))
+                .expect("revoke request"),
+        )
+        .await
+        .expect("revoke response");
+    assert_eq!(revoke_response.status(), StatusCode::OK);
+
+    let introspect_payload = json!({ "token": token.access_token });
+    let introspect_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/introspect")
+                .header("content-type", "application/json")
+                .body(Body::from(introspect_payload.to_string()))
+                .expect("introspect request"),
+        )
+        .await
+        .expect("introspect response");
+    let introspect_status = introspect_response.status();
+    let introspect_body = to_bytes(introspect_response.into_body(), usize::MAX)
+        .await
+        .expect("introspect body");
+    if introspect_status == StatusCode::OK {
+        let introspect: IntrospectResponse =
+            serde_json::from_slice(&introspect_body).expect("introspect json");
+        assert!(!introspect.active);
+    } else {
+        assert_eq!(introspect_status, StatusCode::BAD_REQUEST);
+        let error: ApiErrorBody = serde_json::from_slice(&introspect_body).expect("error json");
+        assert_eq!(error.error, "invalid_request");
+        assert!(error.error_description.contains("Token doğrulanamadı"));
+    }
+
+    let refresh_payload = json!({
+        "grant_type": "refresh_token",
+        "refresh_token": token.refresh_token,
+        "client_id": "demo-client"
+    });
+    let refresh_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/token")
+                .header("content-type", "application/json")
+                .body(Body::from(refresh_payload.to_string()))
+                .expect("refresh request"),
+        )
+        .await
+        .expect("refresh response");
+    let refresh_status = refresh_response.status();
+    let refresh_body = to_bytes(refresh_response.into_body(), usize::MAX)
+        .await
+        .expect("refresh body");
+    if refresh_status != StatusCode::OK {
+        panic!(
+            "unexpected refresh error (status {}): {}",
+            refresh_status,
+            String::from_utf8_lossy(&refresh_body)
+        );
+    }
+    let refreshed: TokenResponse = serde_json::from_slice(&refresh_body).expect("refresh json");
+    assert_ne!(refreshed.access_token, token.access_token);
+}
+
+#[tokio::test]
 async fn reject_blank_identity_fields() {
     let state = setup_state();
     let app = build_router(&state);
