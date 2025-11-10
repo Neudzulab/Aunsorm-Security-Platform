@@ -385,7 +385,12 @@ export class AunsormOAuthClient {
   async beginAuthorization(params: BeginAuthorizationParams): Promise<BeginAuthorizationResult> {
     const verifier = await generateCodeVerifier(DEFAULT_CODE_VERIFIER_LENGTH, this.randomSource);
     const codeChallenge = await computeCodeChallenge(verifier, this.digestFn);
-    const stateValue = params.state ?? (await generateState(DEFAULT_STATE_LENGTH, this.randomSource));
+    const providedState = params.state;
+    const stateValue = providedState ?? (await generateState(DEFAULT_STATE_LENGTH, this.randomSource));
+
+    if (providedState !== undefined && providedState.trim().length === 0) {
+      throw new Error('state must be a non-empty string when provided.');
+    }
 
     if (!params.clientId.trim()) {
       throw new Error('clientId is required.');
