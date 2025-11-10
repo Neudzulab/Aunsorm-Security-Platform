@@ -166,9 +166,69 @@ fn host_to_server_url(host: &str) -> String {
 
 /// Environment-aware default hostname
 fn default_hostname() -> String {
-    std::env::var("HOSTNAME")
-        .or_else(|_| std::env::var("HOST"))
-        .unwrap_or_else(|_| "localhost".to_string())
+    env_hostname("HOSTNAME")
+        .or_else(|| env_hostname("HOST"))
+        .unwrap_or_else(|| "localhost".to_string())
+}
+
+fn env_hostname(key: &str) -> Option<String> {
+    let value = std::env::var(key).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        normalize_hostname(trimmed)
+    }
+}
+
+fn normalize_hostname(input: &str) -> Option<String> {
+    if let Some(host) = parse_hostname_from_url(input) {
+        return Some(host);
+    }
+
+    if let Ok(ip) = input.parse::<IpAddr>() {
+        return Some(ip.to_string());
+    }
+
+    let has_whitespace = input.chars().any(char::is_whitespace);
+    let has_path_segments = input.contains('/') || input.contains('?') || input.contains('#');
+    let has_scheme = input.contains("://");
+
+    if !has_whitespace && !has_path_segments {
+        if let Ok(authority) = input.parse::<http::uri::Authority>() {
+            return Some(normalize_host_output(authority.host().to_string()));
+        }
+    }
+
+    if !has_scheme {
+        if let Some(host) = parse_hostname_from_url(&format!("http://{input}")) {
+            return Some(host);
+        }
+    }
+
+    if has_whitespace || has_path_segments {
+        None
+    } else {
+        Some(input.to_string())
+    }
+}
+
+fn parse_hostname_from_url(candidate: &str) -> Option<String> {
+    Url::parse(candidate).ok().and_then(|url| {
+        url.host()
+            .map(|host| normalize_host_output(host.to_string()))
+    })
+}
+
+fn normalize_host_output(host: String) -> String {
+    if let Some(stripped) = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+    {
+        stripped.to_string()
+    } else {
+        host
+    }
 }
 
 #[derive(Parser)]
@@ -4992,6 +5052,53 @@ mod tests {
         let _env = EnvOverride::apply(&[
             (SERVER_URL_VAR, None),
             (HOST_VAR, None),
+            (HOSTNAME_VAR, None),
+        ]);
+        assert_eq!(default_hostname(), "localhost");
+    }
+
+    #[test]
+    fn default_hostname_trims_hostname_env() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, Some("unused")),
+            (HOSTNAME_VAR, Some("  server.internal  \n")),
+        ]);
+        assert_eq!(default_hostname(), "server.internal");
+    }
+
+    #[test]
+    fn default_hostname_extracts_host_from_host_url() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (
+                HOST_VAR,
+                Some("https://gw.prod.local:9443/api?tenant=core#frag"),
+            ),
+            (HOSTNAME_VAR, None),
+        ]);
+        assert_eq!(default_hostname(), "gw.prod.local");
+    }
+
+    #[test]
+    fn default_hostname_handles_ipv6_authority() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, Some("[2001:db8::1]:7443")),
+            (HOSTNAME_VAR, None),
+        ]);
+        assert_eq!(default_hostname(), "2001:db8::1");
+    }
+
+    #[test]
+    fn default_hostname_falls_back_on_invalid_host() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, None),
+            (HOST_VAR, Some("http://")),
             (HOSTNAME_VAR, None),
         ]);
         assert_eq!(default_hostname(), "localhost");
