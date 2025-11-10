@@ -8,8 +8,10 @@
 //! Yerel JSON tabanlı store ve gelecekteki sağlayıcılar için ortak
 //! API sağlar.
 
+mod approval;
 #[cfg(feature = "kms-azure")]
 mod azure;
+mod backup;
 mod client;
 mod config;
 mod error;
@@ -19,8 +21,11 @@ mod local;
 #[cfg(feature = "kms-pkcs11")]
 mod pkcs11;
 mod rng;
+mod rotation;
 mod util;
 
+pub use approval::{ApprovalBundle, ApprovalPolicy, ApprovalSignature};
+pub use backup::{BackupMetadata, EncryptedBackup};
 pub use client::KmsClient;
 #[cfg(feature = "kms-azure")]
 pub use config::{AzureBackendConfig, AzureKeyConfig};
@@ -31,6 +36,7 @@ pub use config::{GcpBackendConfig, GcpKeyConfig};
 pub use config::{Pkcs11BackendConfig, Pkcs11KeyConfig};
 pub use error::{KmsError, Result};
 pub use rng::{create_aunsorm_rng, AunsormNativeRng};
+pub use rotation::{RotationEvent, RotationPolicy};
 
 #[cfg(test)]
 mod tests;

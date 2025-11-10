@@ -37,3 +37,4 @@ features = ["bundled"]
 [dev-dependencies]
 rand = "0.8"
 tempfile = "3"
+time = { version = "0.3", features = ["formatting"] }

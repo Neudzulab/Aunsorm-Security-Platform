@@ -11,14 +11,23 @@ use crate::{
 };
 
 #[cfg(feature = "kms")]
-use aunsorm_kms::{BackendKind, BackendLocator, KeyDescriptor, KmsClient, KmsConfig};
+use aunsorm_kms::{
+    BackendKind, BackendLocator, BackupMetadata, EncryptedBackup, KeyDescriptor, KmsClient,
+    KmsConfig,
+};
 #[cfg(feature = "kms")]
 use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
     Engine as _,
 };
 #[cfg(feature = "kms")]
+use ed25519_dalek::{SigningKey, VerifyingKey};
+#[cfg(feature = "kms")]
+use sha2::{Digest, Sha256};
+#[cfg(feature = "kms")]
 use tempfile::NamedTempFile;
+#[cfg(feature = "kms")]
+use time::OffsetDateTime;
 
 #[cfg(feature = "sqlite")]
 use crate::SqliteJtiStore;
@@ -367,15 +376,41 @@ fn kms_signer_roundtrip() {
     use std::io::Write;
 
     let mut file = NamedTempFile::new().expect("tmp");
-    let json = serde_json::json!({
+    let signing_seed = [5u8; 32];
+    let signing_key = SigningKey::from_bytes(&signing_seed);
+    let verifying = VerifyingKey::from(&signing_key);
+    let kid = hex::encode(Sha256::digest(verifying.as_bytes()));
+    let created_at = OffsetDateTime::from_unix_timestamp(1).expect("timestamp");
+    let document = serde_json::json!({
+        "version": 2,
         "keys": [{
             "id": "jwt-kms",
             "purpose": "ed25519-sign",
-            "secret": STANDARD.encode([5u8; 32]),
+            "material": STANDARD.encode(signing_seed),
+            "kid": kid,
+            "public_key": STANDARD.encode(verifying.to_bytes()),
+            "metadata": {
+                "created_at": created_at
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .expect("format timestamp"),
+            },
         }]
     });
-    write!(file, "{}", serde_json::to_string(&json).unwrap()).expect("write");
+    let plaintext = serde_json::to_vec(&document).expect("local json");
+    let encryption_key = [11u8; 32];
+    let metadata = BackupMetadata::new(
+        OffsetDateTime::from_unix_timestamp(5).expect("metadata timestamp"),
+        vec!["jwt-kms".to_string()],
+        2,
+    );
+    let backup = EncryptedBackup::seal(&plaintext, &encryption_key, metadata).expect("seal");
+    let bytes = backup.to_bytes().expect("serialise backup");
+    file.write_all(&bytes).expect("write backup");
     file.flush().expect("flush");
+    std::env::set_var(
+        "AUNSORM_KMS_LOCAL_STORE_KEY",
+        STANDARD.encode(encryption_key),
+    );
 
     let config = KmsConfig::local_only(file.path()).expect("config");
     let client = KmsClient::from_config(config).expect("kms");

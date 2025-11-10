@@ -1,16 +1,20 @@
 use std::io::Write;
+use std::path::Path;
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 #[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
 use ed25519_dalek::Signer as _;
 use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
-use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
+use time::OffsetDateTime;
 
+use crate::local::LocalBackend;
+use crate::util::compute_kid;
 #[cfg(feature = "kms-azure")]
 use crate::{AzureBackendConfig, AzureKeyConfig};
-use crate::{BackendKind, BackendLocator, KeyDescriptor, KmsClient, KmsConfig, LocalStoreConfig};
+use crate::{BackendKind, BackendLocator, KeyDescriptor, KmsClient, KmsConfig};
+use crate::{BackupMetadata, EncryptedBackup};
 #[cfg(feature = "kms-gcp")]
 use crate::{GcpBackendConfig, GcpKeyConfig};
 #[cfg(feature = "kms-pkcs11")]
@@ -25,6 +29,7 @@ use std::thread;
 #[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
 use tiny_http::{Header, Method, Response, Server};
 
+#[cfg(any(feature = "kms-gcp", feature = "kms-azure", feature = "kms-pkcs11"))]
 fn empty_config() -> KmsConfig {
     KmsConfig {
         strict: false,
@@ -39,44 +44,91 @@ fn empty_config() -> KmsConfig {
     }
 }
 
-fn write_local_store() -> NamedTempFile {
+struct LocalStoreFixture {
+    file: NamedTempFile,
+    key_b64: String,
+    expected_kid: String,
+}
+
+impl LocalStoreFixture {
+    fn path(&self) -> &Path {
+        self.file.path()
+    }
+
+    fn install_env(&self) {
+        std::env::set_var("AUNSORM_KMS_LOCAL_STORE_KEY", &self.key_b64);
+    }
+}
+
+fn write_local_store() -> LocalStoreFixture {
     let mut file = NamedTempFile::new().expect("tempfile");
-    let signing_key = SigningKey::from_bytes(&[42u8; 32]);
-    let secret_b64 = STANDARD.encode([42u8; 32]);
-    let wrap_key = STANDARD.encode([7u8; 32]);
-    let json = serde_json::json!({
+    let signing_seed = [42u8; 32];
+    let wrap_seed = [7u8; 32];
+    let signing_key = SigningKey::from_bytes(&signing_seed);
+    let verifying = VerifyingKey::from(&signing_key);
+    let expected_kid = compute_kid(&verifying.to_bytes());
+    let created_at = OffsetDateTime::from_unix_timestamp(1).expect("timestamp");
+    let document = serde_json::json!({
+        "version": 2,
         "keys": [
             {
                 "id": "jwt-sign",
                 "purpose": "ed25519-sign",
-                "secret": secret_b64,
+                "material": STANDARD.encode(signing_seed),
+                "kid": expected_kid,
+                "public_key": STANDARD.encode(verifying.to_bytes()),
+                "metadata": {
+                    "created_at": created_at
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .expect("format timestamp"),
+                },
             },
             {
                 "id": "wrap",
                 "purpose": "aes256-wrap",
-                "secret": wrap_key,
+                "material": STANDARD.encode(wrap_seed),
             }
         ]
     });
-    write!(file, "{}", serde_json::to_string_pretty(&json).unwrap()).expect("write");
-    file.flush().expect("flush");
-    // ensure deterministic kid matches expectation
-    let verifying = VerifyingKey::from(&signing_key);
-    let expected_kid = hex::encode(Sha256::digest(verifying.as_bytes()));
-    let mut config = empty_config();
-    config.local_store = Some(LocalStoreConfig::new(file.path().to_path_buf()));
-    let client = KmsClient::from_config(config).expect("client");
-    let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Local, "jwt-sign"));
-    assert_eq!(client.key_kid(&descriptor).unwrap(), expected_kid);
-    file
+    let plaintext = serde_json::to_vec(&document).expect("local json");
+    let encryption_key = [9u8; 32];
+    let metadata = BackupMetadata::new(
+        OffsetDateTime::from_unix_timestamp(10).expect("metadata timestamp"),
+        vec!["jwt-sign".to_string(), "wrap".to_string()],
+        2,
+    );
+    let backup = EncryptedBackup::seal(&plaintext, &encryption_key, metadata).expect("seal");
+    let bytes = backup.to_bytes().expect("serialise backup");
+    file.write_all(&bytes).expect("write backup");
+    file.flush().expect("flush backup");
+    let key_b64 = STANDARD.encode(encryption_key);
+
+    let backend = LocalBackend::from_encrypted_bytes(&bytes, &encryption_key).expect("backend");
+    let _ = backend.store_version();
+    let _ = backend.key_kids("jwt-sign").expect("key ids");
+    let _ = backend
+        .rotation_policy("jwt-sign")
+        .expect("rotation policy");
+    let _ = backend.create_backup(&encryption_key).expect("backup");
+
+    LocalStoreFixture {
+        file,
+        key_b64,
+        expected_kid,
+    }
 }
 
 #[test]
 fn local_sign_roundtrip() {
     let store = write_local_store();
+    store.install_env();
     let config = KmsConfig::local_only(store.path()).expect("config");
     let client = KmsClient::from_config(config).expect("client");
     let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Local, "jwt-sign"));
+    assert_eq!(
+        client.key_kid(&descriptor).expect("kid"),
+        store.expected_kid
+    );
     let message = b"aunsorm";
     let signature = client.sign_ed25519(&descriptor, message).expect("sign");
     assert_eq!(signature.len(), 64);
@@ -90,6 +142,7 @@ fn local_sign_roundtrip() {
 #[test]
 fn wrap_and_unwrap_roundtrip() {
     let store = write_local_store();
+    store.install_env();
     let config = KmsConfig::local_only(store.path()).expect("config");
     let client = KmsClient::from_config(config).expect("client");
     let locator = BackendLocator::new(BackendKind::Local, "wrap");
@@ -105,6 +158,7 @@ fn wrap_and_unwrap_roundtrip() {
 #[test]
 fn fallback_respects_strict_mode() {
     let store = write_local_store();
+    store.install_env();
     let base_config = KmsConfig::local_only(store.path()).expect("config");
     let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Gcp, "projects/demo"))
         .with_fallback(BackendLocator::new(BackendKind::Local, "jwt-sign"));
@@ -145,6 +199,7 @@ fn fallback_respects_strict_mode() {
 #[test]
 fn fallback_when_primary_key_missing() {
     let store = write_local_store();
+    store.install_env();
     let config = KmsConfig::local_only(store.path())
         .expect("config")
         .with_fallback(true);
@@ -165,7 +220,11 @@ fn gcp_remote_sign_and_public_with_retry() {
     let signing = SigningKey::from_bytes(&[5u8; 32]);
     let verifying = VerifyingKey::from(&signing);
     let verifying_bytes = verifying.to_bytes();
-    let kid = hex::encode(Sha256::digest(verifying_bytes));
+    let verifying_array: [u8; 32] = verifying_bytes
+        .as_slice()
+        .try_into()
+        .expect("verifying len");
+    let kid = compute_kid(&verifying_array);
     let server = Server::http(("127.0.0.1", 0)).expect("server");
     let base_url = format!("http://{}", server.server_addr());
     let get_attempts = Arc::new(AtomicUsize::new(0));
@@ -299,7 +358,7 @@ fn azure_local_fallback_uses_private_key() {
     assert_eq!(public, verifying.to_bytes().to_vec());
 
     let kid_value = client.key_kid(&descriptor).expect("kid");
-    let expected_kid = hex::encode(Sha256::digest(verifying.as_bytes()));
+    let expected_kid = compute_kid(verifying.as_bytes());
     assert_eq!(kid_value, expected_kid);
 }
 
@@ -340,7 +399,11 @@ fn azure_remote_sign_and_public() {
     let signing = SigningKey::from_bytes(&[13u8; 32]);
     let verifying = VerifyingKey::from(&signing);
     let verifying_bytes = verifying.to_bytes();
-    let kid = hex::encode(Sha256::digest(verifying_bytes));
+    let verifying_array: [u8; 32] = verifying_bytes
+        .as_slice()
+        .try_into()
+        .expect("verifying len");
+    let kid = compute_kid(&verifying_array);
     let server = Server::http(("127.0.0.1", 0)).expect("server");
     let base_url = format!("http://{}", server.server_addr());
     let total = Arc::new(AtomicUsize::new(0));
@@ -530,7 +593,7 @@ fn pkcs11_sign_and_public_roundtrip() {
     assert_eq!(public, verifying.to_bytes().to_vec());
 
     let kid_value = client.key_kid(&descriptor).expect("kid");
-    let expected_kid = hex::encode(Sha256::digest(verifying.as_bytes()));
+    let expected_kid = compute_kid(verifying.as_bytes());
     assert_eq!(kid_value, expected_kid);
 }
 

@@ -10,17 +10,21 @@ use aunsorm_core::{calib_from_text, KdfPreset, KdfProfile, Salts, SessionRatchet
 use aunsorm_kms::AzureBackendConfig;
 #[cfg(feature = "kms-gcp")]
 use aunsorm_kms::GcpBackendConfig;
-use aunsorm_kms::{BackendKind, BackendLocator, KeyDescriptor, KmsClient, KmsConfig};
+use aunsorm_kms::{
+    BackendKind, BackendLocator, BackupMetadata, EncryptedBackup, KeyDescriptor, KmsClient,
+    KmsConfig,
+};
 use aunsorm_packet::{
     decrypt_one_shot, decrypt_session, encrypt_one_shot, encrypt_session, AeadAlgorithm,
     DecryptParams, EncryptParams, SessionDecryptParams, SessionEncryptParams, SessionStore,
 };
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
-use ed25519_dalek::{Signature, VerifyingKey};
+use ed25519_dalek::{Signature, SigningKey, VerifyingKey};
 #[cfg(any(feature = "kms-gcp", feature = "kms-azure"))]
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+use time::OffsetDateTime;
 
 const DEFAULT_SESSION_ITERATIONS: usize = 256;
 const DEFAULT_KMS_ITERATIONS: usize = 128;
@@ -123,13 +127,48 @@ fn write_local_store_file() -> PathBuf {
     );
     path.push(unique);
     let mut file = File::create(&path).expect("local store file");
-    let signing_secret = STANDARD.encode([0x42u8; 32]);
-    let wrap_secret = STANDARD.encode([0x24u8; 32]);
-    let json = format!(
-        "{{\n  \"keys\": [\n    {{\n      \"id\": \"jwt-sign\",\n      \"purpose\": \"ed25519-sign\",\n      \"secret\": \"{signing_secret}\"\n    }},\n    {{\n      \"id\": \"wrap\",\n      \"purpose\": \"aes256-wrap\",\n      \"secret\": \"{wrap_secret}\"\n    }}\n  ]\n}}"
+    let signing_seed = [0x42u8; 32];
+    let wrap_seed = [0x24u8; 32];
+    let signing_key = SigningKey::from_bytes(&signing_seed);
+    let verifying = VerifyingKey::from(&signing_key);
+    let created_at = OffsetDateTime::from_unix_timestamp(1).expect("timestamp");
+    let document = serde_json::json!({
+        "version": 2,
+        "keys": [
+            {
+                "id": "jwt-sign",
+                "purpose": "ed25519-sign",
+                "material": STANDARD.encode(signing_seed),
+                "kid": hex::encode(Sha256::digest(verifying.as_bytes())),
+                "public_key": STANDARD.encode(verifying.to_bytes()),
+                "metadata": {
+                    "created_at": created_at
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .expect("format timestamp"),
+                },
+            },
+            {
+                "id": "wrap",
+                "purpose": "aes256-wrap",
+                "material": STANDARD.encode(wrap_seed),
+            }
+        ]
+    });
+    let plaintext = serde_json::to_vec(&document).expect("local json");
+    let encryption_key = [17u8; 32];
+    let metadata = BackupMetadata::new(
+        OffsetDateTime::from_unix_timestamp(5).expect("metadata timestamp"),
+        vec!["jwt-sign".to_string(), "wrap".to_string()],
+        2,
     );
-    file.write_all(json.as_bytes()).expect("write local store");
+    let backup = EncryptedBackup::seal(&plaintext, &encryption_key, metadata).expect("seal");
+    let bytes = backup.to_bytes().expect("backup bytes");
+    file.write_all(&bytes).expect("write local store");
     file.flush().expect("flush local store");
+    std::env::set_var(
+        "AUNSORM_KMS_LOCAL_STORE_KEY",
+        STANDARD.encode(encryption_key),
+    );
     path
 }
 
