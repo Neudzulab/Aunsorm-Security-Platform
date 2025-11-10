@@ -1,0 +1,33 @@
+# Cloudflare Ruleset for the public API zone. Apply via: wrangler ruleset deploy --config ddos-ruleset.yaml
+kind: cloudflare-ruleset
+apiVersion: rulesets/v1
+metadata:
+  name: aunsorm-gateway-ddos
+  account_id: ${CLOUDFLARE_ACCOUNT_ID}
+spec:
+  description: Harden Aunsorm API against volumetric and layer-7 DDoS
+  zone_id: ${CLOUDFLARE_ZONE_ID}
+  phase: http_request_firewall_custom
+  rules:
+    # Challenge high-risk countries with historical abuse
+    - action: managed_challenge
+      description: Country based challenge
+      expression: "(ip.geoip.country in {\"RU\", \"CN\", \"KP\"}) and http.request.uri.path contains \"/oauth\""
+    # Enforce rate limit per client IP
+    - action: block
+      description: Hard block on burst traffic beyond 3000 rpm
+      ratelimit:
+        period: 60
+        requests_per_period: 3000
+        characteristics:
+          - ip.src
+      match:
+        expression: "http.host eq \"api.aunsorm.example\""
+    # Mitigate known bad ASNs using threat intelligence feed tag
+    - action: block
+      description: Block IPs matching threat intel feed
+      expression: "cf.threat_score gt 20"
+    # Require JavaScript challenge on generic POST floods
+    - action: challenge
+      description: Challenge POST floods without authenticated origin
+      expression: "(http.request.method eq \"POST\") and (cf.bot_management.score lt 30) and (not http.request.headers[\"Authorization\"] exists)"

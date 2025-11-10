@@ -1,0 +1,161 @@
+# Istio control plane installation and mesh policies enforcing mutual TLS and circuit breaking.
+# Apply CRDs via istioctl prior to this manifest: https://istio.io/latest/docs/setup/install/operator/.
+---
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: aunsorm-istio-controlplane
+  namespace: istio-system
+spec:
+  profile: minimal
+  meshConfig:
+    enableAutoMtls: true
+    accessLogFile: /dev/stdout
+    defaultConfig:
+      holdApplicationUntilProxyStarts: true
+  components:
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          service:
+            type: ClusterIP
+          hpaSpec:
+            minReplicas: 2
+            maxReplicas: 6
+            metrics:
+              - type: Resource
+                resource:
+                  name: cpu
+                  target:
+                    type: Utilization
+                    averageUtilization: 70
+    pilot:
+      k8s:
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: "1"
+            memory: 2Gi
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: istio-system
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: aunsorm-platform-default
+  namespace: aunsorm-platform
+spec:
+  selector:
+    matchLabels:
+      app: aunsorm-gateway
+  mtls:
+    mode: STRICT
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: aunsorm-gateway
+  namespace: aunsorm-platform
+spec:
+  host: aunsorm-gateway.aunsorm-platform.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      http:
+        http1MaxPendingRequests: 1000
+        maxRequestsPerConnection: 1
+      tcp:
+        maxConnections: 200
+    outlierDetection:
+      consecutive5xxErrors: 5
+      interval: 5s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    tls:
+      mode: ISTIO_MUTUAL
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: aunsorm-gateway
+  namespace: aunsorm-platform
+spec:
+  hosts:
+    - aunsorm-gateway
+  gateways:
+    - mesh
+  http:
+    - route:
+        - destination:
+            host: aunsorm-gateway.aunsorm-platform.svc.cluster.local
+            port:
+              number: 8080
+      retries:
+        attempts: 3
+        perTryTimeout: 5s
+        retryOn: gateway-error,connect-failure,refused-stream,reset
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: aunsorm-gateway-rate-limit
+  namespace: istio-system
+  annotations:
+    # Reference: https://istio.io/latest/docs/tasks/policy-enforcement/rate-limit/#envoy-local-rate-limiting
+    documentation-url: https://istio.io/latest/docs/tasks/policy-enforcement/rate-limit/#envoy-local-rate-limiting
+spec:
+  workloadSelector:
+    labels:
+      istio: ingressgateway
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          portNumber: 80
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+              subFilter:
+                name: envoy.filters.http.router
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.local_ratelimit
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+            stat_prefix: aunsorm-ingress-rate-limit
+            token_bucket:
+              max_tokens: 200
+              tokens_per_fill: 200
+              fill_interval: 1s
+            filter_enabled:
+              runtime_key: local_rate_limit_enabled
+              default_value:
+                numerator: 100
+                denominator: HUNDRED
+            filter_enforced:
+              runtime_key: local_rate_limit_enforced
+              default_value:
+                numerator: 100
+                denominator: HUNDRED
+            response_headers_to_add:
+              - append: false
+                header:
+                  key: X-RateLimit-Limit
+                  value: "200"
+              - append: false
+                header:
+                  key: Retry-After
+                  value: "1"
+            status:
+              code: 429
