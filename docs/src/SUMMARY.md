@@ -32,6 +32,8 @@
 - [Pazar İstihbaratı ve Gelecek Vizyonu Çalıştayı](operations/market-intelligence.md)
 - [KMS Conformance ve Sertifikasyon Raporları](operations/kms-certification.md)
 - [Regülasyon Uyumluluk Kontrol Listesi](operations/compliance-checklist.md)
+- [Veri Saklama Politikası ve İmha Programı](operations/data-retention-policy.md)
+- [Gizlilik Politikası ve Hizmet Şartları Taslağı](operations/privacy-terms-blueprint.md)
 - [Agent Charter ve Sprint Intake Kılavuzu](operations/agent-charters.md)
 - [Blockchain İnovasyon Programı](innovation/blockchain.md)
 - [Gelecek Yol Haritası](appendix/roadmap.md)
