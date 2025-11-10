@@ -53,6 +53,8 @@ tower-http = { version = "0.5", features = ["trace"] }
 rusqlite = { version = "0.31", default-features = false, features = ["bundled"] }
 time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
 hyper = { version = "1", features = ["full"] }
+hmac = "0.12"
+sha1 = { version = "0.10", default-features = false, features = ["std"] }
 opentelemetry = { version = "0.24", optional = true }
 opentelemetry_sdk = { version = "0.24", optional = true, features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.17", optional = true, features = ["http-proto"] }

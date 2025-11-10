@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fmt;
+use std::iter::FromIterator;
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -18,8 +19,11 @@ use aunsorm_mdm::{
     CertificateDistributionPlan, DevicePlatform, EnrollmentMode, MdmDirectory, MdmError,
     PolicyDocument, PolicyRule,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use hmac::{Hmac, Mac};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
+use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
@@ -41,18 +45,194 @@ use crate::transparency::{
 
 const AUTH_TTL: Duration = Duration::from_secs(300);
 const SFU_CONTEXT_TTL: Duration = Duration::from_secs(900);
+const DEFAULT_TOTP_DIGITS: u32 = 6;
+const TOTP_STEP_SECONDS: u64 = 30;
+const DEFAULT_ADMIN_SUBJECT: &str = "alice";
+const DEFAULT_ADMIN_MFA_SECRET_B64: &str = "YWRtaW4tc2hhcmVkLXNlY3JldC1vdHA=";
+const DEFAULT_SERVICE_ROLE: &str = "service";
+
+#[derive(Debug, Clone)]
+pub struct RolePolicy {
+    allowed_scopes: Vec<String>,
+    session_ttl: Duration,
+    refresh_ttl: Duration,
+    require_mfa: bool,
+}
+
+impl RolePolicy {
+    pub fn new(
+        allowed_scopes: Vec<String>,
+        session_ttl: Duration,
+        refresh_ttl: Duration,
+        require_mfa: bool,
+    ) -> Self {
+        Self {
+            allowed_scopes,
+            session_ttl,
+            refresh_ttl,
+            require_mfa,
+        }
+    }
+
+    pub fn allows_scope(&self, scope: &str) -> bool {
+        self.allowed_scopes.iter().any(|allowed| allowed == scope)
+    }
+
+    pub fn allowed_scopes(&self) -> &[String] {
+        &self.allowed_scopes
+    }
+
+    pub const fn session_ttl(&self) -> Duration {
+        self.session_ttl
+    }
+
+    pub const fn refresh_ttl(&self) -> Duration {
+        self.refresh_ttl
+    }
+
+    pub const fn require_mfa(&self) -> bool {
+        self.require_mfa
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct RoleDirectory {
+    entries: HashMap<String, HashSet<String>>,
+}
+
+impl RoleDirectory {
+    pub fn new(entries: HashMap<String, HashSet<String>>) -> Self {
+        Self { entries }
+    }
+
+    pub fn allows(&self, subject: &str, role: &str) -> bool {
+        self.entries
+            .get(subject)
+            .map_or(false, |roles| roles.contains(role))
+    }
+}
+
+#[derive(Debug, Clone)]
+struct MfaSecret {
+    secret: Vec<u8>,
+    digits: u32,
+}
+
+impl MfaSecret {
+    fn new(secret: Vec<u8>, digits: u32) -> Self {
+        Self { secret, digits }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct MfaDirectory {
+    entries: HashMap<String, MfaSecret>,
+}
+
+impl MfaDirectory {
+    fn new(entries: HashMap<String, MfaSecret>) -> Self {
+        Self { entries }
+    }
+
+    pub fn is_enrolled(&self, subject: &str) -> bool {
+        self.entries.contains_key(subject)
+    }
+
+    pub fn verify(&self, subject: &str, code: &str, at: SystemTime) -> Result<bool, ServerError> {
+        let Some(secret) = self.entries.get(subject) else {
+            return Ok(false);
+        };
+        verify_totp_code(secret, code, at)
+    }
+
+    #[cfg(test)]
+    fn secret(&self, subject: &str) -> Option<&MfaSecret> {
+        self.entries.get(subject)
+    }
+}
+
+fn verify_totp_code(secret: &MfaSecret, code: &str, at: SystemTime) -> Result<bool, ServerError> {
+    if code.len() != secret.digits as usize || !code.chars().all(|ch| ch.is_ascii_digit()) {
+        return Ok(false);
+    }
+    let expected = match code.parse::<u32>() {
+        Ok(value) => value,
+        Err(_) => return Ok(false),
+    };
+    let counter = at
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ServerError::Configuration("timestamp before epoch".to_string()))?
+        .as_secs()
+        / TOTP_STEP_SECONDS;
+
+    for window in [-1_i64, 0, 1] {
+        let candidate_counter = match window {
+            -1 => counter.saturating_sub(1),
+            0 => counter,
+            1 => counter.saturating_add(1),
+            _ => counter,
+        };
+        let value = generate_totp(secret, candidate_counter)?;
+        if value == expected {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn generate_totp(secret: &MfaSecret, counter: u64) -> Result<u32, ServerError> {
+    if secret.digits == 0 || secret.digits > 9 {
+        return Err(ServerError::Configuration(
+            "MFA digits must be between 1 and 9".to_string(),
+        ));
+    }
+    type HmacSha1 = Hmac<Sha1>;
+    let mut mac = HmacSha1::new_from_slice(&secret.secret)
+        .map_err(|_| ServerError::Configuration("MFA secret length invalid".to_string()))?;
+    mac.update(&counter.to_be_bytes());
+    let result = mac.finalize().into_bytes();
+    let offset = usize::from(result[result.len() - 1] & 0x0f);
+    if offset + 4 > result.len() {
+        return Err(ServerError::Configuration(
+            "HMAC output truncated unexpectedly".to_string(),
+        ));
+    }
+    let slice = &result[offset..offset + 4];
+    let mut bytes = [0_u8; 4];
+    bytes.copy_from_slice(slice);
+    let binary = u32::from_be_bytes(bytes) & 0x7fff_ffff;
+    let divisor = 10_u32.pow(secret.digits);
+    Ok(binary % divisor)
+}
+
+#[cfg(test)]
+pub(crate) fn debug_totp_for(state: &ServerState, subject: &str, at: SystemTime) -> Option<String> {
+    let secret = state.mfa_directory.secret(subject)?;
+    let counter = at.duration_since(UNIX_EPOCH).ok()?.as_secs() / TOTP_STEP_SECONDS;
+    let value = generate_totp(secret, counter).ok()?;
+    Some(format!("{:01$}", value, secret.digits as usize))
+}
 
 #[derive(Debug, Clone)]
 pub struct OAuthClient {
     allowed_redirects: Vec<String>,
     allowed_scopes: Vec<String>,
+    default_role: String,
+    role_policies: HashMap<String, RolePolicy>,
 }
 
 impl OAuthClient {
-    pub const fn new(allowed_redirects: Vec<String>, allowed_scopes: Vec<String>) -> Self {
+    pub fn new(
+        allowed_redirects: Vec<String>,
+        allowed_scopes: Vec<String>,
+        default_role: impl Into<String>,
+        role_policies: HashMap<String, RolePolicy>,
+    ) -> Self {
         Self {
             allowed_redirects,
             allowed_scopes,
+            default_role: default_role.into(),
+            role_policies,
         }
     }
 
@@ -65,6 +245,14 @@ impl OAuthClient {
     pub fn allowed_scopes(&self) -> &[String] {
         &self.allowed_scopes
     }
+
+    pub fn default_role(&self) -> &str {
+        &self.default_role
+    }
+
+    pub fn policy(&self, role: &str) -> Option<&RolePolicy> {
+        self.role_policies.get(role)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -74,6 +262,10 @@ pub struct AuthRequest {
     pub redirect_uri: String,
     pub state: Option<String>,
     pub scope: Option<String>,
+    pub role: String,
+    pub mfa_required: bool,
+    pub session_ttl: Duration,
+    pub refresh_ttl: Duration,
     pub code_challenge: String,
     pub created_at: SystemTime,
     pub expires_at: SystemTime,
@@ -271,6 +463,39 @@ fn default_oauth_clients() -> HashMap<String, OAuthClient> {
         redirect_uris.push(prod_callback);
     }
 
+    let mut demo_roles = HashMap::new();
+    demo_roles.insert(
+        "user".to_owned(),
+        RolePolicy::new(
+            vec!["read".to_owned(), "write".to_owned()],
+            Duration::from_secs(3_600),
+            Duration::from_secs(86_400),
+            false,
+        ),
+    );
+    demo_roles.insert(
+        "admin".to_owned(),
+        RolePolicy::new(
+            vec![
+                "read".to_owned(),
+                "write".to_owned(),
+                "introspect".to_owned(),
+                "admin".to_owned(),
+            ],
+            Duration::from_secs(900),
+            Duration::from_secs(7_200),
+            true,
+        ),
+    );
+    demo_roles.insert(
+        DEFAULT_SERVICE_ROLE.to_owned(),
+        RolePolicy::new(
+            vec!["introspect".to_owned()],
+            Duration::from_secs(600),
+            Duration::from_secs(7_200),
+            false,
+        ),
+    );
     clients.insert(
         "demo-client".to_string(),
         OAuthClient::new(
@@ -279,7 +504,21 @@ fn default_oauth_clients() -> HashMap<String, OAuthClient> {
                 "read".to_string(),
                 "write".to_string(),
                 "introspect".to_string(),
+                "admin".to_string(),
             ],
+            "user",
+            demo_roles,
+        ),
+    );
+
+    let mut webapp_roles = HashMap::new();
+    webapp_roles.insert(
+        "user".to_owned(),
+        RolePolicy::new(
+            vec!["read".to_owned(), "write".to_owned()],
+            Duration::from_secs(3_600),
+            Duration::from_secs(43_200),
+            false,
         ),
     );
     clients.insert(
@@ -287,9 +526,108 @@ fn default_oauth_clients() -> HashMap<String, OAuthClient> {
         OAuthClient::new(
             vec!["https://app.example.com/callback".to_string()],
             vec!["read".to_string(), "write".to_string()],
+            "user",
+            webapp_roles,
         ),
     );
     clients
+}
+
+#[derive(Debug, Deserialize)]
+struct MfaEntryConfig {
+    secret: String,
+    #[serde(default = "default_totp_digits")]
+    digits: u32,
+}
+
+const fn default_totp_digits() -> u32 {
+    DEFAULT_TOTP_DIGITS
+}
+
+fn parse_role_bindings(raw: &str) -> Result<HashMap<String, HashSet<String>>, ServerError> {
+    let bindings: HashMap<String, Vec<String>> = serde_json::from_str(raw).map_err(|err| {
+        ServerError::Configuration(format!("AUNSORM_ROLE_BINDINGS JSON parse edilemedi: {err}"))
+    })?;
+    let mut map = HashMap::new();
+    for (subject, roles) in bindings {
+        let normalized = roles
+            .into_iter()
+            .map(|role| role.trim().to_lowercase())
+            .filter(|role| !role.is_empty())
+            .collect::<HashSet<_>>();
+        if normalized.is_empty() {
+            return Err(ServerError::Configuration(format!(
+                "Role binding list cannot be empty for subject {subject}"
+            )));
+        }
+        map.insert(subject, normalized);
+    }
+    Ok(map)
+}
+
+fn default_role_directory(strict: bool) -> Result<RoleDirectory, ServerError> {
+    if let Ok(raw) = std::env::var("AUNSORM_ROLE_BINDINGS") {
+        let bindings = parse_role_bindings(&raw)?;
+        return Ok(RoleDirectory::new(bindings));
+    }
+    if strict {
+        return Err(ServerError::Configuration(
+            "Strict kipte AUNSORM_ROLE_BINDINGS yapılandırması zorunludur".to_string(),
+        ));
+    }
+    let mut map: HashMap<String, HashSet<String>> = HashMap::new();
+    map.insert(
+        DEFAULT_ADMIN_SUBJECT.to_owned(),
+        HashSet::from_iter(["user".to_owned(), "admin".to_owned()]),
+    );
+    map.insert(
+        "client:demo-client".to_owned(),
+        HashSet::from_iter([DEFAULT_SERVICE_ROLE.to_owned(), "user".to_owned()]),
+    );
+    map.insert(
+        "client:webapp-123".to_owned(),
+        HashSet::from_iter(["user".to_owned()]),
+    );
+    Ok(RoleDirectory::new(map))
+}
+
+fn default_mfa_directory(strict: bool) -> Result<MfaDirectory, ServerError> {
+    if let Ok(raw) = std::env::var("AUNSORM_MFA_SECRETS") {
+        let configs: HashMap<String, MfaEntryConfig> =
+            serde_json::from_str(&raw).map_err(|err| {
+                ServerError::Configuration(format!(
+                    "AUNSORM_MFA_SECRETS JSON parse edilemedi: {err}"
+                ))
+            })?;
+        let mut entries = HashMap::new();
+        for (subject, cfg) in configs {
+            let secret = BASE64_STANDARD
+                .decode(cfg.secret.as_bytes())
+                .map_err(|err| {
+                    ServerError::Configuration(format!(
+                        "MFA secret base64 çözülemedi ({subject}): {err}"
+                    ))
+                })?;
+            entries.insert(subject, MfaSecret::new(secret, cfg.digits));
+        }
+        return Ok(MfaDirectory::new(entries));
+    }
+    if strict {
+        return Err(ServerError::Configuration(
+            "Strict kipte AUNSORM_MFA_SECRETS yapılandırması zorunludur".to_string(),
+        ));
+    }
+    let mut entries = HashMap::new();
+    let default_secret = BASE64_STANDARD
+        .decode(DEFAULT_ADMIN_MFA_SECRET_B64.as_bytes())
+        .map_err(|err| {
+            ServerError::Configuration(format!("Varsayılan MFA sırrı decode edilemedi: {err}"))
+        })?;
+    entries.insert(
+        DEFAULT_ADMIN_SUBJECT.to_owned(),
+        MfaSecret::new(default_secret, DEFAULT_TOTP_DIGITS),
+    );
+    Ok(MfaDirectory::new(entries))
 }
 
 #[derive(Debug, Clone)]
@@ -663,6 +1001,249 @@ impl TokenLedger {
             }
         }
     }
+
+    pub async fn revoke(&self, jti: &str) -> Result<bool, ServerError> {
+        match &self.inner {
+            TokenLedgerInner::Memory { entries } => {
+                let mut guard = entries.lock().await;
+                let existed = guard.remove(jti).is_some();
+                Ok(existed)
+            }
+            TokenLedgerInner::Sqlite { conn } => {
+                let conn = Arc::clone(conn);
+                let jti = jti.to_owned();
+                let removed = tokio::task::spawn_blocking(move || -> Result<bool, ServerError> {
+                    let conn_guard = conn.lock().map_err(|_| {
+                        ServerError::Configuration("SQLite lock poisoned".to_string())
+                    })?;
+                    let changes = conn_guard.execute("DELETE FROM tokens WHERE jti = ?1", [jti])?;
+                    Ok(changes > 0)
+                })
+                .await
+                .map_err(|err| {
+                    ServerError::Configuration(format!("SQLite task failed: {err}"))
+                })??;
+                Ok(removed)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RefreshTokenRecord {
+    pub client_id: String,
+    pub subject: Option<String>,
+    pub role: String,
+    pub scope: Option<String>,
+    pub issued_at: SystemTime,
+    pub expires_at: SystemTime,
+    pub session_ttl: Duration,
+    pub mfa_verified: bool,
+}
+
+pub struct RefreshTokenStore {
+    inner: RefreshTokenStoreInner,
+}
+
+enum RefreshTokenStoreInner {
+    Memory {
+        entries: Mutex<HashMap<String, RefreshTokenRecord>>,
+    },
+    Sqlite {
+        conn: Arc<StdMutex<rusqlite::Connection>>,
+    },
+}
+
+impl RefreshTokenStore {
+    pub fn new(backend: LedgerBackend) -> Result<Self, ServerError> {
+        match backend {
+            LedgerBackend::Memory => Ok(Self {
+                inner: RefreshTokenStoreInner::Memory {
+                    entries: Mutex::new(HashMap::new()),
+                },
+            }),
+            LedgerBackend::Sqlite(path) => {
+                use rusqlite::{Connection, OpenFlags};
+                let conn = Connection::open_with_flags(
+                    path,
+                    OpenFlags::SQLITE_OPEN_CREATE
+                        | OpenFlags::SQLITE_OPEN_READ_WRITE
+                        | OpenFlags::SQLITE_OPEN_FULL_MUTEX,
+                )?;
+                conn.pragma_update(None, "journal_mode", "WAL")?;
+                conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS refresh_tokens (
+                        token_hash TEXT PRIMARY KEY,
+                        client_id TEXT NOT NULL,
+                        subject TEXT,
+                        role TEXT NOT NULL,
+                        scope TEXT,
+                        mfa_verified INTEGER NOT NULL,
+                        issued_at INTEGER NOT NULL,
+                        expires_at INTEGER NOT NULL,
+                        session_ttl INTEGER NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expiry ON refresh_tokens(expires_at);",
+                )?;
+                Ok(Self {
+                    inner: RefreshTokenStoreInner::Sqlite {
+                        conn: Arc::new(StdMutex::new(conn)),
+                    },
+                })
+            }
+        }
+    }
+
+    pub async fn insert(&self, token: &str, record: RefreshTokenRecord) -> Result<(), ServerError> {
+        let hash = hash_refresh_token(token);
+        match &self.inner {
+            RefreshTokenStoreInner::Memory { entries } => {
+                let mut guard = entries.lock().await;
+                guard.insert(hash, record);
+                Ok(())
+            }
+            RefreshTokenStoreInner::Sqlite { conn } => {
+                let conn = Arc::clone(conn);
+                tokio::task::spawn_blocking(move || -> Result<(), ServerError> {
+                    let issued_at = unix_seconds(record.issued_at)?;
+                    let expires_at = unix_seconds(record.expires_at)?;
+                    let session_ttl = i64::try_from(record.session_ttl.as_secs()).map_err(|_| {
+                        ServerError::Configuration("session ttl overflow".to_string())
+                    })?;
+                    let subject = record.subject.clone();
+                    let scope = record.scope.clone();
+                    let conn_guard = conn.lock().map_err(|_| {
+                        ServerError::Configuration("SQLite lock poisoned".to_string())
+                    })?;
+                    let mfa_flag: i64 = if record.mfa_verified { 1 } else { 0 };
+                    conn_guard.execute(
+                        "INSERT OR REPLACE INTO refresh_tokens(
+                            token_hash, client_id, subject, role, scope, mfa_verified, issued_at, expires_at, session_ttl
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                        (
+                            hash,
+                            record.client_id,
+                            subject,
+                            record.role,
+                            scope,
+                            mfa_flag,
+                            issued_at,
+                            expires_at,
+                            session_ttl,
+                        ),
+                    )?;
+                    Ok(())
+                })
+                .await
+                .map_err(|err| {
+                    ServerError::Configuration(format!("SQLite task failed: {err}"))
+                })??;
+                Ok(())
+            }
+        }
+    }
+
+    pub async fn consume(
+        &self,
+        token: &str,
+        now: SystemTime,
+    ) -> Result<Option<RefreshTokenRecord>, ServerError> {
+        let hash = hash_refresh_token(token);
+        match &self.inner {
+            RefreshTokenStoreInner::Memory { entries } => {
+                let mut guard = entries.lock().await;
+                if let Some(record) = guard.remove(&hash) {
+                    if record.expires_at > now {
+                        return Ok(Some(record));
+                    }
+                }
+                Ok(None)
+            }
+            RefreshTokenStoreInner::Sqlite { conn } => {
+                let conn = Arc::clone(conn);
+                let now_secs = unix_seconds(now)?;
+                let record = tokio::task::spawn_blocking(move || -> Result<Option<RefreshTokenRecord>, ServerError> {
+                    let conn_guard = conn.lock().map_err(|_| {
+                        ServerError::Configuration("SQLite lock poisoned".to_string())
+                    })?;
+                    let mut stmt = conn_guard.prepare(
+                        "SELECT client_id, subject, role, scope, mfa_verified, issued_at, expires_at, session_ttl
+                         FROM refresh_tokens WHERE token_hash = ?1 LIMIT 1",
+                    )?;
+                    let mut rows = stmt.query([&hash])?;
+                    let row = match rows.next()? {
+                        Some(row) => row,
+                        None => return Ok(None),
+                    };
+                    let client_id: String = row.get(0)?;
+                    let subject: Option<String> = row.get(1)?;
+                    let role: String = row.get(2)?;
+                    let scope: Option<String> = row.get(3)?;
+                    let mfa_verified_raw: i64 = row.get(4)?;
+                    let issued_at_secs: i64 = row.get(5)?;
+                    let expires_at_secs: i64 = row.get(6)?;
+                    let session_ttl_secs: i64 = row.get(7)?;
+                    drop(rows);
+                    drop(stmt);
+                    conn_guard.execute("DELETE FROM refresh_tokens WHERE token_hash = ?1", [&hash])?;
+                    drop(conn_guard);
+                    if expires_at_secs <= now_secs {
+                        return Ok(None);
+                    }
+                    let issued_at = system_time_from_secs(issued_at_secs)?;
+                    let expires_at = system_time_from_secs(expires_at_secs)?;
+                    let session_ttl = duration_from_secs(session_ttl_secs)?;
+                    Ok(Some(RefreshTokenRecord {
+                        client_id,
+                        subject,
+                        role,
+                        scope,
+                        issued_at,
+                        expires_at,
+                        session_ttl,
+                        mfa_verified: mfa_verified_raw != 0,
+                    }))
+                })
+                .await
+                .map_err(|err| {
+                    ServerError::Configuration(format!("SQLite task failed: {err}"))
+                })??;
+                Ok(record)
+            }
+        }
+    }
+
+    pub async fn revoke(&self, token: &str) -> Result<bool, ServerError> {
+        let hash = hash_refresh_token(token);
+        match &self.inner {
+            RefreshTokenStoreInner::Memory { entries } => {
+                let mut guard = entries.lock().await;
+                Ok(guard.remove(&hash).is_some())
+            }
+            RefreshTokenStoreInner::Sqlite { conn } => {
+                let conn = Arc::clone(conn);
+                let removed = tokio::task::spawn_blocking(move || -> Result<bool, ServerError> {
+                    let conn_guard = conn.lock().map_err(|_| {
+                        ServerError::Configuration("SQLite lock poisoned".to_string())
+                    })?;
+                    let changes = conn_guard
+                        .execute("DELETE FROM refresh_tokens WHERE token_hash = ?1", [&hash])?;
+                    Ok(changes > 0)
+                })
+                .await
+                .map_err(|err| {
+                    ServerError::Configuration(format!("SQLite task failed: {err}"))
+                })??;
+                Ok(removed)
+            }
+        }
+    }
+}
+
+fn hash_refresh_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 fn purge_map(map: &mut HashMap<String, SystemTime>, now: SystemTime) {
@@ -675,6 +1256,24 @@ fn unix_seconds(time: SystemTime) -> Result<i64, ServerError> {
         .map_err(|_| ServerError::Configuration("timestamp before epoch".to_string()))?;
     i64::try_from(duration.as_secs())
         .map_err(|_| ServerError::Configuration("timestamp overflow".to_string()))
+}
+
+fn system_time_from_secs(secs: i64) -> Result<SystemTime, ServerError> {
+    if secs < 0 {
+        return Err(ServerError::Configuration(
+            "timestamp before epoch".to_string(),
+        ));
+    }
+    Ok(UNIX_EPOCH + Duration::from_secs(secs as u64))
+}
+
+fn duration_from_secs(secs: i64) -> Result<Duration, ServerError> {
+    if secs < 0 {
+        return Err(ServerError::Configuration(
+            "duration cannot be negative".to_string(),
+        ));
+    }
+    Ok(Duration::from_secs(secs as u64))
 }
 
 fn map_mdm_error(err: &MdmError) -> ServerError {
@@ -881,8 +1480,11 @@ pub struct ServerState {
     verifier: JwtVerifier,
     jwks: Jwks,
     oauth_clients: Arc<HashMap<String, OAuthClient>>,
+    role_directory: RoleDirectory,
+    mfa_directory: MfaDirectory,
     auth_store: AuthStore,
     ledger: TokenLedger,
+    refresh_tokens: RefreshTokenStore,
     sfu_store: SfuStore,
     transparency_tree: RwLock<KeyTransparencyLog>,
     transparency_ledger: TransparencyLedger,
@@ -942,6 +1544,10 @@ impl ServerState {
             keys: vec![public_jwk.clone()],
         };
 
+        let role_directory = default_role_directory(strict)?;
+        let mfa_directory = default_mfa_directory(strict)?;
+        let refresh_backend = ledger.clone();
+
         let ClockRuntime {
             verifier: clock_verifier,
             audit_proof,
@@ -961,6 +1567,7 @@ impl ServerState {
             public.verifying_key().as_bytes(),
             public_jwk,
         )?;
+        let refresh_tokens = RefreshTokenStore::new(refresh_backend)?;
 
         let mdm = default_mdm_directory()?;
         let fabric = FabricDidRegistry::poc()?;
@@ -976,8 +1583,11 @@ impl ServerState {
             verifier,
             jwks,
             oauth_clients,
+            role_directory,
+            mfa_directory,
             auth_store: AuthStore::new(),
             ledger,
+            refresh_tokens,
             sfu_store: SfuStore::new(),
             transparency_tree: RwLock::new(transparency_tree),
             transparency_ledger,
@@ -1096,6 +1706,53 @@ impl ServerState {
 
     pub const fn jwks(&self) -> &Jwks {
         &self.jwks
+    }
+
+    pub fn role_policy(&self, client_id: &str, role: &str) -> Option<&RolePolicy> {
+        self.oauth_clients
+            .get(client_id)
+            .and_then(|client| client.policy(role))
+    }
+
+    pub fn allows_role(&self, subject: &str, role: &str) -> bool {
+        self.role_directory.allows(subject, role)
+    }
+
+    pub fn is_mfa_enrolled(&self, subject: &str) -> bool {
+        self.mfa_directory.is_enrolled(subject)
+    }
+
+    pub fn verify_mfa_code(
+        &self,
+        subject: &str,
+        code: &str,
+        at: SystemTime,
+    ) -> Result<bool, ServerError> {
+        self.mfa_directory.verify(subject, code, at)
+    }
+
+    pub async fn issue_refresh_token(
+        &self,
+        token: &str,
+        record: RefreshTokenRecord,
+    ) -> Result<(), ServerError> {
+        self.refresh_tokens.insert(token, record).await
+    }
+
+    pub async fn consume_refresh_token(
+        &self,
+        token: &str,
+        now: SystemTime,
+    ) -> Result<Option<RefreshTokenRecord>, ServerError> {
+        self.refresh_tokens.consume(token, now).await
+    }
+
+    pub async fn revoke_refresh_token(&self, token: &str) -> Result<bool, ServerError> {
+        self.refresh_tokens.revoke(token).await
+    }
+
+    pub async fn revoke_access_token(&self, jti: &str) -> Result<bool, ServerError> {
+        self.ledger.revoke(jti).await
     }
 
     pub async fn audit_proof_document(&self) -> AuditProofDocument {
@@ -1347,6 +2004,10 @@ impl ServerState {
         redirect_uri: String,
         state: Option<String>,
         scope: Option<String>,
+        role: String,
+        mfa_required: bool,
+        session_ttl: Duration,
+        refresh_ttl: Duration,
         code_challenge: String,
     ) -> String {
         let now = SystemTime::now();
@@ -1356,6 +2017,10 @@ impl ServerState {
             redirect_uri,
             state,
             scope,
+            role,
+            mfa_required,
+            session_ttl,
+            refresh_ttl,
             code_challenge,
             created_at: now,
             expires_at: now + AUTH_TTL,
@@ -1545,6 +2210,22 @@ impl ServerState {
             head: guard.tree_head(),
             records: guard.records().to_vec(),
         }
+    }
+
+    pub async fn record_audit_event(
+        &self,
+        prefix: &str,
+        principal: impl Into<String>,
+        outcome: AuditOutcome,
+        resource: impl Into<String>,
+    ) {
+        let event = AuditEvent {
+            event_id: format!("{prefix}::{}", generate_id()),
+            principal_id: principal.into(),
+            outcome,
+            resource: resource.into(),
+        };
+        self.audit_events.write().await.push(event);
     }
 
     pub async fn record_calibration_failure(

@@ -34,7 +34,7 @@ use crate::fabric::{
     canonical_challenge, FABRIC_POC_CHANNEL, FABRIC_POC_DID, FABRIC_POC_KEY_SEED,
     FABRIC_POC_METHOD_ID, FABRIC_POC_TRANSACTION_ID,
 };
-use crate::state::ServerState;
+use crate::state::{debug_totp_for, ServerState};
 use ed25519_dalek::Signer;
 use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
 
@@ -263,6 +263,9 @@ fn setup_state_with_profile(
     strict: bool,
     calibration_override: Option<String>,
 ) -> Arc<ServerState> {
+    const ROLE_BINDINGS_JSON: &str = r#"{"alice":["user","admin"],"client:demo-client":["service","user"],"client:webapp-123":["user"]}"#;
+    const MFA_SECRETS_JSON: &str =
+        r#"{"alice":{"secret":"YWRtaW4tc2hhcmVkLXNlY3JldC1vdHA=","digits":6}}"#;
     let key = Ed25519KeyPair::from_seed("test", test_seed()).expect("seed");
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -291,6 +294,10 @@ fn setup_state_with_profile(
     } else {
         LedgerBackend::Memory
     };
+    if strict {
+        std::env::set_var("AUNSORM_ROLE_BINDINGS", ROLE_BINDINGS_JSON);
+        std::env::set_var("AUNSORM_MFA_SECRETS", MFA_SECRETS_JSON);
+    }
     let config = ServerConfig::new(
         "127.0.0.1:0".parse::<SocketAddr>().expect("addr"),
         "https://issuer",
@@ -1077,6 +1084,8 @@ async fn pkce_flow_succeeds() {
         .expect("body");
     let begin: BeginAuthResponse = serde_json::from_slice(&body).expect("json");
     assert_eq!(begin.state.as_deref(), Some("random-csrf-token-123"));
+    assert!(!begin.mfa_required);
+    assert_eq!(begin.role, "user");
 
     let token_payload = json!({
         "grant_type": "authorization_code",
@@ -1103,6 +1112,10 @@ async fn pkce_flow_succeeds() {
         .expect("body");
     let token: TokenResponse = serde_json::from_slice(&body).expect("token");
     assert_eq!(token.token_type, "Bearer");
+    assert!(!token.refresh_token.is_empty());
+    assert!(token.refresh_expires_in > 0);
+    assert_eq!(token.role, "user");
+    assert!(!token.mfa_verified);
 
     let introspect_payload = json!({ "token": token.access_token });
     let response = app
@@ -1126,6 +1139,8 @@ async fn pkce_flow_succeeds() {
     assert_eq!(introspect.sub.as_deref(), Some("alice"));
     assert_eq!(introspect.client_id.as_deref(), Some("demo-client"));
     assert_eq!(introspect.scope.as_deref(), Some("read write"));
+    assert_eq!(introspect.role.as_deref(), Some("user"));
+    assert_eq!(introspect.mfa_verified, Some(false));
 
     let metrics_response = app
         .clone()
@@ -1199,6 +1214,94 @@ async fn pkce_flow_succeeds() {
             panic!("media records are not expected in this smoke test")
         }
     }
+}
+
+#[tokio::test]
+async fn admin_flow_requires_mfa() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let code_verifier = "admin-flow-super-secret-code-verifier-000000000000000000000000";
+    let digest = Sha256::digest(code_verifier.as_bytes());
+    let code_challenge = URL_SAFE_NO_PAD.encode(digest);
+    let begin_payload = json!({
+        "subject": "alice",
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback",
+        "role": "admin",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/begin-auth")
+                .header("content-type", "application/json")
+                .body(Body::from(begin_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let begin: BeginAuthResponse = serde_json::from_slice(&body).expect("json");
+    assert!(begin.mfa_required);
+    assert_eq!(begin.role, "admin");
+
+    let now = SystemTime::now();
+    let mfa_code = debug_totp_for(&state, "alice", now).expect("mfa code");
+    let token_payload = json!({
+        "grant_type": "authorization_code",
+        "code": begin.code,
+        "code_verifier": code_verifier,
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback",
+        "mfa_code": mfa_code,
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/token")
+                .header("content-type", "application/json")
+                .body(Body::from(token_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let token: TokenResponse = serde_json::from_slice(&body).expect("token");
+    assert_eq!(token.role, "admin");
+    assert!(token.mfa_verified);
+
+    let introspect_payload = json!({ "token": token.access_token });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/introspect")
+                .header("content-type", "application/json")
+                .body(Body::from(introspect_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let introspect: IntrospectResponse = serde_json::from_slice(&body).expect("introspect");
+    assert!(introspect.active);
+    assert_eq!(introspect.role.as_deref(), Some("admin"));
+    assert_eq!(introspect.mfa_verified, Some(true));
 }
 
 #[derive(Debug, Deserialize)]
@@ -2408,6 +2511,9 @@ struct BeginAuthResponse {
     #[serde(default)]
     state: Option<String>,
     expires_in: u64,
+    #[serde(rename = "mfaRequired")]
+    mfa_required: bool,
+    role: String,
 }
 
 #[allow(dead_code)]
@@ -2416,6 +2522,13 @@ struct TokenResponse {
     access_token: String,
     token_type: String,
     expires_in: u64,
+    #[serde(rename = "refreshToken")]
+    refresh_token: String,
+    #[serde(rename = "refreshExpiresIn")]
+    refresh_expires_in: u64,
+    role: String,
+    #[serde(rename = "mfaVerified")]
+    mfa_verified: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2439,6 +2552,9 @@ struct IntrospectResponse {
     aud: Option<String>,
     sub: Option<String>,
     jti: Option<String>,
+    role: Option<String>,
+    #[serde(rename = "mfaVerified")]
+    mfa_verified: Option<bool>,
 }
 
 #[allow(dead_code)]
