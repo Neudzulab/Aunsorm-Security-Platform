@@ -125,6 +125,25 @@ describe('AunsormOAuthClient', () => {
     expect(store.getItem('aunsorm.oauth.code_verifier')).toBeNull();
   });
 
+  it('rejects caller-provided blank state values', async () => {
+    const fetchStub = vi.fn();
+    const client = new AunsormOAuthClient({
+      baseUrl: 'https://auth.example.com',
+      fetchImpl: fetchStub,
+      randomSource: deterministicRandom,
+    });
+
+    await expect(
+      client.beginAuthorization({
+        clientId: 'demo-client',
+        redirectUri: 'https://app.example.com/callback',
+        state: '   ',
+      }),
+    ).rejects.toThrow(/state must be a non-empty string/);
+
+    expect(fetchStub).not.toHaveBeenCalled();
+  });
+
   it('validates callback state before exchanging the code', async () => {
     const store = new MemoryStore();
     store.setItem('aunsorm.oauth.state', 'expected-state');
