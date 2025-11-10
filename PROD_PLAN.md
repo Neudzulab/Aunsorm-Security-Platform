@@ -37,12 +37,12 @@ This document tracks all remaining work required for production deployment.
 - [ ] Implement key expiration and automatic rotation policies
 
 ### Authentication & Authorization
-- [ ] Multi-factor authentication (MFA) for admin operations
-- [ ] Role-based access control (RBAC) enforcement
-- [ ] OAuth 2.0 refresh token rotation
+- [x] Multi-factor authentication (MFA) for admin operations
+- [x] Role-based access control (RBAC) enforcement
+- [x] OAuth 2.0 refresh token rotation
 - [ ] Token revocation webhook notifications
-- [ ] Session timeout configuration per client type
-- [ ] Audit logging for all authentication events
+- [x] Session timeout configuration per client type
+- [x] Audit logging for all authentication events
 
 ---
 

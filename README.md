@@ -151,6 +151,7 @@ Durum işaretleri:
   - `GET /oauth/jwks.json` — JWKS anahtar yayını
   - `POST /oauth/begin-auth` — OAuth 2.0 + PKCE başlangıcı
   - `POST /oauth/token` — Token değişimi
+  - `POST /oauth/revoke` — Erişim ve refresh token iptali
   - `POST /oauth/introspect` — Token inceleme
   - `GET /oauth/transparency` — Şeffaflık logları
 
