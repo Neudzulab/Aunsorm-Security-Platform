@@ -77,7 +77,10 @@ use tokio::runtime::Runtime;
 /// Environment-aware default URL for Aunsorm server
 fn default_server_url() -> String {
     if let Ok(url) = std::env::var("AUNSORM_SERVER_URL") {
-        return url;
+        let trimmed = url.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_owned();
+        }
     }
 
     if let Ok(host) = std::env::var("HOST") {
@@ -4890,6 +4893,31 @@ mod tests {
             (HOSTNAME_VAR, Some("cli-host")),
         ]);
         assert_eq!(default_server_url(), "https://prod.aunsorm.example");
+    }
+
+    #[test]
+    fn default_server_url_trims_explicit_env() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (
+                SERVER_URL_VAR,
+                Some("  https://prod.aunsorm.example/cli  \n"),
+            ),
+            (HOST_VAR, Some("10.0.0.1")),
+            (HOSTNAME_VAR, Some("cli-host")),
+        ]);
+        assert_eq!(default_server_url(), "https://prod.aunsorm.example/cli");
+    }
+
+    #[test]
+    fn default_server_url_ignores_blank_env() {
+        let _guard = env_lock().lock().unwrap();
+        let _env = EnvOverride::apply(&[
+            (SERVER_URL_VAR, Some("   \t   \n")),
+            (HOST_VAR, Some("10.42.0.8")),
+            (HOSTNAME_VAR, Some("cli-host")),
+        ]);
+        assert_eq!(default_server_url(), "http://10.42.0.8:8080");
     }
 
     #[test]
