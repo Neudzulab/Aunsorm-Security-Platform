@@ -1,0 +1,47 @@
+# Helm values for ingress-nginx controller with TLS termination and global rate limiting.
+# Apply with: helm upgrade --install aunsorm-ingress ingress-nginx/ingress-nginx -n ingress-nginx -f ingress-nginx-values.yaml
+controller:
+  replicaCount: 3
+  ingressClassResource:
+    name: aunsorm-nginx
+    controllerValue: k8s.io/ingress-nginx
+    enabled: true
+  ingressClassByName: true
+  service:
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+      service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+      service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: instance
+      service.beta.kubernetes.io/aws-load-balancer-proxy-protocol: "false"
+      external-dns.alpha.kubernetes.io/hostname: gateway.aunsorm.example
+      service.beta.kubernetes.io/aws-load-balancer-ssl-cert: arn:aws:acm:REGION:ACCOUNT:certificate/CERT_ID
+      service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+    targetPorts:
+      http: http
+      https: http
+    type: LoadBalancer
+  config:
+    use-forwarded-headers: "true"
+    real-ip-header: X-Forwarded-For
+    enable-real-ip: "true"
+    proxy-body-size: "32m"
+    ssl-redirect: "true"
+    force-ssl-redirect: "true"
+    hsts: "true"
+    hsts-max-age: "31536000"
+    hsts-include-subdomains: "true"
+    hsts-preload: "true"
+    http-snippet: |
+      limit_req_zone $binary_remote_addr zone=global-rate-limit:20m rate=200r/s;
+      limit_conn_zone $binary_remote_addr zone=global-conn-limit:20m;
+    server-snippet: |
+      limit_conn global-conn-limit 400;
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "10254"
+  extraArgs:
+    default-ssl-certificate: ingress-nginx/aunsorm-edge-tls

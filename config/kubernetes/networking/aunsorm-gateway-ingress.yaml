@@ -1,0 +1,64 @@
+# Ingress resource terminating TLS at ingress-nginx and forwarding to the internal Istio ingress gateway.
+# Prerequisites:
+# - `kubectl create namespace ingress-nginx` and deploy ingress-nginx using `ingress-nginx-values.yaml`.
+# - TLS secret `aunsorm-edge-tls` must exist in `ingress-nginx` namespace (created via cert-manager or kubectl).
+# - Namespace `aunsorm-platform` hosts the application workloads with Istio sidecar injection enabled.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aunsorm-platform
+  labels:
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aunsorm-gateway
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-gateway
+spec:
+  selector:
+    app: aunsorm-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aunsorm-gateway
+  namespace: aunsorm-platform
+  annotations:
+    kubernetes.io/ingress.class: aunsorm-nginx
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    nginx.ingress.kubernetes.io/limit-rps: "120"
+    nginx.ingress.kubernetes.io/limit-rpm: "6000"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "2"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10s"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60s"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60s"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
+    nginx.ingress.kubernetes.io/hsts-preload: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  tls:
+    - hosts:
+        - api.aunsorm.example
+      secretName: aunsorm-edge-tls
+  rules:
+    - host: api.aunsorm.example
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: aunsorm-gateway
+                port:
+                  number: 8080

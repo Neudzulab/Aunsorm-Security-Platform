@@ -99,6 +99,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ACME DNS-01 doğrulama yardımcıları: `_acme-challenge` TXT kayıt adı ve
   SHA-256 key-authorization digest değerini deterministik olarak üretir,
   wildcard domainleri normalleştirir.
+- Üretim ağ sertleştirmesi: ingress-nginx TLS sonlandırması, Istio mTLS devre kesici
+  politikaları ve Cloudflare/AWS Shield DDoS kuralları `docs/src/operations/networking-load-balancing.md`
+  altında belgelendi; Kubernetes/terraform manifestleri `config/kubernetes/networking/`,
+  `config/cloudflare/` ve `config/aws/` dizinlerine eklendi.
 - ACME TLS-ALPN-01 doğrulama yardımcıları: key-authorization SHA-256 özetini
   hesaplayıp `acmeIdentifier` uzantısı ve Ed25519 anahtarlarıyla kendinden
   imzalı sertifika üreten yardımcılar sağlar; PEM çıktıları ALPN `acme-tls/1`
