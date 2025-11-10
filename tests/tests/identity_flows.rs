@@ -14,16 +14,20 @@ use aunsorm_jwt::{
     Audience, Claims, Ed25519PublicKey, InMemoryJtiStore, JtiStore, Jwk, JwtError, JwtVerifier,
     VerificationOptions,
 };
-use aunsorm_kms::{BackendKind, BackendLocator, KeyDescriptor, KmsClient, KmsConfig};
+use aunsorm_kms::{
+    BackendKind, BackendLocator, BackupMetadata, EncryptedBackup, KeyDescriptor, KmsClient,
+    KmsConfig,
+};
 use aunsorm_x509::{generate_self_signed, SelfSignedCertParams, SubjectAltName};
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine as _;
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{SigningKey, VerifyingKey};
 use pem::parse;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
+use time::OffsetDateTime;
 use x509_parser::{
     extensions::ParsedExtension,
     prelude::{FromDer, X509Certificate},
@@ -118,25 +122,73 @@ fn build_subject_alt_names(fixture: &SubjectAltNameFixture) -> Vec<SubjectAltNam
     sans
 }
 
-fn write_local_store(fixture: &KmsFixture) -> NamedTempFile {
+struct LocalStoreHandle {
+    file: NamedTempFile,
+    key_b64: String,
+}
+
+impl LocalStoreHandle {
+    fn path(&self) -> &std::path::Path {
+        self.file.path()
+    }
+
+    fn install_env(&self) {
+        std::env::set_var("AUNSORM_KMS_LOCAL_STORE_KEY", &self.key_b64);
+    }
+}
+
+fn write_local_store(fixture: &KmsFixture) -> LocalStoreHandle {
     let mut file = NamedTempFile::new().expect("local store file");
-    let json = serde_json::json!({
+    let signing_seed = decode_b64(&fixture.signing_seed_b64)
+        .try_into()
+        .unwrap_or_else(|_| {
+            panic!(
+                "signing seed must be 32 bytes for {}",
+                fixture.signing_key_id
+            )
+        });
+    let wrap_seed = decode_b64(&fixture.wrap_seed_b64)
+        .try_into()
+        .unwrap_or_else(|_| panic!("wrap seed must be 32 bytes for {}", fixture.wrap_key_id));
+    let signing_key = SigningKey::from_bytes(&signing_seed);
+    let verifying = VerifyingKey::from(&signing_key);
+    let created_at = OffsetDateTime::from_unix_timestamp(1).expect("timestamp");
+    let document = serde_json::json!({
+        "version": 2,
         "keys": [
             {
-                "id": fixture.signing_key_id,
+                "id": fixture.signing_key_id.clone(),
                 "purpose": "ed25519-sign",
-                "secret": fixture.signing_seed_b64,
+                "material": STANDARD.encode(signing_seed),
+                "kid": hex::encode(Sha256::digest(verifying.as_bytes())),
+                "public_key": STANDARD.encode(verifying.to_bytes()),
+                "metadata": {
+                    "created_at": created_at
+                        .format(&time::format_description::well_known::Rfc3339)
+                        .expect("format timestamp"),
+                },
             },
             {
-                "id": fixture.wrap_key_id,
+                "id": fixture.wrap_key_id.clone(),
                 "purpose": "aes256-wrap",
-                "secret": fixture.wrap_seed_b64,
+                "material": STANDARD.encode(wrap_seed),
             }
         ]
     });
-    serde_json::to_writer_pretty(file.as_file_mut(), &json).expect("write local store");
+    let plaintext = serde_json::to_vec(&document).expect("store json");
+    let encryption_key = [21u8; 32];
+    let metadata = BackupMetadata::new(
+        OffsetDateTime::from_unix_timestamp(5).expect("metadata timestamp"),
+        vec![fixture.signing_key_id.clone(), fixture.wrap_key_id.clone()],
+        2,
+    );
+    let backup = EncryptedBackup::seal(&plaintext, &encryption_key, metadata).expect("seal");
+    let bytes = backup.to_bytes().expect("serialise backup");
+    file.write_all(&bytes).expect("write backup");
     file.flush().expect("flush local store");
-    file
+    let key_b64 = STANDARD.encode(encryption_key);
+
+    LocalStoreHandle { file, key_b64 }
 }
 
 fn import_extra_claims(claims: &mut Claims, extras: &Map<String, Value>) {
@@ -154,6 +206,7 @@ fn identity_flow_alpha_roundtrip() {
 
     // Prepare KMS local store and client.
     let local_store = write_local_store(&fixture.kms);
+    local_store.install_env();
     let config = KmsConfig::local_only(local_store.path()).expect("kms config");
     let client = KmsClient::from_config(config).expect("kms client");
 

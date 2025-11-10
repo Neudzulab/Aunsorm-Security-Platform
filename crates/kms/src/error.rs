@@ -33,6 +33,18 @@ pub enum KmsError {
     /// Kriptografik operasyon başarısız olduğunda kullanılır.
     #[error("cryptographic error: {0}")]
     Crypto(String),
+    /// Multi-imza onayı geçersiz.
+    #[error("approval error: {0}")]
+    Approval(String),
+    /// Anahtar rotasyonu veya politikalarındaki hata.
+    #[error("rotation error: {0}")]
+    Rotation(String),
+    /// Yedekleme/geri yükleme sırasında oluşan hata.
+    #[error("backup error: {0}")]
+    Backup(String),
+    /// HSM ile etkileşim sırasında oluşan hata.
+    #[error("hsm error: {0}")]
+    Hsm(String),
 }
 
 /// Sonuç tipi kestirmesi.

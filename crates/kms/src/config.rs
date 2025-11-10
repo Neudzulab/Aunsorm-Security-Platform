@@ -1,7 +1,17 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine as _;
+use zeroize::Zeroizing;
+
+#[cfg(feature = "kms-pkcs11")]
+use crate::approval::ApprovalPolicyConfig;
 use crate::error::{KmsError, Result};
+#[cfg(feature = "kms-pkcs11")]
+use crate::rotation::RotationPolicyConfig;
+
+const LOCAL_STORE_KEY_ENV: &str = "AUNSORM_KMS_LOCAL_STORE_KEY";
 
 #[cfg(any(feature = "kms-gcp", feature = "kms-azure", feature = "kms-pkcs11"))]
 use serde::{de::DeserializeOwned, Deserialize};
@@ -103,6 +113,14 @@ pub struct AzureKeyConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Pkcs11BackendConfig {
     #[serde(default)]
+    pub module: Option<String>,
+    #[serde(default)]
+    pub slot: Option<u64>,
+    #[serde(default)]
+    pub token_label: Option<String>,
+    #[serde(default)]
+    pub user_pin_env: Option<String>,
+    #[serde(default)]
     pub keys: Vec<Pkcs11KeyConfig>,
 }
 
@@ -110,11 +128,18 @@ pub struct Pkcs11BackendConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Pkcs11KeyConfig {
     pub key_id: String,
-    pub private_key: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub wrapped_seed: Option<String>,
     #[serde(default)]
     pub public_key: Option<String>,
     #[serde(default)]
     pub kid: Option<String>,
+    #[serde(default)]
+    pub rotation: Option<RotationPolicyConfig>,
+    #[serde(default)]
+    pub approvals: Option<ApprovalPolicyConfig>,
 }
 
 /// Belirli bir backend ve anahtar kimliğini adresler.
@@ -221,7 +246,8 @@ impl KmsConfig {
             parse_bool(env::var("AUNSORM_KMS_FALLBACK").ok().as_deref()).unwrap_or(false);
         let local_store = match env::var("AUNSORM_KMS_LOCAL_STORE").ok() {
             Some(path) if !path.trim().is_empty() => {
-                Some(LocalStoreConfig::new(PathBuf::from(path)))
+                let key = load_local_store_key_from_env()?;
+                Some(LocalStoreConfig::new(PathBuf::from(path), key))
             }
             _ => None,
         };
@@ -263,14 +289,35 @@ impl KmsConfig {
     ///
     /// `path` boş ise `KmsError::Config` döner.
     pub fn local_only<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let key = load_local_store_key_from_env()?;
+        Self::local_only_with_key(path, key.as_ref())
+    }
+
+    /// Sadece yerel store kullanacak şekilde konfigürasyon üretir, key materyali doğrudan
+    /// çağıran tarafından sağlanır.
+    ///
+    /// # Errors
+    ///
+    /// `path` boş ise `KmsError::Config` döner.
+    pub fn local_only_with_key<P: AsRef<Path>>(path: P, key: &[u8]) -> Result<Self> {
         let store_path = path.as_ref();
         if store_path.as_os_str().is_empty() {
             return Err(KmsError::Config("local store path is empty".into()));
         }
+        if key.len() != 32 {
+            return Err(KmsError::Config(
+                "local store key must decode to exactly 32 bytes".into(),
+            ));
+        }
+        let mut encryption_key = Zeroizing::new([0u8; 32]);
+        encryption_key.copy_from_slice(key);
         Ok(Self {
             strict: false,
             allow_fallback: false,
-            local_store: Some(LocalStoreConfig::new(store_path.to_path_buf())),
+            local_store: Some(LocalStoreConfig::new(
+                store_path.to_path_buf(),
+                encryption_key,
+            )),
             #[cfg(feature = "kms-gcp")]
             gcp: None,
             #[cfg(feature = "kms-azure")]
@@ -283,8 +330,10 @@ impl KmsConfig {
     /// Yerel store dosyasını ayarlar.
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
-    pub fn with_local_store(mut self, path: impl Into<PathBuf>) -> Self {
-        self.local_store = Some(LocalStoreConfig::new(path.into()));
+    pub fn with_local_store(mut self, path: impl Into<PathBuf>, key: &[u8; 32]) -> Self {
+        let mut encryption_key = Zeroizing::new([0u8; 32]);
+        encryption_key.copy_from_slice(key);
+        self.local_store = Some(LocalStoreConfig::new(path.into(), encryption_key));
         self
     }
 
@@ -333,20 +382,30 @@ impl KmsConfig {
 #[derive(Debug, Clone)]
 pub struct LocalStoreConfig {
     path: PathBuf,
+    encryption_key: Zeroizing<[u8; 32]>,
 }
 
 impl LocalStoreConfig {
     /// Yeni yapılandırma oluşturur.
     #[must_use]
     #[allow(clippy::missing_const_for_fn)]
-    pub fn new(path: PathBuf) -> Self {
-        Self { path }
+    pub fn new(path: PathBuf, encryption_key: Zeroizing<[u8; 32]>) -> Self {
+        Self {
+            path,
+            encryption_key,
+        }
     }
 
     /// Store dosya yolunu döndürür.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Şifreleme anahtarını döndürür.
+    #[must_use]
+    pub fn encryption_key(&self) -> &[u8; 32] {
+        &self.encryption_key
     }
 }
 
@@ -370,4 +429,31 @@ fn parse_json_config<T: DeserializeOwned>(value: Option<String>, name: &str) -> 
     serde_json::from_str(&raw)
         .map(Some)
         .map_err(|err| KmsError::Config(format!("invalid {name} json: {err}")))
+}
+
+fn load_local_store_key_from_env() -> Result<Zeroizing<[u8; 32]>> {
+    let raw = env::var(LOCAL_STORE_KEY_ENV).map_err(|_| {
+        KmsError::Config(format!(
+            "{LOCAL_STORE_KEY_ENV} must be set when local store is enabled"
+        ))
+    })?;
+    decode_key_material(&raw, LOCAL_STORE_KEY_ENV)
+}
+
+fn decode_key_material(value: &str, name: &str) -> Result<Zeroizing<[u8; 32]>> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(KmsError::Config(format!("{name} cannot be empty")));
+    }
+    let decoded = STANDARD
+        .decode(trimmed.as_bytes())
+        .map_err(|err| KmsError::Config(format!("failed to decode {name}: {err}")))?;
+    let mut key = Zeroizing::new([0u8; 32]);
+    if decoded.len() != key.len() {
+        return Err(KmsError::Config(format!(
+            "{name} must decode to exactly 32 bytes"
+        )));
+    }
+    key.copy_from_slice(&decoded);
+    Ok(key)
 }

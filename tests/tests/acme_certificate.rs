@@ -10,7 +10,9 @@ use aunsorm_acme::{
     CertificateError, CertificateStorage, FinalizeOptions, FinalizeWorkflow, OrderService,
     OrderStatus, OrderStatusSnapshot,
 };
-use aunsorm_kms::{BackendKind, BackendLocator, KmsClient, KmsConfig};
+use aunsorm_kms::{
+    BackendKind, BackendLocator, BackupMetadata, EncryptedBackup, KmsClient, KmsConfig,
+};
 use aunsorm_x509::ca::{
     generate_certificate_signing_request, sign_server_cert, verify_certificate_chain,
     CertificateSigningRequestParams, KeyAlgorithm, RootCaParams, ServerCertParams,
@@ -20,6 +22,7 @@ use base64::Engine as _;
 use pem::parse as parse_pem;
 use serde_json::{self, Value};
 use tempfile::tempdir;
+use time::OffsetDateTime;
 use tokio::runtime::Runtime;
 use url::Url;
 
@@ -257,20 +260,30 @@ fn certificate_download_and_storage_flow() {
 
         let kms_store_path = dir.path().join("kms.json");
         let aes_key = [0x42u8; 32];
-        let store_json = serde_json::json!({
+        let document = serde_json::json!({
+            "version": 2,
             "keys": [
                 {
                     "id": "tls-wrap",
                     "purpose": "aes256-wrap",
-                    "secret": STANDARD.encode(aes_key),
+                    "material": STANDARD.encode(aes_key),
                 }
             ]
         });
-        fs::write(
-            &kms_store_path,
-            serde_json::to_vec_pretty(&store_json).expect("kms json"),
-        )
-        .expect("write kms");
+        let plaintext = serde_json::to_vec(&document).expect("kms json");
+        let encryption_key = [31u8; 32];
+        let metadata = BackupMetadata::new(
+            OffsetDateTime::from_unix_timestamp(3).expect("metadata timestamp"),
+            vec!["tls-wrap".to_string()],
+            2,
+        );
+        let backup = EncryptedBackup::seal(&plaintext, &encryption_key, metadata).expect("seal");
+        let bytes = backup.to_bytes().expect("backup bytes");
+        fs::write(&kms_store_path, &bytes).expect("write kms");
+        std::env::set_var(
+            "AUNSORM_KMS_LOCAL_STORE_KEY",
+            STANDARD.encode(encryption_key),
+        );
         let kms_config = KmsConfig::local_only(&kms_store_path).expect("kms config");
         let kms_client = Arc::new(KmsClient::from_config(kms_config).expect("kms client"));
         let wrap_locator = BackendLocator::new(BackendKind::Local, "tls-wrap");
