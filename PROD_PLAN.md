@@ -12,8 +12,11 @@ This document tracks all remaining work required for production deployment.
 
 ### Clock Attestation System
 - [ ] Deploy NTP attestation server with real certificate signatures
+ - [ ] Provision dual-node NTP cluster with hardware PPS/GPS modules and HAProxy failover
+ - [ ] Issue attestation certificates from production CA and rotate signing keys quarterly
  - [ ] Replace development mock signatures with production cryptographic proofs
  - [ ] Set `AUNSORM_CLOCK_MAX_AGE_SECS=30` in production environment
+ - [ ] Document firewall rules and secure management network for attestation hosts
 - [x] Implement automatic clock refresh service (ClockRefreshService integration)
 - [x] Configure health checks to monitor clock attestation freshness
 - [x] Enforce HTTPS-only refresh endpoints and verifier gating before publishing snapshots
@@ -30,17 +33,31 @@ This document tracks all remaining work required for production deployment.
 
 ### Key Management
 - [ ] Implement hardware security module (HSM) integration for KMS
+ - [ ] Finalize vendor selection (AWS CloudHSM vs. on-prem Luna SA) and procurement checklist
+ - [ ] Implement PKCS#11 abstraction layer with failover to standby HSM cluster
+ - [ ] Update Terraform to provision dedicated VPC subnets and security groups for HSM links
 - [ ] Key rotation automation with zero-downtime
+ - [ ] Implement dual-publish strategy (old+new keys) with gradual traffic shift
+ - [ ] Add integration tests covering rotation rollback and cutover monitoring hooks
 - [ ] Encrypted backup/restore procedures
+ - [ ] Design sealed secret export format with hardware-bound wrapping keys
+ - [ ] Schedule quarterly restore drills and capture runbooks in docs/src/operations
 - [ ] Multi-signature approval for sensitive key operations
+ - [ ] Integrate change-approval workflow with Slack + PagerDuty and store approvals in tamper-proof log
 - [ ] Key material never touches disk unencrypted
+ - [ ] Audit all services for tmpfs usage and enforce in CI with static analysis rule
 - [ ] Implement key expiration and automatic rotation policies
+ - [ ] Define per-algorithm lifetime matrix (RSA, Ed25519, AES-GCM) and codify in config schemas
+ - [ ] Expose rotation status metrics for alerting (expiring_soon, expired)
 
 ### Authentication & Authorization
 - [x] Multi-factor authentication (MFA) for admin operations
 - [x] Role-based access control (RBAC) enforcement
 - [x] OAuth 2.0 refresh token rotation
 - [ ] Token revocation webhook notifications
+ - [ ] Implement signed webhook payloads with timestamped nonce validation
+ - [ ] Add replay protection storage (Redis) with TTL tuned to webhook retry window
+ - [ ] Provide webhook delivery monitoring dashboard and SLA alerts
 - [x] Session timeout configuration per client type
 - [x] Audit logging for all authentication events
 
