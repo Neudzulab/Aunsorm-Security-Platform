@@ -1217,6 +1217,55 @@ mod tests {
         );
     }
 
+    #[test]
+    fn failures_excludes_allowlisted_entries() {
+        let report = ValidationReport {
+            base_url: "https://validator.test".to_string(),
+            results: vec![
+                ValidationResult {
+                    method: "GET".to_string(),
+                    path: "/ok".to_string(),
+                    status: Some(200),
+                    latency_ms: Some(10),
+                    outcome: ValidationOutcome::Success,
+                    response_excerpt: None,
+                    likely_cause: None,
+                    suggested_fix: None,
+                    allowed: false,
+                },
+                ValidationResult {
+                    method: "POST".to_string(),
+                    path: "/allowed".to_string(),
+                    status: Some(500),
+                    latency_ms: Some(25),
+                    outcome: ValidationOutcome::Failure(FailureKind::ServerError),
+                    response_excerpt: None,
+                    likely_cause: None,
+                    suggested_fix: None,
+                    allowed: true,
+                },
+                ValidationResult {
+                    method: "DELETE".to_string(),
+                    path: "/fail".to_string(),
+                    status: Some(404),
+                    latency_ms: Some(40),
+                    outcome: ValidationOutcome::Failure(FailureKind::Missing),
+                    response_excerpt: Some("missing".to_string()),
+                    likely_cause: Some("routing".to_string()),
+                    suggested_fix: Some("restore route".to_string()),
+                    allowed: false,
+                },
+            ],
+        };
+
+        let failures = report.failures();
+        assert_eq!(failures.len(), 1);
+        let failure = failures[0];
+        assert_eq!(failure.path, "/fail");
+        assert_eq!(failure.method, "DELETE");
+        assert_eq!(failure.status, Some(404));
+    }
+
     #[tokio::test]
     async fn rate_limiter_disables_when_limit_is_zero() {
         let limiter = RateLimiter::new(Some(0));
