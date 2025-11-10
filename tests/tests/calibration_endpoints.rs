@@ -14,6 +14,11 @@ use serde_json::json;
 use tempfile::TempDir;
 use tower::ServiceExt;
 
+const ROLE_BINDINGS_JSON: &str =
+    r#"{"alice":["user","admin"],"client:demo-client":["service","user"],"client:webapp-123":["user"]}"#;
+const MFA_SECRETS_JSON: &str =
+    r#"{"alice":{"secret":"YWRtaW4tc2hhcmVkLXNlY3JldC1vdHA=","digits":6}}"#;
+
 #[derive(Debug, Deserialize)]
 struct CalibrationVerifyExpectations {
     fingerprint_hex: Option<String>,
@@ -30,6 +35,28 @@ struct CalibrationVerifyResponseBody {
     fingerprint_hex: String,
     expectations: CalibrationVerifyExpectations,
     results: CalibrationVerifyResults,
+}
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<String>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let previous = std::env::var(key).ok();
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match &self.previous {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
 }
 
 fn strict_state() -> (Arc<ServerState>, TempDir) {
@@ -58,6 +85,8 @@ fn strict_state() -> (Arc<ServerState>, TempDir) {
     let calibration_fingerprint = calibration.fingerprint_hex();
     let temp_dir = TempDir::new().expect("temp dir");
     let ledger_path = temp_dir.path().join("jti-ledger.sqlite");
+    let _role_guard = EnvVarGuard::set("AUNSORM_ROLE_BINDINGS", ROLE_BINDINGS_JSON);
+    let _mfa_guard = EnvVarGuard::set("AUNSORM_MFA_SECRETS", MFA_SECRETS_JSON);
     let config = ServerConfig::new(
         "127.0.0.1:0".parse::<SocketAddr>().expect("socket"),
         "https://calibration-tests",
