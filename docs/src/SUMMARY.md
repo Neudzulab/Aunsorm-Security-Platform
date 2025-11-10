@@ -7,6 +7,7 @@
 - [HTTP/3 ve QUIC Datagram Programı](architecture/http3-quic.md)
 - [Post-Kuantum Hazırlık Durumu](architecture/postquantum.md)
 - [Kilitli Bellek ve Güvenli Donanım](architecture/trusted_compute.md)
+- [Mimari Boşluk Analizi](architecture/gap-analysis.md)
 - [Operasyonel Testler](operations/testing.md)
 - [Operasyonel Sorun Giderme Rehberi](operations/troubleshooting-guide.md)
 - [Clock Attestation Sunucu Runbook'u](operations/clock-attestation-deployment.md)
