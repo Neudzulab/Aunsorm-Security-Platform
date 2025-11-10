@@ -83,8 +83,16 @@ fn map_jwt_error(err: &JwtError) -> String {
 
 const BEARER_KEYWORD: &str = "bearer";
 
+fn contains_ascii_control(value: &str) -> bool {
+    value.bytes().any(|byte| byte.is_ascii_control())
+}
+
 fn sanitize_token_input(token: &str) -> Cow<'_, str> {
     let trimmed = token.trim();
+
+    if trimmed.is_empty() {
+        return Cow::Borrowed(trimmed);
+    }
 
     if trimmed.len() == BEARER_KEYWORD.len() && trimmed.eq_ignore_ascii_case(BEARER_KEYWORD) {
         return Cow::Owned(String::new());
@@ -96,11 +104,15 @@ fn sanitize_token_input(token: &str) -> Cow<'_, str> {
         let after_keyword = &trimmed[BEARER_KEYWORD.len()..];
         if after_keyword.starts_with(char::is_whitespace) {
             let normalized = after_keyword.trim_start_matches(char::is_whitespace);
-            if normalized.is_empty() {
+            if normalized.is_empty() || contains_ascii_control(normalized) {
                 return Cow::Owned(String::new());
             }
             return Cow::Owned(normalized.to_owned());
         }
+    }
+
+    if contains_ascii_control(trimmed) {
+        return Cow::Owned(String::new());
     }
 
     Cow::Borrowed(trimmed)
@@ -3529,6 +3541,17 @@ mod jwt_helper_tests {
     #[test]
     fn sanitize_token_input_returns_empty_when_bearer_without_token() {
         let result = sanitize_token_input("Bearer   \n\t");
+        assert!(result.as_ref().is_empty());
+        assert!(matches!(result, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn sanitize_token_input_rejects_ascii_control_characters_in_token() {
+        let result = sanitize_token_input("abc\n123");
+        assert!(result.as_ref().is_empty());
+        assert!(matches!(result, Cow::Owned(_)));
+
+        let result = sanitize_token_input("Bearer token\nvalue");
         assert!(result.as_ref().is_empty());
         assert!(matches!(result, Cow::Owned(_)));
     }

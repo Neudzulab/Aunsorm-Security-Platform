@@ -180,6 +180,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/security/jwt-verify` artık JSON gövdesinde `Bearer` önekiyle gelen token
   değerlerini temizleyerek Authorization başlığına özgü formatı yeniden
   kullanan istemcilerin doğrulama sürecinde hata almamasını sağlıyor.
+- `/security/jwt-verify` token temizlemesi artık ASCII kontrol karakterleri içeren
+  değerleri reddederek satır sonu enjeksiyonlarını ve gövde taşmalarını engelliyor.
 - `derive_seed64_and_pdk` now rejects empty passwords, preventing accidental derivation of seeds from blank credentials.
 - `/random/number` artık tam `u64` aralığını destekleyerek yüksek üst limitlerde hata vermeden deterministik reddetme örneklemesini uyguluyor.
 - ACME account telephone normalization now accepts DTMF digits (`*`, `#`) so service codes and keypad suffixes parse correctly.
