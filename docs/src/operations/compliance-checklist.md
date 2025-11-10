@@ -7,6 +7,7 @@ Bu kontrol listesi, Aunsorm platformunun eIDAS, SOC 2 ve FATF gibi standartlarla
 ## Çapraz Referanslanan Programlar
 - **HTTP/3 & QUIC:** [HTTP/3 QUIC Güvenlik Değerlendirmesi](http3-quic-security.md) dokümanı, QUIC datagram trafiği için AEAD gereksinimlerini ve 0-RTT kısıtlarını içerir.
 - **Blockchain İnovasyon Programı:** [Blockchain İnovasyon Programı](../innovation/blockchain.md) teslimatları, zincir üstü kayıtların gizlilik ve denetlenebilirlik hedeflerini tanımlar.
+- **Gizlilik ve Saklama Politikaları:** [Veri Saklama Politikası ve İmha Programı](data-retention-policy.md) ile [Gizlilik Politikası ve Hizmet Şartları Taslağı](privacy-terms-blueprint.md) müşteri verisi yükümlülüklerini ve yayın planını belirler.
 
 ## Kontrol Maddeleri
 1. **Veri Sınıflandırması**
