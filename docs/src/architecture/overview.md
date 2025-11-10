@@ -21,6 +21,9 @@ Aunsorm bileşenleri dört ana katmana ayrılır:
 
 Bu katmanlar `PLAN.md` ve sprint checklist'leriyle hizalıdır.
 
+Devam eden mimari kararları ve belgelenmesi gereken boşlukları
+[Mimari Boşluk Analizi](gap-analysis.md) sayfasında takip ediyoruz.
+
 ## Veri Akışı
 
 ```text
