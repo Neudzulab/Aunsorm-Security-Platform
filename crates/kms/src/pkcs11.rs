@@ -20,7 +20,6 @@ use zeroize::Zeroizing;
 use crate::approval::{ApprovalPolicy, ApprovalPolicyConfig};
 use crate::config::{BackendKind, Pkcs11BackendConfig, Pkcs11KeyConfig};
 use crate::error::{KmsError, Result};
-use crate::rng::create_aunsorm_rng;
 use crate::rotation::{RotationEvent, RotationPolicy, RotationPolicyConfig};
 use crate::util::compute_kid;
 use rand_core::RngCore;
@@ -56,6 +55,7 @@ struct KeyVersion {
     valid_until: Option<OffsetDateTime>,
 }
 
+#[derive(Clone)]
 enum SigningSource {
     Software(Zeroizing<[u8; 32]>),
     Hardware(cryptoki::object::ObjectHandle),
@@ -102,7 +102,7 @@ impl Pkcs11Backend {
 
     pub fn sign_ed25519(&self, key_id: &str, message: &[u8]) -> Result<Vec<u8>> {
         let mut keys = self.keys.lock().map_err(|err| {
-            let io_err = io::Error::new(io::ErrorKind::Other, err.to_string());
+            let io_err = io::Error::other(err.to_string());
             KmsError::unavailable(BackendKind::Pkcs11, io_err)
         })?;
         let entry = keys.get_mut(key_id).ok_or_else(|| KmsError::KeyNotFound {
@@ -120,7 +120,7 @@ impl Pkcs11Backend {
 
     pub fn public_ed25519(&self, key_id: &str) -> Result<Vec<u8>> {
         let keys = self.keys.lock().map_err(|err| {
-            let io_err = io::Error::new(io::ErrorKind::Other, err.to_string());
+            let io_err = io::Error::other(err.to_string());
             KmsError::unavailable(BackendKind::Pkcs11, io_err)
         })?;
         let entry = keys.get(key_id).ok_or_else(|| KmsError::KeyNotFound {
@@ -132,7 +132,7 @@ impl Pkcs11Backend {
 
     pub fn public_ed25519_versions(&self, key_id: &str) -> Result<Vec<(String, Vec<u8>)>> {
         let keys = self.keys.lock().map_err(|err| {
-            let io_err = io::Error::new(io::ErrorKind::Other, err.to_string());
+            let io_err = io::Error::other(err.to_string());
             KmsError::unavailable(BackendKind::Pkcs11, io_err)
         })?;
         let entry = keys.get(key_id).ok_or_else(|| KmsError::KeyNotFound {
@@ -147,10 +147,10 @@ impl Pkcs11Backend {
     }
 
     pub fn key_kid(&self, key_id: &str) -> Result<String> {
-        let keys = self
-            .keys
-            .lock()
-            .map_err(|err| KmsError::unavailable(BackendKind::Pkcs11, err))?;
+        let keys = self.keys.lock().map_err(|err| {
+            let io_err = io::Error::other(err.to_string());
+            KmsError::unavailable(BackendKind::Pkcs11, io_err)
+        })?;
         let entry = keys.get(key_id).ok_or_else(|| KmsError::KeyNotFound {
             backend: BackendKind::Pkcs11,
             key_id: key_id.to_string(),
@@ -165,7 +165,7 @@ impl Pkcs11Backend {
         strict: bool,
     ) -> Result<RotationEvent> {
         let mut keys = self.keys.lock().map_err(|err| {
-            let io_err = io::Error::new(io::ErrorKind::Other, err.to_string());
+            let io_err = io::Error::other(err.to_string());
             KmsError::unavailable(BackendKind::Pkcs11, io_err)
         })?;
         let entry = keys.get_mut(key_id).ok_or_else(|| KmsError::KeyNotFound {
@@ -301,8 +301,8 @@ fn auto_rotate_if_needed(
 fn rotate_entry(
     entry: &mut Pkcs11Key,
     key_id: &str,
-    hardware: SharedHardware,
-    wrap_key: SharedWrap,
+    _hardware: SharedHardware,
+    _wrap_key: SharedWrap,
 ) -> Result<RotationEvent> {
     let now = OffsetDateTime::now_utc();
     match entry.active.source {
@@ -359,7 +359,7 @@ fn sign_with_source(
             let hw =
                 hardware.ok_or_else(|| KmsError::Hsm("hardware session not configured".into()))?;
             let session = hw.session.lock().map_err(|err| {
-                let io_err = io::Error::new(io::ErrorKind::Other, err.to_string());
+                let io_err = io::Error::other(err.to_string());
                 KmsError::unavailable(BackendKind::Pkcs11, io_err)
             })?;
             session
@@ -373,11 +373,11 @@ fn initialize_hardware(module: &str, config: &Pkcs11BackendConfig) -> Result<Har
     let pkcs11 = Pkcs11::new(module)
         .map_err(|err| KmsError::Hsm(format!("failed to load pkcs11 module {module}: {err}")))?;
     pkcs11
-        .initialize(Default::default())
+        .initialize(cryptoki::context::CInitializeArgs::OsThreads)
         .map_err(|err| KmsError::Hsm(format!("pkcs11 initialize failed: {err}")))?;
     let slots = pkcs11
-        .get_slot_list(true)
-        .map_err(|err| KmsError::Hsm(format!("pkcs11 get_slot_list failed: {err}")))?;
+        .get_slots_with_token()
+        .map_err(|err| KmsError::Hsm(format!("pkcs11 get_slots_with_token failed: {err}")))?;
     let slot = select_slot(&pkcs11, &slots, config)?;
     let session = pkcs11
         .open_rw_session(slot)
@@ -427,23 +427,17 @@ fn find_private_key(
     session: &Mutex<Session>,
     label: &str,
 ) -> Result<cryptoki::object::ObjectHandle> {
-    let mut session = session.lock().map_err(|err| {
-        let io_err = io::Error::new(io::ErrorKind::Other, err.to_string());
+    let session = session.lock().map_err(|err| {
+        let io_err = io::Error::other(err.to_string());
         KmsError::unavailable(BackendKind::Pkcs11, io_err)
     })?;
     let template = vec![
         Attribute::Class(ObjectClass::PRIVATE_KEY),
         Attribute::Label(label.as_bytes().to_vec()),
     ];
-    session
-        .find_objects_init(&template)
-        .map_err(|err| KmsError::Hsm(format!("pkcs11 find_objects_init failed: {err}")))?;
     let objects = session
-        .find_objects(1)
+        .find_objects(&template)
         .map_err(|err| KmsError::Hsm(format!("pkcs11 find_objects failed: {err}")))?;
-    session
-        .find_objects_final()
-        .map_err(|err| KmsError::Hsm(format!("pkcs11 find_objects_final failed: {err}")))?;
     objects
         .into_iter()
         .next()
@@ -455,7 +449,7 @@ fn read_public_key(
     handle: cryptoki::object::ObjectHandle,
 ) -> Result<[u8; 32]> {
     let session = session.lock().map_err(|err| {
-        let io_err = io::Error::new(io::ErrorKind::Other, err.to_string());
+        let io_err = io::Error::other(err.to_string());
         KmsError::unavailable(BackendKind::Pkcs11, io_err)
     })?;
     let attributes = session
@@ -558,9 +552,12 @@ fn unwrap_seed(
     let (nonce_bytes, ciphertext) = bytes.split_at(12);
     let cipher = Aes256Gcm::new_from_slice(wrap_key.as_ref())
         .map_err(|err| KmsError::Config(format!("invalid pkcs11 wrap key: {err}")))?;
+    let mut nonce_array = [0u8; 12];
+    nonce_array.copy_from_slice(&nonce_bytes[..12]);
+    let nonce = Nonce::from(nonce_array);
     let plaintext = cipher
         .decrypt(
-            Nonce::from_slice(nonce_bytes),
+            &nonce,
             Payload {
                 msg: ciphertext,
                 aad: key_id.as_bytes(),

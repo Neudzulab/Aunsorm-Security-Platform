@@ -108,7 +108,7 @@ impl RoleDirectory {
     pub fn allows(&self, subject: &str, role: &str) -> bool {
         self.entries
             .get(subject)
-            .map_or(false, |roles| roles.contains(role))
+            .is_some_and(|roles| roles.contains(role))
     }
 }
 
@@ -206,7 +206,7 @@ fn generate_totp(secret: &MfaSecret, counter: u64) -> Result<u32, ServerError> {
 }
 
 #[cfg(test)]
-pub(crate) fn debug_totp_for(state: &ServerState, subject: &str, at: SystemTime) -> Option<String> {
+pub fn debug_totp_for(state: &ServerState, subject: &str, at: SystemTime) -> Option<String> {
     let secret = state.mfa_directory.secret(subject)?;
     let counter = at.duration_since(UNIX_EPOCH).ok()?.as_secs() / TOTP_STEP_SECONDS;
     let value = generate_totp(secret, counter).ok()?;
@@ -1115,7 +1115,7 @@ impl RefreshTokenStore {
                     let conn_guard = conn.lock().map_err(|_| {
                         ServerError::Configuration("SQLite lock poisoned".to_string())
                     })?;
-                    let mfa_flag: i64 = if record.mfa_verified { 1 } else { 0 };
+                    let mfa_flag: i64 = i64::from(record.mfa_verified);
                     conn_guard.execute(
                         "INSERT OR REPLACE INTO refresh_tokens(
                             token_hash, client_id, subject, role, scope, mfa_verified, issued_at, expires_at, session_ttl

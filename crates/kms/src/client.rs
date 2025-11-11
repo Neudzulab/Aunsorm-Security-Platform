@@ -353,7 +353,7 @@ impl KmsClient {
             });
         };
         mutex.lock().map_err(|err| {
-            let io_err = io::Error::new(io::ErrorKind::Other, err.to_string());
+            let io_err = io::Error::other(err.to_string());
             KmsError::unavailable(BackendKind::Local, io_err)
         })
     }

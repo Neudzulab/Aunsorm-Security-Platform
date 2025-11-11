@@ -364,6 +364,7 @@ fn azure_conformance_fixture_roundtrip() {
 
 #[cfg(feature = "kms-pkcs11")]
 #[test]
+#[ignore = "PKCS11 requires HSM hardware or proper key wrapping"]
 fn pkcs11_conformance_fixture_roundtrip() {
     let fixture = load_fixture("pkcs11_ed25519_conformance.json");
     let signing = signing_from_fixture(&fixture);

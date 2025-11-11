@@ -147,7 +147,7 @@ fn write_local_store(fixture: &KmsFixture) -> LocalStoreHandle {
                 fixture.signing_key_id
             )
         });
-    let wrap_seed = decode_b64(&fixture.wrap_seed_b64)
+    let wrap_seed: [u8; 32] = decode_b64(&fixture.wrap_seed_b64)
         .try_into()
         .unwrap_or_else(|_| panic!("wrap seed must be 32 bytes for {}", fixture.wrap_key_id));
     let signing_key = SigningKey::from_bytes(&signing_seed);

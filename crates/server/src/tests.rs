@@ -1885,13 +1885,12 @@ async fn revoke_access_token_marks_introspection_inactive() {
     let refresh_body = to_bytes(refresh_response.into_body(), usize::MAX)
         .await
         .expect("refresh body");
-    if refresh_status != StatusCode::OK {
-        panic!(
-            "unexpected refresh error (status {}): {}",
-            refresh_status,
-            String::from_utf8_lossy(&refresh_body)
-        );
-    }
+    assert!(
+        (refresh_status == StatusCode::OK),
+        "unexpected refresh error (status {}): {}",
+        refresh_status,
+        String::from_utf8_lossy(&refresh_body)
+    );
     let refreshed: TokenResponse = serde_json::from_slice(&refresh_body).expect("refresh json");
     assert_ne!(refreshed.access_token, token.access_token);
 }

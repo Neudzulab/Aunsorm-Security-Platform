@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 #![deny(warnings)]
-#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+#![deny(clippy::all)]
+#![warn(clippy::pedantic, clippy::nursery)]
+#![allow(clippy::option_if_let_else)]
 
 mod rng;
 
@@ -2707,7 +2709,21 @@ fn handle_jwt_sign(args: &JwtSignArgs) -> CliResult<()> {
         }
         let mut config = KmsConfig::from_env()?;
         if let Some(store) = args.kms_store.as_ref() {
-            config = config.with_local_store(store.clone());
+            // Load local store key from environment
+            let key_str = std::env::var("AUNSORM_KMS_LOCAL_STORE_KEY").map_err(|_| {
+                CliError::Kms(aunsorm_kms::KmsError::Config(
+                    "AUNSORM_KMS_LOCAL_STORE_KEY must be set".into(),
+                ))
+            })?;
+            let key_bytes = base64::engine::general_purpose::STANDARD.decode(key_str.trim())?;
+            if key_bytes.len() != 32 {
+                return Err(CliError::Kms(aunsorm_kms::KmsError::Config(
+                    "KMS local store key must be 32 bytes".into(),
+                )));
+            }
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&key_bytes);
+            config = config.with_local_store(store.clone(), &key);
         }
         let client = KmsClient::from_config(config)?;
         let primary = KmsBackendLocator::new(backend.into(), kms_key_id.clone());
