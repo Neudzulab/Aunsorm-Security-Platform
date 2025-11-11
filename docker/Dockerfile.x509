@@ -19,6 +19,7 @@ WORKDIR /srv
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-x509
 
 ENV AUNSORM_LISTEN=0.0.0.0:50013
+ENV SERVICE_MODE=x509-service
 ENV RUST_LOG=info
 
 USER aunsorm-x509

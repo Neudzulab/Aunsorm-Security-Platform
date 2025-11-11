@@ -19,6 +19,7 @@ WORKDIR /srv
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-blockchain
 
 ENV AUNSORM_LISTEN=0.0.0.0:50020
+ENV SERVICE_MODE=blockchain-service
 ENV RUST_LOG=info
 
 USER aunsorm-blockchain

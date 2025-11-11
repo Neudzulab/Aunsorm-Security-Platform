@@ -29,6 +29,13 @@ WORKDIR /srv
 # Copy binary
 COPY --from=builder /workspace/target/release/aunsorm-server /srv/aunsorm-server
 
+ENV AUNSORM_LISTEN=0.0.0.0:50023
+ENV SERVICE_MODE=cli-gateway
+ENV CLI_MAX_FILE_SIZE=100MB
+ENV CLI_TIMEOUT=300s
+ENV AUTH_SERVICE_URL=http://auth-service:50011
+ENV RUST_LOG=info
+
 # Expose port
 EXPOSE 50023
 
@@ -37,4 +44,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:50023/health || exit 1
 
 # Start CLI Gateway Service
-CMD ["/srv/aunsorm-server", "--port", "50023", "--service", "cli-gateway"]
+CMD ["/srv/aunsorm-server"]

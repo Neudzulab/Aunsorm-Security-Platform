@@ -19,6 +19,7 @@ WORKDIR /srv
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-kms
 
 ENV AUNSORM_LISTEN=0.0.0.0:50014
+ENV SERVICE_MODE=kms-service
 ENV RUST_LOG=info
 
 USER aunsorm-kms

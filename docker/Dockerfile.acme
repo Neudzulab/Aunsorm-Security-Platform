@@ -20,6 +20,7 @@ RUN install -d -o aunsorm-acme -g aunsorm-acme /srv/data
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-acme
 
 ENV AUNSORM_LISTEN=0.0.0.0:50017
+ENV SERVICE_MODE=acme-service
 ENV RUST_LOG=info
 
 USER aunsorm-acme

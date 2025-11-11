@@ -19,6 +19,7 @@ WORKDIR /srv
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-metrics
 
 ENV AUNSORM_LISTEN=0.0.0.0:50022
+ENV SERVICE_MODE=metrics-service
 ENV RUST_LOG=info
 
 USER aunsorm-metrics
