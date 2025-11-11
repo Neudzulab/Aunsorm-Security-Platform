@@ -21,6 +21,8 @@ use sha2::{Digest, Sha256};
 use std::array;
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::env;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use time::OffsetDateTime;
@@ -34,6 +36,78 @@ mod acme;
 
 // Global registered devices set for testing
 static REGISTERED_DEVICES: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+
+fn service_mode_from_binary_name(name: &str) -> Option<&'static str> {
+    match name {
+        "aunsorm-gateway" => Some("gateway"),
+        "aunsorm-auth" => Some("auth-service"),
+        "aunsorm-crypto" => Some("crypto-service"),
+        "aunsorm-x509" => Some("x509-service"),
+        "aunsorm-kms" => Some("kms-service"),
+        "aunsorm-mdm" => Some("mdm-service"),
+        "aunsorm-id" => Some("id-service"),
+        "aunsorm-acme" => Some("acme-service"),
+        "aunsorm-pqc" => Some("pqc-service"),
+        "aunsorm-rng" => Some("rng-service"),
+        "aunsorm-blockchain" => Some("blockchain-service"),
+        "aunsorm-e2ee" => Some("e2ee-service"),
+        "aunsorm-metrics" => Some("metrics-service"),
+        "aunsorm-cli-gateway" => Some("cli-gateway"),
+        _ => None,
+    }
+}
+
+fn service_mode_from_port(port: u16) -> Option<&'static str> {
+    match port {
+        50010 => Some("gateway"),
+        50011 => Some("auth-service"),
+        50012 => Some("crypto-service"),
+        50013 => Some("x509-service"),
+        50014 => Some("kms-service"),
+        50015 => Some("mdm-service"),
+        50016 => Some("id-service"),
+        50017 => Some("acme-service"),
+        50018 => Some("pqc-service"),
+        50019 => Some("rng-service"),
+        50020 => Some("blockchain-service"),
+        50021 => Some("e2ee-service"),
+        50022 => Some("metrics-service"),
+        50023 => Some("cli-gateway"),
+        _ => None,
+    }
+}
+
+fn detect_service_mode() -> Option<String> {
+    if let Ok(raw_mode) = env::var("SERVICE_MODE") {
+        let trimmed = raw_mode.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_owned());
+        }
+    }
+
+    if let Ok(exe_path) = env::current_exe() {
+        if let Some(stem) = exe_path.file_stem().and_then(|value| value.to_str()) {
+            if let Some(mode) = service_mode_from_binary_name(stem) {
+                tracing::info!(binary = stem, "🔧 SERVICE_MODE inferred from binary name");
+                return Some(mode.to_string());
+            }
+        }
+    }
+
+    if let Ok(listen_raw) = env::var("AUNSORM_LISTEN") {
+        if let Ok(addr) = listen_raw.parse::<SocketAddr>() {
+            if let Some(mode) = service_mode_from_port(addr.port()) {
+                tracing::info!(
+                    port = addr.port(),
+                    "🔧 SERVICE_MODE inferred from listen port"
+                );
+                return Some(mode.to_string());
+            }
+        }
+    }
+
+    None
+}
 
 fn system_time_to_unix_seconds(time: SystemTime) -> u64 {
     time.duration_since(UNIX_EPOCH)
@@ -2898,7 +2972,7 @@ pub async fn transparency_tree(
 /// # Panics
 /// `http3-experimental` özelliği etkin ve `Alt-Svc` başlığı oluşturulamazsa panikler.
 pub fn build_router(state: &Arc<ServerState>) -> Router {
-    let service_mode = std::env::var("SERVICE_MODE").ok();
+    let service_mode = detect_service_mode();
     tracing::info!("🔧 SERVICE_MODE: {:?}", service_mode);
 
     let mut router = Router::new()
@@ -3100,6 +3174,48 @@ async fn proxy_jwt_verify(Json(payload): Json<serde_json::Value>) -> impl IntoRe
             }
         }
         Err(_) => (StatusCode::BAD_GATEWAY, "Auth service unavailable").into_response(),
+    }
+}
+
+#[cfg(test)]
+mod service_mode_detection_tests {
+    use super::{service_mode_from_binary_name, service_mode_from_port};
+
+    #[test]
+    fn binary_name_mappings_cover_known_services() {
+        assert_eq!(
+            service_mode_from_binary_name("aunsorm-gateway"),
+            Some("gateway")
+        );
+        assert_eq!(
+            service_mode_from_binary_name("aunsorm-auth"),
+            Some("auth-service")
+        );
+        assert_eq!(
+            service_mode_from_binary_name("aunsorm-crypto"),
+            Some("crypto-service")
+        );
+        assert_eq!(
+            service_mode_from_binary_name("aunsorm-cli-gateway"),
+            Some("cli-gateway")
+        );
+    }
+
+    #[test]
+    fn binary_name_unknown_variants_return_none() {
+        assert_eq!(service_mode_from_binary_name("custom-server"), None);
+    }
+
+    #[test]
+    fn port_mappings_cover_primary_services() {
+        assert_eq!(service_mode_from_port(50010), Some("gateway"));
+        assert_eq!(service_mode_from_port(50013), Some("x509-service"));
+        assert_eq!(service_mode_from_port(50022), Some("metrics-service"));
+    }
+
+    #[test]
+    fn port_unknown_values_return_none() {
+        assert_eq!(service_mode_from_port(42), None);
     }
 }
 

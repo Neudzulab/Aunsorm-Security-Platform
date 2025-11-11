@@ -134,6 +134,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `endpoint-validator` rate limiter artık `0` değeri verildiğinde sınırsız
   istek kabul ederek CLI yapılandırmalarındaki "0 = kapalı" semantiğiyle
   tutarlılık sağlıyor ve gereksiz yavaşlamayı önlüyor.
+- `aunsorm-server` otomatik servis modu tespiti: `SERVICE_MODE` tanımlanmadığında
+  ikili adı veya `AUNSORM_LISTEN` portu üzerinden uygun servis modu seçilerek
+  Docker varsayılanlarıyla manuel override gereksinimi ortadan kalktı.
 - `/metrics` endpoint now pulls live counts from the server state instead of
   returning placeholder metric values.
 - `aunsorm-jwt` doğrulaması varsayılan olarak `jti` alanını zorunlu kılar ve
