@@ -177,7 +177,19 @@ fn sanitize_token_input(token: &str) -> Cow<'_, str> {
     {
         let after_keyword = &trimmed[BEARER_KEYWORD.len()..];
         if after_keyword.starts_with(char::is_whitespace) {
-            let normalized = after_keyword.trim_start_matches(char::is_whitespace);
+            let mut offset = 0_usize;
+            for ch in after_keyword.chars() {
+                if ch == ' ' || ch == '\t' {
+                    offset += ch.len_utf8();
+                    continue;
+                }
+                if ch.is_whitespace() {
+                    return Cow::Owned(String::new());
+                }
+                break;
+            }
+
+            let normalized = &after_keyword[offset..];
             if normalized.is_empty() || contains_ascii_control(normalized) {
                 return Cow::Owned(String::new());
             }
@@ -3735,6 +3747,21 @@ mod jwt_helper_tests {
         assert!(matches!(result, Cow::Owned(_)));
 
         let result = sanitize_token_input("Bearer token\nvalue");
+        assert!(result.as_ref().is_empty());
+        assert!(matches!(result, Cow::Owned(_)));
+    }
+
+    #[test]
+    fn sanitize_token_input_rejects_vertical_whitespace_after_bearer() {
+        let result = sanitize_token_input("Bearer\nabc");
+        assert!(result.as_ref().is_empty());
+        assert!(matches!(result, Cow::Owned(_)));
+
+        let result = sanitize_token_input("Bearer \nabc");
+        assert!(result.as_ref().is_empty());
+        assert!(matches!(result, Cow::Owned(_)));
+
+        let result = sanitize_token_input("Bearer\r\nabc");
         assert!(result.as_ref().is_empty());
         assert!(matches!(result, Cow::Owned(_)));
     }
