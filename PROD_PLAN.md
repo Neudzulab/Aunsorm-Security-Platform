@@ -226,7 +226,9 @@ This document tracks all remaining work required for production deployment.
 - [x] JWT duplicate field fix (serialize with RFC standard names)
 - [x] Clock attestation auto-update on server startup
 - [x] Native RNG implementation across all crates
-- [ ] Complete port-map.yaml and documentation restructure
+- [x] Complete port-map.yaml and documentation restructure
+  - README.md service endpoint tree mirrors the latest port-map statuses (gateway, metrics, CLI, RNG deprecation note)
+  - PROJECT_SUMMARY.md microservices table verified against port-map allocations
 - [x] Version bump to 0.5.0 in all Cargo.toml files
 - [ ] Archive legacy planning documents
 
