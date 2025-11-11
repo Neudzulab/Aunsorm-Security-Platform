@@ -48,6 +48,9 @@ const PATH_KEYS = [
   'AUNSORM_INTEGRATIONS_PATH',
 ];
 
+const DOMAIN_PATH_WARNING_MESSAGE =
+  'Domain override values should not include URL paths, queries, or fragments; configure path overrides via AUNSORM_*_PATH instead.';
+
 const LOOPBACK_HOST_ALIASES = new Set([
   'localhost.localdomain',
   'localhost6',
@@ -239,6 +242,42 @@ function splitHostPort(value: string): HostPortParts {
   }
 
   return { host: stripTrailingDots(hostPort), hadBrackets: false, rest };
+}
+
+function domainValueIncludesPathOrQuery(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return false;
+  }
+
+  const protocolRelative =
+    trimmed.startsWith('//') && !/^\w+:\/\//i.test(trimmed) ? `http:${trimmed}` : trimmed;
+
+  if (/^\w+:\/\//i.test(protocolRelative)) {
+    try {
+      const url = new URL(protocolRelative);
+      const hasPath = url.pathname !== '/' && url.pathname !== '';
+      return hasPath || url.search.length > 0 || url.hash.length > 0;
+    } catch {
+      // Fall through to heuristic parsing.
+    }
+  }
+
+  const withoutSlashes = trimmed.startsWith('//') ? trimmed.replace(/^\/+/, '') : trimmed;
+  const { rest } = splitHostPort(withoutSlashes);
+  if (!rest) {
+    return false;
+  }
+
+  if (rest === '/' || rest === '') {
+    return false;
+  }
+
+  return true;
 }
 
 function isLoopbackIpv4Address(candidate: string): boolean {
@@ -750,6 +789,16 @@ export function resolveAunsormBaseUrlDiagnostics(
   const setPathKeys = pathEntries
     .filter((entry) => entry.raw !== undefined && entry.raw !== null)
     .map((entry) => entry.key);
+
+  const domainWithPathKeys = domainEntries
+    .filter((entry) => entry.hasValue && domainValueIncludesPathOrQuery(entry.trimmed))
+    .map((entry) => entry.key);
+  if (domainWithPathKeys.length > 0) {
+    warnings.push({
+      message: DOMAIN_PATH_WARNING_MESSAGE,
+      keys: sortKeys(domainWithPathKeys),
+    });
+  }
 
   if (details.source.kind === 'direct-file') {
     const ignoredDirect = ignoredKeysWarning(

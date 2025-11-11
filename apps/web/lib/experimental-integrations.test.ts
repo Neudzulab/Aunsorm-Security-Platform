@@ -795,6 +795,25 @@ describe('resolveAunsormBaseUrlDiagnostics', () => {
     );
   });
 
+  it('warns when domain overrides include path or query components', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'gateway.aunsorm.dev/custom',
+      NEXT_PUBLIC_AUNSORM_BASE_DOMAIN: 'https://alt.aunsorm.dev/other?preview=true',
+    } satisfies NodeJS.ProcessEnv;
+
+    const diagnostics = resolveAunsormBaseUrlDiagnostics(env);
+
+    expect(diagnostics.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.stringContaining('Domain override values should not include URL paths'),
+          keys: ['AUNSORM_BASE_DOMAIN', 'NEXT_PUBLIC_AUNSORM_BASE_DOMAIN'],
+        }),
+      ]),
+    );
+  });
+
   it('does not warn about http overrides for loopback hosts', () => {
     const env = {
       NODE_ENV: 'production',
