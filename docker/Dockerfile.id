@@ -19,6 +19,7 @@ WORKDIR /srv
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-id
 
 ENV AUNSORM_LISTEN=0.0.0.0:50016
+ENV SERVICE_MODE=id-service
 ENV RUST_LOG=info
 
 USER aunsorm-id

@@ -20,6 +20,7 @@ RUN install -d -o aunsorm-mdm -g aunsorm-mdm /srv/data
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-mdm
 
 ENV AUNSORM_LISTEN=0.0.0.0:50015
+ENV SERVICE_MODE=mdm-service
 ENV RUST_LOG=info
 
 USER aunsorm-mdm

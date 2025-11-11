@@ -26,6 +26,7 @@ RUN install -d -o aunsorm-auth -g aunsorm-auth /srv/data
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-auth
 
 ENV AUNSORM_LISTEN=0.0.0.0:50011
+ENV SERVICE_MODE=auth-service
 ENV RUST_LOG=info
 
 USER aunsorm-auth

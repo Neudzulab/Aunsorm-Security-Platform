@@ -20,6 +20,7 @@ RUN install -d -o aunsorm-e2ee -g aunsorm-e2ee /srv/data
 COPY --from=builder /build/target/release/aunsorm-server /usr/local/bin/aunsorm-e2ee
 
 ENV AUNSORM_LISTEN=0.0.0.0:50021
+ENV SERVICE_MODE=e2ee-service
 ENV RUST_LOG=info
 
 USER aunsorm-e2ee

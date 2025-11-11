@@ -32,9 +32,6 @@ services:
       - metrics-service
       - cli-gateway
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50010
-      - SERVICE_MODE=gateway
 
   # Auth Service - JWT/OAuth (Port 50011)
   auth-service:
@@ -51,9 +48,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50011
-      - SERVICE_MODE=auth-service
 
   # Crypto Service - Core cryptography (Port 50012)
   crypto-service:
@@ -68,9 +62,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50012
-      - SERVICE_MODE=crypto-service
 
   # X509 Service - Certificate management (Port 50013)
   x509-service:
@@ -85,9 +76,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50013
-      - SERVICE_MODE=x509-service
 
   # KMS Service - Key Management (Port 50014)
   kms-service:
@@ -102,9 +90,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50014
-      - SERVICE_MODE=kms-service
 
   # MDM Service - Mobile Device Management (Port 50015)
   mdm-service:
@@ -121,9 +106,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50015
-      - SERVICE_MODE=mdm-service
 
   # ACME Service - Let's Encrypt (Port 50017)
   acme-service:
@@ -140,9 +122,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50017
-      - SERVICE_MODE=acme-service
 
   # ID Service - Identity management (Port 50016)
   id-service:
@@ -157,9 +136,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50016
-      - SERVICE_MODE=id-service
 
   # PQC Service - Post-Quantum Cryptography (Port 50018)
   pqc-service:
@@ -174,9 +150,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50018
-      - SERVICE_MODE=pqc-service
 
   # RNG Service - Cryptographic Random Number Generator (Port 50019)
   rng-service:
@@ -191,9 +164,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50019
-      - SERVICE_MODE=rng-service
 
   # Blockchain Service - DID verification and Fabric integration (Port 50020)
   # ------------------------------------------------------------------
@@ -226,9 +196,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50020
-      - SERVICE_MODE=blockchain-service
 
   # E2EE Service - End-to-End Encryption media sessions (Port 50021)
   e2ee-service:
@@ -245,9 +212,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50021
-      - SERVICE_MODE=e2ee-service
 
   # Metrics Service - Prometheus endpoints (Port 50022)
   metrics-service:
@@ -262,9 +226,6 @@ services:
     networks:
       - aunsorm-network
     restart: unless-stopped
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50022
-      - SERVICE_MODE=metrics-service
 
   # CLI Gateway Service - REST API for CLI commands (Port 50023)
   cli-gateway:
@@ -282,12 +243,6 @@ services:
       - auth-service
       - crypto-service
       - x509-service
-    environment:
-      - AUNSORM_LISTEN=0.0.0.0:50023
-      - SERVICE_MODE=cli-gateway
-      - CLI_MAX_FILE_SIZE=100MB
-      - CLI_TIMEOUT=300s
-      - AUTH_SERVICE_URL=http://auth-service:50011
     restart: unless-stopped
 
 volumes:
