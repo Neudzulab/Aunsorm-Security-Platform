@@ -423,6 +423,37 @@ function ensureProtocol(origin: string, fallbackScheme: 'http' | 'https'): strin
   return `${scheme}${bracketedHost}${portSuffix}${rest}`;
 }
 
+function stripUrlPath(candidate: string): string {
+  if (candidate === '') {
+    return '';
+  }
+
+  try {
+    const url = new URL(candidate);
+    return url.origin;
+  } catch {
+    const schemeMatch = candidate.match(/^(https?):\/\/(.*)$/i);
+    if (!schemeMatch) {
+      return candidate;
+    }
+
+    const scheme = schemeMatch[1].toLowerCase();
+    const remainder = schemeMatch[2];
+    const { host, port, hadBrackets } = splitHostPort(remainder);
+
+    if (!host) {
+      return `${scheme}://`;
+    }
+
+    const safeHost = encodeZoneId(host);
+    const needsBrackets = hadBrackets || safeHost.includes(':');
+    const bracketedHost = needsBrackets ? `[${safeHost}]` : safeHost;
+    const portSuffix = port ? `:${port}` : '';
+
+    return `${scheme}://${bracketedHost}${portSuffix}`;
+  }
+}
+
 function collapseSlashes(input: string): string {
   return input.replace(/\/{2,}/g, '/');
 }
@@ -703,10 +734,14 @@ export function resolveAunsormBaseUrlDetails(
     const domainOverride = domain.value;
     const hasDomainOverride =
       domainOverride !== undefined && domainOverride.length > 0;
-    const resolvedOrigin = ensureProtocol(
+    let resolvedOrigin = ensureProtocol(
       hasDomainOverride ? domainOverride : fallbackDefaults.origin,
       scheme,
     );
+
+    if (hasDomainOverride && domainValueIncludesPathOrQuery(domainOverride)) {
+      resolvedOrigin = stripUrlPath(resolvedOrigin);
+    }
     const resolvedPath = normalisePath(path.value, fallbackDefaults.path);
     return {
       baseUrl: joinUrl(resolvedOrigin, resolvedPath),
