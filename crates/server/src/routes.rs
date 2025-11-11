@@ -3179,7 +3179,35 @@ async fn proxy_jwt_verify(Json(payload): Json<serde_json::Value>) -> impl IntoRe
 
 #[cfg(test)]
 mod service_mode_detection_tests {
-    use super::{service_mode_from_binary_name, service_mode_from_port};
+    use super::{detect_service_mode, service_mode_from_binary_name, service_mode_from_port};
+    use std::env;
+    use std::sync::Mutex;
+
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    struct EnvVarGuard {
+        key: &'static str,
+        original: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn new(key: &'static str) -> Self {
+            Self {
+                key,
+                original: env::var(key).ok(),
+            }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(ref value) = self.original {
+                env::set_var(self.key, value);
+            } else {
+                env::remove_var(self.key);
+            }
+        }
+    }
 
     #[test]
     fn binary_name_mappings_cover_known_services() {
@@ -3216,6 +3244,45 @@ mod service_mode_detection_tests {
     #[test]
     fn port_unknown_values_return_none() {
         assert_eq!(service_mode_from_port(42), None);
+    }
+
+    #[test]
+    fn detect_service_mode_prefers_explicit_env_value() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+        let _service_mode_guard = EnvVarGuard::new("SERVICE_MODE");
+        let _listen_guard = EnvVarGuard::new("AUNSORM_LISTEN");
+
+        env::set_var("SERVICE_MODE", "  auth-service  ");
+        env::set_var("AUNSORM_LISTEN", "127.0.0.1:50017");
+
+        let detected = detect_service_mode();
+        assert_eq!(detected.as_deref(), Some("auth-service"));
+    }
+
+    #[test]
+    fn detect_service_mode_falls_back_to_port_mapping() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+        let _service_mode_guard = EnvVarGuard::new("SERVICE_MODE");
+        let _listen_guard = EnvVarGuard::new("AUNSORM_LISTEN");
+
+        env::remove_var("SERVICE_MODE");
+        env::set_var("AUNSORM_LISTEN", "0.0.0.0:50017");
+
+        let detected = detect_service_mode();
+        assert_eq!(detected.as_deref(), Some("acme-service"));
+    }
+
+    #[test]
+    fn detect_service_mode_returns_none_when_no_source_matches() {
+        let _lock = ENV_MUTEX.lock().unwrap();
+        let _service_mode_guard = EnvVarGuard::new("SERVICE_MODE");
+        let _listen_guard = EnvVarGuard::new("AUNSORM_LISTEN");
+
+        env::set_var("SERVICE_MODE", "   ");
+        env::set_var("AUNSORM_LISTEN", "127.0.0.1:45000");
+
+        let detected = detect_service_mode();
+        assert!(detected.is_none());
     }
 }
 
