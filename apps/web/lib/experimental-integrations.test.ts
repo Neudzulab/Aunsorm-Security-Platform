@@ -695,6 +695,25 @@ describe('resolveAunsormBaseUrlDetails', () => {
       },
     });
   });
+
+  it('strips path fragments from domain overrides when deriving the origin', () => {
+    const env = {
+      NODE_ENV: 'production',
+      AUNSORM_BASE_DOMAIN: 'gateway.aunsorm.dev/custom/api?preview=true',
+      AUNSORM_BASE_PATH: '/bridge',
+    } satisfies NodeJS.ProcessEnv;
+
+    expect(resolveAunsormBaseUrlDetails(env)).toEqual({
+      baseUrl: 'https://gateway.aunsorm.dev/bridge',
+      origin: 'https://gateway.aunsorm.dev',
+      path: '/bridge',
+      source: {
+        kind: 'domain-path',
+        domainKey: 'AUNSORM_BASE_DOMAIN',
+        pathKey: 'AUNSORM_BASE_PATH',
+      },
+    });
+  });
 });
 
 describe('resolveAunsormBaseUrlDiagnostics', () => {
