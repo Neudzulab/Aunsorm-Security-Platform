@@ -118,10 +118,13 @@ fn system_time_to_unix_seconds(time: SystemTime) -> u64 {
 fn audience_to_string(audience: Option<&Audience>, fallback: &str) -> String {
     match audience {
         Some(Audience::Single(value)) => value.clone(),
-        Some(Audience::Multiple(values)) => values
-            .first()
-            .cloned()
-            .unwrap_or_else(|| fallback.to_string()),
+        Some(Audience::Multiple(values)) => {
+            if values.is_empty() {
+                fallback.to_string()
+            } else {
+                values.join(", ")
+            }
+        }
         None => fallback.to_string(),
     }
 }

@@ -2510,6 +2510,68 @@ async fn jwt_verify_endpoint_accepts_valid_token() {
 }
 
 #[tokio::test]
+async fn jwt_verify_endpoint_reports_all_audiences() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let mut claims = Claims::new();
+    claims.subject = Some("participant-multi-aud".to_string());
+    claims.issuer = Some(state.issuer().to_owned());
+    claims.audience = Some(Audience::Multiple(vec![
+        "zasian-media".to_string(),
+        "edge-ingest".to_string(),
+        "aunsorm-cli".to_string(),
+    ]));
+    claims.set_issued_now();
+    claims.set_expiration_from_now(state.token_ttl());
+    claims.extras.insert(
+        "roomId".to_string(),
+        Value::String("room-multi-aud".to_string()),
+    );
+
+    let signer = state.signer().clone();
+    let token = signer.sign(&mut claims).expect("token");
+    let jti = claims.jwt_id.clone().expect("jti");
+    let expiration = claims.expiration.expect("exp");
+    state
+        .record_token(
+            &jti,
+            expiration,
+            claims.subject.as_deref(),
+            Some("zasian-media"),
+        )
+        .await
+        .expect("record token");
+
+    let verify_payload = json!({ "token": token });
+    let verify_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwt-verify")
+                .header("content-type", "application/json")
+                .body(Body::from(verify_payload.to_string()))
+                .expect("verify request"),
+        )
+        .await
+        .expect("verify response");
+
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let verify_body = to_bytes(verify_response.into_body(), usize::MAX)
+        .await
+        .expect("verify body");
+    let verify: JwtVerifyResponseBody =
+        serde_json::from_slice(&verify_body).expect("verify json");
+    assert!(verify.valid);
+    let payload = verify.payload.expect("payload");
+    assert_eq!(
+        payload.get("audience").and_then(|value| value.as_str()),
+        Some("zasian-media, edge-ingest, aunsorm-cli")
+    );
+}
+
+#[tokio::test]
 async fn jwt_verify_endpoint_accepts_bearer_prefix() {
     let state = setup_state();
     let app = build_router(&state);
