@@ -4898,7 +4898,7 @@ fn format_optional_timestamp(value: Option<u64>) -> String {
 fn audience_to_string(audience: Option<&Audience>) -> String {
     match audience {
         Some(Audience::Single(value)) => value.clone(),
-        Some(Audience::Multiple(values)) => values.first().cloned().unwrap_or_default(),
+        Some(Audience::Multiple(values)) => values.join(", "),
         None => String::new(),
     }
 }
@@ -5152,7 +5152,7 @@ mod tests {
         let normalized = NormalizedJwtClaims::from_claims(&claims);
 
         assert_eq!(normalized.subject, "user123");
-        assert_eq!(normalized.audience, "zasian-media");
+        assert_eq!(normalized.audience, "zasian-media, fallback");
         assert_eq!(normalized.issuer, "https://aunsorm.local");
         assert_eq!(normalized.expiration, 1_761_791_358);
         assert_eq!(normalized.issued_at, Some(1_761_787_758));
@@ -5182,6 +5182,20 @@ mod tests {
         assert!(normalized.related_id.is_none());
         assert!(normalized.jwt_id.is_none());
         assert!(normalized.extras.is_none());
+    }
+
+    #[test]
+    fn audience_to_string_includes_all_entries() {
+        let audience = Audience::Multiple(vec![
+            "primary".to_string(),
+            "secondary".to_string(),
+            "tertiary".to_string(),
+        ]);
+
+        assert_eq!(
+            audience_to_string(Some(&audience)),
+            "primary, secondary, tertiary"
+        );
     }
 
     #[test]
