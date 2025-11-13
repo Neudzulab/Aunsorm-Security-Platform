@@ -415,7 +415,10 @@ components:
           example: user123
         audience:
           type: string
-          example: zasian-media
+          description: >-
+            Audience claim reported as a comma-separated string; tokens with
+            multiple audiences list every value in issuance order.
+          example: "zasian-media, edge-ingest"
         issuer:
           type: string
           example: https://aunsorm.local

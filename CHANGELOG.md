@@ -173,6 +173,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   akışı dokümante edildi.
 
 ### Fixed
+- `/security/jwt-verify` artık JWT `aud` alanındaki tüm değerleri virgül ile
+  ayrılmış olarak raporlayarak birden fazla audience içeren token'larda eksik
+  bilgi sunulmasını engelliyor ve CLI çıktılarıyla hizalanıyor.
 - `aunsorm-jwt` signer now rejects blank `jti` values before generating a token,
   matching verifier-side validation and preventing replay bypass attempts with
   whitespace identifiers.
