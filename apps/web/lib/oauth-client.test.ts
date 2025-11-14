@@ -220,6 +220,7 @@ describe('AunsormOAuthClient', () => {
           access_token: 'token-abc',
           token_type: 'Bearer',
           expires_in: 600,
+          refresh_token: 'refresh-abc',
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
@@ -238,10 +239,104 @@ describe('AunsormOAuthClient', () => {
       redirectUri: 'https://app.example.com/callback',
     });
 
-    expect(token).toEqual({ access_token: 'token-abc', token_type: 'Bearer', expires_in: 600 });
+    expect(token).toEqual({
+      access_token: 'token-abc',
+      token_type: 'Bearer',
+      expires_in: 600,
+      refresh_token: 'refresh-abc',
+    });
     expect(store.getItem('aunsorm.oauth.access_token')).toBe('token-abc');
+    expect(store.getItem('aunsorm.oauth.refresh_token')).toBe('refresh-abc');
     expect(store.getItem('aunsorm.oauth.state')).toBeNull();
     expect(store.getItem('aunsorm.oauth.code_verifier')).toBeNull();
+  });
+
+  it('refreshes the access token using the stored refresh token', async () => {
+    const store = new MemoryStore();
+    store.setItem('aunsorm.oauth.refresh_token', 'stored-refresh');
+
+    const fetchStub = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const payload = JSON.parse((init?.body as string) ?? '{}');
+      expect(payload).toMatchObject({
+        grant_type: 'refresh_token',
+        refresh_token: 'stored-refresh',
+        client_id: 'demo-client',
+      });
+
+      return new Response(
+        JSON.stringify({
+          access_token: 'token-rotated',
+          refresh_token: 'refresh-rotated',
+          token_type: 'Bearer',
+          expires_in: 700,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+
+    const client = new AunsormOAuthClient({
+      baseUrl: 'https://auth.example.com',
+      fetchImpl: fetchStub,
+      storage: store,
+      randomSource: deterministicRandom,
+    });
+
+    const refreshed = await client.refreshAccessToken({ clientId: 'demo-client' });
+
+    expect(refreshed).toEqual({
+      access_token: 'token-rotated',
+      refresh_token: 'refresh-rotated',
+      token_type: 'Bearer',
+      expires_in: 700,
+    });
+    expect(store.getItem('aunsorm.oauth.access_token')).toBe('token-rotated');
+    expect(store.getItem('aunsorm.oauth.refresh_token')).toBe('refresh-rotated');
+  });
+
+  it('uses explicit refresh token overrides when storage is unavailable', async () => {
+    const fetchStub = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const payload = JSON.parse((init?.body as string) ?? '{}');
+      expect(payload).toMatchObject({
+        grant_type: 'refresh_token',
+        refresh_token: 'override-refresh',
+        client_id: 'demo-client',
+        scope: 'read',
+      });
+
+      return new Response(
+        JSON.stringify({
+          access_token: 'token-new',
+          token_type: 'Bearer',
+          expires_in: 500,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+
+    const client = new AunsormOAuthClient({
+      baseUrl: 'https://auth.example.com',
+      fetchImpl: fetchStub,
+      randomSource: deterministicRandom,
+    });
+
+    const refreshed = await client.refreshAccessToken({
+      clientId: 'demo-client',
+      refreshToken: 'override-refresh',
+      scope: 'read',
+    });
+
+    expect(refreshed).toEqual({ access_token: 'token-new', token_type: 'Bearer', expires_in: 500 });
+  });
+
+  it('requires a refresh token when neither storage nor override is available', async () => {
+    const client = new AunsormOAuthClient({
+      baseUrl: 'https://auth.example.com',
+      randomSource: deterministicRandom,
+    });
+
+    await expect(client.refreshAccessToken({ clientId: 'demo-client' })).rejects.toThrow(
+      /refreshToken is required/,
+    );
   });
 
   it('supports HTTP base URLs for loopback hosts during development', () => {

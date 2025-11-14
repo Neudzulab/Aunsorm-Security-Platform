@@ -51,6 +51,12 @@ export interface ExchangeTokenParams {
   clientId: string;
 }
 
+export interface RefreshTokenParams {
+  clientId: string;
+  refreshToken?: string;
+  scope?: string;
+}
+
 export interface TokenResponseBody {
   access_token: string;
   token_type: string;
@@ -68,11 +74,13 @@ export interface OAuthClientOptions {
   stateStorageKey?: string;
   verifierStorageKey?: string;
   tokenStorageKey?: string;
+  refreshTokenStorageKey?: string;
 }
 
 const DEFAULT_STATE_KEY = 'aunsorm.oauth.state';
 const DEFAULT_VERIFIER_KEY = 'aunsorm.oauth.code_verifier';
 const DEFAULT_TOKEN_KEY = 'aunsorm.oauth.access_token';
+const DEFAULT_REFRESH_TOKEN_KEY = 'aunsorm.oauth.refresh_token';
 
 const DEFAULT_CODE_VERIFIER_LENGTH = 64;
 const DEFAULT_STATE_LENGTH = 32;
@@ -339,6 +347,7 @@ export class AunsormOAuthClient {
   private readonly stateKey: string;
   private readonly verifierKey: string;
   private readonly tokenKey: string;
+  private readonly refreshTokenKey: string;
 
   constructor(options: OAuthClientOptions) {
     this.baseUrl = parseUrl(options.baseUrl);
@@ -349,6 +358,7 @@ export class AunsormOAuthClient {
     this.stateKey = options.stateStorageKey ?? DEFAULT_STATE_KEY;
     this.verifierKey = options.verifierStorageKey ?? DEFAULT_VERIFIER_KEY;
     this.tokenKey = options.tokenStorageKey ?? DEFAULT_TOKEN_KEY;
+    this.refreshTokenKey = options.refreshTokenStorageKey ?? DEFAULT_REFRESH_TOKEN_KEY;
   }
 
   private get verifier(): string | undefined {
@@ -380,6 +390,17 @@ export class AunsormOAuthClient {
       return;
     }
     this.storage.setItem(this.tokenKey, token);
+  }
+
+  private persistRefreshToken(token?: string): void {
+    if (!this.storage) {
+      return;
+    }
+    if (token && token.trim().length > 0) {
+      this.storage.setItem(this.refreshTokenKey, token);
+    } else {
+      this.storage.removeItem(this.refreshTokenKey);
+    }
   }
 
   async beginAuthorization(params: BeginAuthorizationParams): Promise<BeginAuthorizationResult> {
@@ -525,6 +546,7 @@ export class AunsormOAuthClient {
     }
 
     this.persistToken(body.access_token);
+    this.persistRefreshToken(body.refresh_token);
     this.clearSession();
     return body;
   }
@@ -538,6 +560,61 @@ export class AunsormOAuthClient {
       return;
     }
     this.storage.removeItem(this.tokenKey);
+  }
+
+  getStoredRefreshToken(): string | undefined {
+    return this.storage?.getItem(this.refreshTokenKey) ?? undefined;
+  }
+
+  clearStoredRefreshToken(): void {
+    if (!this.storage) {
+      return;
+    }
+    this.storage.removeItem(this.refreshTokenKey);
+  }
+
+  async refreshAccessToken(params: RefreshTokenParams): Promise<TokenResponseBody> {
+    if (!params.clientId.trim()) {
+      throw new Error('clientId is required.');
+    }
+
+    const providedToken = params.refreshToken?.trim();
+    const storedToken = this.getStoredRefreshToken()?.trim();
+    const effectiveToken = providedToken && providedToken.length > 0 ? providedToken : storedToken;
+
+    if (!effectiveToken) {
+      throw new Error('refreshToken is required (either provide one or configure storage).');
+    }
+
+    const payload: Record<string, string> = {
+      grant_type: 'refresh_token',
+      refresh_token: effectiveToken,
+      client_id: params.clientId,
+    };
+
+    if (params.scope) {
+      payload.scope = params.scope;
+    }
+
+    const response = await this.fetchImpl(`${this.baseUrl}/oauth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`OAuth token refresh failed: ${await readError(response)}`);
+    }
+
+    const body = (await response.json()) as TokenResponseBody;
+    if (!body || typeof body.access_token !== 'string' || body.access_token.length === 0) {
+      throw new Error('OAuth token response missing access_token.');
+    }
+
+    this.persistToken(body.access_token);
+    const nextRefreshToken = body.refresh_token ?? effectiveToken;
+    this.persistRefreshToken(nextRefreshToken);
+    return body;
   }
 }
 

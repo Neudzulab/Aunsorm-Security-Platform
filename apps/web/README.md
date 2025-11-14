@@ -56,3 +56,18 @@ state value received from the authorization server against the state returned by
 
 When both a storage adapter and an explicit override are supplied the helper
 verifies that the values match to prevent confusing state mismatches.
+
+### Refresh token persistence
+
+`AunsormOAuthClient` also keeps the most recent refresh token in the configured
+storage adapter (under `aunsorm.oauth.refresh_token`).
+
+- `exchangeToken` persists both the access token and refresh token when the
+  server issues them.
+- `refreshAccessToken` automatically reuses the stored refresh token when one is
+  available and rotates it whenever the server responds with a new value.
+- When storage is unavailable, callers can pass a `refreshToken` override to
+  `refreshAccessToken`.
+
+Consumers that need to explicitly remove the stored secret can call
+`clearStoredRefreshToken()`.
