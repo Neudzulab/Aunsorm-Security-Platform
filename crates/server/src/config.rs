@@ -8,6 +8,7 @@ use zeroize::Zeroizing;
 
 use aunsorm_core::clock::SecureClockSnapshot;
 use aunsorm_jwt::Ed25519KeyPair;
+use url::Url;
 
 use crate::error::ServerError;
 
@@ -154,6 +155,7 @@ pub struct ServerConfig {
     pub(crate) clock_max_age: Duration,
     pub(crate) clock_snapshot: SecureClockSnapshot,
     pub(crate) clock_refresh: Option<ClockRefreshConfig>,
+    pub(crate) revocation_webhook: Option<RevocationWebhookConfig>,
 }
 
 /// Configuration for the background clock refresh worker.
@@ -180,6 +182,64 @@ impl ClockRefreshConfig {
     #[must_use]
     pub(crate) const fn interval(&self) -> Duration {
         self.interval
+    }
+}
+
+/// Webhook configuration for token revocation events.
+#[derive(Debug, Clone)]
+pub struct RevocationWebhookConfig {
+    endpoint: Url,
+    secret: String,
+    timeout: Duration,
+}
+
+impl RevocationWebhookConfig {
+    /// Builds a new webhook configuration, validating URL and secret inputs.
+    ///
+    /// # Errors
+    /// Returns [`ServerError::Configuration`] when the URL scheme is unsupported or
+    /// the provided secret is empty.
+    pub fn new(
+        endpoint: Url,
+        secret: impl Into<String>,
+        timeout: Duration,
+    ) -> Result<Self, ServerError> {
+        if endpoint.scheme() != "https" && endpoint.scheme() != "http" {
+            return Err(ServerError::Configuration(
+                "Webhook URL sadece http(s) şemasını destekler".to_string(),
+            ));
+        }
+        if timeout.is_zero() {
+            return Err(ServerError::Configuration(
+                "Webhook zaman aşımı 0 olamaz".to_string(),
+            ));
+        }
+        let secret = secret.into();
+        if secret.trim().len() < 32 {
+            return Err(ServerError::Configuration(
+                "Webhook secret en az 32 karakter olmalıdır".to_string(),
+            ));
+        }
+        Ok(Self {
+            endpoint,
+            secret,
+            timeout,
+        })
+    }
+
+    #[must_use]
+    pub(crate) fn endpoint(&self) -> &Url {
+        &self.endpoint
+    }
+
+    #[must_use]
+    pub(crate) fn secret(&self) -> &str {
+        &self.secret
+    }
+
+    #[must_use]
+    pub(crate) const fn timeout(&self) -> Duration {
+        self.timeout
     }
 }
 
@@ -302,6 +362,47 @@ impl ServerConfig {
             }
         };
 
+        let revocation_webhook = match env::var("AUNSORM_WEBHOOK_URL") {
+            Ok(value) => {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    return Err(ServerError::Configuration(
+                        "AUNSORM_WEBHOOK_URL boş olamaz".to_string(),
+                    ));
+                }
+                let endpoint = Url::parse(trimmed).map_err(|err| {
+                    ServerError::Configuration(format!(
+                        "AUNSORM_WEBHOOK_URL parse edilemedi: {err}"
+                    ))
+                })?;
+                let secret = env::var("AUNSORM_WEBHOOK_SECRET").map_err(|_| {
+                    ServerError::Configuration(
+                        "AUNSORM_WEBHOOK_SECRET çevre değişkeni zorunludur".to_string(),
+                    )
+                })?;
+                let timeout_ms = env::var("AUNSORM_WEBHOOK_TIMEOUT_MS")
+                    .ok()
+                    .and_then(|raw| raw.parse::<u64>().ok())
+                    .unwrap_or(1_500);
+                if timeout_ms == 0 {
+                    return Err(ServerError::Configuration(
+                        "AUNSORM_WEBHOOK_TIMEOUT_MS 0 olamaz".to_string(),
+                    ));
+                }
+                Some(RevocationWebhookConfig::new(
+                    endpoint,
+                    secret,
+                    Duration::from_millis(timeout_ms),
+                )?)
+            }
+            Err(env::VarError::NotPresent) => None,
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(ServerError::Configuration(
+                    "AUNSORM_WEBHOOK_URL ASCII olmayan karakterler içeriyor".to_string(),
+                ));
+            }
+        };
+
         let kid = env::var("AUNSORM_JWT_KID").unwrap_or_else(|_| "aunsorm-server".to_string());
         let seed_b64 = env::var("AUNSORM_JWT_SEED_B64");
         let key_pair = match seed_b64 {
@@ -405,6 +506,7 @@ impl ServerConfig {
             clock_max_age,
             clock_snapshot,
             clock_refresh,
+            revocation_webhook,
         )
     }
 
@@ -427,6 +529,7 @@ impl ServerConfig {
         clock_max_age: Duration,
         clock_snapshot: SecureClockSnapshot,
         clock_refresh: Option<ClockRefreshConfig>,
+        revocation_webhook: Option<RevocationWebhookConfig>,
     ) -> Result<Self, ServerError> {
         if strict && matches!(ledger, LedgerBackend::Memory) {
             return Err(ServerError::Configuration(
@@ -472,6 +575,7 @@ impl ServerConfig {
             clock_max_age,
             clock_snapshot,
             clock_refresh,
+            revocation_webhook,
         })
     }
 
@@ -547,6 +651,7 @@ mod tests {
             Duration::from_secs(45),
             sample_snapshot(),
             None,
+            None,
         );
 
         assert!(
@@ -568,6 +673,7 @@ mod tests {
             sample_calibration(),
             Duration::from_secs(0),
             sample_snapshot(),
+            None,
             None,
         );
 

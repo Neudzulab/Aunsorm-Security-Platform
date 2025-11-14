@@ -47,9 +47,10 @@ mod routes;
 mod state;
 mod telemetry;
 mod transparency;
+mod webhook;
 
 pub use clock_refresh::{ClockRefreshError, ClockRefreshService};
-pub use config::{FabricChaincodeConfig, LedgerBackend, ServerConfig};
+pub use config::{FabricChaincodeConfig, LedgerBackend, RevocationWebhookConfig, ServerConfig};
 pub use error::{ApiError, ServerError};
 pub use quic::datagram::{
     AuditEvent, AuditOutcome, CounterSample, DatagramChannel, DatagramError, DatagramPayload,

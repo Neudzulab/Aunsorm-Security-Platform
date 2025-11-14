@@ -6,17 +6,27 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use aunsorm_core::{calibration::calib_from_text, clock::SecureClockSnapshot};
 use aunsorm_jwt::Ed25519KeyPair;
-use aunsorm_server::{build_router, LedgerBackend, ServerConfig, ServerState};
+use aunsorm_server::{
+    build_router, LedgerBackend, RevocationWebhookConfig, ServerConfig, ServerState,
+};
 use axum::body::{to_bytes, Body};
-use axum::http::{Request, StatusCode};
+use axum::extract::State;
+use axum::http::{HeaderMap, Request, StatusCode};
 use axum::response::Response;
-use axum::Router;
+use axum::routing::any;
+use axum::{serve, Router};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
+use hex;
+use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use tokio::net::TcpListener;
+use tokio::sync::{oneshot, Mutex as AsyncMutex};
+use tokio::time::timeout;
 use tower::ServiceExt;
+use url::Url;
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -49,6 +59,10 @@ struct ErrorBody {
 }
 
 fn demo_state() -> Arc<ServerState> {
+    demo_state_with_webhook(None)
+}
+
+fn demo_state_with_webhook(webhook: Option<RevocationWebhookConfig>) -> Arc<ServerState> {
     const SEED: [u8; 32] = [7_u8; 32];
     let key = Ed25519KeyPair::from_seed("oauth-test", SEED).expect("seed");
     let now_ms = u64::try_from(
@@ -85,6 +99,7 @@ fn demo_state() -> Arc<ServerState> {
         Duration::from_secs(300),
         clock_snapshot,
         None,
+        webhook,
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))
@@ -192,6 +207,46 @@ async fn introspect_token(app: &mut Router, token: &str) -> IntrospectResponse {
     serde_json::from_slice(&body).expect("introspect response")
 }
 
+type WebhookSinkSender = Arc<AsyncMutex<Option<oneshot::Sender<(HeaderMap, Vec<u8>)>>>>;
+
+async fn webhook_sink_handler(
+    State(sender): State<WebhookSinkSender>,
+    req: Request<Body>,
+) -> StatusCode {
+    let headers = req.headers().clone();
+    let body = to_bytes(req.into_body(), usize::MAX)
+        .await
+        .map(|bytes| bytes.to_vec())
+        .unwrap_or_default();
+    if let Some(channel) = sender.lock().await.take() {
+        let _ = channel.send((headers, body));
+    }
+    StatusCode::OK
+}
+
+async fn spawn_test_webhook_sink() -> (
+    Url,
+    oneshot::Receiver<(HeaderMap, Vec<u8>)>,
+    tokio::task::JoinHandle<()>,
+) {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("webhook sink");
+    let addr = listener.local_addr().expect("addr");
+    let (tx, rx) = oneshot::channel();
+    let sender: WebhookSinkSender = Arc::new(AsyncMutex::new(Some(tx)));
+    let router = Router::new()
+        .route("/", any(webhook_sink_handler))
+        .with_state(sender);
+    let handle = tokio::spawn(async move {
+        if let Err(err) = serve(listener, router).await {
+            eprintln!("webhook sink error: {err}");
+        }
+    });
+    let endpoint = Url::parse(&format!("http://{}", addr)).expect("url");
+    (endpoint, rx, handle)
+}
+
 #[tokio::test]
 async fn authorization_code_flow_roundtrip() {
     let state = demo_state();
@@ -222,6 +277,92 @@ async fn authorization_code_flow_roundtrip() {
     assert_eq!(introspect.sub.as_deref(), Some("alice"));
     assert_eq!(introspect.client_id.as_deref(), Some("demo-client"));
     assert_eq!(introspect.scope.as_deref(), Some("read write"));
+}
+
+#[tokio::test]
+async fn refresh_token_revocation_emits_signed_webhook() {
+    let (endpoint, receiver, handle) = spawn_test_webhook_sink().await;
+    let secret = "test-webhook-secret-0123456789abcdef".repeat(2);
+    let webhook =
+        RevocationWebhookConfig::new(endpoint, secret.clone(), Duration::from_millis(750))
+            .expect("webhook config");
+    let state = demo_state_with_webhook(Some(webhook));
+    let mut app = build_router(&state);
+    let (begin, verifier) = begin_flow(
+        &mut app,
+        "alice",
+        None,
+        Some("read"),
+        "S256",
+        "https://app.example.com/callback",
+    )
+    .await;
+
+    let token_response = exchange_code(&mut app, &begin.code, &verifier).await;
+    assert_eq!(token_response.status(), StatusCode::OK);
+    let token_body = to_bytes(token_response.into_body(), usize::MAX)
+        .await
+        .expect("token body");
+    let token_json: Value = serde_json::from_slice(&token_body).expect("token json");
+    let refresh_token = token_json["refreshToken"]
+        .as_str()
+        .expect("refresh token")
+        .to_owned();
+
+    let revoke_payload = json!({
+        "token": refresh_token,
+        "token_type_hint": "refresh_token"
+    });
+    let revoke_response = post_json(&mut app, "/oauth/revoke", revoke_payload).await;
+    assert_eq!(revoke_response.status(), StatusCode::OK);
+
+    let (headers, body) = timeout(Duration::from_secs(5), receiver)
+        .await
+        .expect("webhook timeout")
+        .expect("webhook payload");
+    handle.abort();
+
+    let payload: Value = serde_json::from_slice(&body).expect("webhook body");
+    assert_eq!(payload["event"], "token.revoked");
+    assert_eq!(payload["revocation"]["tokenType"], "refresh_token");
+    assert_eq!(payload["revocation"]["revoked"], true);
+    assert_eq!(payload["revocation"]["clientId"], "demo-client");
+
+    let signature_header = headers
+        .get("Aunsorm-Signature")
+        .and_then(|value| value.to_str().ok())
+        .expect("signature header");
+    let mut timestamp = None;
+    let mut nonce = None;
+    let mut signature = None;
+    for part in signature_header.split(';') {
+        if let Some((key, value)) = part.split_once('=') {
+            match key {
+                "t" => timestamp = Some(value.to_owned()),
+                "nonce" => nonce = Some(value.to_owned()),
+                "v1" => signature = Some(value.to_owned()),
+                _ => {}
+            }
+        }
+    }
+    let timestamp = timestamp.expect("timestamp");
+    let nonce = nonce.expect("nonce");
+    let signature = signature.expect("signature");
+    assert_eq!(
+        timestamp.parse::<u64>().expect("timestamp number"),
+        payload["timestampMs"].as_u64().expect("payload timestamp"),
+    );
+    type WebhookHmac = Hmac<Sha256>;
+    let mut mac = WebhookHmac::new_from_slice(secret.as_bytes()).expect("mac");
+    let mut canonical = Vec::new();
+    canonical.extend_from_slice(timestamp.as_bytes());
+    canonical.push(b'.');
+    canonical.extend_from_slice(nonce.as_bytes());
+    canonical.push(b'.');
+    canonical.extend_from_slice(&body);
+    mac.update(&canonical);
+    let expected_signature = hex::encode(mac.finalize().into_bytes());
+    assert_eq!(signature, expected_signature);
 }
 
 #[tokio::test]
