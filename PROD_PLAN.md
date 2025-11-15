@@ -230,7 +230,7 @@ This document tracks all remaining work required for production deployment.
   - README.md service endpoint tree mirrors the latest port-map statuses (gateway, metrics, CLI, RNG deprecation note)
   - PROJECT_SUMMARY.md microservices table verified against port-map allocations
 - [x] Version bump to 0.5.0 in all Cargo.toml files
-- [ ] Archive legacy planning documents
+- [x] Archive legacy planning documents (see `docs/archive/README.md` for the historical index)
 
 ### Next Sprint (v0.5.1)
 - [ ] Kubernetes deployment manifests
