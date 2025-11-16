@@ -285,6 +285,7 @@ cargo +nightly fuzz run <target>
 - **[SECURITY.md](SECURITY.md)** - Security policy and disclosures
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history
+- **[docs/archive/README.md](docs/archive/README.md)** - Index of preserved legacy planning documents
 
 ---
 
