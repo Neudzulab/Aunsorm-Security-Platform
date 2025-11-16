@@ -30,9 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edilmiş claim çıktısını insan okunur biçimde raporlar; varsayılan JSON
   formatı korunur ve `claims_out` hedefi loglarda kullanılan format bilgisiyle
   birlikte bildirilir.
-- `aunsorm-server` HTTP hizmetine `tower-http` TraceLayer katmanı eklenerek
-  her isteğin başlangıcı/yanıtı milisaniye gecikmesiyle stdout log'larına
-  aktarılır.
+- `aunsorm-server` HTTP hizmetine `tower-http` TraceLayer ve istek/yanıt
+  sıkıştırma katmanları eklenerek her isteğin başlangıcı/yanıtı milisaniye
+  gecikmesiyle stdout log'larına aktarılır; `br/gzip/deflate/zstd`
+  algoritmaları otomatik müzakere edilir ve gelen gövdeler aynı
+  `Content-Encoding` değerleriyle açılır.
 - GitHub Actions `ACME Staging Smoke` job'u Let’s Encrypt staging API’sine
   karşı `tests/tests/acme_staging.rs` hesabı roundtrip testini çalıştırır;
   secrets eksikse erken hata verilir ve sonuçlar `docs/src/operations/acme/production-deploy.md`

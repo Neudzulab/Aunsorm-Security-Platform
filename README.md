@@ -231,6 +231,16 @@ Durum işaretleri:
   - `POST /cli/jwt/verify` — CLI JWT doğrulama
   - `POST /cli/execute` — Komut yürütme
 
+### HTTP Middleware Garantileri
+- `tower-http` `TraceLayer` entegrasyonu tüm servis uçlarında istek/yanıt
+  gecikmesini milisaniye hassasiyetiyle loglar ve başarısız istekleri
+  ayrı log seviyesinde işaretler.
+- Yanıtlar otomatik olarak `br`, `gzip`, `deflate` veya `zstd`
+  sıkıştırma algoritmalarıyla müzakere edilir ve gelen istekler aynı
+  `Content-Encoding` değerleri için açılır; bu sayede bant genişliği
+  tüketimi düşerken CLI ve otomasyon istemcileri ek konfigürasyon
+  gerektirmeden sıkıştırma kullanabilir.
+
 ---
 
 ## Environment Configuration

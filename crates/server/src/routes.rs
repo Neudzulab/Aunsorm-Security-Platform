@@ -26,6 +26,13 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use time::OffsetDateTime;
+use tower_http::compression::CompressionLayer;
+use tower_http::decompression::RequestDecompressionLayer;
+use tower_http::trace::{
+    DefaultMakeSpan, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer,
+};
+use tower_http::LatencyUnit;
+use tracing::Level;
 
 use crate::acme::{
     AcmeProblem, FinalizeOrderOutcome, NewAccountOutcome, NewOrderOutcome, OrderLookupOutcome,
@@ -3140,6 +3147,25 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/http3/capabilities", get(http3_capabilities));
         }
     }
+
+    let trace_layer = TraceLayer::new_for_http()
+        .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+        .on_request(DefaultOnRequest::new().level(Level::INFO))
+        .on_response(
+            DefaultOnResponse::new()
+                .level(Level::INFO)
+                .latency_unit(LatencyUnit::Millis),
+        )
+        .on_failure(
+            DefaultOnFailure::new()
+                .level(Level::ERROR)
+                .latency_unit(LatencyUnit::Millis),
+        );
+
+    let router = router
+        .layer(trace_layer)
+        .layer(CompressionLayer::new())
+        .layer(RequestDecompressionLayer::new());
 
     #[cfg(feature = "http3-experimental")]
     let router = {
