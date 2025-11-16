@@ -16,7 +16,7 @@ This document tracks all remaining work required for production deployment.
  - [ ] Issue attestation certificates from production CA and rotate signing keys quarterly
  - [ ] Replace development mock signatures with production cryptographic proofs
  - [ ] Set `AUNSORM_CLOCK_MAX_AGE_SECS=30` in production environment
- - [ ] Document firewall rules and secure management network for attestation hosts
+- [x] Document firewall rules and secure management network for attestation hosts (docs/src/operations/clock-attestation-deployment.md)
 - [x] Implement automatic clock refresh service (ClockRefreshService integration)
 - [x] Configure health checks to monitor clock attestation freshness
 - [x] Enforce HTTPS-only refresh endpoints and verifier gating before publishing snapshots
