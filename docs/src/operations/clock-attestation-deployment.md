@@ -156,6 +156,59 @@ spec:
 - `podSecurityContext.fsGroup`: `1001`.
 - `networkPolicy`: yalnızca yetkili servis hesaplarına 5000/TCP erişimine izin verir.
 
+## 🛡️ Firewall Kuralları ve Yönetim Ağı
+
+Clock attestation düğümleri yalnızca yetkili servislerden gelen trafiği kabul
+etmeli ve yönetim erişimleri ayrı bir ağ segmenti üzerinden taşınmalıdır. Aşağıdaki
+kurallar, hem Docker hem de Kubernetes dağıtımlarında zorunlu kabul kriteri
+olarak uygulanmalıdır.
+
+### Ağ Segmentleri
+
+| Segment | Amaç | Güvenlik Kuralları |
+| --- | --- | --- |
+| `sec-attestation` (Prod) | 5000/5443 üzerinden uygulama trafiği | Yalnızca `gateway`, `auth-service`, `crypto-service`, `kms-service` ve `pqc-service` pod'larının servis hesapları NetworkPolicy/SG aracılığıyla erişebilir. |
+| `sec-monitoring` | Prometheus, Loki, Alertmanager erişimi | Salt okunur HTTPS endpoint'leri; sadece `metrics-service` ve `observability` namespace'indeki ajanlar izinlidir. |
+| `sec-mgmt` | Yönetim ve bakım bağlantıları | Ayrı VLAN/VPC (`10.90.0.0/24` önerilir) ve WireGuard tüneli ile bastion → attestation düğümü arasında tek atlamalı SSH; çok faktörlü kimlik doğrulama zorunludur. |
+
+### İzin Verilen Trafik Matrisi
+
+| Kaynak | Hedef | Protokol/Port | Kurul | Not |
+| --- | --- | --- | --- | --- |
+| `security` namespace servisleri | `ntp-attestation` Service | TCP/5000 | ALLOW (stateful) | `k8s-netpol` ile label `app=ntp-attestation` zorunlu. |
+| `gateway` health checker | `ntp-attestation` Pod IP | TCP/5443 | ALLOW | Yalnızca `/health` endpoint'i; HTTP header'ı `X-Aunsorm-Mesh: gateway` olarak sabitlenir. |
+| `sec-monitoring` | `ntp-attestation` | TCP/9090,4317 | ALLOW | Prometheus scrape ve OTLP export; mTLS istemci sertifikası gerekir. |
+| `sec-mgmt bastion` | `ntp-attestation` host | TCP/22 | ALLOW (rate limited) | `fail2ban` + `sshguard` aktif, `AllowUsers ntp-admin@sec-mgmt`. |
+| `ntp-attestation` | Upstream NTP referansları | UDP/123 | ALLOW (egress) | Outbound yalnızca `ntp*.nist.gov` ve `pool.ntp.org` whitelisti; DNS çözümü `security-dns` resolver üzerinden yapılır. |
+| `ntp-attestation` | Vault/HSM | TCP/8200,5696 | ALLOW (egress) | Secrets yenilemesi için; TLS pinning uygulanır. |
+
+Tüm diğer port ve kaynak kombinasyonları **DROP** kuralına tabidir. Firewall
+kuralları hem host düzeyinde (`nftables`/`iptables`) hem de ağ seviyesinde
+(Security Group / NetworkPolicy) yinelenmelidir.
+
+### Yönetim Ağı Gereksinimleri
+
+1. `sec-mgmt` segmenti internet'e NAT yapmaz; outbound trafik yalnızca bastion
+   → attestation doğrultusunda açılır.
+2. Bastion erişimi FIDO2 tabanlı MFA + short-lived SSH sertifikalarıyla verilir;
+   `ssh_config` `ProxyJump bastion.sec-mgmt.aunsorm` zorunludur.
+3. Her oturumda `sudo wg show ntp-sec-mgmt` ile tünel durumu doğrulanır ve
+   `journalctl -u wg-quick@sec-mgmt` logları `Loki`ye gönderilir.
+4. Konfigürasyon değişikliği öncesi `change-ticket-id` etiketi zorunlu ve
+   `gitops` reposunda izlenir.
+
+### Denetim ve Testler
+
+- **Firewall Doğrulaması**: `nmap -Pn ntp-attestation -p-` komutu sadece izin
+  verilen portları göstermeli; sonuç CI'ya artefakt olarak yüklenir.
+- **NetworkPolicy Testi**: `kubectl run --rm test --image=alpine -n default -- wget -qO- ntp-attestation.security.svc:5000`
+  komutu başarısız olmalı ve `403` döndürmelidir.
+- **Bastion Sağlık Kontrolü**: Haftalık `ssh bastion ntp-attestation -- sudo nft list ruleset`
+  çıktısı `ops-firewall-logs` dizinine arşivlenir.
+
+Bu kurallar uygulanmadan clock attestation servisi üretim ortamına alınamaz; her
+deploy öncesi ağ değişiklikleri `change-review` sürecinde onaylanmalıdır.
+
 ## 🔐 Güvenlik Kontrolleri
 
 1. **İmzalama Anahtarı**: Sadece init container tarafından okunur; çalışma sırasında bellekte `mlock` ile kilitlenir.
