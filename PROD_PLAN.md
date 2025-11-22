@@ -188,6 +188,8 @@ This document tracks all remaining work required for production deployment.
 
 ### Developer Experience
 - [ ] Contribution guidelines update
+  - [x] Documented native RNG compliance, plan alignment, and endpoint/OpenAPI
+    update expectations in `CONTRIBUTING.md`
 - [ ] Code review checklist
 - [ ] Development environment setup automation (devcontainer)
 - [ ] CI/CD pipeline documentation
