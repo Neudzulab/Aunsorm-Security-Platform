@@ -19,7 +19,11 @@ high-quality standards.
 2. Keep pull requests focused; split unrelated changes into separate branches.
 3. Update or add tests alongside code changes. Every module must cover both
    success paths and relevant failure cases.
-4. Run the full validation suite before submitting a PR:
+4. Ensure work items map to entries in `PROD_PLAN.md` and keep plan checkboxes
+   in sync with shipped changes. For new endpoints, also update the server
+   endpoint tree in `README.md`, relevant OpenAPI YAML files under `openapi/`,
+   and `port-map.yaml` if ports change.
+5. Run the full validation suite before submitting a PR:
    ```bash
    cargo fmt --all
    cargo clippy --all-targets --all-features
@@ -30,11 +34,11 @@ high-quality standards.
    cargo bench --no-run
    ```
    Failing commands must be fixed or explained; we treat warnings as errors.
-5. Document externally-visible behavior:
+6. Document externally-visible behavior:
    - Update `README.md`, `CHANGELOG.md`, and crate-level `README.md` files when
      API or UX changes occur.
    - Add rustdoc examples for new public APIs.
-6. Rebase onto the latest `work` branch before requesting review to keep the
+7. Rebase onto the latest `work` branch before requesting review to keep the
    history linear.
 
 ## Coding Standards
@@ -43,6 +47,15 @@ high-quality standards.
 - Avoid panics in library code; return typed errors using `thiserror`.
 - Gate optional functionality behind feature flags as defined in `PLAN.md`.
 - Provide descriptive commit messages using the format `component: summary`.
+
+### Randomness and Security Requirements
+- **Use `AunsormNativeRng` for all cryptographic randomness**; `rand::thread_rng`,
+  `OsRng` (except for initial entropy seeding), and alternative RNG
+  implementations are forbidden in production code.
+- New crates must expose a `src/rng.rs` module consistent with existing
+  implementations.
+- Benchmarks and tests may seed RNGs explicitly for determinism but must still
+  route through `AunsormNativeRng`.
 
 ## Testing Expectations
 - Unit tests live next to the code they exercise.
