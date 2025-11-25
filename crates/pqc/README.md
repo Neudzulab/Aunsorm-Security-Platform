@@ -1,46 +1,28 @@
 # aunsorm-pqc
 
-`aunsorm-pqc`, Aunsorm platformu için post-kuantum kriptografi köprüsü sağlar. ML-KEM anahtar
-kapsülleme şemaları ile ML-DSA, Falcon ve SPHINCS+ imza algoritmalarını tek noktadan sunar. Hem
-"strict" bağlamında fail-fast politikaları destekler hem de klasik modlar için güvenli degradasyon
-senaryosu sunar.
+## Servisin Görevi
+PQC servisi, ML-KEM anahtar kapsülleme ve SLH-DSA / ML-DSA imzalama/verifikasyon işlemlerini sağlar. Algoritmalar `ml-kem-*`, `slh-dsa-*`, `ml-dsa-*` biçiminde isimlendirilir ve strict kipte desteklenmeyen seçenekler reddedilir.
 
-## Özellikler
-- ML-KEM-768 ve ML-KEM-1024 için anahtar üretme, kapsülleme, kapsülü çözme
-- ML-DSA 65, Falcon-512 ve SPHINCS+-SHAKE-128f imza algoritmaları
-- Strict kipte kullanılabilir algoritma zorlaması
-- `aunsorm-packet` entegrasyonu için hazır KEM paketleyicileri
-- ML-DSA-65 için üretim sertleştirmesi: `mldsa::validate_*` yardımcıları
-  anahtar uzunluğu, entropi ve rho uyumluluğunu denetler.
+## Portlar
+- **50018** — PQC HTTP API
 
-## Kullanım
-```rust
-use aunsorm_pqc::{
-    kem::{negotiate_kem, KemAlgorithm},
-    signature::{negotiate_signature, SignatureAlgorithm, SignatureKeyPair},
-    strict::StrictMode,
-};
-
-let selection = negotiate_kem(&[KemAlgorithm::MlKem768], StrictMode::Strict)?;
-println!("Seçilen algoritma: {}", selection.algorithm.name());
-
-let signature = negotiate_signature(&[SignatureAlgorithm::MlDsa65], StrictMode::Relaxed)?;
-match signature.algorithm {
-    Some(alg) => println!("İmza algoritması: {}", alg.name()),
-    None => println!("PQC imzası yok, klasik moda dönülüyor"),
-}
-
-let checklist = SignatureAlgorithm::MlDsa65.checklist();
-println!("ML-DSA NIST kategorisi: {}", checklist.nist_category());
-for action in checklist.client_actions() {
-    println!("İstemci aksiyonu: {action}");
-}
-
-// Sertleştirme yardımcıları doğrudan kullanılabilir.
-use aunsorm_pqc::signature::mldsa;
-
-let pair = SignatureKeyPair::generate(SignatureAlgorithm::MlDsa65)?;
-let pk = pair.public_key().as_bytes();
-let sk = pair.secret_key().as_bytes();
-mldsa::validate_keypair(pk, sk)?;
+## Örnek İstek/Response
+```bash
+curl -X POST http://localhost:50018/pqc/encapsulate \
+  -H "Content-Type: application/json" \
+  -d '{"algorithm":"ml-kem-768","publicKey":"BASE64_PUBLIC_KEY"}'
 ```
+
+```json
+{
+  "algorithm": "ml-kem-768",
+  "ciphertext": "BASE64_CIPHERTEXT",
+  "sharedSecret": "BASE64_SECRET"
+}
+```
+
+## Güvenlik Notları
+- Paylaşılan sırlar `Zeroizing` yapılarıyla tutulur; düz metin bırakılmaz.
+- Strict kip etkinse fallback kabul edilmez ve `StrictRequired` hatası döner.
+- Tüm rastgelelik `AunsormNativeRng` ile üretilir; HTTP veya stdlib RNG'leri yasaktır.
+- Pozitif ve negatif senaryolar için kapsamlı testler zorunludur.
