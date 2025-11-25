@@ -38,6 +38,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions `ACME Staging Smoke` job'u Let’s Encrypt staging API’sine
   karşı `tests/tests/acme_staging.rs` hesabı roundtrip testini çalıştırır;
   secrets eksikse erken hata verilir ve sonuçlar `docs/src/operations/acme/production-deploy.md`
+
+## [0.5.0] - 2025-02-01
+
+### Added
+- Post-quantum cryptography expansion with ML-KEM key encapsulation and SLH-DSA / ML-DSA signing pipelines across PQC service endpoints.
+- Calibration workflow finalized with strict clock attestation enforcement and refresh worker guidance for production deployments.
+- AunsormNativeRng hardened seeding and reuse model shared across crates and service examples.
+- Clock attestation observability exposing freshness and authority fingerprint status on health endpoints.
+- ACME service partial implementation covering account onboarding, nonce management, and order scaffolding for future challenge handlers.
   rehberinde belgelenir.
 - `endpoint-validator` kütüphanesi ve `aunsorm-cli validate-endpoints`
   komutu: OpenAPI/sitemap/HTML keşfi, otomatik gövde üretimi, geri çekilme
