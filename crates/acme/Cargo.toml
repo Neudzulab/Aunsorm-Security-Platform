@@ -27,6 +27,7 @@ hkdf = "0.12"
 rcgen = { version = "0.12" }
 async-trait = "0.1"
 pem = "3"
+aunsorm-core = { path = "../core" }
 aunsorm-x509 = { path = "../x509" }
 aunsorm-kms = { path = "../kms" }
 

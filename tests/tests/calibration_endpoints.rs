@@ -99,6 +99,7 @@ fn strict_state() -> (Arc<ServerState>, TempDir) {
         Duration::from_secs(30),
         clock_snapshot,
         None,
+        None, // revocation_webhook
     )
     .expect("config");
     let state = Arc::new(ServerState::try_new(config).expect("state"));

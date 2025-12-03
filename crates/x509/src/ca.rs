@@ -79,9 +79,12 @@ use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::{
     build_extension_oid, calib_from_text, calibration_extension_from_parts, deterministic_serial,
-    optimizations::AunsormNativeRng, SubjectAltName, X509Error, CALIBRATION_EXTENSION_ARC,
+    SubjectAltName, X509Error, CALIBRATION_EXTENSION_ARC,
     DEFAULT_BASE_OID,
 };
+
+// Import sealed RNG from aunsorm-core
+use aunsorm_core::AunsormNativeRng;
 
 /// Key algorithm for certificate generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,8 +116,21 @@ impl KeyAlgorithm {
 }
 
 fn generate_rsa_keypair(bits: usize) -> Result<KeyPair, X509Error> {
-    // Use optimized RSA generation for better performance
-    crate::optimizations::generate_optimized_rsa_keypair(bits)
+    use pem::Pem;
+    use rsa::{pkcs8::EncodePrivateKey, RsaPrivateKey};
+    
+    let mut rng = AunsormNativeRng::new();
+    let private_key = RsaPrivateKey::new(&mut rng, bits)
+        .map_err(|err| X509Error::KeyGeneration(format!("RSA {bits}-bit generation failed: {err}")))?;
+    
+    let pkcs8 = private_key
+        .to_pkcs8_der()
+        .map_err(|err| X509Error::KeyGeneration(err.to_string()))?;
+    
+    let pem = Pem::new("PRIVATE KEY", pkcs8.as_bytes());
+    let pem_encoded = pem::encode(&pem);
+    KeyPair::from_pkcs8_pem_and_sign_algo(&pem_encoded, &rcgen::PKCS_RSA_SHA256)
+        .map_err(|err| X509Error::KeyGeneration(err.to_string()))
 }
 
 /// Parameters for Root CA generation.

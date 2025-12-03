@@ -20,7 +20,7 @@ use zeroize::Zeroize;
 use crate::{
     error::{JwtError, Result},
     jwk::{Ed25519KeyPair, Ed25519PublicKey},
-    rng::AunsormNativeRng,
+    AunsormNativeRng,
 };
 
 const TAG_SIZE: usize = 16;

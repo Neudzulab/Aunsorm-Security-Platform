@@ -36,9 +36,17 @@ mod gcp;
 mod local;
 #[cfg(feature = "kms-pkcs11")]
 mod pkcs11;
-mod rng;
+// mod rng; // DEPRECATED: Use aunsorm-core::AunsormNativeRng instead
 mod rotation;
 mod util;
+
+// Re-export sealed RNG from aunsorm-core
+pub use aunsorm_core::AunsormNativeRng;
+
+/// Create a new Aunsorm native RNG instance
+pub fn create_aunsorm_rng() -> AunsormNativeRng {
+    AunsormNativeRng::new()
+}
 
 pub use approval::{ApprovalBundle, ApprovalPolicy, ApprovalSignature};
 pub use backup::{BackupMetadata, EncryptedBackup};
@@ -51,7 +59,7 @@ pub use config::{GcpBackendConfig, GcpKeyConfig};
 #[cfg(feature = "kms-pkcs11")]
 pub use config::{Pkcs11BackendConfig, Pkcs11KeyConfig};
 pub use error::{KmsError, Result};
-pub use rng::{create_aunsorm_rng, AunsormNativeRng};
+// pub use rng::{create_aunsorm_rng, AunsormNativeRng}; // Now re-exported from aunsorm-core above
 pub use rotation::{RotationEvent, RotationPolicy};
 
 #[cfg(test)]

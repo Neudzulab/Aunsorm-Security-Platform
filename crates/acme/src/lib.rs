@@ -11,9 +11,17 @@ mod nonce;
 mod order;
 mod providers;
 mod renewal;
-mod rng;
+// mod rng; // DEPRECATED: Use aunsorm-core::AunsormNativeRng instead
 mod storage;
 mod validation;
+
+// Re-export sealed RNG from aunsorm-core
+pub use aunsorm_core::AunsormNativeRng;
+
+/// Create a new Aunsorm native RNG instance
+pub fn create_aunsorm_rng() -> AunsormNativeRng {
+    AunsormNativeRng::new()
+}
 
 pub use account::{
     AccountContact, AccountContactError, AccountContactKind, AccountService,
@@ -51,7 +59,7 @@ pub use renewal::{
     async_trait, ManagedCertificate, RenewalCandidate, RenewalInventory, RenewalJob,
     RenewalJobError, DEFAULT_RENEWAL_THRESHOLD,
 };
-pub use rng::{create_aunsorm_rng, AunsormNativeRng};
+// pub use rng::{create_aunsorm_rng, AunsormNativeRng}; // Now re-exported from aunsorm-core above
 pub use storage::{
     CertificateBundle, CertificateStorage, KmsStorage, LocalStorage, StorageError, StorageOutcome,
 };

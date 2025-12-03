@@ -10,6 +10,7 @@ aunsorm-core = { path = "../crates/core" }
 aunsorm-packet = { path = "../crates/packet" }
 aunsorm-x509 = { path = "../crates/x509" }
 rand_core = "0.6"
+rsa = { workspace = true }
 
 [[bench]]
 name = "aead"
@@ -29,4 +30,9 @@ harness = false
 [[bench]]
 name = "performance_analysis"
 path = "performance_analysis.rs"
+harness = false
+
+[[bench]]
+name = "rng_comparison"
+path = "rng_comparison.rs"
 harness = false

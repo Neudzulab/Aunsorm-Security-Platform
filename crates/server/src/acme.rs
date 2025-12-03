@@ -10,7 +10,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::rng::AunsormNativeRng;
+use crate::AunsormNativeRng;
 use axum::http::StatusCode;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;

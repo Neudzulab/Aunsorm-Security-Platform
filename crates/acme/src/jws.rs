@@ -98,7 +98,7 @@ impl Ed25519AccountKey {
     /// Aunsorm native RNG kullanarak yeni hesap anahtarı üretir.
     #[must_use]
     pub fn generate() -> Self {
-        use crate::rng::AunsormNativeRng;
+        use aunsorm_core::AunsormNativeRng;
         let mut rng = AunsormNativeRng::new();
         Self::generate_with_rng(&mut rng)
     }
@@ -246,7 +246,7 @@ impl EcdsaP256AccountKey {
     /// Aunsorm native RNG ile yeni ECDSA hesap anahtarı üretir.
     #[must_use]
     pub fn generate() -> Self {
-        use crate::rng::AunsormNativeRng;
+        use aunsorm_core::AunsormNativeRng;
         let mut rng = AunsormNativeRng::new();
         Self::generate_with_rng(&mut rng)
     }
@@ -400,7 +400,7 @@ impl RsaAccountKey {
     /// Rastgele sayı üretimi veya asal üretim başarısız olursa `JwsError::InvalidRsaKey`
     /// döner.
     pub fn generate() -> Result<Self, JwsError> {
-        use crate::rng::AunsormNativeRng;
+        use aunsorm_core::AunsormNativeRng;
         let mut rng = AunsormNativeRng::new();
         Self::generate_with_rng(Self::DEFAULT_MODULUS_BITS, &mut rng)
     }

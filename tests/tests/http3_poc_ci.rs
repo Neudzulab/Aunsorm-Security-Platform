@@ -52,6 +52,7 @@ async fn http3_canary_listener_emits_datagrams() -> Result<(), ServerError> {
         Duration::from_secs(300),
         clock_snapshot,
         None,
+        None, // revocation_webhook
     )?;
     let state = Arc::new(ServerState::try_new(config)?);
 

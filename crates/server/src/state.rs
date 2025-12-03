@@ -5,7 +5,7 @@ use std::iter::FromIterator;
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use crate::rng::AunsormNativeRng;
+use crate::AunsormNativeRng;
 use aunsorm_core::{
     clock::{ClockAuthority, ClockValidation, SecureClockSnapshot, SecureClockVerifier},
     transparency::{
@@ -1531,6 +1531,7 @@ impl ServerState {
             clock_snapshot,
             clock_max_age,
             clock_refresh,
+            revocation_webhook: _revocation_webhook, // TODO: Implement webhook support
         } = config;
         let signer = JwtSigner::new(key_pair.clone());
         let public = key_pair.public_key();

@@ -8,7 +8,7 @@ use time::OffsetDateTime;
 use zeroize::Zeroizing;
 
 use crate::error::{KmsError, Result};
-use crate::rng::create_aunsorm_rng;
+use crate::create_aunsorm_rng;
 
 /// Metadata describing an encrypted backup artifact.
 #[derive(Debug, Clone)]

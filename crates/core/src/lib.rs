@@ -13,6 +13,12 @@ pub mod salts;
 pub mod session;
 pub mod transparency;
 
+// Sealed native RNG module
+mod sealed {
+    pub mod aunsorm_rng;
+}
+pub use sealed::aunsorm_rng::AunsormNativeRng;
+
 pub use calibration::{
     calib_from_text, coord32_derive, normalize_calibration_text, Calibration, CalibrationId,
     CalibrationRange,

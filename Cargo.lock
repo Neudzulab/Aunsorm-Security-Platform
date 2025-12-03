@@ -364,6 +364,7 @@ name = "aunsorm-acme"
 version = "0.5.0"
 dependencies = [
  "async-trait",
+ "aunsorm-core",
  "aunsorm-kms",
  "aunsorm-x509",
  "base64 0.21.7",
@@ -431,6 +432,7 @@ version = "0.5.0"
 dependencies = [
  "argon2",
  "base64 0.21.7",
+ "chacha20",
  "criterion",
  "hex",
  "hkdf",
@@ -491,6 +493,7 @@ version = "0.5.0"
 dependencies = [
  "aead",
  "aes-gcm",
+ "aunsorm-core",
  "base64 0.21.7",
  "cryptoki",
  "ed25519-dalek",
@@ -652,6 +655,7 @@ dependencies = [
  "http-body-util",
  "pem",
  "proptest",
+ "rand_core 0.6.4",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
@@ -2300,6 +2304,7 @@ dependencies = [
  "aunsorm-x509",
  "criterion",
  "rand_core 0.6.4",
+ "rsa",
 ]
 
 [[package]]

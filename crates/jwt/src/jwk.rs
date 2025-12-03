@@ -37,7 +37,7 @@ impl Ed25519KeyPair {
     ///
     /// RNG'den seed alınırken veya seed doğrulanırken hata oluşursa `JwtError` döner.
     pub fn generate(kid: impl Into<String>) -> Result<Self> {
-        use crate::rng::AunsormNativeRng;
+        use aunsorm_core::AunsormNativeRng;
         let mut rng = AunsormNativeRng::new();
         Self::generate_with_rng(kid, &mut rng)
     }

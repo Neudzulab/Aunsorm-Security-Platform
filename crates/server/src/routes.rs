@@ -228,7 +228,7 @@ use crate::quic::datagram::AuditOutcome;
 use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
 #[cfg(feature = "http3-experimental")]
 use crate::quic::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
-use crate::rng::AunsormNativeRng;
+use crate::AunsormNativeRng;
 use crate::state::{AuditProofDocument, ClockHealthStatus, RefreshTokenRecord, ServerState};
 use crate::transparency::TransparencyEvent as LedgerTransparencyEvent;
 use rand_core::RngCore;
@@ -3591,6 +3591,7 @@ fn build_test_state() -> Arc<ServerState> {
         Duration::from_secs(300),
         clock_snapshot,
         None,
+        None, // revocation_webhook
     )
     .expect("config is valid");
     Arc::new(ServerState::try_new(config).expect("state is constructed"))

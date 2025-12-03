@@ -7,7 +7,7 @@
 
 pub mod automation;
 pub mod ca;
-pub mod optimizations;
+// pub mod optimizations; // REMOVED: Unnecessary wrapper layer
 
 use std::collections::BTreeSet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};

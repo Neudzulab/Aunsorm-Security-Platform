@@ -24,7 +24,7 @@ use crate::authorization::{
     validate_token, Authorization, Challenge, ChallengeError, ChallengeKind,
 };
 use crate::order::OrderIdentifier;
-use crate::rng::AunsormNativeRng;
+use aunsorm_core::AunsormNativeRng;
 
 /// ACME challenge durum makinesinin geçebileceği durumları temsil eder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

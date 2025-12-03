@@ -314,7 +314,7 @@ fn rotate_entry(
         SigningSource::Software(_) => {}
     }
     let mut seed = Zeroizing::new([0u8; 32]);
-    crate::rng::create_aunsorm_rng().fill_bytes(seed.as_mut());
+    crate::create_aunsorm_rng().fill_bytes(seed.as_mut());
     let signing = SigningKey::from_bytes(&seed);
     let public = VerifyingKey::from(&signing).to_bytes();
     let kid = compute_kid(&public);

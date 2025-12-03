@@ -16,7 +16,7 @@ use crate::approval::{ApprovalPolicy, ApprovalPolicyConfig, ApprovalSignerConfig
 use crate::backup::{BackupMetadata, EncryptedBackup};
 use crate::config::{BackendKind, LocalStoreConfig};
 use crate::error::{KmsError, Result};
-use crate::rng::create_aunsorm_rng;
+use crate::create_aunsorm_rng;
 use crate::rotation::{RotationEvent, RotationPolicy, RotationPolicyConfig};
 use crate::util::compute_kid;
 

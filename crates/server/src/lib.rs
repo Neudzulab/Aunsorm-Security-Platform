@@ -42,12 +42,20 @@ mod error;
 pub(crate) mod fabric;
 mod jobs;
 mod quic;
-mod rng;
+// mod rng; // DEPRECATED: Use aunsorm-core::AunsormNativeRng instead
 mod routes;
 mod state;
 mod telemetry;
 mod transparency;
-mod webhook;
+// mod webhook; // TODO: Implement webhook module
+
+// Re-export sealed RNG from aunsorm-core
+pub use aunsorm_core::AunsormNativeRng;
+
+/// Create a new Aunsorm native RNG instance
+pub fn create_aunsorm_rng() -> AunsormNativeRng {
+    AunsormNativeRng::new()
+}
 
 pub use clock_refresh::{ClockRefreshError, ClockRefreshService};
 pub use config::{FabricChaincodeConfig, LedgerBackend, RevocationWebhookConfig, ServerConfig};
@@ -59,7 +67,7 @@ pub use quic::datagram::{
 };
 #[cfg(feature = "http3-experimental")]
 pub use quic::{build_alt_svc_header_value, spawn_http3_poc, Http3PocGuard, ALT_SVC_MAX_AGE};
-pub use rng::{create_aunsorm_rng, AunsormNativeRng};
+// pub use rng::{create_aunsorm_rng, AunsormNativeRng}; // Now re-exported from aunsorm-core above
 pub use routes::{build_router, serve};
 pub use state::ServerState;
 pub use telemetry::{init_tracing, TelemetryError, TelemetryGuard};

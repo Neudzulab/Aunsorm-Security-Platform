@@ -50,6 +50,7 @@ fn demo_state() -> Arc<ServerState> {
         Duration::from_secs(300),
         clock_snapshot,
         None,
+        None, // revocation_webhook
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))

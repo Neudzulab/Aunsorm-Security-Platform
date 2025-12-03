@@ -26,6 +26,7 @@ aunsorm-server = { path = "../crates/server" }
 aunsorm-mdm = { path = "../crates/mdm" }
 proptest = "1.4"
 base64 = { workspace = true }
+rand_core = "0.6"
 sha2 = { workspace = true }
 hex = { workspace = true }
 hmac = { workspace = true }

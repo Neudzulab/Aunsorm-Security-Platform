@@ -75,7 +75,7 @@ impl Claims {
     /// `jti` alanı yoksa Aunsorm native RNG ile rastgele üretir.
     pub fn ensure_jwt_id(&mut self) {
         if self.jwt_id.is_none() {
-            use crate::rng::AunsormNativeRng;
+            use aunsorm_core::AunsormNativeRng;
             let mut rng = AunsormNativeRng::new();
             let mut buf = [0_u8; 16];
             rng.fill_bytes(&mut buf);

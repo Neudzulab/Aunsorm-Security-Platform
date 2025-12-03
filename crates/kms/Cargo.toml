@@ -16,6 +16,7 @@ default = []
 "kms-pkcs11" = ["dep:cryptoki"]
 
 [dependencies]
+aunsorm-core = { path = "../core" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

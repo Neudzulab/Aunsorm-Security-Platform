@@ -21,6 +21,7 @@ sysinfo = { workspace = true }
 unicode-normalization = { workspace = true }
 subtle = { workspace = true }
 hex = { workspace = true }
+chacha20 = "0.9"
 
 [dev-dependencies]
 criterion = { workspace = true }

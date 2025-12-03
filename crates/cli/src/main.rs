@@ -4,9 +4,9 @@
 #![warn(clippy::pedantic, clippy::nursery)]
 #![allow(clippy::option_if_let_else)]
 
-mod rng;
+// mod rng; // DEPRECATED: Use aunsorm-core::AunsormNativeRng instead
 
-use crate::rng::AunsormNativeRng;
+use aunsorm_core::AunsormNativeRng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error as _;
 use std::fs;
