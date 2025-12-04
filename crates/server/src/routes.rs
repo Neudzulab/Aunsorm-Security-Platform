@@ -228,9 +228,9 @@ use crate::quic::datagram::AuditOutcome;
 use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
 #[cfg(feature = "http3-experimental")]
 use crate::quic::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
-use crate::AunsormNativeRng;
 use crate::state::{AuditProofDocument, ClockHealthStatus, RefreshTokenRecord, ServerState};
 use crate::transparency::TransparencyEvent as LedgerTransparencyEvent;
+use crate::AunsormNativeRng;
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -2381,9 +2381,12 @@ pub async fn revoke_token(
         .map(|value| value.trim().to_lowercase());
 
     if hint.as_deref() != Some("access_token") {
-        state.revoke_refresh_token(token).await.map_err(|err| {
-            ApiError::server_error(format!("Refresh token iptal edilemedi: {err}"))
-        })?;
+        state
+            .revoke_refresh_token_with_webhook(token)
+            .await
+            .map_err(|err| {
+                ApiError::server_error(format!("Refresh token iptal edilemedi: {err}"))
+            })?;
     }
 
     if hint.as_deref() != Some("refresh_token") {

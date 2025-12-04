@@ -47,12 +47,13 @@ mod routes;
 mod state;
 mod telemetry;
 mod transparency;
-// mod webhook; // TODO: Implement webhook module
+mod webhook;
 
 // Re-export sealed RNG from aunsorm-core
 pub use aunsorm_core::AunsormNativeRng;
 
 /// Create a new Aunsorm native RNG instance
+#[must_use]
 pub fn create_aunsorm_rng() -> AunsormNativeRng {
     AunsormNativeRng::new()
 }

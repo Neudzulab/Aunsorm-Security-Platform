@@ -1,7 +1,6 @@
 use std::time::Instant;
 
 use aunsorm_x509::ca::{generate_root_ca, KeyAlgorithm, RootCaParams};
-use aunsorm_x509::optimizations::RsaPerformanceMetrics;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand_core::RngCore;
 
@@ -39,14 +38,10 @@ fn bench_root_generation_with_metrics(c: &mut Criterion) {
             BenchmarkId::new("rsa_optimized", name),
             &bits,
             |b, &bits| {
-                let mut metrics = RsaPerformanceMetrics::new();
-
                 b.iter_custom(|iters| {
                     let start = Instant::now();
 
                     for _ in 0..iters {
-                        let gen_start = Instant::now();
-
                         let empty_strings: &[String] = &[];
                         let common_name = format!("Optimized Benchmark Root RSA {}", bits);
                         let org_salt = format!("opt-bench-root-rsa{}", bits);
@@ -66,34 +61,9 @@ fn bench_root_generation_with_metrics(c: &mut Criterion) {
                         black_box(
                             generate_root_ca(&params).unwrap_or_else(|_| panic!("rsa{bits} root")),
                         );
-
-                        let gen_duration = gen_start.elapsed();
-                        metrics.record_key_generation(gen_duration.as_millis() as u64);
                     }
 
-                    let total_duration = start.elapsed();
-
-                    // Report performance metrics
-                    eprintln!("\n=== RSA-{} Performance Metrics ===", bits);
-                    eprintln!(
-                        "Average generation time: {:.2} ms",
-                        metrics.avg_key_generation_ms()
-                    );
-                    eprintln!(
-                        "Outliers detected: {} out of {} samples",
-                        metrics.outliers_count(),
-                        iters
-                    );
-
-                    if metrics.outliers_count() > iters as usize / 10 {
-                        eprintln!(
-                            "⚠️  WARNING: High outlier ratio ({}%) for RSA-{}",
-                            (metrics.outliers_count() * 100) / iters as usize,
-                            bits
-                        );
-                    }
-
-                    total_duration
+                    start.elapsed()
                 });
             },
         );

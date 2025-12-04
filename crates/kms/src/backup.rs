@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use zeroize::Zeroizing;
 
-use crate::error::{KmsError, Result};
 use crate::create_aunsorm_rng;
+use crate::error::{KmsError, Result};
 
 /// Metadata describing an encrypted backup artifact.
 #[derive(Debug, Clone)]

@@ -17,7 +17,6 @@ use axum::routing::any;
 use axum::{serve, Router};
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine as _;
-use hex;
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use serde_json::{json, Value};

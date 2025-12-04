@@ -453,9 +453,9 @@ dependencies = [
 name = "aunsorm-id"
 version = "0.5.0"
 dependencies = [
+ "aunsorm-core",
  "base64 0.21.7",
  "hex",
- "hkdf",
  "once_cell",
  "rand_core 0.6.4",
  "serde",

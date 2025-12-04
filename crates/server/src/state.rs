@@ -42,6 +42,7 @@ use crate::transparency::{
     TransparencyEvent as LedgerTransparencyEvent, TransparencyLedger,
     TransparencySnapshot as LedgerTransparencySnapshot,
 };
+use crate::webhook::WebhookClient;
 
 const AUTH_TTL: Duration = Duration::from_secs(300);
 const SFU_CONTEXT_TTL: Duration = Duration::from_secs(900);
@@ -1501,6 +1502,7 @@ pub struct ServerState {
     clock_refresh_service: Option<Arc<ClockRefreshService>>,
     clock_refresh_task: OnceLock<JoinHandle<()>>,
     clock_monitor_task: OnceLock<JoinHandle<()>>,
+    webhook_client: Option<Arc<WebhookClient>>,
 }
 
 struct ClockRuntime {
@@ -1531,7 +1533,7 @@ impl ServerState {
             clock_snapshot,
             clock_max_age,
             clock_refresh,
-            revocation_webhook: _revocation_webhook, // TODO: Implement webhook support
+            revocation_webhook,
         } = config;
         let signer = JwtSigner::new(key_pair.clone());
         let public = key_pair.public_key();
@@ -1574,6 +1576,11 @@ impl ServerState {
         let fabric = FabricDidRegistry::poc()?;
         let acme = AcmeService::new(&issuer)?;
         let oauth_clients = Arc::new(default_oauth_clients());
+
+        let webhook_client = revocation_webhook
+            .map(|config| WebhookClient::new(Arc::new(config)))
+            .transpose()?;
+
         Ok(Self {
             listen_port: listen.port(),
             issuer,
@@ -1605,6 +1612,7 @@ impl ServerState {
             clock_refresh_service,
             clock_refresh_task: OnceLock::new(),
             clock_monitor_task: OnceLock::new(),
+            webhook_client: webhook_client.map(Arc::new),
         })
     }
 
@@ -1753,7 +1761,61 @@ impl ServerState {
     }
 
     pub async fn revoke_access_token(&self, jti: &str) -> Result<bool, ServerError> {
-        self.ledger.revoke(jti).await
+        let revoked = self.ledger.revoke(jti).await?;
+
+        // Trigger webhook if configured
+        if revoked {
+            if let Some(webhook) = &self.webhook_client {
+                // Fire and forget - don't block revocation on webhook delivery
+                let webhook_clone = Arc::clone(webhook);
+                let issuer = self.issuer.clone();
+                let jti_owned = jti.to_string();
+
+                tokio::spawn(async move {
+                    if let Err(err) = webhook_clone
+                        .send_revocation_event(&issuer, &jti_owned, "access_token")
+                        .await
+                    {
+                        eprintln!("Webhook delivery failed: {err}");
+                    }
+                });
+            }
+        }
+
+        Ok(revoked)
+    }
+
+    pub async fn revoke_refresh_token_with_webhook(
+        &self,
+        token: &str,
+    ) -> Result<bool, ServerError> {
+        let revoked = self.refresh_tokens.revoke(token).await?;
+
+        // Trigger webhook if configured
+        if revoked {
+            if let Some(webhook) = &self.webhook_client {
+                // Fire and forget - don't block revocation on webhook delivery
+                let webhook_clone = Arc::clone(webhook);
+                let issuer = self.issuer.clone();
+                let token_hash = {
+                    use sha2::{Digest, Sha256};
+                    let mut hasher = Sha256::new();
+                    hasher.update(token.as_bytes());
+                    hex::encode(hasher.finalize())
+                };
+
+                tokio::spawn(async move {
+                    if let Err(err) = webhook_clone
+                        .send_revocation_event(&issuer, &token_hash, "refresh_token")
+                        .await
+                    {
+                        eprintln!("Webhook delivery failed: {err}");
+                    }
+                });
+            }
+        }
+
+        Ok(revoked)
     }
 
     pub async fn audit_proof_document(&self) -> AuditProofDocument {

@@ -340,7 +340,8 @@ async fn webhook_sink_handler(
         .await
         .map(|bytes| bytes.to_vec())
         .unwrap_or_default();
-    if let Some(ch) = sender.lock().await.take() {
+    let value = sender.lock().await.take();
+    if let Some(ch) = value {
         let _ = ch.send((headers, body));
     }
     StatusCode::OK
@@ -1789,7 +1790,6 @@ async fn revoke_refresh_token_prevents_reuse() {
 }
 
 #[tokio::test]
-#[ignore = "Webhook implementation in progress - see PLAN.md"]
 async fn revoke_endpoint_emits_signed_webhook() {
     let (endpoint, receiver, handle) = spawn_webhook_sink().await;
     let secret = "test-webhook-secret-0123456789abcdef".repeat(2);

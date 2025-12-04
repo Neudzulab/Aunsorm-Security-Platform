@@ -15,7 +15,7 @@ use aes_siv::Aes128SivAead;
 
 use crate::error::PacketError;
 use crate::header::{AeadAlgorithm, Header};
-use crate::rng::AunsormNativeRng;
+use crate::AunsormNativeRng;
 
 pub const VERSION: &str = "1.01";
 

@@ -13,13 +13,13 @@ default = []
 serde = ["dep:serde"]
 
 [dependencies]
+aunsorm-core = { path = "../core" }
 base64 = { workspace = true }
 hex = { workspace = true }
 once_cell = "1"
 rand_core = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
-hkdf = { workspace = true }
 serde = { workspace = true, optional = true }
 
 [dev-dependencies]

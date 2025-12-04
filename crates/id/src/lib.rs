@@ -4,9 +4,14 @@
 #![allow(clippy::module_name_repetitions)]
 #![doc = "Projeler arası HEAD bağlı benzersiz kimlik üreticisi."]
 
-mod rng;
+// Re-export sealed RNG from aunsorm-core
+pub use aunsorm_core::AunsormNativeRng;
 
-pub use crate::rng::{create_aunsorm_rng, AunsormNativeRng};
+/// Create a new Aunsorm native RNG instance
+#[must_use]
+pub fn create_aunsorm_rng() -> AunsormNativeRng {
+    AunsormNativeRng::new()
+}
 
 use std::fmt;
 use std::str::FromStr;
@@ -38,7 +43,7 @@ const COUNTER_LEN: usize = 8;
 const PAYLOAD_LEN: usize = FINGERPRINT_LEN + ENTROPY_LEN + TIMESTAMP_LEN + COUNTER_LEN;
 
 static PROCESS_ENTROPY: Lazy<[u8; ENTROPY_LEN]> = Lazy::new(|| {
-    let mut rng = crate::rng::create_aunsorm_rng();
+    let mut rng = create_aunsorm_rng();
     let mut entropy = [0_u8; ENTROPY_LEN];
     rng.fill_bytes(&mut entropy);
     entropy
@@ -155,7 +160,7 @@ impl HeadIdGenerator {
         let namespace = normalize_namespace(namespace.as_ref())?;
         let fingerprint = fingerprint_from_head(&normalized_head);
         let prefix_hex = hex::encode(&fingerprint[..FINGERPRINT_PREFIX_BYTES]);
-        let mut rng = crate::rng::create_aunsorm_rng();
+        let mut rng = create_aunsorm_rng();
         let counter_seed = rng.next_u64();
         Ok(Self {
             namespace,

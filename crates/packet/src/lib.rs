@@ -8,7 +8,7 @@ mod crypto;
 mod error;
 mod header;
 mod packet;
-mod rng;
+// mod rng; // DEPRECATED: Use aunsorm-core::AunsormNativeRng instead
 mod session;
 mod transcript;
 mod util;
@@ -25,7 +25,15 @@ pub use crate::packet::{
     decrypt_one_shot, encrypt_one_shot, DecryptOk, DecryptParams, EncryptParams, KemPayload,
     Packet, PacketId,
 };
-pub use crate::rng::{create_aunsorm_rng, AunsormNativeRng};
+// Re-export sealed RNG from aunsorm-core
+pub use aunsorm_core::AunsormNativeRng;
+
+/// Create a new Aunsorm native RNG instance
+#[must_use]
+pub fn create_aunsorm_rng() -> AunsormNativeRng {
+    AunsormNativeRng::new()
+}
+
 pub use crate::session::{
     decrypt_session, encrypt_session, SessionDecryptParams, SessionEncryptParams, SessionMetadata,
     SessionStepOutcome, SessionStore,

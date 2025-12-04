@@ -18,6 +18,7 @@ mod verifier;
 pub use aunsorm_core::AunsormNativeRng;
 
 /// Create a new Aunsorm native RNG instance
+#[must_use]
 pub fn create_aunsorm_rng() -> AunsormNativeRng {
     AunsormNativeRng::new()
 }
