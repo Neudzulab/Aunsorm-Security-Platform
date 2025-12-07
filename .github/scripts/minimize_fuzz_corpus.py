@@ -61,7 +61,8 @@ def main() -> int:
         else:
             print(f"[nightly-fuzz] Minimizing corpus for {target} ({before['files']} files, {before['bytes']} bytes)")
             ensure_directory(dst)
-            cmd = ["cargo", "fuzz", "cmin", target, str(src), str(dst)]
+            shutil.copytree(src, dst, dirs_exist_ok=True)
+            cmd = ["cargo", "fuzz", "cmin", target, str(dst)]
             subprocess.run(cmd, check=True)
             status = "minimized"
 
