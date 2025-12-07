@@ -61,6 +61,7 @@ version = "0.5.0"
 dependencies = [
  "argon2",
  "base64",
+ "chacha20",
  "hex",
  "hkdf",
  "rand_core",

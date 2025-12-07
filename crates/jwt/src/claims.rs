@@ -109,7 +109,10 @@ impl Claims {
             }
         }
         for (key, value) in &self.extras {
-            eprintln!("[DEBUG] Validating extras value for key '{}': {:?}", key, value);
+            eprintln!(
+                "[DEBUG] Validating extras value for key '{}': {:?}",
+                key, value
+            );
             if !validate_custom_value(value) {
                 eprintln!("[DEBUG] Value for key '{}' failed validation", key);
                 return Err(JwtError::InvalidClaim("extras", CUSTOM_KEY_FORMAT_ERROR));
