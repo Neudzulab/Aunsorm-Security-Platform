@@ -74,6 +74,7 @@ use rcgen::{
     BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair,
     KeyUsagePurpose, SignatureAlgorithm, SigningKey,
 };
+use rsa::RsaPrivateKey;
 use time::{Duration, OffsetDateTime};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
@@ -115,9 +116,6 @@ impl KeyAlgorithm {
 }
 
 fn generate_rsa_keypair(bits: usize) -> Result<KeyPair, X509Error> {
-    use pem::Pem;
-    use rsa::{pkcs8::EncodePrivateKey, RsaPrivateKey};
-
     let mut rng = AunsormNativeRng::new();
     let private_key = RsaPrivateKey::new(&mut rng, bits).map_err(|err| {
         X509Error::KeyGeneration(format!("RSA {bits}-bit generation failed: {err}"))
