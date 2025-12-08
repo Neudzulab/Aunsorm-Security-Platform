@@ -3162,7 +3162,6 @@ fn handle_x509_ca_issue(args: &X509CaIssueArgs) -> CliResult<()> {
 
 fn handle_x509_ca_sign_server(args: &X509CaSignServerArgs) -> CliResult<()> {
     use aunsorm_x509::ca::{sign_server_cert, ServerCertParams};
-    use std::net::IpAddr;
 
     let ca_cert_pem = fs::read_to_string(&args.ca_cert)?;
     let ca_key_pem = fs::read_to_string(&args.ca_key)?;

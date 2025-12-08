@@ -36,6 +36,6 @@ pub mod serde_bytes32 {
         D: Deserializer<'de>,
     {
         let text = String::deserialize(deserializer)?;
-        <[u8; 32]>::from_hex(&text).map_err(serde::de::Error::custom)
+        <[u8; 32]>::from_hex(text).map_err(serde::de::Error::custom)
     }
 }
