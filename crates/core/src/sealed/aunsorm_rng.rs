@@ -19,6 +19,7 @@ use sha2::{Digest, Sha256};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use zeroize::Zeroize;
 
 // Zeroish calibration constants for NEUDZ-PCS
 const ZEROISH_AS: f64 = -17.116_310_446_8;
@@ -246,6 +247,15 @@ impl AunsormNativeRng {
         let m3 = ((Self::aacm_mix(n3).fract() * U64_MAX_F64) as u64) ^ v3;
         entropy[24..32].copy_from_slice(&m3.to_le_bytes());
     }
+
+    fn wipe(&mut self) {
+        self.key.zeroize();
+        self.nonce.zeroize();
+        self.state.zeroize();
+        self.entropy_buffer.zeroize();
+        self.counter.zeroize();
+        self.buffer_offset.zeroize();
+    }
 }
 
 impl RngCore for AunsormNativeRng {
@@ -318,3 +328,38 @@ impl Default for AunsormNativeRng {
 
 // Marker trait indicating this RNG is cryptographically secure
 impl rand_core::CryptoRng for AunsormNativeRng {}
+
+impl Drop for AunsormNativeRng {
+    fn drop(&mut self) {
+        self.wipe();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand_core::RngCore;
+
+    use super::AunsormNativeRng;
+
+    #[test]
+    fn zeroizes_sensitive_state_on_drop() {
+        let mut rng = AunsormNativeRng::new();
+        let mut dest = [0u8; 64];
+        rng.fill_bytes(&mut dest);
+
+        assert!(rng.key.iter().any(|&byte| byte != 0));
+        assert!(rng.state.iter().any(|&byte| byte != 0));
+        assert!(rng.entropy_buffer.iter().any(|&byte| byte != 0));
+        assert!(rng.nonce.iter().any(|&byte| byte != 0));
+        assert_ne!(rng.counter, 0);
+
+        rng.wipe();
+
+        assert!(rng.key.iter().all(|&byte| byte == 0));
+        assert!(rng.state.iter().all(|&byte| byte == 0));
+        assert!(rng.entropy_buffer.iter().all(|&byte| byte == 0));
+        assert!(rng.nonce.iter().all(|&byte| byte == 0));
+        assert_eq!(rng.counter, 0);
+        assert_eq!(rng.buffer_offset, 0);
+    }
+}
