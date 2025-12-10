@@ -7,7 +7,11 @@ use proptest::{
 use sha2::{Digest, Sha256};
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(32))]
+    #![proptest_config(ProptestConfig {
+        cases: 32,
+        failure_persistence: None,
+        ..ProptestConfig::default()
+    })]
     #[test]
     fn coord_digest_matches_seed_and_calibration(
         seed_bytes in prop::collection::vec(any::<u8>(), 64),
