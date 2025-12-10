@@ -176,7 +176,7 @@ This document tracks all remaining work required for production deployment.
 - [ ] Architecture decision records (ADRs)
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
 - [x] Incident response playbook
-- [ ] Production deployment guide
+- [x] Production deployment guide
 
 ### Compliance & Certifications
 - [x] SOC 2 Type II audit preparation
