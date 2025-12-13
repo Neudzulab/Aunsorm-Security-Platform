@@ -2400,9 +2400,25 @@ pub async fn revoke_token(
             },
         ) {
             if let Some(jti) = claims.jwt_id {
-                state.revoke_access_token(&jti).await.map_err(|err| {
-                    ApiError::server_error(format!("Access token iptal edilemedi: {err}"))
-                })?;
+                let client_id = claims
+                    .extras
+                    .get("clientId")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned)
+                    .or_else(|| {
+                        claims
+                            .extras
+                            .get("client_id")
+                            .and_then(Value::as_str)
+                            .map(str::to_owned)
+                    });
+
+                state
+                    .revoke_access_token(&jti, client_id.as_deref())
+                    .await
+                    .map_err(|err| {
+                        ApiError::server_error(format!("Access token iptal edilemedi: {err}"))
+                    })?;
             }
         }
     }

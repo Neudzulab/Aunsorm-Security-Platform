@@ -10,6 +10,7 @@ use hmac::{Hmac, Mac};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use std::borrow::ToOwned;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -85,6 +86,7 @@ impl WebhookClient {
         _issuer: &str,
         token_identifier: &str,
         token_type: &str,
+        client_id: Option<&str>,
     ) -> Result<()> {
         #[allow(clippy::cast_possible_truncation)]
         let timestamp_ms = SystemTime::now()
@@ -113,7 +115,7 @@ impl WebhookClient {
                 token_hash,
                 token_type: token_type.to_string(),
                 revoked: true,
-                client_id: Some("demo-client".to_string()), // TODO: Pass actual client_id
+                client_id: client_id.map(ToOwned::to_owned),
                 revoked_at_ms: timestamp_ms,
             },
         };
@@ -231,5 +233,6 @@ mod tests {
         assert!(json.contains("\"tokenHash\":\"abc123\""));
         assert!(json.contains("\"tokenType\":\"access_token\""));
         assert!(json.contains("\"revoked\":true"));
+        assert!(json.contains("\"clientId\":\"demo-client\""));
     }
 }
