@@ -373,9 +373,48 @@ paths:
                   client_id:
                     type: string
                     example: aunsorm-cli
-                  exp:
-                    type: integer
-                    example: 1761791358
+                exp:
+                  type: integer
+                  example: 1761791358
+
+  /oauth/revoke:
+    post:
+      tags:
+        - OAuth 2.0
+      summary: Revoke access or refresh token
+      description: |
+        Revokes the provided OAuth token and triggers downstream revocation webhooks when
+        configured. Webhook deliveries include token metadata and client context so audit
+        pipelines can correlate revocations with the original session.
+      operationId: revokeToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: Raw refresh or access token to revoke
+                  example: eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJhbGljZSJ9...
+                token_type_hint:
+                  type: string
+                  description: Optional hint to skip unnecessary validation work
+                  enum:
+                    - access_token
+                    - refresh_token
+      responses:
+        '200':
+          description: Token revoked (empty response body)
+        '400':
+          description: Invalid token or malformed request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /oauth/transparency:
     get:
@@ -481,6 +520,77 @@ components:
         code:
           type: string
           example: BAD_REQUEST
+
+    RevocationWebhookEvent:
+      type: object
+      description: Payload delivered to revocation webhook subscribers
+      properties:
+        event:
+          type: string
+          example: token.revoked
+        timestampMs:
+          type: integer
+          format: int64
+          description: Event creation time in milliseconds since Unix epoch
+          example: 1734131605123
+        revocation:
+          $ref: '#/components/schemas/RevocationDetails'
+
+    RevocationDetails:
+      type: object
+      properties:
+        tokenHash:
+          type: string
+          description: SHA-256 hex digest of the revoked token or JTI
+          example: 0a5d33e34a0bb14f9f9c1f0b5c5f67e4c0c8336c2b8f71f7e7f7c6e9c6a4b3d5
+        tokenType:
+          type: string
+          enum: [access_token, refresh_token]
+          description: Token category being revoked
+        revoked:
+          type: boolean
+          example: true
+        clientId:
+          type: string
+          nullable: true
+          description: OAuth client identifier if available
+          example: demo-client
+        client:
+          $ref: '#/components/schemas/RevocationClientContext'
+        revokedAtMs:
+          type: integer
+          format: int64
+          description: Timestamp matching the top-level event time
+          example: 1734131605123
+
+    RevocationClientContext:
+      type: object
+      description: Client/session context attached to the revoked token
+      properties:
+        id:
+          type: string
+          description: OAuth client identifier
+          example: demo-client
+        subject:
+          type: string
+          nullable: true
+          description: Subject associated with the token
+          example: alice
+        role:
+          type: string
+          nullable: true
+          description: Role granted for the session
+          example: user
+        scope:
+          type: string
+          nullable: true
+          description: Space-delimited scopes issued with the token
+          example: read write
+        mfaVerified:
+          type: boolean
+          nullable: true
+          description: Whether MFA was verified when the token was issued
+          example: false
 
   securitySchemes:
     BearerAuth:
