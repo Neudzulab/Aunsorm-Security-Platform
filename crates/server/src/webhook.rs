@@ -10,6 +10,7 @@ use hmac::{Hmac, Mac};
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use std::borrow::ToOwned;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -42,9 +43,32 @@ pub struct RevocationDetails {
     /// Client ID (if available)
     #[serde(rename = "clientId", skip_serializing_if = "Option::is_none")]
     pub client_id: Option<String>,
+    /// Client context for downstream auditing
+    #[serde(rename = "client", skip_serializing_if = "Option::is_none")]
+    pub client_context: Option<ClientContext>,
     /// Revoked at timestamp (same as parent `timestamp_ms`)
     #[serde(rename = "revokedAtMs")]
     pub revoked_at_ms: u64,
+}
+
+/// Additional context about the client and session attached to the revoked token
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct ClientContext {
+    /// OAuth client identifier
+    #[serde(rename = "id")]
+    pub id: String,
+    /// Optional subject associated with the session
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    /// Role granted for the session
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// Scopes issued to the token
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    /// Whether multi-factor authentication was verified
+    #[serde(rename = "mfaVerified", skip_serializing_if = "Option::is_none")]
+    pub mfa_verified: Option<bool>,
 }
 
 /// Webhook client for sending revocation events
@@ -86,6 +110,7 @@ impl WebhookClient {
         token_identifier: &str,
         token_type: &str,
         client_id: Option<&str>,
+        client_context: Option<ClientContext>,
     ) -> Result<()> {
         #[allow(clippy::cast_possible_truncation)]
         let timestamp_ms = SystemTime::now()
@@ -119,7 +144,8 @@ impl WebhookClient {
                 token_hash,
                 token_type: token_type.to_string(),
                 revoked: true,
-                client_id,
+                client_id: client_id.map(ToOwned::to_owned),
+                client_context,
                 revoked_at_ms: timestamp_ms,
             },
         };
@@ -227,6 +253,13 @@ mod tests {
                 token_type: "access_token".to_string(),
                 revoked: true,
                 client_id: Some("demo-client".to_string()),
+                client_context: Some(ClientContext {
+                    id: "demo-client".to_string(),
+                    subject: Some("alice".to_string()),
+                    role: Some("user".to_string()),
+                    scope: Some("read:all".to_string()),
+                    mfa_verified: Some(true),
+                }),
                 revoked_at_ms: 1_234_567_890,
             },
         };
@@ -237,5 +270,11 @@ mod tests {
         assert!(json.contains("\"tokenHash\":\"abc123\""));
         assert!(json.contains("\"tokenType\":\"access_token\""));
         assert!(json.contains("\"revoked\":true"));
+        assert!(json.contains("\"clientId\":\"demo-client\""));
+        assert!(json.contains("\"client\":{\"id\":\"demo-client\""));
+        assert!(json.contains("\"subject\":\"alice\""));
+        assert!(json.contains("\"role\":\"user\""));
+        assert!(json.contains("\"scope\":\"read:all\""));
+        assert!(json.contains("\"mfaVerified\":true"));
     }
 }

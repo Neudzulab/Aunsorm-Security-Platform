@@ -1886,6 +1886,28 @@ async fn revoke_endpoint_emits_signed_webhook() {
         payload["revocation"]["clientId"].as_str(),
         Some("demo-client")
     );
+    let client_context = payload["revocation"]["client"]
+        .as_object()
+        .expect("client context");
+    assert_eq!(
+        client_context.get("id").and_then(Value::as_str),
+        Some("demo-client")
+    );
+    assert_eq!(
+        client_context.get("subject").and_then(Value::as_str),
+        Some("alice")
+    );
+    assert_eq!(
+        client_context.get("role").and_then(Value::as_str),
+        Some("user")
+    );
+    assert!(client_context
+        .get("scope")
+        .map_or(true, |value| value.is_null()));
+    assert_eq!(
+        client_context.get("mfaVerified").and_then(Value::as_bool),
+        Some(false)
+    );
     let token_hash = payload["revocation"]["tokenHash"].as_str().expect("hash");
     assert_eq!(token_hash.len(), 64);
     assert_eq!(payload["timestampMs"], payload["revocation"]["revokedAtMs"]);
@@ -1925,6 +1947,133 @@ async fn revoke_endpoint_emits_signed_webhook() {
     mac.update(&canonical);
     let expected_signature = hex::encode(mac.finalize().into_bytes());
     assert_eq!(received_signature, expected_signature);
+}
+
+#[tokio::test]
+async fn revoke_access_token_includes_client_context() {
+    let (endpoint, receiver, handle) = spawn_webhook_sink().await;
+    let secret = "test-webhook-secret-abcdef0123456789".repeat(2);
+    let webhook_cfg =
+        RevocationWebhookConfig::new(endpoint.clone(), secret, Duration::from_millis(750))
+            .expect("webhook config");
+    let state = setup_state_with_profile(false, None, Some(webhook_cfg));
+    let app = build_router(&state);
+
+    let code_verifier = "oauth-webhook-verifier-bbbbbbbbbbbbbbbbbbbb";
+    let digest = Sha256::digest(code_verifier.as_bytes());
+    let code_challenge = URL_SAFE_NO_PAD.encode(digest);
+    let begin_payload = json!({
+        "subject": "alice",
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback",
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
+        "scope": "read write"
+    });
+    let begin_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/begin-auth")
+                .header("content-type", "application/json")
+                .body(Body::from(begin_payload.to_string()))
+                .expect("begin request"),
+        )
+        .await
+        .expect("begin response");
+    assert_eq!(begin_response.status(), StatusCode::OK);
+    let begin_body = to_bytes(begin_response.into_body(), usize::MAX)
+        .await
+        .expect("begin body");
+    let begin: BeginAuthResponse = serde_json::from_slice(&begin_body).expect("begin json");
+
+    let token_payload = json!({
+        "grant_type": "authorization_code",
+        "code": begin.code,
+        "code_verifier": code_verifier,
+        "client_id": "demo-client",
+        "redirect_uri": "https://app.example.com/callback"
+    });
+    let token_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/token")
+                .header("content-type", "application/json")
+                .body(Body::from(token_payload.to_string()))
+                .expect("token request"),
+        )
+        .await
+        .expect("token response");
+    assert_eq!(token_response.status(), StatusCode::OK);
+    let token_body = to_bytes(token_response.into_body(), usize::MAX)
+        .await
+        .expect("token body");
+    let token: TokenResponse = serde_json::from_slice(&token_body).expect("token json");
+
+    let revoke_payload = json!({
+        "token": token.access_token,
+        "token_type_hint": "access_token"
+    });
+    let revoke_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/revoke")
+                .header("content-type", "application/json")
+                .body(Body::from(revoke_payload.to_string()))
+                .expect("revoke request"),
+        )
+        .await
+        .expect("revoke response");
+    assert_eq!(revoke_response.status(), StatusCode::OK);
+
+    let (_headers, body) = timeout(Duration::from_secs(5), receiver)
+        .await
+        .expect("webhook timeout")
+        .expect("webhook payload");
+    handle.abort();
+
+    let payload: Value = serde_json::from_slice(&body).expect("webhook json");
+    assert_eq!(payload["event"], "token.revoked");
+    assert_eq!(
+        payload["revocation"]["tokenType"].as_str(),
+        Some("access_token")
+    );
+    assert_eq!(payload["revocation"]["revoked"], true);
+    assert_eq!(
+        payload["revocation"]["clientId"].as_str(),
+        Some("demo-client")
+    );
+    let client_context = payload["revocation"]["client"]
+        .as_object()
+        .expect("client context");
+    assert_eq!(
+        client_context.get("id").and_then(Value::as_str),
+        Some("demo-client")
+    );
+    assert_eq!(
+        client_context.get("subject").and_then(Value::as_str),
+        Some("alice")
+    );
+    assert_eq!(
+        client_context.get("role").and_then(Value::as_str),
+        Some("user")
+    );
+    assert_eq!(
+        client_context.get("scope").and_then(Value::as_str),
+        Some("read write")
+    );
+    assert_eq!(
+        client_context.get("mfaVerified").and_then(Value::as_bool),
+        Some(false)
+    );
+    let token_hash = payload["revocation"]["tokenHash"].as_str().expect("hash");
+    assert_eq!(token_hash.len(), 64);
+    assert_eq!(payload["timestampMs"], payload["revocation"]["revokedAtMs"]);
 }
 
 #[tokio::test]
