@@ -25,6 +25,7 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
+use std::borrow::ToOwned;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 
@@ -1239,6 +1240,71 @@ impl RefreshTokenStore {
             }
         }
     }
+
+    pub async fn revoke_with_record(
+        &self,
+        token: &str,
+    ) -> Result<Option<RefreshTokenRecord>, ServerError> {
+        let hash = hash_refresh_token(token);
+        match &self.inner {
+            RefreshTokenStoreInner::Memory { entries } => {
+                let mut guard = entries.lock().await;
+                Ok(guard.remove(&hash))
+            }
+            RefreshTokenStoreInner::Sqlite { conn } => {
+                let conn = Arc::clone(conn);
+                let record = tokio::task::spawn_blocking(move || -> Result<Option<RefreshTokenRecord>, ServerError> {
+                    let conn_guard = conn.lock().map_err(|_| {
+                        ServerError::Configuration("SQLite lock poisoned".to_string())
+                    })?;
+
+                    let mut stmt = conn_guard.prepare(
+                        "SELECT client_id, subject, role, scope, mfa_verified, issued_at, expires_at, session_ttl\
+                         FROM refresh_tokens WHERE token_hash = ?1 LIMIT 1",
+                    )?;
+                    let mut rows = stmt.query([&hash])?;
+                    let row = match rows.next()? {
+                        Some(row) => row,
+                        None => return Ok(None),
+                    };
+
+                    let client_id: String = row.get(0)?;
+                    let subject: Option<String> = row.get(1)?;
+                    let role: String = row.get(2)?;
+                    let scope: Option<String> = row.get(3)?;
+                    let mfa_verified_raw: i64 = row.get(4)?;
+                    let issued_at_secs: i64 = row.get(5)?;
+                    let expires_at_secs: i64 = row.get(6)?;
+                    let session_ttl_secs: i64 = row.get(7)?;
+                    drop(rows);
+                    drop(stmt);
+
+                    conn_guard.execute("DELETE FROM refresh_tokens WHERE token_hash = ?1", [&hash])?;
+
+                    let issued_at = system_time_from_secs(issued_at_secs)?;
+                    let expires_at = system_time_from_secs(expires_at_secs)?;
+                    let session_ttl = duration_from_secs(session_ttl_secs)?;
+
+                    Ok(Some(RefreshTokenRecord {
+                        client_id,
+                        subject,
+                        role,
+                        scope,
+                        issued_at,
+                        expires_at,
+                        session_ttl,
+                        mfa_verified: mfa_verified_raw != 0,
+                    }))
+                })
+                .await
+                .map_err(|err| {
+                    ServerError::Configuration(format!("SQLite task failed: {err}"))
+                })??;
+
+                Ok(record)
+            }
+        }
+    }
 }
 
 fn hash_refresh_token(token: &str) -> String {
@@ -1760,7 +1826,11 @@ impl ServerState {
         self.refresh_tokens.revoke(token).await
     }
 
-    pub async fn revoke_access_token(&self, jti: &str) -> Result<bool, ServerError> {
+    pub async fn revoke_access_token(
+        &self,
+        jti: &str,
+        client_id: Option<&str>,
+    ) -> Result<bool, ServerError> {
         let revoked = self.ledger.revoke(jti).await?;
 
         // Trigger webhook if configured
@@ -1770,10 +1840,16 @@ impl ServerState {
                 let webhook_clone = Arc::clone(webhook);
                 let issuer = self.issuer.clone();
                 let jti_owned = jti.to_string();
+                let client_id_owned = client_id.map(ToOwned::to_owned);
 
                 tokio::spawn(async move {
                     if let Err(err) = webhook_clone
-                        .send_revocation_event(&issuer, &jti_owned, "access_token")
+                        .send_revocation_event(
+                            &issuer,
+                            &jti_owned,
+                            "access_token",
+                            client_id_owned.as_deref(),
+                        )
                         .await
                     {
                         eprintln!("Webhook delivery failed: {err}");
@@ -1789,10 +1865,10 @@ impl ServerState {
         &self,
         token: &str,
     ) -> Result<bool, ServerError> {
-        let revoked = self.refresh_tokens.revoke(token).await?;
+        let record = self.refresh_tokens.revoke_with_record(token).await?;
 
         // Trigger webhook if configured
-        if revoked {
+        if let Some(record) = &record {
             if let Some(webhook) = &self.webhook_client {
                 // Fire and forget - don't block revocation on webhook delivery
                 let webhook_clone = Arc::clone(webhook);
@@ -1803,10 +1879,16 @@ impl ServerState {
                     hasher.update(token.as_bytes());
                     hex::encode(hasher.finalize())
                 };
+                let client_id = record.client_id.clone();
 
                 tokio::spawn(async move {
                     if let Err(err) = webhook_clone
-                        .send_revocation_event(&issuer, &token_hash, "refresh_token")
+                        .send_revocation_event(
+                            &issuer,
+                            &token_hash,
+                            "refresh_token",
+                            Some(client_id.as_str()),
+                        )
                         .await
                     {
                         eprintln!("Webhook delivery failed: {err}");
@@ -1815,7 +1897,7 @@ impl ServerState {
             }
         }
 
-        Ok(revoked)
+        Ok(record.is_some())
     }
 
     pub async fn audit_proof_document(&self) -> AuditProofDocument {
