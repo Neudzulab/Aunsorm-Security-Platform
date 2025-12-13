@@ -85,6 +85,7 @@ impl WebhookClient {
         _issuer: &str,
         token_identifier: &str,
         token_type: &str,
+        client_id: Option<&str>,
     ) -> Result<()> {
         #[allow(clippy::cast_possible_truncation)]
         let timestamp_ms = SystemTime::now()
@@ -106,6 +107,11 @@ impl WebhookClient {
             hex::encode(hasher.finalize())
         };
 
+        let client_id = client_id
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+
         let event = RevocationEventPayload {
             event: "token.revoked".to_string(),
             timestamp_ms,
@@ -113,7 +119,7 @@ impl WebhookClient {
                 token_hash,
                 token_type: token_type.to_string(),
                 revoked: true,
-                client_id: Some("demo-client".to_string()), // TODO: Pass actual client_id
+                client_id,
                 revoked_at_ms: timestamp_ms,
             },
         };

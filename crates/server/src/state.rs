@@ -1760,7 +1760,11 @@ impl ServerState {
         self.refresh_tokens.revoke(token).await
     }
 
-    pub async fn revoke_access_token(&self, jti: &str) -> Result<bool, ServerError> {
+    pub async fn revoke_access_token(
+        &self,
+        jti: &str,
+        client_id: Option<String>,
+    ) -> Result<bool, ServerError> {
         let revoked = self.ledger.revoke(jti).await?;
 
         // Trigger webhook if configured
@@ -1770,10 +1774,18 @@ impl ServerState {
                 let webhook_clone = Arc::clone(webhook);
                 let issuer = self.issuer.clone();
                 let jti_owned = jti.to_string();
+                let client_id = client_id
+                    .map(|value| value.trim().to_owned())
+                    .filter(|value| !value.is_empty());
 
                 tokio::spawn(async move {
                     if let Err(err) = webhook_clone
-                        .send_revocation_event(&issuer, &jti_owned, "access_token")
+                        .send_revocation_event(
+                            &issuer,
+                            &jti_owned,
+                            "access_token",
+                            client_id.as_deref(),
+                        )
                         .await
                     {
                         eprintln!("Webhook delivery failed: {err}");
@@ -1789,10 +1801,10 @@ impl ServerState {
         &self,
         token: &str,
     ) -> Result<bool, ServerError> {
-        let revoked = self.refresh_tokens.revoke(token).await?;
+        let record = self.consume_refresh_token(token, SystemTime::now()).await?;
 
         // Trigger webhook if configured
-        if revoked {
+        if record.is_some() {
             if let Some(webhook) = &self.webhook_client {
                 // Fire and forget - don't block revocation on webhook delivery
                 let webhook_clone = Arc::clone(webhook);
@@ -1803,10 +1815,16 @@ impl ServerState {
                     hasher.update(token.as_bytes());
                     hex::encode(hasher.finalize())
                 };
+                let client_id = record.as_ref().map(|rec| rec.client_id.clone());
 
                 tokio::spawn(async move {
                     if let Err(err) = webhook_clone
-                        .send_revocation_event(&issuer, &token_hash, "refresh_token")
+                        .send_revocation_event(
+                            &issuer,
+                            &token_hash,
+                            "refresh_token",
+                            client_id.as_deref(),
+                        )
                         .await
                     {
                         eprintln!("Webhook delivery failed: {err}");
@@ -1815,7 +1833,7 @@ impl ServerState {
             }
         }
 
-        Ok(revoked)
+        Ok(record.is_some())
     }
 
     pub async fn audit_proof_document(&self) -> AuditProofDocument {
