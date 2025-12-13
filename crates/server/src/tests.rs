@@ -1886,6 +1886,28 @@ async fn revoke_endpoint_emits_signed_webhook() {
         payload["revocation"]["clientId"].as_str(),
         Some("demo-client")
     );
+    let client_context = payload["revocation"]["client"]
+        .as_object()
+        .expect("client context");
+    assert_eq!(
+        client_context.get("id").and_then(Value::as_str),
+        Some("demo-client")
+    );
+    assert_eq!(
+        client_context.get("subject").and_then(Value::as_str),
+        Some("alice")
+    );
+    assert_eq!(
+        client_context.get("role").and_then(Value::as_str),
+        Some("user")
+    );
+    assert!(client_context
+        .get("scope")
+        .map_or(true, |value| value.is_null()));
+    assert_eq!(
+        client_context.get("mfaVerified").and_then(Value::as_bool),
+        Some(false)
+    );
     let token_hash = payload["revocation"]["tokenHash"].as_str().expect("hash");
     assert_eq!(token_hash.len(), 64);
     assert_eq!(payload["timestampMs"], payload["revocation"]["revokedAtMs"]);
