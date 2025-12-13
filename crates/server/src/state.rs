@@ -25,7 +25,6 @@ use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
-use std::borrow::ToOwned;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 
@@ -1829,7 +1828,7 @@ impl ServerState {
     pub async fn revoke_access_token(
         &self,
         jti: &str,
-        client_id: Option<&str>,
+        client_context: Option<ClientContext>,
     ) -> Result<bool, ServerError> {
         let revoked = self.ledger.revoke(jti).await?;
 
@@ -1840,22 +1839,23 @@ impl ServerState {
                 let webhook_clone = Arc::clone(webhook);
                 let issuer = self.issuer.clone();
                 let jti_owned = jti.to_string();
-                let client_id_owned = client_id.map(ToOwned::to_owned);
+                let client_context = client_context.map(|context| {
+                    let id = context.id.clone();
+                    (id, context)
+                });
 
                 tokio::spawn(async move {
+                    let (client_id, client_context) = match client_context {
+                        Some((id, context)) => (Some(id), Some(context)),
+                        None => (None, None),
+                    };
                     if let Err(err) = webhook_clone
                         .send_revocation_event(
                             &issuer,
                             &jti_owned,
                             "access_token",
-                            client_id_owned.as_deref(),
-                            client_id_owned.as_ref().map(|id| ClientContext {
-                                id: id.clone(),
-                                subject: None,
-                                role: None,
-                                scope: None,
-                                mfa_verified: None,
-                            }),
+                            client_id.as_deref(),
+                            client_context,
                         )
                         .await
                     {

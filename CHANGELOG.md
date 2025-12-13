@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Revocation webhooks now include structured client context (client ID, subject,
   role, scope and MFA verification state) alongside token metadata, enabling
   downstream replay protection stores to attach richer audit trails.
+- Access token revocation notifications now emit the same client context as
+  refresh token events, keeping downstream auditing consistent regardless of
+  token type.
 - `aunsorm-server` Strict kipte kalibrasyon doğrulama hatalarını audit telemetri
   olayları (`AuditEvent::Failure`) olarak kaydeder; entegrasyon testleri HTTP
   422 yanıtını ve telemetri tetikleyicisini doğrular.
