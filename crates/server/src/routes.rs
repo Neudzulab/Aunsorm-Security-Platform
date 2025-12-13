@@ -230,6 +230,7 @@ use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
 use crate::quic::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
 use crate::state::{AuditProofDocument, ClockHealthStatus, RefreshTokenRecord, ServerState};
 use crate::transparency::TransparencyEvent as LedgerTransparencyEvent;
+use crate::webhook::ClientContext;
 use crate::AunsormNativeRng;
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
@@ -2412,9 +2413,31 @@ pub async fn revoke_token(
                             .and_then(Value::as_str)
                             .map(str::to_owned)
                     });
+                let subject = claims.subject.clone();
+                let role = claims
+                    .extras
+                    .get("role")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                let scope = claims
+                    .extras
+                    .get("scope")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned);
+                let mfa_verified = claims
+                    .extras
+                    .get("mfaVerified")
+                    .and_then(Value::as_bool);
+                let client_context = client_id.clone().map(|id| ClientContext {
+                    id,
+                    subject,
+                    role,
+                    scope,
+                    mfa_verified,
+                });
 
                 state
-                    .revoke_access_token(&jti, client_id.as_deref())
+                    .revoke_access_token(&jti, client_context)
                     .await
                     .map_err(|err| {
                         ApiError::server_error(format!("Access token iptal edilemedi: {err}"))
