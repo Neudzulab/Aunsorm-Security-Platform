@@ -43,7 +43,7 @@ use crate::transparency::{
     TransparencyEvent as LedgerTransparencyEvent, TransparencyLedger,
     TransparencySnapshot as LedgerTransparencySnapshot,
 };
-use crate::webhook::WebhookClient;
+use crate::webhook::{ClientContext, WebhookClient};
 
 const AUTH_TTL: Duration = Duration::from_secs(300);
 const SFU_CONTEXT_TTL: Duration = Duration::from_secs(900);
@@ -1849,6 +1849,13 @@ impl ServerState {
                             &jti_owned,
                             "access_token",
                             client_id_owned.as_deref(),
+                            client_id_owned.as_ref().map(|id| ClientContext {
+                                id: id.clone(),
+                                subject: None,
+                                role: None,
+                                scope: None,
+                                mfa_verified: None,
+                            }),
                         )
                         .await
                     {
@@ -1880,6 +1887,11 @@ impl ServerState {
                     hex::encode(hasher.finalize())
                 };
                 let client_id = record.client_id.clone();
+                let client_id_borrow = client_id.clone();
+                let subject = record.subject.clone();
+                let role = record.role.clone();
+                let scope = record.scope.clone();
+                let mfa_verified = record.mfa_verified;
 
                 tokio::spawn(async move {
                     if let Err(err) = webhook_clone
@@ -1887,7 +1899,14 @@ impl ServerState {
                             &issuer,
                             &token_hash,
                             "refresh_token",
-                            Some(client_id.as_str()),
+                            Some(client_id_borrow.as_str()),
+                            Some(ClientContext {
+                                id: client_id,
+                                subject,
+                                role: Some(role),
+                                scope,
+                                mfa_verified: Some(mfa_verified),
+                            }),
                         )
                         .await
                     {
