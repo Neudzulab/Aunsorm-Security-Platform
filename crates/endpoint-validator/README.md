@@ -33,3 +33,49 @@ println!("{} kontrol tamamlandı", report.results.len());
 
 Daha gelişmiş senaryolarda `ValidatorConfig` üzerinden eş zamanlılık, rate
 limit, allowlist, özel `User-Agent` ve ek HTTP başlıkları yapılandırılabilir.
+
+## Yapılandırma Rehberi
+
+`ValidatorConfig::with_base_url` aşağıdaki varsayılanlarla başlar:
+
+- **Eşzamanlılık:** `4` (asgari 1 olacak şekilde ayarlanır).
+- **Zaman aşımı:** Her istek için `10s`.
+- **Yeniden deneme:** `2` deneme ve `500ms` tabanlı üstel geri çekilme.
+- **Rate limit:** Devre dışı (`None`), `Some(0)` verilirse yine devre dışı
+  bırakılır.
+- **Destructive metodlar:** `false`; `POST/PUT/PATCH/DELETE/CONNECT` istekleri
+  yalnızca `include_destructive` `true` olduğunda gönderilir.
+- **User-Agent:** `aunsorm-endpoint-validator/0.1`.
+
+Özelleştirmenin tamamı zincirlenebilir setter'lar yerine yapı alanlarını doğrudan
+ayarlayarak yapılır. Örnek gelişmiş kullanım:
+
+```rust
+use endpoint_validator::{validate, AllowlistedFailure, ValidatorConfig};
+use http::header::{HeaderName, HeaderValue};
+use url::Url;
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let mut config = ValidatorConfig::with_base_url(Url::parse("https://api.example.com")?);
+config.include_destructive = true; // Test ortamında tüm metodları dene
+config.concurrency = 8;            // Daha yüksek eşzamanlılık
+config.rate_limit_per_second = Some(20);
+config.additional_headers.push((
+    HeaderName::from_static("x-trace-id"),
+    HeaderValue::from_static("validator-run"),
+));
+config.allowlist.push(AllowlistedFailure {
+    method: "GET".into(),
+    path: "/healthz".into(),
+    statuses: vec![503],
+});
+
+let report = validate(config).await?;
+println!("{} uç kontrol edildi", report.results.len());
+# Ok(())
+# }
+```
+
+İsteğe bağlı olarak `seed_paths` alanına eklenen yollar, keşif katmanından
+bağımsız şekilde test kuyruğuna eklenir ve `Allow` yanıtı alınamayan uçlarda bile
+istek denenmesine izin verir.
