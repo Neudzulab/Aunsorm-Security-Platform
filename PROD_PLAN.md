@@ -190,7 +190,9 @@ This document tracks all remaining work required for production deployment.
 - [ ] Contribution guidelines update
   - [x] Documented native RNG compliance, plan alignment, and endpoint/OpenAPI
     update expectations in `CONTRIBUTING.md`
-- [ ] Code review checklist
+- [x] Code review checklist
+  - Documented reviewer gates in `CONTRIBUTING.md`, including RNG compliance,
+    documentation updates, and validation suite requirements
 - [ ] Development environment setup automation (devcontainer)
 - [ ] CI/CD pipeline documentation
 - [x] Troubleshooting guide for common issues
