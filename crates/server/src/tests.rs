@@ -15,7 +15,7 @@ use aunsorm_acme::{
 };
 use aunsorm_core::{calibration::calib_from_text, clock::SecureClockSnapshot};
 use aunsorm_jwt::{Audience, Claims, Ed25519KeyPair, Jwk};
-use aunsorm_mdm::{DeviceCertificatePlan, DeviceRecord, PolicyDocument};
+use aunsorm_mdm::{DeviceCertificatePlan, DevicePlatform, DeviceRecord, PolicyDocument};
 use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
     Engine as _,
@@ -1545,6 +1545,79 @@ async fn mdm_rejects_control_characters_in_platform() {
             .contains("Platform contains control characters"),
         "unexpected error message: {}",
         error.error_description
+    );
+}
+
+#[tokio::test]
+async fn mdm_registration_trims_and_deduplicates_whitespace() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/mdm/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "device_id": "  mdm-device-2  ",
+                        "owner": "  alice  ",
+                        "platform": " ios ",
+                        "display_name": "  Alice's tablet  "
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let enrollment: DeviceEnrollmentEnvelope = serde_json::from_slice(&body).expect("json");
+    assert_eq!(enrollment.device.device_id, "mdm-device-2");
+    assert_eq!(enrollment.device.owner, "alice");
+    assert_eq!(enrollment.device.platform, DevicePlatform::Ios);
+    assert_eq!(
+        enrollment.device.display_name.as_deref(),
+        Some("Alice's tablet")
+    );
+
+    let duplicate = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/mdm/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "device_id": "mdm-device-2",
+                        "owner": "alice",
+                        "platform": "ios"
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("duplicate response");
+
+    assert_eq!(duplicate.status(), StatusCode::BAD_REQUEST);
+    let dup_body = to_bytes(duplicate.into_body(), usize::MAX)
+        .await
+        .expect("duplicate body");
+    let error: ErrorResponse = serde_json::from_slice(&dup_body).expect("duplicate json");
+    assert_eq!(error.error, "invalid_request");
+    assert!(
+        error
+            .error_description
+            .contains("Device already registered"),
+        "unexpected error message: {}",
+        error.error_description,
     );
 }
 

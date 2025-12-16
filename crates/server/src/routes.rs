@@ -1520,6 +1520,7 @@ pub async fn register_device(
             "device_id is invalid - contains control characters",
         ));
     }
+    let device_id = device_id.to_owned();
 
     // Validate owner
     let owner = request.owner.trim();
@@ -1533,16 +1534,26 @@ pub async fn register_device(
             "owner is invalid - contains control characters",
         ));
     }
+    let owner = owner.to_owned();
 
     // Validate platform
-    if request.platform.is_empty() {
+    let platform = request.platform.trim();
+    if platform.is_empty() {
         return Err(ApiError::invalid_request("Platform cannot be empty"));
     }
-    if request.platform.chars().any(char::is_control) {
+    if platform.chars().any(char::is_control) {
         return Err(ApiError::invalid_request(
             "Platform contains control characters",
         ));
     }
+    let platform = platform.to_owned();
+
+    let display_name = request
+        .display_name
+        .as_ref()
+        .map(|name| name.trim())
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned);
 
     // Check for duplicate registration
     {
@@ -1552,8 +1563,8 @@ pub async fn register_device(
         }
 
         let devices = registered.as_mut().unwrap();
-        let device_exists = devices.contains(&request.device_id);
-        devices.insert(request.device_id.clone());
+        let device_exists = devices.contains(&device_id);
+        devices.insert(device_id.clone());
         drop(registered);
 
         if device_exists {
@@ -1562,16 +1573,16 @@ pub async fn register_device(
     }
 
     let now = 1_700_000_000_u64; // Mock timestamp
-    let device_id = request.device_id.clone();
-    let owner = request.owner.clone();
-    let platform = request.platform.clone();
+    let device_id_clone = device_id.clone();
+    let owner_clone = owner.clone();
+    let platform_clone = platform.clone();
 
     Ok(Json(MdmRegisterResponse {
         device: DeviceRecord {
-            device_id: request.device_id,
-            owner: request.owner,
-            display_name: request.display_name,
-            platform: request.platform,
+            device_id,
+            owner,
+            display_name,
+            platform,
             enrolled_at: now,
             last_seen: now,
             certificate_serial: None,
@@ -1583,9 +1594,9 @@ pub async fn register_device(
             rules: vec![],
         },
         certificate: DeviceCertificatePlan {
-            device_id,
-            owner,
-            platform,
+            device_id: device_id_clone,
+            owner: owner_clone,
+            platform: platform_clone,
             profile_name: "aunsorm-mdm-default".to_string(),
             certificate_authority: "Aunsorm MDM CA".to_string(),
             distribution_endpoints: vec!["https://mdm.aunsorm.com/enroll".to_string()],
@@ -2424,10 +2435,7 @@ pub async fn revoke_token(
                     .get("scope")
                     .and_then(Value::as_str)
                     .map(str::to_owned);
-                let mfa_verified = claims
-                    .extras
-                    .get("mfaVerified")
-                    .and_then(Value::as_bool);
+                let mfa_verified = claims.extras.get("mfaVerified").and_then(Value::as_bool);
                 let client_context = client_id.clone().map(|id| ClientContext {
                     id,
                     subject,
