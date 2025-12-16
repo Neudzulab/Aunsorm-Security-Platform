@@ -41,6 +41,24 @@ high-quality standards.
 7. Rebase onto the latest `work` branch before requesting review to keep the
    history linear.
 
+## Code Review Checklist
+- Verify the change maps to a tracked item in `PROD_PLAN.md` and update the
+  relevant checkboxes to reflect shipped scope.
+- Confirm cryptographic randomness flows through `AunsormNativeRng` (except for
+  initial entropy seeding) and that no forbidden RNG fallbacks remain.
+- Ensure public behavior changes are documented: update the server endpoint
+  tree in `README.md`, relevant OpenAPI specs under `openapi/`, crate-level
+  `README.md` files, and `port-map.yaml` when ports or routes move.
+- Run the validation suite (`cargo fmt`, `cargo clippy --deny warnings`, `cargo
+  test`, `cargo deny check`, `cargo audit`) and resolve all warnings or
+  failures.
+- Confirm error messages avoid leaking secrets, especially in CLI output and
+  HTTP handlers, and that logs stay minimal by default.
+- Check that new tests cover success and failure paths, include deterministic
+  seeding for RNG-dependent flows, and avoid relying on mocks for production
+  behavior.
+- Review commits for clear `component: summary` messages and ensure sealed
+  types or invariants are not modified without prior approval.
 ## Coding Standards
 - All crates must include `#![forbid(unsafe_code)]` and `#![deny(warnings)]`.
 - Prefer constant-time primitives and zeroization for sensitive material.
