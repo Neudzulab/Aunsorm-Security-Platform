@@ -91,6 +91,14 @@ impl AllowlistedFailure {
 }
 
 /// Validator configuration supplied by the caller.
+///
+/// Defaults are optimized for safe discovery runs:
+///
+/// - concurrency: 4 (with a minimum of 1 enforced)
+/// - timeout: 10s per request
+/// - retries: 2 attempts with a 500ms exponential backoff base
+/// - rate limiting: disabled when `rate_limit_per_second` is `None` or `Some(0)`
+/// - destructive methods: skipped unless `include_destructive` is set to `true`
 #[derive(Clone, Debug)]
 pub struct ValidatorConfig {
     pub base_url: Url,
