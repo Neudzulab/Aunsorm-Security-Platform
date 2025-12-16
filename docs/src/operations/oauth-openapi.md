@@ -52,7 +52,7 @@ desteklenmeyecek akışları ifade eder.
 | Şeffaflık Günlüğü | Proje içi | ✅ | `/oauth/transparency` token ve anahtar olaylarını raporluyor. |
 | Refresh Token Grant | RFC 6749 §6 | 📋 [v0.5.0] | README ağacında refresh token döngüsü planlandı (grant_type=refresh_token). |
 | Client Credentials Grant | RFC 6749 §4.4 | 📋 [v0.5.0] | Makine-makine erişimi için `/oauth/token` iyileştirilecek. |
-| Token Revocation | RFC 7009 | 📋 [v0.5.0] | `/oauth/revoke` endpoint'i planlandı. |
+| Token Revocation | RFC 7009 | ✅ | `/oauth/revoke` etkin; `token.revoked` webhook'u SHA-256 token özeti ve oturum bağlamıyla gönderiliyor. |
 | Device Authorization Grant | RFC 8628 | 📋 [v0.5.1] | `/oauth/device/code` ve `/oauth/device/activate` uçları planlandı. |
 | Authorization Server Metadata | RFC 8414 | 📋 [v0.5.1] | `/.well-known/oauth-authorization-server` servisi eklenecek. |
 | Dynamic Client Registration | RFC 7591 / RFC 7592 | 📋 [v0.5.1] | `/oauth/register` ile otomasyon hedefleniyor. |
@@ -82,6 +82,16 @@ başlangıçta deneysel sürümlerde yayınlanacaktır.
 Bu tablo README mimari ağacı ve ROADMAP ile eş zamanlı güncellenecektir. Yeni
 uçların OpenAPI şemasına eklenmesi, implementasyon commit'iyle aynı sprintte
 tamamlanacaktır.
+
+### Token İptali ve Webhook Bildirimleri
+
+RFC 7009 uyumlu `/oauth/revoke` uç noktası hem erişim hem de refresh
+token'lar için kullanılabilir ve başarılı her iptal işlemi sonrasında
+`token.revoked` olayı yayına alınır. Webhook yükü, iptal edilen belirtecin
+SHA-256 özeti (`digestSha256`), belirteç türü (`tokenType`), ham belirteç veya
+JTI değeri (`revoked`) ve üretim zaman damgasını (`revokedAtMs`) içerir;
+ayrıca istemci bağlamı (`clientContext`) otomatik olarak eklenerek tüketici
+sistemlerin yeniden oynatma veya kaçak kullanım analizini kolaylaştırır.
 
 Sunucu tarafında kayıt altına alınmayan bir `redirect_uri` değeri ile
 `/oauth/begin-auth` çağrıldığında yanıt `400 Bad Request` ve
