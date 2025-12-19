@@ -85,6 +85,7 @@ impl WebhookClient {
     pub fn new(config: Arc<RevocationWebhookConfig>) -> Result<Self> {
         let http_client = reqwest::Client::builder()
             .timeout(config.timeout())
+            .no_proxy()
             .build()
             .map_err(|err| {
                 ServerError::Configuration(format!("HTTP client oluşturulamadı: {err}"))

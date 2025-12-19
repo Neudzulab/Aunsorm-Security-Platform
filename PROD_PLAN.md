@@ -151,6 +151,7 @@ This document tracks all remaining work required for production deployment.
 ### Security Auditing
 - [ ] Third-party security audit (penetration testing)
 - [ ] Dependency vulnerability scanning automation
+- [ ] Replace unmaintained or vulnerable crypto dependencies flagged by cargo-deny (atomic-polyfill, fxhash, pqcrypto-dilithium/kyber, ring 0.16.20) to restore advisory compliance
 - [ ] Static code analysis (cargo clippy strict mode)
 - [ ] Dynamic analysis (ASAN, MSAN, TSAN)
 - [ ] Fuzz testing for all parsers and decoders
