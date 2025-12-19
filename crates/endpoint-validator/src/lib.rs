@@ -358,6 +358,7 @@ pub async fn validate(config: ValidatorConfig) -> Result<ValidationReport, Valid
     }
 
     let client = Client::builder()
+        .no_proxy()
         .timeout(config.timeout)
         .default_headers(default_headers)
         .build()

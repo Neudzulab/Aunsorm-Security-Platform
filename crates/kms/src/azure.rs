@@ -88,6 +88,7 @@ impl AzureBackend {
     pub(crate) fn new(config: AzureBackendConfig, strict: bool) -> Result<Self> {
         let base_url = normalize_base_url(&config.base_url)?;
         let client = Client::builder()
+            .no_proxy()
             .build()
             .map_err(|err| KmsError::Config(format!("failed to build http client: {err}")))?;
         let token = config.access_token.map(Zeroizing::new);
