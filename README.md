@@ -67,6 +67,23 @@ Set `AUNSORM_SERVER_URL` or `HOSTNAME` in `.env` to point the CLI to a non-defau
 | Metrics Service | 50022 | Observability and health aggregation |
 | CLI Gateway | 50023 | CLI-dedicated ingress for automation |
 
+## Endpoint Tree & Health Signals
+- ✅ **Gateway** (`:50010` → `/health`): routes public traffic to all backend services and fronts calibration checks.
+  - ✅ **Auth Service** (`:50011` → `/health`): JWT/OAuth2 flows with strict JTI enforcement.
+  - ✅ **Crypto Service** (`:50012` → `/health`): Core cryptographic primitives.
+  - ✅ **X509 Service** (`:50013` → `/health`): Certificate issuance and verification.
+  - ✅ **KMS Service** (`:50014` → `/health`): Key lifecycle management with attestation gating.
+  - ✅ **MDM Service** (`:50015` → `/health`): Device enrollment and policy application.
+  - ✅ **ID Service** (`:50016` → `/health`): Identity binding and claims issuance.
+  - 🚧 **ACME Service** (`:50017` → `/health`): ACME account/order flows (in development).
+  - 🚧 **PQC Service** (`:50018` → `/health`): ML-KEM and SLH-DSA / ML-DSA endpoints (in development).
+  - ⚠️ **RNG Service** (`:50019` → `/health`): Deprecated HTTP RNG exposure; use `AunsormNativeRng` in crates.
+  - 🚧 **Blockchain Service** (`:50020` → `/health`): DID registry proof-of-concept for ledger anchoring.
+  - 🚧 **E2EE Service** (`:50021` → `/health`): End-to-end encryption helpers (in development).
+  - ✅ **Metrics Service** (`:50022` → `/health`): Prometheus metrics aggregation and health aggregation.
+- ✅ **CLI Gateway** (`:50023` → `/health`): Dedicated ingress for automation and CLI flows.
+- 📋 **Documentation surfaces**: OpenAPI spec server (`:50024`) and Redoc UI (`:50025`) remain reserved for spec delivery.
+
 ## Security Guarantees
 - **Deterministic entropy**: All cryptographic random generation uses `AunsormNativeRng`; OS RNG is only allowed for bootstrapping entropy.
 - **Replay resistance**: Clock attestation with strict max-age windows and calibration fingerprints gates every time-sensitive operation.
