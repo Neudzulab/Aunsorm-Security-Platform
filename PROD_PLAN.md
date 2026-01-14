@@ -189,7 +189,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Privacy policy and terms of service
 
 ### Developer Experience
-- [ ] Contribution guidelines update
+- [x] Contribution guidelines update
   - [x] Documented native RNG compliance, plan alignment, and endpoint/OpenAPI
     update expectations in `CONTRIBUTING.md`
 - [x] Code review checklist
