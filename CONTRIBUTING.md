@@ -23,7 +23,11 @@ high-quality standards.
    in sync with shipped changes. For new endpoints, also update the server
    endpoint tree in `README.md`, relevant OpenAPI YAML files under `openapi/`,
    and `port-map.yaml` if ports change.
-5. Run the full validation suite before submitting a PR:
+5. Do not suppress issues or warnings. Avoid `#[allow]`, `#[expect]`, or
+   `#[cfg(test)]` fallbacks in production code, and resolve findings instead.
+   Deprecated dependencies are not allowed, and mocks must not replace real
+   implementations in non-test code paths.
+6. Run the full validation suite before submitting a PR:
    ```bash
    cargo fmt --all
    cargo clippy --all-targets --all-features
@@ -34,11 +38,11 @@ high-quality standards.
    cargo bench --no-run
    ```
    Failing commands must be fixed or explained; we treat warnings as errors.
-6. Document externally-visible behavior:
+7. Document externally-visible behavior:
    - Update `README.md`, `CHANGELOG.md`, and crate-level `README.md` files when
      API or UX changes occur.
    - Add rustdoc examples for new public APIs.
-7. Rebase onto the latest `work` branch before requesting review to keep the
+8. Rebase onto the latest `work` branch before requesting review to keep the
    history linear.
 
 ## Code Review Checklist
@@ -46,6 +50,8 @@ high-quality standards.
   relevant checkboxes to reflect shipped scope.
 - Confirm cryptographic randomness flows through `AunsormNativeRng` (except for
   initial entropy seeding) and that no forbidden RNG fallbacks remain.
+- Ensure there are no deprecated dependencies, suppressed warnings, or mock
+  implementations used in production paths.
 - Ensure public behavior changes are documented: update the server endpoint
   tree in `README.md`, relevant OpenAPI specs under `openapi/`, crate-level
   `README.md` files, and `port-map.yaml` when ports or routes move.
@@ -61,6 +67,7 @@ high-quality standards.
   types or invariants are not modified without prior approval.
 ## Coding Standards
 - All crates must include `#![forbid(unsafe_code)]` and `#![deny(warnings)]`.
+- Do not introduce `#[allow]` or `#[expect]` attributes to silence issues.
 - Prefer constant-time primitives and zeroization for sensitive material.
 - Avoid panics in library code; return typed errors using `thiserror`.
 - Gate optional functionality behind feature flags as defined in `PLAN.md`.
