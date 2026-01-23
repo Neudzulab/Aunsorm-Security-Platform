@@ -25,6 +25,7 @@ use hkdf::Hkdf;
 use http::{header::LOCATION, HeaderMap, HeaderName, HeaderValue, StatusCode};
 use humantime::format_rfc3339;
 use rand_core::RngCore;
+use reqwest::header::{HeaderName as ReqHeaderName, HeaderValue as ReqHeaderValue};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::Sha256;
@@ -3714,13 +3715,13 @@ fn load_allowlist(path: &Path) -> CliResult<Vec<AllowlistedFailure>> {
     Ok(entries)
 }
 
-fn parse_header_pair(input: &str) -> CliResult<(HeaderName, HeaderValue)> {
+fn parse_header_pair(input: &str) -> CliResult<(ReqHeaderName, ReqHeaderValue)> {
     let (name, value) = input
         .split_once(':')
         .ok_or_else(|| CliError::InvalidHeader(input.to_string()))?;
-    let header_name = HeaderName::from_bytes(name.trim().as_bytes())
+    let header_name = ReqHeaderName::from_bytes(name.trim().as_bytes())
         .map_err(|_| CliError::InvalidHeader(input.to_string()))?;
-    let header_value = HeaderValue::from_str(value.trim())
+    let header_value = ReqHeaderValue::from_str(value.trim())
         .map_err(|_| CliError::InvalidHeader(input.to_string()))?;
     Ok((header_name, header_value))
 }

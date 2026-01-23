@@ -10,13 +10,14 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Context as _};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use futures::stream::{FuturesUnordered, StreamExt as FuturesStreamExt};
-use http::header::{
-    HeaderName, HeaderValue, InvalidHeaderValue, ALLOW, AUTHORIZATION, CONTENT_TYPE, USER_AGENT,
-};
-use http::{HeaderMap, Method};
 use openapiv3::{OpenAPI, Operation, ReferenceOr, RequestBody};
 use quick_xml::de::from_str as parse_xml;
 use regex::Regex;
+use reqwest::header::{
+    HeaderMap, HeaderName, HeaderValue, InvalidHeaderValue, ALLOW, AUTHORIZATION, CONTENT_TYPE,
+    USER_AGENT,
+};
+use reqwest::Method;
 use reqwest::{Client, Response};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};

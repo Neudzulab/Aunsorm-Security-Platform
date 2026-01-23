@@ -52,7 +52,7 @@ ayarlayarak yapılır. Örnek gelişmiş kullanım:
 
 ```rust
 use endpoint_validator::{validate, AllowlistedFailure, ValidatorConfig};
-use http::header::{HeaderName, HeaderValue};
+use reqwest::header::{HeaderName, HeaderValue};
 use url::Url;
 
 # async fn run() -> Result<(), Box<dyn std::error::Error>> {

@@ -49,6 +49,15 @@ cargo run -p aunsorm-cli -- jwt verify --token <token> --format json
 ```
 Set `AUNSORM_SERVER_URL` or `HOSTNAME` in `.env` to point the CLI to a non-default deployment.
 
+### Validation
+Run the full quality gate suite before committing changes:
+```bash
+cargo fmt --all
+cargo clippy --all-targets --all-features
+cargo test --all-features
+cargo deny check
+```
+
 ## Service List & Ports
 | Service | Port | Notes |
 | --- | --- | --- |
