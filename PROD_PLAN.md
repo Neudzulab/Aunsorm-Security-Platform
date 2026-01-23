@@ -195,7 +195,8 @@ This document tracks all remaining work required for production deployment.
 - [x] Code review checklist
   - Documented reviewer gates in `CONTRIBUTING.md`, including RNG compliance,
     documentation updates, and validation suite requirements
-- [ ] Development environment setup automation (devcontainer)
+- [x] Development environment setup automation (devcontainer)
+- [x] Document validation suite (fmt/clippy/test/deny) in README quick start
 - [ ] CI/CD pipeline documentation
 - [x] Troubleshooting guide for common issues
 
