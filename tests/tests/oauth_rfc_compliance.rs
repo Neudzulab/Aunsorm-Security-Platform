@@ -94,6 +94,7 @@ fn demo_state_with_webhook(webhook: Option<RevocationWebhookConfig>) -> Arc<Serv
         key,
         LedgerBackend::Memory,
         None,
+        None,
         calibration_fingerprint,
         Duration::from_secs(300),
         clock_snapshot,

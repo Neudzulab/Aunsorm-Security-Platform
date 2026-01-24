@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gecikmesiyle stdout log'larına aktarılır; `br/gzip/deflate/zstd`
   algoritmaları otomatik müzakere edilir ve gelen gövdeler aynı
   `Content-Encoding` değerleriyle açılır.
+- Fabric DID registry için chaincode lifecycle scripti ve gateway event relay uygulaması eklendi.
+- `POST /blockchain/media/record` uç noktası, Fabric gateway yapılandırıldığında
+  denetim izlerini zincire gönderip `ledgerReceipt` ile onay bilgisi döndürür.
 - GitHub Actions `ACME Staging Smoke` job'u Let’s Encrypt staging API’sine
   karşı `tests/tests/acme_staging.rs` hesabı roundtrip testini çalıştırır;
   secrets eksikse erken hata verilir ve sonuçlar `docs/src/operations/acme/production-deploy.md`

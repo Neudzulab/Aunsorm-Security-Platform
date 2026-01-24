@@ -130,19 +130,19 @@ This document tracks all remaining work required for production deployment.
 - [ ] Multi-domain SAN certificate support
 
 ### Blockchain Integration
-- [ ] Complete Hyperledger Fabric DID registry implementation
-- [ ] Implement chaincode deployment automation
-- [ ] Add blockchain-based audit trail for sensitive operations
-- [ ] Implement DID resolution caching
-- [ ] Configure blockchain network High Availability
- - [ ] Define Fabric network topology, org MSPs, and channel policy baselines
- - [ ] Provision CA/peer/orderer certificates with rotation runbooks
- - [ ] Implement DID registry chaincode CRUD, events, and access controls
- - [ ] Add chaincode lifecycle automation (package, approve, commit, upgrade)
- - [ ] Build audit trail pipeline (on-chain events → secure log sink)
- - [ ] Implement DID resolution cache invalidation and TTL policy
- - [ ] Add HA deployment plan for orderers/peers with failover testing
- - [ ] Document operational runbooks for Fabric deployment and upgrades
+- [ ] Complete Hyperledger Fabric DID registry implementation (user verification required for live Fabric validation)
+- [x] Implement chaincode deployment automation
+- [x] Add blockchain-based audit trail for sensitive operations
+- [x] Implement DID resolution caching
+- [x] Configure blockchain network High Availability
+ - [x] Define Fabric network topology, org MSPs, and channel policy baselines
+ - [x] Provision CA/peer/orderer certificates with rotation runbooks
+ - [x] Implement DID registry chaincode CRUD, events, and access controls
+ - [x] Add chaincode lifecycle automation (package, approve, commit, upgrade)
+ - [x] Build audit trail pipeline (on-chain events → secure log sink)
+ - [x] Implement DID resolution cache invalidation and TTL policy
+ - [x] Add HA deployment plan for orderers/peers with failover testing
+ - [x] Document operational runbooks for Fabric deployment and upgrades
 
 ---
 

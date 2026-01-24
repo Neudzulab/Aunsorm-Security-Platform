@@ -1,8 +1,8 @@
 #![allow(clippy::module_name_repetitions)]
 
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use aunsorm_jwt::{Ed25519KeyPair, Ed25519PublicKey, JwtError};
 use ed25519_dalek::{Signature, Verifier};
@@ -16,6 +16,7 @@ use time::OffsetDateTime;
 use crate::config::FabricChaincodeConfig;
 
 const DEFAULT_CLOCK_SKEW_MS: u64 = 30_000;
+const DEFAULT_DID_CACHE_TTL: Duration = Duration::from_secs(300);
 const ANCHOR_CONTEXT: &[u8] = b"aunsorm-fabric-anchor:v1";
 
 pub const FABRIC_POC_DID: &str = "did:fabric:testnet:aunsorm:device-root";
@@ -30,10 +31,18 @@ pub const FABRIC_POC_KEY_SEED: [u8; 32] = [0x37; 32];
 pub const FABRIC_POC_BLOCK_INDEX: u64 = 42;
 pub const FABRIC_POC_ANCHOR_TIMESTAMP_MS: u64 = 1_728_000_200_000;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FabricDidRegistry {
     documents: Arc<HashMap<String, FabricDidDocument>>,
     allowed_clock_skew_ms: u64,
+    cache_ttl: Duration,
+    cache: RwLock<HashMap<String, CachedFabricDid>>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedFabricDid {
+    document: FabricDidDocument,
+    expires_at: Instant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,8 +118,8 @@ impl FabricLedgerAnchor {
 
 #[derive(Debug)]
 #[allow(dead_code)]
-pub struct FabricDidVerification<'a> {
-    pub(crate) document: &'a FabricDidDocument,
+pub struct FabricDidVerification {
+    pub(crate) document: FabricDidDocument,
     pub(crate) challenge: Vec<u8>,
     pub(crate) checked_at_ms: u64,
     pub(crate) clock_skew_ms: u64,
@@ -183,6 +192,8 @@ impl FabricDidRegistry {
         Ok(Self {
             documents: Arc::new(documents),
             allowed_clock_skew_ms: DEFAULT_CLOCK_SKEW_MS,
+            cache_ttl: DEFAULT_DID_CACHE_TTL,
+            cache: RwLock::new(HashMap::new()),
         })
     }
 
@@ -191,17 +202,14 @@ impl FabricDidRegistry {
         self.documents.get(did)
     }
 
-    pub fn verify<'a>(
-        &'a self,
+    pub fn verify(
+        &self,
         request: FabricDidVerificationRequest<'_>,
-    ) -> Result<FabricDidVerification<'a>, FabricDidError> {
-        let document = self
-            .documents
-            .get(request.did)
-            .ok_or_else(|| FabricDidError::UnknownDid(request.did.to_owned()))?;
+    ) -> Result<FabricDidVerification, FabricDidError> {
+        let document = self.resolve_document(request.did)?;
         if document.channel != request.channel {
             return Err(FabricDidError::ChannelMismatch {
-                expected: document.channel.clone(),
+                expected: document.channel,
                 found: request.channel.to_owned(),
             });
         }
@@ -213,7 +221,7 @@ impl FabricDidRegistry {
         }
         if document.anchor.transaction_id != request.transaction_id {
             return Err(FabricDidError::TransactionMismatch {
-                expected: document.anchor.transaction_id.clone(),
+                expected: document.anchor.transaction_id,
                 found: request.transaction_id.to_owned(),
             });
         }
@@ -244,6 +252,33 @@ impl FabricDidRegistry {
             checked_at_ms: now_ms,
             clock_skew_ms: delta,
         })
+    }
+
+    fn resolve_document(&self, did: &str) -> Result<FabricDidDocument, FabricDidError> {
+        let now = Instant::now();
+        if let Ok(mut cache) = self.cache.write() {
+            if let Some(entry) = cache.get(did) {
+                if entry.expires_at > now {
+                    return Ok(entry.document.clone());
+                }
+            }
+            cache.retain(|_, entry| entry.expires_at > now);
+        }
+        let document = self
+            .documents
+            .get(did)
+            .ok_or_else(|| FabricDidError::UnknownDid(did.to_owned()))?
+            .clone();
+        if let Ok(mut cache) = self.cache.write() {
+            cache.insert(
+                did.to_owned(),
+                CachedFabricDid {
+                    document: document.clone(),
+                    expires_at: now + self.cache_ttl,
+                },
+            );
+        }
+        Ok(document)
     }
 }
 
@@ -332,7 +367,7 @@ struct FabricMediaPayload<'a> {
     captured_at_ms: u64,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[allow(dead_code)] // Future blockchain media recording integration
 pub struct FabricTransactionReceipt {
     pub transaction_id: String,
@@ -340,6 +375,67 @@ pub struct FabricTransactionReceipt {
     pub block_number: Option<u64>,
     #[serde(default)]
     pub status: Option<String>,
+}
+
+/// Audit trail payload for sensitive operation records.
+#[derive(Debug, Clone, Serialize)]
+pub struct FabricAuditProofPayload {
+    pub calibration_fingerprint: String,
+    pub authority: String,
+    pub authority_fingerprint: String,
+    pub attested_unix_ms: u64,
+    pub audit_digest_hex: String,
+    pub clock_signature: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AuditTrailSubmission {
+    pub media_hash: String,
+    pub session_id: String,
+    pub audit_proof: FabricAuditProofPayload,
+}
+
+impl AuditTrailSubmission {
+    fn validate(&self) -> Result<(), FabricClientError> {
+        for (value, field) in [
+            (self.media_hash.as_str(), "media_hash"),
+            (self.session_id.as_str(), "session_id"),
+            (
+                self.audit_proof.calibration_fingerprint.as_str(),
+                "calibration_fingerprint",
+            ),
+            (self.audit_proof.authority.as_str(), "authority"),
+            (
+                self.audit_proof.authority_fingerprint.as_str(),
+                "authority_fingerprint",
+            ),
+            (
+                self.audit_proof.audit_digest_hex.as_str(),
+                "audit_digest_hex",
+            ),
+            (self.audit_proof.clock_signature.as_str(), "clock_signature"),
+        ] {
+            if value.trim().is_empty() {
+                return Err(FabricClientError::EmptyField { field });
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FabricAuditTrailRequest {
+    channel: String,
+    chaincode: String,
+    function: String,
+    #[serde(rename = "mediaHash")]
+    media_hash: String,
+    #[serde(rename = "sessionId")]
+    session_id: String,
+    #[serde(rename = "auditProof")]
+    audit_proof: FabricAuditProofPayload,
+    #[serde(rename = "attestedAtMs")]
+    attested_at_ms: u64,
 }
 
 /// Submits a media transparency record to the configured Fabric chaincode endpoint.
@@ -367,6 +463,35 @@ pub async fn submit_media_record(
             captured_at: record.captured_at,
             captured_at_ms,
         },
+    };
+
+    let response = client.post(endpoint).json(&request).send().await?;
+    if !response.status().is_success() {
+        let status = response.status().as_u16();
+        let body = response.text().await.unwrap_or_default();
+        return Err(FabricClientError::Rejected { status, body });
+    }
+    let receipt = response.json::<FabricTransactionReceipt>().await?;
+    Ok(receipt)
+}
+
+/// Submits a sensitive operation audit trail to the configured Fabric chaincode endpoint.
+pub async fn submit_audit_trail(
+    client: &Client,
+    endpoint: &str,
+    config: &FabricChaincodeConfig,
+    submission: &AuditTrailSubmission,
+) -> Result<FabricTransactionReceipt, FabricClientError> {
+    const FUNCTION: &str = "recordAuditTrail";
+    submission.validate()?;
+    let request = FabricAuditTrailRequest {
+        channel: config.channel().to_owned(),
+        chaincode: config.chaincode().to_owned(),
+        function: FUNCTION.to_owned(),
+        media_hash: submission.media_hash.clone(),
+        session_id: submission.session_id.clone(),
+        audit_proof: submission.audit_proof.clone(),
+        attested_at_ms: submission.audit_proof.attested_unix_ms,
     };
 
     let response = client.post(endpoint).json(&request).send().await?;
