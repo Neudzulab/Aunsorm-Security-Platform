@@ -22,15 +22,17 @@ use aunsorm_mdm::{
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use hmac::{Hmac, Mac};
 use rand_core::RngCore;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
+use url::Url;
 
 use crate::acme::AcmeService;
 use crate::clock_refresh::ClockRefreshService;
-use crate::config::{ClockRefreshConfig, LedgerBackend, ServerConfig};
+use crate::config::{ClockRefreshConfig, FabricChaincodeConfig, LedgerBackend, ServerConfig};
 use crate::error::ServerError;
 use crate::fabric::FabricDidRegistry;
 use crate::quic::datagram::{AuditEvent, AuditOutcome};
@@ -1556,6 +1558,9 @@ pub struct ServerState {
     transparency_ledger: TransparencyLedger,
     mdm: MdmDirectory,
     fabric: FabricDidRegistry,
+    fabric_chaincode: Option<FabricChaincodeConfig>,
+    fabric_gateway_url: Option<Url>,
+    fabric_client: Client,
     acme: AcmeService,
     rng: StdMutex<AunsormNativeRng>,
     audit_proof: Arc<RwLock<AuditProof>>,
@@ -1593,7 +1598,8 @@ impl ServerState {
             strict,
             key_pair,
             ledger,
-            fabric: _fabric,
+            fabric: fabric_chaincode,
+            fabric_gateway_url,
             calibration_fingerprint,
             clock_snapshot,
             clock_max_age,
@@ -1666,6 +1672,9 @@ impl ServerState {
             transparency_ledger,
             mdm,
             fabric,
+            fabric_chaincode,
+            fabric_gateway_url,
+            fabric_client: Client::new(),
             acme,
             rng: StdMutex::new(AunsormNativeRng::new()),
             audit_proof,
@@ -2050,6 +2059,18 @@ impl ServerState {
 
     pub const fn fabric_registry(&self) -> &FabricDidRegistry {
         &self.fabric
+    }
+
+    pub const fn fabric_chaincode(&self) -> Option<&FabricChaincodeConfig> {
+        self.fabric_chaincode.as_ref()
+    }
+
+    pub const fn fabric_gateway_url(&self) -> Option<&Url> {
+        self.fabric_gateway_url.as_ref()
+    }
+
+    pub const fn fabric_client(&self) -> &Client {
+        &self.fabric_client
     }
 
     /// Returns the number of devices registered in the in-memory MDM directory.

@@ -48,6 +48,7 @@ async fn http3_canary_listener_emits_datagrams() -> Result<(), ServerError> {
         key_pair,
         LedgerBackend::Memory,
         None,
+        None,
         calibration_fingerprint,
         Duration::from_secs(300),
         clock_snapshot,

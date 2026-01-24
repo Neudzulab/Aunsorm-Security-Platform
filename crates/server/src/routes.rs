@@ -222,7 +222,10 @@ fn generate_refresh_token() -> String {
 }
 use crate::config::ServerConfig;
 use crate::error::{ApiError, ServerError};
-use crate::fabric::{FabricDidError, FabricDidVerificationRequest};
+use crate::fabric::{
+    submit_audit_trail, AuditTrailSubmission, FabricAuditProofPayload, FabricDidError,
+    FabricDidVerificationRequest, FabricTransactionReceipt,
+};
 use crate::quic::datagram::AuditOutcome;
 #[cfg(feature = "http3-experimental")]
 use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
@@ -2839,6 +2842,8 @@ pub struct BlockchainMediaRecordResponse {
     pub queued: bool,
     #[serde(rename = "expectedAuditProof")]
     pub expected_audit_proof: AuditProofDocument,
+    #[serde(rename = "ledgerReceipt", skip_serializing_if = "Option::is_none")]
+    pub ledger_receipt: Option<FabricTransactionReceipt>,
 }
 
 pub async fn blockchain_media_record(
@@ -2856,13 +2861,42 @@ pub async fn blockchain_media_record(
         return Err(ApiError::unprocessable_entity(err.to_string()));
     }
 
-    let response = BlockchainMediaRecordResponse {
-        status: "not-implemented",
-        queued: false,
-        expected_audit_proof: state.audit_proof_document().await,
+    let fabric_config = state.fabric_chaincode();
+    let fabric_gateway = state.fabric_gateway_url();
+    let (config, gateway) = match (fabric_config, fabric_gateway) {
+        (Some(config), Some(gateway)) => (config, gateway),
+        _ => {
+            return Err(ApiError::server_error(
+                "Fabric audit trail yapılandırması eksik",
+            ))
+        }
     };
 
-    Ok((StatusCode::NOT_IMPLEMENTED, Json(response)))
+    let submission = AuditTrailSubmission {
+        media_hash: request.media_hash.trim().to_owned(),
+        session_id: request.session_id.trim().to_owned(),
+        audit_proof: FabricAuditProofPayload {
+            calibration_fingerprint: request.audit_proof.calibration_fingerprint.clone(),
+            authority: request.audit_proof.authority.clone(),
+            authority_fingerprint: request.audit_proof.authority_fingerprint.clone(),
+            attested_unix_ms: request.audit_proof.attested_unix_ms,
+            audit_digest_hex: request.audit_proof.audit_digest_hex.clone(),
+            clock_signature: request.audit_proof.clock_signature.clone(),
+        },
+    };
+
+    let receipt = submit_audit_trail(state.fabric_client(), gateway.as_str(), config, &submission)
+        .await
+        .map_err(|err| ApiError::server_error(err.to_string()))?;
+
+    let response = BlockchainMediaRecordResponse {
+        status: "submitted",
+        queued: false,
+        expected_audit_proof: state.audit_proof_document().await,
+        ledger_receipt: Some(receipt),
+    };
+
+    Ok((StatusCode::OK, Json(response)))
 }
 
 // SFU Context endpoints
@@ -3636,6 +3670,7 @@ fn build_test_state() -> Arc<ServerState> {
         false,
         key_pair,
         crate::config::LedgerBackend::Memory,
+        None,
         None,
         calibration_fingerprint,
         Duration::from_secs(300),

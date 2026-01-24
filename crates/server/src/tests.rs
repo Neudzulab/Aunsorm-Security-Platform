@@ -315,6 +315,7 @@ fn setup_state_with_profile(
         key,
         ledger,
         None,
+        None,
         calibration_fingerprint,
         if strict {
             Duration::from_secs(30)

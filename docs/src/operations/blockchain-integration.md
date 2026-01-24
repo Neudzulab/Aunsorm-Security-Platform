@@ -378,6 +378,13 @@ için izlenebilir kılınmasını amaçlar.
   doğrulayarak PoC ortamı ile belgelenen gereksinimler arasındaki sürtünmeyi
   azaltır.
 
+## Fabric Operasyonel Runbook ve Otomasyon
+- Chaincode lifecycle otomasyonu için `scripts/fabric_chaincode_lifecycle.sh` kullanılır.
+- DID registry chaincode kaynakları `apps/fabric/chaincode/did_registry` dizininde tutulur.
+- Chaincode event relay uygulaması `apps/fabric/relay` üzerinden audit sink’e aktarım yapar.
+- HA dağıtım, MSP politikaları ve sertifika rotasyon adımları için
+  `docs/src/operations/fabric-ha-runbook.md` dokümanına başvurun.
+
 ## İleri İşler
 - Zincirler arası test harness'i (`tests/blockchain/cross_network.rs`) PoC
   doğrulama endpoint'i ile entegrasyon için sıradadır; veri kümeleri ve

@@ -95,6 +95,7 @@ fn strict_state() -> (Arc<ServerState>, TempDir) {
         key,
         LedgerBackend::Sqlite(ledger_path),
         None,
+        None,
         calibration_fingerprint,
         Duration::from_secs(30),
         clock_snapshot,

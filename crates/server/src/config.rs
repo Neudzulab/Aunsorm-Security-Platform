@@ -151,6 +151,7 @@ pub struct ServerConfig {
     pub(crate) key_pair: Ed25519KeyPair,
     pub(crate) ledger: LedgerBackend,
     pub(crate) fabric: Option<FabricChaincodeConfig>,
+    pub(crate) fabric_gateway_url: Option<Url>,
     pub(crate) calibration_fingerprint: String,
     pub(crate) clock_max_age: Duration,
     pub(crate) clock_snapshot: SecureClockSnapshot,
@@ -441,6 +442,34 @@ impl ServerConfig {
             }
         };
 
+        let fabric_gateway_url = match env::var("AUNSORM_FABRIC_GATEWAY_URL") {
+            Ok(value) => {
+                let url = Url::parse(&value).map_err(|err| {
+                    ServerError::Configuration(format!(
+                        "AUNSORM_FABRIC_GATEWAY_URL geçersiz: {err}"
+                    ))
+                })?;
+                if url.scheme() != "https" && url.scheme() != "http" {
+                    return Err(ServerError::Configuration(
+                        "AUNSORM_FABRIC_GATEWAY_URL sadece http(s) şeması destekler".to_string(),
+                    ));
+                }
+                Some(url)
+            }
+            Err(env::VarError::NotPresent) => None,
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(ServerError::Configuration(
+                    "AUNSORM_FABRIC_GATEWAY_URL geçerli bir URL değil".to_string(),
+                ))
+            }
+        };
+
+        if fabric.is_some() && fabric_gateway_url.is_none() {
+            return Err(ServerError::Configuration(
+                "Fabric entegrasyonu için AUNSORM_FABRIC_GATEWAY_URL zorunludur".to_string(),
+            ));
+        }
+
         let calibration_fingerprint =
             env::var("AUNSORM_CALIBRATION_FINGERPRINT").map_err(|_| {
                 ServerError::Configuration(
@@ -502,6 +531,7 @@ impl ServerConfig {
             key_pair,
             ledger,
             fabric,
+            fabric_gateway_url,
             calibration_fingerprint,
             clock_max_age,
             clock_snapshot,
@@ -525,6 +555,7 @@ impl ServerConfig {
         key_pair: Ed25519KeyPair,
         ledger: LedgerBackend,
         fabric: Option<FabricChaincodeConfig>,
+        fabric_gateway_url: Option<Url>,
         calibration_fingerprint: impl Into<String>,
         clock_max_age: Duration,
         clock_snapshot: SecureClockSnapshot,
@@ -571,6 +602,7 @@ impl ServerConfig {
             key_pair,
             ledger,
             fabric,
+            fabric_gateway_url,
             calibration_fingerprint,
             clock_max_age,
             clock_snapshot,
@@ -647,6 +679,7 @@ mod tests {
             Ed25519KeyPair::generate("strict-test").expect("key pair"),
             LedgerBackend::Sqlite(PathBuf::from("./strict-ledger.db")),
             None,
+            None,
             sample_calibration(),
             Duration::from_secs(45),
             sample_snapshot(),
@@ -669,6 +702,7 @@ mod tests {
             false,
             Ed25519KeyPair::generate("dev-test").expect("key pair"),
             LedgerBackend::Memory,
+            None,
             None,
             sample_calibration(),
             Duration::from_secs(0),
