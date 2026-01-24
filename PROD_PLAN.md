@@ -135,6 +135,14 @@ This document tracks all remaining work required for production deployment.
 - [ ] Add blockchain-based audit trail for sensitive operations
 - [ ] Implement DID resolution caching
 - [ ] Configure blockchain network High Availability
+ - [ ] Define Fabric network topology, org MSPs, and channel policy baselines
+ - [ ] Provision CA/peer/orderer certificates with rotation runbooks
+ - [ ] Implement DID registry chaincode CRUD, events, and access controls
+ - [ ] Add chaincode lifecycle automation (package, approve, commit, upgrade)
+ - [ ] Build audit trail pipeline (on-chain events → secure log sink)
+ - [ ] Implement DID resolution cache invalidation and TTL policy
+ - [ ] Add HA deployment plan for orderers/peers with failover testing
+ - [ ] Document operational runbooks for Fabric deployment and upgrades
 
 ---
 

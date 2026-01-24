@@ -8,9 +8,9 @@ rust-version = "1.76"
 
 [features]
 default = ["kem-mlkem-768", "sig-mldsa-65"]
-kem-mlkem-768 = ["pqcrypto-kyber"]
-kem-mlkem-1024 = ["pqcrypto-kyber"]
-sig-mldsa-65 = ["pqcrypto-dilithium"]
+kem-mlkem-768 = ["pqcrypto-mlkem"]
+kem-mlkem-1024 = ["pqcrypto-mlkem"]
+sig-mldsa-65 = ["pqcrypto-mldsa"]
 sig-falcon-512 = ["pqcrypto-falcon"]
 sig-sphincs-shake-128f = ["pqcrypto-sphincsplus"]
 
@@ -18,8 +18,8 @@ sig-sphincs-shake-128f = ["pqcrypto-sphincsplus"]
 thiserror = { workspace = true }
 zeroize = { workspace = true }
 base64 = { workspace = true }
-pqcrypto-kyber = { workspace = true, optional = true }
-pqcrypto-dilithium = { workspace = true, optional = true }
+pqcrypto-mlkem = { workspace = true, optional = true }
+pqcrypto-mldsa = { workspace = true, optional = true }
 pqcrypto-falcon = { workspace = true, optional = true }
 pqcrypto-sphincsplus = { workspace = true, optional = true }
 pqcrypto-traits = { workspace = true }

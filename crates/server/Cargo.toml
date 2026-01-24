@@ -46,7 +46,7 @@ zeroize = { workspace = true }
 rand_core = { workspace = true }
 hex = { workspace = true }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time"] }
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 tower-http = { version = "0.5", features = ["trace", "compression-full", "decompression-full"] }
@@ -63,14 +63,15 @@ bytes = { version = "1", optional = true }
 futures = { version = "0.3", default-features = false, features = ["std"], optional = true }
 h3 = { version = "0.0.8", optional = true }
 h3-quinn = { version = "0.0.10", optional = true }
-postcard = { version = "1.0", features = ["alloc"] }
+postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 quinn = { version = "0.11.7", default-features = false, features = ["runtime-tokio", "rustls"], optional = true }
-rcgen = { version = "0.12", features = ["x509-parser"] }
+rcgen = { version = "0.14", features = ["pem", "x509-parser"] }
 rustls = { version = "0.22", optional = true }
-x509-parser = { version = "0.16", features = ["verify"] }
+x509-parser = { version = "0.18", features = ["verify"] }
 pem = "3"
+rustls-pki-types = "1"
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }
-rcgen = "0.12"
+rcgen = { version = "0.14", features = ["pem", "x509-parser"] }
 tempfile = "3"

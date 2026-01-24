@@ -13,7 +13,7 @@ use h3_quinn::quinn::{
     VarInt,
 };
 use h3_quinn::Connection as H3QuinnConnection;
-use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType, SanType};
+use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ED25519};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, MissedTickBehavior};
 use tracing::{info, warn};
@@ -86,24 +86,28 @@ pub fn spawn_http3_poc(
 fn generate_ephemeral_cert(
     listen: SocketAddr,
 ) -> Result<(CertificateDer<'static>, PrivateKeyDer<'static>), ServerError> {
-    let mut params = CertificateParams::new(vec!["localhost".to_owned()]);
+    let mut params = CertificateParams::new(vec![
+        "localhost".to_owned(),
+        "aunsorm.local".to_owned(),
+        listen.ip().to_string(),
+    ])
+    .map_err(|err| {
+        ServerError::Configuration(format!(
+            "HTTP/3 sertifika parametreleri oluşturulamadı: {err}"
+        ))
+    })?;
     let mut dn = DistinguishedName::new();
     dn.push(DnType::CommonName, "aunsorm-http3-poc");
     dn.push(DnType::OrganizationName, "Aunsorm");
     params.distinguished_name = dn;
-    params
-        .subject_alt_names
-        .push(SanType::DnsName("aunsorm.local".to_owned()));
-    params
-        .subject_alt_names
-        .push(SanType::IpAddress(listen.ip()));
-    let cert = Certificate::from_params(params).map_err(|err| {
+    let key_pair = KeyPair::generate_for(&PKCS_ED25519).map_err(|err| {
+        ServerError::Configuration(format!("HTTP/3 sertifika anahtarı üretilemedi: {err}"))
+    })?;
+    let cert = params.self_signed(&key_pair).map_err(|err| {
         ServerError::Configuration(format!("HTTP/3 sertifikası üretilemedi: {err}"))
     })?;
-    let cert_der = cert.serialize_der().map_err(|err| {
-        ServerError::Configuration(format!("HTTP/3 sertifikası serileştirilemedi: {err}"))
-    })?;
-    let key_der = cert.serialize_private_key_der();
+    let cert_der = cert.der().to_vec();
+    let key_der = key_pair.serialized_der().to_vec();
     let cert = CertificateDer::from(cert_der);
     let key = PrivateKeyDer::try_from(key_der)
         .map_err(|err| ServerError::Configuration(format!("HTTP/3 anahtarı geçersiz: {err}")))?;

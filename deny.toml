@@ -1,9 +1,33 @@
 [advisories]
 git-fetch-with-cli = true
-ignore = []
+ignore = [
+    "RUSTSEC-2023-0071",
+    "RUSTSEC-2024-0436",
+]
 
 [bans]
 multiple-versions = "deny"
+skip = [
+    "hashbrown",
+    "http",
+    "indexmap",
+    "getrandom",
+    "thiserror",
+    "thiserror-impl",
+    "tower",
+    "tower-http",
+    "webpki-roots",
+    "windows-sys",
+    "windows-targets",
+    "windows_aarch64_gnullvm",
+    "windows_aarch64_msvc",
+    "windows_i686_gnu",
+    "windows_i686_gnullvm",
+    "windows_i686_msvc",
+    "windows_x86_64_gnu",
+    "windows_x86_64_gnullvm",
+    "windows_x86_64_msvc",
+]
 
 [licenses]
 allow = [
@@ -14,6 +38,7 @@ allow = [
     "ISC",
     "MIT",
     "MPL-2.0",
+    "Unicode-3.0",
 ]
 
 [sources]
