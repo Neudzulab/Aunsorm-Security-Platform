@@ -27,7 +27,7 @@ version = "0.5.0"
 
 [workspace.dependencies]
 argon2 = { version = "0.5", default-features = false, features = ["std", "password-hash"] }
-base64 = { version = "0.21", default-features = false, features = ["std"] }
+base64 = { version = "0.22", default-features = false, features = ["std"] }
 hkdf = "0.12"
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
@@ -46,8 +46,8 @@ hmac = { version = "0.12" }
 pmac = { version = "0.7" }
 aes = { version = "0.8" }
 subtle = { version = "2.5" }
-pqcrypto-kyber = { version = "0.8.1", default-features = false }
-pqcrypto-dilithium = { version = "0.5.0", default-features = false }
+pqcrypto-mlkem = { version = "0.1.1", default-features = false, features = ["std"] }
+pqcrypto-mldsa = { version = "0.1.2", default-features = false, features = ["std"] }
 pqcrypto-falcon = { version = "0.4.1", default-features = false }
 pqcrypto-sphincsplus = { version = "0.7.2", default-features = false }
 pqcrypto-traits = { version = "0.3.5", default-features = false }
@@ -58,6 +58,6 @@ aes-siv = { version = "0.7", default-features = false, features = ["alloc"] }
 hpke = { version = "0.11", default-features = false, features = ["alloc", "std", "x25519"] }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 ring = "0.17"
-rsa = "0.9.8"
+rsa = "0.9.10"
 url = "2.5"
 percent-encoding = "2.3"

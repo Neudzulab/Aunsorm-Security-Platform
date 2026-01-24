@@ -40,7 +40,7 @@ use crate::fabric::{
 };
 use crate::state::{debug_totp_for, ServerState};
 use ed25519_dalek::Signer;
-use rcgen::{Certificate, CertificateParams, DistinguishedName, DnType};
+use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair, PKCS_ED25519};
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex as AsyncMutex};
 use tokio::time::timeout;
@@ -698,13 +698,14 @@ async fn acme_directory_and_order_flow() {
     let finalize_nonce = ReplayNonce::parse(finalize_nonce).expect("valid finalize nonce");
 
     // Build CSR covering the identifier.
-    let mut params = CertificateParams::new(vec!["example.com".to_string()]);
+    let mut params =
+        CertificateParams::new(vec!["example.com".to_string()]).expect("certificate params");
     let mut dn = DistinguishedName::new();
     dn.push(DnType::CommonName, "example.com");
     params.distinguished_name = dn;
-    let certificate = Certificate::from_params(params).expect("certificate params");
-    let csr_der = certificate.serialize_request_der().expect("csr der");
-    let csr_b64 = URL_SAFE_NO_PAD.encode(&csr_der);
+    let key_pair = KeyPair::generate_for(&PKCS_ED25519).expect("csr key");
+    let csr = params.serialize_request(&key_pair).expect("csr");
+    let csr_b64 = URL_SAFE_NO_PAD.encode(csr.der().as_ref());
 
     let finalize_url = Url::parse(&finalize_endpoint).expect("finalize url");
     let finalize_payload = json!({ "csr": csr_b64 });

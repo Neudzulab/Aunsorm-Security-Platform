@@ -17,7 +17,7 @@ hex = { workspace = true }
 aunsorm-core = { path = "../core" }
 rcgen = { version = "0.14", default-features = true, features = ["x509-parser"] }
 time = { version = "0.3", features = ["formatting"] }
-x509-parser = { version = "0.16", features = ["verify"] }
+x509-parser = { version = "0.18", features = ["verify"] }
 pem = "3"
 ring = { workspace = true }
 rsa = { workspace = true }

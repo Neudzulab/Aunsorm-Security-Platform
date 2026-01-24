@@ -133,7 +133,7 @@ impl KemKeyPair {
             KemAlgorithm::MlKem768 => {
                 #[cfg(feature = "kem-mlkem-768")]
                 {
-                    let (pk, sk) = pqcrypto_kyber::kyber768::keypair();
+                    let (pk, sk) = pqcrypto_mlkem::mlkem768::keypair();
                     Ok(Self {
                         algorithm,
                         public_key: KemPublicKey::new(algorithm, pk.as_bytes().to_vec()),
@@ -148,7 +148,7 @@ impl KemKeyPair {
             KemAlgorithm::MlKem1024 => {
                 #[cfg(feature = "kem-mlkem-1024")]
                 {
-                    let (pk, sk) = pqcrypto_kyber::kyber1024::keypair();
+                    let (pk, sk) = pqcrypto_mlkem::mlkem1024::keypair();
                     Ok(Self {
                         algorithm,
                         public_key: KemPublicKey::new(algorithm, pk.as_bytes().to_vec()),
@@ -209,7 +209,7 @@ impl KemPublicKey {
             KemAlgorithm::MlKem768 => {
                 #[cfg(feature = "kem-mlkem-768")]
                 {
-                    pqcrypto_kyber::kyber768::PublicKey::from_bytes(bytes).map_err(|_| {
+                    pqcrypto_mlkem::mlkem768::PublicKey::from_bytes(bytes).map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-KEM-768 public key")
                     })?;
                     Ok(Self::new(algorithm, bytes.to_vec()))
@@ -222,7 +222,7 @@ impl KemPublicKey {
             KemAlgorithm::MlKem1024 => {
                 #[cfg(feature = "kem-mlkem-1024")]
                 {
-                    pqcrypto_kyber::kyber1024::PublicKey::from_bytes(bytes).map_err(|_| {
+                    pqcrypto_mlkem::mlkem1024::PublicKey::from_bytes(bytes).map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-KEM-1024 public key")
                     })?;
                     Ok(Self::new(algorithm, bytes.to_vec()))
@@ -278,7 +278,7 @@ impl KemSecretKey {
             KemAlgorithm::MlKem768 => {
                 #[cfg(feature = "kem-mlkem-768")]
                 {
-                    pqcrypto_kyber::kyber768::SecretKey::from_bytes(bytes).map_err(|_| {
+                    pqcrypto_mlkem::mlkem768::SecretKey::from_bytes(bytes).map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-KEM-768 secret key")
                     })?;
                     Ok(Self::new(algorithm, bytes.to_vec()))
@@ -291,7 +291,7 @@ impl KemSecretKey {
             KemAlgorithm::MlKem1024 => {
                 #[cfg(feature = "kem-mlkem-1024")]
                 {
-                    pqcrypto_kyber::kyber1024::SecretKey::from_bytes(bytes).map_err(|_| {
+                    pqcrypto_mlkem::mlkem1024::SecretKey::from_bytes(bytes).map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-KEM-1024 secret key")
                     })?;
                     Ok(Self::new(algorithm, bytes.to_vec()))
@@ -454,11 +454,11 @@ pub fn encapsulate(algorithm: KemAlgorithm, public_key: &KemPublicKey) -> Result
         KemAlgorithm::MlKem768 => {
             #[cfg(feature = "kem-mlkem-768")]
             {
-                let pk = pqcrypto_kyber::kyber768::PublicKey::from_bytes(public_key.as_bytes())
+                let pk = pqcrypto_mlkem::mlkem768::PublicKey::from_bytes(public_key.as_bytes())
                     .map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-KEM-768 public key")
                     })?;
-                let (shared, ciphertext) = pqcrypto_kyber::kyber768::encapsulate(&pk);
+                let (shared, ciphertext) = pqcrypto_mlkem::mlkem768::encapsulate(&pk);
                 Ok(KemEncapsulation::new(
                     algorithm,
                     ciphertext.as_bytes().to_vec(),
@@ -473,11 +473,11 @@ pub fn encapsulate(algorithm: KemAlgorithm, public_key: &KemPublicKey) -> Result
         KemAlgorithm::MlKem1024 => {
             #[cfg(feature = "kem-mlkem-1024")]
             {
-                let pk = pqcrypto_kyber::kyber1024::PublicKey::from_bytes(public_key.as_bytes())
+                let pk = pqcrypto_mlkem::mlkem1024::PublicKey::from_bytes(public_key.as_bytes())
                     .map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-KEM-1024 public key")
                     })?;
-                let (shared, ciphertext) = pqcrypto_kyber::kyber1024::encapsulate(&pk);
+                let (shared, ciphertext) = pqcrypto_mlkem::mlkem1024::encapsulate(&pk);
                 Ok(KemEncapsulation::new(
                     algorithm,
                     ciphertext.as_bytes().to_vec(),
@@ -510,15 +510,15 @@ pub fn decapsulate(
         KemAlgorithm::MlKem768 => {
             #[cfg(feature = "kem-mlkem-768")]
             {
-                let sk = pqcrypto_kyber::kyber768::SecretKey::from_bytes(secret_key.as_bytes())
+                let sk = pqcrypto_mlkem::mlkem768::SecretKey::from_bytes(secret_key.as_bytes())
                     .map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-KEM-768 secret key")
                     })?;
                 let ct =
-                    pqcrypto_kyber::kyber768::Ciphertext::from_bytes(ciphertext).map_err(|_| {
+                    pqcrypto_mlkem::mlkem768::Ciphertext::from_bytes(ciphertext).map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-KEM-768 ciphertext")
                     })?;
-                let shared = pqcrypto_kyber::kyber768::decapsulate(&ct, &sk);
+                let shared = pqcrypto_mlkem::mlkem768::decapsulate(&ct, &sk);
                 Ok(Zeroizing::new(shared.as_bytes().to_vec()))
             }
             #[cfg(not(feature = "kem-mlkem-768"))]
@@ -529,14 +529,14 @@ pub fn decapsulate(
         KemAlgorithm::MlKem1024 => {
             #[cfg(feature = "kem-mlkem-1024")]
             {
-                let sk = pqcrypto_kyber::kyber1024::SecretKey::from_bytes(secret_key.as_bytes())
+                let sk = pqcrypto_mlkem::mlkem1024::SecretKey::from_bytes(secret_key.as_bytes())
                     .map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-KEM-1024 secret key")
                     })?;
-                let ct = pqcrypto_kyber::kyber1024::Ciphertext::from_bytes(ciphertext).map_err(
+                let ct = pqcrypto_mlkem::mlkem1024::Ciphertext::from_bytes(ciphertext).map_err(
                     |_| PqcError::invalid(algorithm.name(), "invalid ML-KEM-1024 ciphertext"),
                 )?;
-                let shared = pqcrypto_kyber::kyber1024::decapsulate(&ct, &sk);
+                let shared = pqcrypto_mlkem::mlkem1024::decapsulate(&ct, &sk);
                 Ok(Zeroizing::new(shared.as_bytes().to_vec()))
             }
             #[cfg(not(feature = "kem-mlkem-1024"))]
@@ -581,9 +581,9 @@ mod tests {
         }
         let kp = KemKeyPair::generate(KemAlgorithm::MlKem768).unwrap();
         let encapsulation = encapsulate(KemAlgorithm::MlKem768, kp.public_key()).unwrap();
-        let expected_len = pqcrypto_kyber::kyber768::ciphertext_bytes();
+        let expected_len = pqcrypto_mlkem::mlkem768::ciphertext_bytes();
         assert_eq!(encapsulation.ciphertext().len(), expected_len);
-        pqcrypto_kyber::kyber768::Ciphertext::from_bytes(encapsulation.ciphertext())
+        pqcrypto_mlkem::mlkem768::Ciphertext::from_bytes(encapsulation.ciphertext())
             .expect("ciphertext roundtrip");
         let secret = decapsulate(
             KemAlgorithm::MlKem768,

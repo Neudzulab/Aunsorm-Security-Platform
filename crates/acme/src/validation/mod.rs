@@ -10,11 +10,9 @@ use std::fmt;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine as _;
 use ed25519_dalek::{pkcs8::EncodePrivateKey, SigningKey};
+use pem::{encode as pem_encode, Pem};
 use rand_core::{CryptoRng, RngCore};
-use rcgen::{
-    Certificate, CertificateParams, CustomExtension, DistinguishedName, DnType, KeyPair,
-    PKCS_ED25519,
-};
+use rcgen::{CertificateParams, CustomExtension, DistinguishedName, DnType, KeyPair, PKCS_ED25519};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -420,11 +418,12 @@ impl TlsAlpnChallenge {
             .to_pkcs8_der()
             .map_err(|err| TlsAlpnCertificateError::KeyEncoding(err.to_string()))?;
         let private_key_der = Zeroizing::new(key_doc.as_bytes().to_vec());
-        let key_pair = KeyPair::from_der(private_key_der.as_slice())
+        let key_pem = pem_encode(&Pem::new("PRIVATE KEY", private_key_der.as_slice()));
+        let key_pair = KeyPair::from_pkcs8_pem_and_sign_algo(&key_pem, &PKCS_ED25519)
             .map_err(|err| TlsAlpnCertificateError::Certificate(err.to_string()))?;
 
-        let mut params = CertificateParams::new(vec![self.domain.clone()]);
-        params.alg = &PKCS_ED25519;
+        let mut params = CertificateParams::new(vec![self.domain.clone()])
+            .map_err(|err| TlsAlpnCertificateError::Certificate(err.to_string()))?;
         params.distinguished_name = DistinguishedName::new();
         params
             .distinguished_name
@@ -432,13 +431,11 @@ impl TlsAlpnChallenge {
         params
             .custom_extensions
             .push(CustomExtension::new_acme_identifier(&self.digest));
-        params.key_pair = Some(key_pair);
 
-        let certificate = Certificate::from_params(params)
+        let certificate = params
+            .self_signed(&key_pair)
             .map_err(|err| TlsAlpnCertificateError::Certificate(err.to_string()))?;
-        let certificate_der = certificate
-            .serialize_der()
-            .map_err(|err| TlsAlpnCertificateError::Certificate(err.to_string()))?;
+        let certificate_der = certificate.der().to_vec();
 
         Ok(TlsAlpnCertificate {
             domain: self.domain.clone(),

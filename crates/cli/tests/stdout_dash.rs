@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
+use assert_cmd::cargo::cargo_bin_cmd;
 use assert_cmd::Command;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use hkdf::Hkdf;
@@ -34,7 +35,7 @@ fn derive_salts(org_salt: &[u8], calibration_id: &str) -> (Vec<u8>, Salts) {
 }
 
 fn cli_command() -> Command {
-    Command::cargo_bin("aunsorm-cli").expect("cli bin")
+    cargo_bin_cmd!("aunsorm-cli")
 }
 
 #[test]

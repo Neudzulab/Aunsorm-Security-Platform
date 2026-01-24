@@ -8,17 +8,17 @@ use crate::error::{PqcError, Result};
 use crate::strict::StrictMode;
 
 #[cfg(feature = "sig-mldsa-65")]
-const ML_DSA_65_PUBLIC_KEY_BYTES: usize = pqcrypto_dilithium::dilithium5::public_key_bytes();
+const ML_DSA_65_PUBLIC_KEY_BYTES: usize = pqcrypto_mldsa::mldsa65::public_key_bytes();
 #[cfg(not(feature = "sig-mldsa-65"))]
 const ML_DSA_65_PUBLIC_KEY_BYTES: usize = 2_592;
 
 #[cfg(feature = "sig-mldsa-65")]
-const ML_DSA_65_SECRET_KEY_BYTES: usize = pqcrypto_dilithium::dilithium5::secret_key_bytes();
+const ML_DSA_65_SECRET_KEY_BYTES: usize = pqcrypto_mldsa::mldsa65::secret_key_bytes();
 #[cfg(not(feature = "sig-mldsa-65"))]
 const ML_DSA_65_SECRET_KEY_BYTES: usize = 4_896;
 
 #[cfg(feature = "sig-mldsa-65")]
-const ML_DSA_65_SIGNATURE_BYTES: usize = pqcrypto_dilithium::dilithium5::signature_bytes();
+const ML_DSA_65_SIGNATURE_BYTES: usize = pqcrypto_mldsa::mldsa65::signature_bytes();
 #[cfg(not(feature = "sig-mldsa-65"))]
 const ML_DSA_65_SIGNATURE_BYTES: usize = 4_595;
 
@@ -135,7 +135,7 @@ fn ensure_ml_dsa_not_uniform(bytes: &[u8], label: &str) -> Result<()> {
 /// Desteklenen PQC imza algoritmaları.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SignatureAlgorithm {
-    /// ML-DSA 65 (Dilithium5).
+    /// ML-DSA 65 (ML-DSA-65).
     MlDsa65,
     /// Falcon-512.
     Falcon512,
@@ -177,15 +177,15 @@ impl SignatureAlgorithm {
                 deterministic: true,
                 client_actions: &[
                     "Build with the `sig-mldsa-65` feature enabled and document the flag in release notes.",
-                    "Pin pqcrypto-dilithium to the audited version and require reproducible builds in CI.",
-                    "Validate transparency log entries for Dilithium5 public keys before trusting remote peers.",
+                    "Pin pqcrypto-mldsa to the audited version and require reproducible builds in CI.",
+                    "Validate transparency log entries for ML-DSA-65 public keys before trusting remote peers.",
                     "Reject provisioning bundles whose rho/key/tr segments are uniform using `mldsa::validate_secret_key`.",
                     "Call `mldsa::validate_keypair` before enrolling ML-DSA credentials in HSM inventories.",
                 ],
                 runtime_assertions: &[
                     "Reject handshake transcripts that omit `ml-dsa-65` when `AUNSORM_STRICT=1`.",
                     "Abort if the peer advertises a key shorter than 2592 bytes for ML-DSA public keys.",
-                    "Bind calibration identifiers to the Dilithium5 public key hash prior to accepting sessions.",
+                    "Bind calibration identifiers to the ML-DSA-65 public key hash prior to accepting sessions.",
                     "Drop signatures that fail `mldsa::validate_signature` prior to verification attempts.",
                 ],
                 references: &[
@@ -434,7 +434,7 @@ impl SignatureKeyPair {
             SignatureAlgorithm::MlDsa65 => {
                 #[cfg(feature = "sig-mldsa-65")]
                 {
-                    let (pk, sk) = pqcrypto_dilithium::dilithium5::keypair();
+                    let (pk, sk) = pqcrypto_mldsa::mldsa65::keypair();
                     mldsa::validate_keypair(pk.as_bytes(), sk.as_bytes())?;
                     Ok(Self {
                         public_key: SignaturePublicKey::new(algorithm, pk.as_bytes().to_vec()),
@@ -514,7 +514,7 @@ impl SignaturePublicKey {
                 #[cfg(feature = "sig-mldsa-65")]
                 {
                     mldsa::validate_public_key(bytes)?;
-                    pqcrypto_dilithium::dilithium5::PublicKey::from_bytes(bytes).map_err(|_| {
+                    pqcrypto_mldsa::mldsa65::PublicKey::from_bytes(bytes).map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-DSA public key")
                     })?;
                     Ok(Self::new(algorithm, bytes.to_vec()))
@@ -594,7 +594,7 @@ impl SignatureSecretKey {
                 #[cfg(feature = "sig-mldsa-65")]
                 {
                     mldsa::validate_secret_key(bytes)?;
-                    pqcrypto_dilithium::dilithium5::SecretKey::from_bytes(bytes).map_err(|_| {
+                    pqcrypto_mldsa::mldsa65::SecretKey::from_bytes(bytes).map_err(|_| {
                         PqcError::invalid(algorithm.name(), "invalid ML-DSA secret key")
                     })?;
                     Ok(Self::new(algorithm, bytes.to_vec()))
@@ -661,12 +661,11 @@ pub fn sign(
         SignatureAlgorithm::MlDsa65 => {
             #[cfg(feature = "sig-mldsa-65")]
             {
-                let sk =
-                    pqcrypto_dilithium::dilithium5::SecretKey::from_bytes(secret_key.as_bytes())
-                        .map_err(|_| {
-                            PqcError::invalid(algorithm.name(), "invalid ML-DSA secret key")
-                        })?;
-                let signature = pqcrypto_dilithium::dilithium5::detached_sign(message, &sk);
+                let sk = pqcrypto_mldsa::mldsa65::SecretKey::from_bytes(secret_key.as_bytes())
+                    .map_err(|_| {
+                        PqcError::invalid(algorithm.name(), "invalid ML-DSA secret key")
+                    })?;
+                let signature = pqcrypto_mldsa::mldsa65::detached_sign(message, &sk);
                 let signature = signature.as_bytes().to_vec();
                 mldsa::validate_signature(&signature)?;
                 Ok(signature)
@@ -726,14 +725,13 @@ pub fn verify(
             #[cfg(feature = "sig-mldsa-65")]
             {
                 mldsa::validate_signature(signature)?;
-                let pk =
-                    pqcrypto_dilithium::dilithium5::PublicKey::from_bytes(public_key.as_bytes())
-                        .map_err(|_| {
-                            PqcError::invalid(algorithm.name(), "invalid ML-DSA public key")
-                        })?;
-                let sig = pqcrypto_dilithium::dilithium5::DetachedSignature::from_bytes(signature)
+                let pk = pqcrypto_mldsa::mldsa65::PublicKey::from_bytes(public_key.as_bytes())
+                    .map_err(|_| {
+                        PqcError::invalid(algorithm.name(), "invalid ML-DSA public key")
+                    })?;
+                let sig = pqcrypto_mldsa::mldsa65::DetachedSignature::from_bytes(signature)
                     .map_err(|_| PqcError::invalid(algorithm.name(), "invalid ML-DSA signature"))?;
-                pqcrypto_dilithium::dilithium5::verify_detached_signature(&sig, message, &pk)
+                pqcrypto_mldsa::mldsa65::verify_detached_signature(&sig, message, &pk)
                     .map_err(|_| PqcError::crypto(algorithm.name(), "verification failed"))
             }
             #[cfg(not(feature = "sig-mldsa-65"))]

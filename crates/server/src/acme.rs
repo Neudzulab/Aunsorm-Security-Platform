@@ -19,11 +19,12 @@ use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256VerifyingKey};
 use pem::Pem;
 use rand_core::RngCore;
 use rcgen::{
-    BasicConstraints, Certificate, CertificateParams, CertificateSigningRequest, DnType,
-    ExtendedKeyUsagePurpose, IsCa, KeyUsagePurpose, SerialNumber, PKCS_ED25519,
+    BasicConstraints, CertificateParams, CertificateSigningRequestParams, DnType,
+    ExtendedKeyUsagePurpose, IsCa, Issuer, KeyPair, KeyUsagePurpose, SerialNumber, PKCS_ED25519,
 };
 use rsa::pkcs1v15::{Signature as RsaSignature, VerifyingKey as RsaVerifyingKey};
 use rsa::{BigUint, RsaPublicKey};
+use rustls_pki_types::CertificateSigningRequestDer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -63,7 +64,7 @@ pub struct AcmeService {
     nonces: Mutex<NonceState>,
     accounts: Mutex<AccountStore>,
     orders: Mutex<HashMap<String, AcmeOrder>>,
-    ca_certificate: Certificate,
+    ca_issuer: Issuer<'static, KeyPair>,
     ca_pem: String,
     issued_certificates: Mutex<HashMap<String, StoredCertificate>>,
     next_account: AtomicU64,
@@ -137,7 +138,7 @@ impl AcmeService {
             additional_endpoints: BTreeMap::new(),
         };
         let terms = terms_url.map(|url| url.to_string());
-        let (ca_certificate, ca_pem) = generate_acme_ca(&endpoints.base)?;
+        let (ca_issuer, ca_pem) = generate_acme_ca(&endpoints.base)?;
 
         Ok(Self {
             endpoints,
@@ -146,7 +147,7 @@ impl AcmeService {
             nonces: Mutex::new(NonceState::default()),
             accounts: Mutex::new(AccountStore::default()),
             orders: Mutex::new(HashMap::new()),
-            ca_certificate,
+            ca_issuer,
             ca_pem,
             issued_certificates: Mutex::new(HashMap::new()),
             next_account: AtomicU64::new(0),
@@ -622,8 +623,9 @@ impl AcmeService {
             .map_err(|err| AcmeProblem::malformed(format!("CSR ayrıştırılamadı: {err}")))?;
         csr.verify_signature()
             .map_err(|err| AcmeProblem::malformed(format!("CSR imzası doğrulanamadı: {err}")))?;
+        let csr_der = CertificateSigningRequestDer::from(csr_bytes.as_slice());
         let mut signing_request =
-            CertificateSigningRequest::from_der(&csr_bytes).map_err(|err| {
+            CertificateSigningRequestParams::from_der(&csr_der).map_err(|err| {
                 AcmeProblem::malformed(format!("CSR imzalama isteği ayrıştırılamadı: {err}"))
             })?;
         let csr_identifiers = collect_csr_identifiers(&csr)?;
@@ -669,7 +671,7 @@ impl AcmeService {
     async fn issue_certificate_if_needed(
         &self,
         order_id: &str,
-        csr: &mut CertificateSigningRequest,
+        csr: &mut CertificateSigningRequestParams,
         not_before: Option<OffsetDateTime>,
         not_after: Option<OffsetDateTime>,
     ) -> Result<(), AcmeProblem> {
@@ -715,11 +717,10 @@ impl AcmeService {
         csr.params.use_authority_key_identifier_extension = true;
         csr.params.serial_number = Some(random_serial_number());
 
-        let leaf_der = csr
-            .serialize_der_with_signer(&self.ca_certificate)
-            .map_err(|err| {
-                AcmeProblem::server_internal(format!("Sertifika imzalanamadı: {err}"))
-            })?;
+        let leaf_certificate = csr.signed_by(&self.ca_issuer).map_err(|err| {
+            AcmeProblem::server_internal(format!("Sertifika imzalanamadı: {err}"))
+        })?;
+        let leaf_der = leaf_certificate.der().to_vec();
         let leaf_pem = pem::encode(&Pem::new("CERTIFICATE", leaf_der.clone()));
         let stored = StoredCertificate::new(leaf_pem, leaf_der, self.ca_pem.clone());
         let mut issued = self.issued_certificates.lock().await;
@@ -999,12 +1000,13 @@ impl OrderService for AcmeService {
     }
 }
 
-fn generate_acme_ca(base: &Url) -> Result<(Certificate, String), ServerError> {
+fn generate_acme_ca(base: &Url) -> Result<(Issuer<'static, KeyPair>, String), ServerError> {
     let host = base
         .host_str()
         .map_or_else(|| "aunsorm.local".to_owned(), ToOwned::to_owned);
-    let mut params = CertificateParams::new(vec![format!("Aunsorm ACME Issuing CA ({host})")]);
-    params.alg = &PKCS_ED25519;
+    let mut params = CertificateParams::new(Vec::<String>::new()).map_err(|err| {
+        ServerError::Configuration(format!("ACME CA parametreleri oluşturulamadı: {err}"))
+    })?;
     params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
     params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
     params.extended_key_usages.clear();
@@ -1021,12 +1023,16 @@ fn generate_acme_ca(base: &Url) -> Result<(Certificate, String), ServerError> {
         format!("Aunsorm ACME Issuing CA ({host})"),
     );
 
-    let certificate = Certificate::from_params(params)
-        .map_err(|err| ServerError::Configuration(format!("ACME CA oluşturulamadı: {err}")))?;
-    let pem = certificate.serialize_pem().map_err(|err| {
-        ServerError::Configuration(format!("ACME CA PEM üretimi başarısız: {err}"))
+    let key_pair = KeyPair::generate_for(&PKCS_ED25519).map_err(|err| {
+        ServerError::Configuration(format!("ACME CA anahtarı üretilemedi: {err}"))
     })?;
-    Ok((certificate, pem))
+    let certificate = params
+        .clone()
+        .self_signed(&key_pair)
+        .map_err(|err| ServerError::Configuration(format!("ACME CA oluşturulamadı: {err}")))?;
+    let pem = certificate.pem();
+    let issuer = Issuer::new(params, key_pair);
+    Ok((issuer, pem))
 }
 
 #[derive(Debug, Clone)]

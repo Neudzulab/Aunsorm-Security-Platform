@@ -7,11 +7,9 @@ use crate::X509Error;
 use aunsorm_core::AunsormNativeRng;
 use once_cell::sync::Lazy;
 use pem::Pem;
-use rand_core::RngCore;
 use rcgen::KeyPair;
 use rsa::{pkcs8::EncodePrivateKey, RsaPrivateKey};
 use std::collections::HashMap;
-use std::convert::TryFrom;
 
 /// Pre-generated RSA keypairs for development/testing
 /// Bu production'da kullanılmamalı, sadece benchmark/test için
@@ -83,20 +81,20 @@ fn generate_rsa_with_hints(bits: usize) -> Result<RsaPrivateKey, X509Error> {
 /// Parallel RSA key generation for large key sizes (4096+)
 /// Uses multiple RNG streams to generate primes concurrently
 fn generate_rsa_parallel(bits: usize) -> Result<RsaPrivateKey, X509Error> {
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
-    
+    use std::sync::Arc;
+
     eprintln!("⚡ Using parallel prime generation for RSA-{bits}...");
-    
+
     // Try multiple times with different RNG seeds
     let max_attempts = 3;
     let found = Arc::new(AtomicBool::new(false));
-    
+
     for attempt in 1..=max_attempts {
         if attempt > 1 {
             eprintln!("🔄 Retry attempt {attempt}/{max_attempts}...");
         }
-        
+
         // Generate with dedicated RNG instance
         let mut rng = AunsormNativeRng::new();
         match RsaPrivateKey::new(&mut rng, bits) {
@@ -115,7 +113,7 @@ fn generate_rsa_parallel(bits: usize) -> Result<RsaPrivateKey, X509Error> {
             }
         }
     }
-    
+
     Err(X509Error::KeyGeneration(format!(
         "RSA {bits}-bit generation exhausted all attempts"
     )))

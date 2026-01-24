@@ -15,7 +15,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true, features = ["oid"] }
 thiserror = { workspace = true }
-url = { workspace = true }
+url = { workspace = true, features = ["serde"] }
 idna = { workspace = true }
 percent-encoding = { workspace = true }
 ed25519-dalek = { version = "~2.1", default-features = false, features = ["std", "pkcs8"] }
@@ -24,7 +24,7 @@ zeroize = { workspace = true }
 time = { version = "0.3", features = ["formatting", "macros", "serde", "parsing"] }
 rand_core = { workspace = true }
 hkdf = "0.12"
-rcgen = { version = "0.12" }
+rcgen = { version = "0.14", features = ["pem", "x509-parser"] }
 async-trait = "0.1"
 pem = "3"
 aunsorm-core = { path = "../core" }
@@ -34,5 +34,5 @@ aunsorm-kms = { path = "../kms" }
 [dev-dependencies]
 pretty_assertions = "1"
 rand_chacha = { workspace = true }
-x509-parser = { version = "0.16", features = ["verify"] }
+x509-parser = { version = "0.18", features = ["verify"] }
 tokio = { version = "1", features = ["macros", "rt"] }
