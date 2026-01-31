@@ -185,6 +185,7 @@ This document tracks all remaining work required for production deployment.
 - [x] port-map.yaml - Service port mapping
 - [x] Revize: Clarify CLI environment override variables in README quick start (AUNSORM_SERVER_URL/HOST)
 - [x] Document Redoc access links in OpenAPI README quick start and service table
+- [x] Revize: Replace hardcoded localhost references in OpenAPI landing page and README with host placeholders
 - [ ] API reference documentation (OpenAPI spec)
 - [ ] Architecture decision records (ADRs)
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
