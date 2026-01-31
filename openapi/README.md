@@ -13,17 +13,18 @@ docker compose up -d
 ### Access Documentation
 - **Main Portal**: http://localhost:50024
 - **Swagger UI**: http://localhost:8080
+- **Redoc**: http://localhost:50025
 - **Individual Specs**: http://localhost:50024/[service-name].yaml
 
 ## 📚 Available Services
 
-| Service | Port | Swagger UI Link | Description |
-|---------|------|-----------------|-------------|
-| **Auth** | 50011 | [Open](http://localhost:8080/?url=http://localhost:50024/auth-service.yaml) | JWT, OAuth 2.0 + PKCE |
-| **Crypto** | 50012 | [Open](http://localhost:8080/?url=http://localhost:50024/crypto-service.yaml) | AEAD, Signing, KDF |
-| **PQC** | 50018 | [Open](http://localhost:8080/?url=http://localhost:50024/pqc-service.yaml) | ML-KEM, ML-DSA, SLH-DSA |
-| **X509** | 50013 | Coming Soon | Certificate Management |
-| **KMS** | 50014 | Coming Soon | Key Management |
+| Service | Port | Swagger UI Link | Redoc Link | Description |
+|---------|------|-----------------|------------|-------------|
+| **Auth** | 50011 | [Open](http://localhost:8080/?url=http://localhost:50024/auth-service.yaml) | [Open](http://localhost:50025/?url=/auth-service.yaml) | JWT, OAuth 2.0 + PKCE |
+| **Crypto** | 50012 | [Open](http://localhost:8080/?url=http://localhost:50024/crypto-service.yaml) | [Open](http://localhost:50025/?url=/crypto-service.yaml) | AEAD, Signing, KDF |
+| **PQC** | 50018 | [Open](http://localhost:8080/?url=http://localhost:50024/pqc-service.yaml) | [Open](http://localhost:50025/?url=/pqc-service.yaml) | ML-KEM, ML-DSA, SLH-DSA |
+| **X509** | 50013 | Coming Soon | Coming Soon | Certificate Management |
+| **KMS** | 50014 | Coming Soon | Coming Soon | Key Management |
 
 ## 📖 Interactive Testing
 
