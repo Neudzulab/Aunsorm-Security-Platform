@@ -10,6 +10,7 @@
 - [Mimari Boşluk Analizi](architecture/gap-analysis.md)
 - [Operasyonel Testler](operations/testing.md)
 - [Operasyonel Sorun Giderme Rehberi](operations/troubleshooting-guide.md)
+- [CI/CD Pipeline Dokümantasyonu](operations/ci-cd-pipeline.md)
 - [Clock Attestation Sunucu Runbook'u](operations/clock-attestation-deployment.md)
 - [Ağ ve Yük Dengeleme Sertleştirmesi](operations/networking-load-balancing.md)
 - [Production Deployment Guide](operations/production-deployment-guide.md)
