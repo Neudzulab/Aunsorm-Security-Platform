@@ -164,6 +164,7 @@ This document tracks all remaining work required for production deployment.
 - [ ] Static code analysis (cargo clippy strict mode)
 - [ ] Dynamic analysis (ASAN, MSAN, TSAN)
 - [ ] Fuzz testing for all parsers and decoders
+- [x] Align fuzz harness base64 dependency with workspace version to reduce version divergence
 - [ ] Supply chain security (verify all dependencies)
 
 ### Performance Optimization

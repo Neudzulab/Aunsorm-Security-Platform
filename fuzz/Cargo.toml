@@ -14,7 +14,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 aunsorm-packet = { path = "../crates/packet" }
 aunsorm-core = { path = "../crates/core" }
-base64 = { version = "0.21", default-features = false, features = ["std"] }
+base64 = { version = "0.22", default-features = false, features = ["std"] }
 once_cell = "1.19"
 
 [profile.release]
