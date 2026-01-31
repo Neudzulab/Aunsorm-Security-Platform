@@ -183,6 +183,7 @@ This document tracks all remaining work required for production deployment.
 - [x] PROJECT_SUMMARY.md - Architecture overview
 - [x] README.md - Quick start guide
 - [x] port-map.yaml - Service port mapping
+- [x] Revize: Clarify CLI environment override variables in README quick start (AUNSORM_SERVER_URL/HOST)
 - [ ] API reference documentation (OpenAPI spec)
 - [ ] Architecture decision records (ADRs)
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
