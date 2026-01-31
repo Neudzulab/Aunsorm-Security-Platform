@@ -52,6 +52,7 @@ fn demo_state() -> Arc<ServerState> {
         clock_snapshot,
         None,
         None, // revocation_webhook
+        None, // cors
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))

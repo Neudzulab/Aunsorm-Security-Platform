@@ -32,7 +32,9 @@ use url::Url;
 
 use crate::acme::AcmeService;
 use crate::clock_refresh::ClockRefreshService;
-use crate::config::{ClockRefreshConfig, FabricChaincodeConfig, LedgerBackend, ServerConfig};
+use crate::config::{
+    ClockRefreshConfig, CorsConfig, FabricChaincodeConfig, LedgerBackend, ServerConfig,
+};
 use crate::error::ServerError;
 use crate::fabric::FabricDidRegistry;
 use crate::quic::datagram::{AuditEvent, AuditOutcome};
@@ -1573,6 +1575,7 @@ pub struct ServerState {
     clock_refresh_task: OnceLock<JoinHandle<()>>,
     clock_monitor_task: OnceLock<JoinHandle<()>>,
     webhook_client: Option<Arc<WebhookClient>>,
+    cors: Option<CorsConfig>,
 }
 
 struct ClockRuntime {
@@ -1605,6 +1608,7 @@ impl ServerState {
             clock_max_age,
             clock_refresh,
             revocation_webhook,
+            cors,
         } = config;
         let signer = JwtSigner::new(key_pair.clone());
         let public = key_pair.public_key();
@@ -1687,6 +1691,7 @@ impl ServerState {
             clock_refresh_task: OnceLock::new(),
             clock_monitor_task: OnceLock::new(),
             webhook_client: webhook_client.map(Arc::new),
+            cors,
         })
     }
 
@@ -1966,6 +1971,11 @@ impl ServerState {
 
     pub const fn clock_max_age(&self) -> Duration {
         self.clock_max_age
+    }
+
+    #[must_use]
+    pub(crate) fn cors(&self) -> Option<&CorsConfig> {
+        self.cors.as_ref()
     }
 
     pub async fn clock_health_status(&self) -> ClockHealthStatus {

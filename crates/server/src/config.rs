@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use axum::http::{HeaderName, HeaderValue, Method};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use zeroize::Zeroizing;
 
@@ -157,6 +158,7 @@ pub struct ServerConfig {
     pub(crate) clock_snapshot: SecureClockSnapshot,
     pub(crate) clock_refresh: Option<ClockRefreshConfig>,
     pub(crate) revocation_webhook: Option<RevocationWebhookConfig>,
+    pub(crate) cors: Option<CorsConfig>,
 }
 
 /// Configuration for the background clock refresh worker.
@@ -241,6 +243,230 @@ impl RevocationWebhookConfig {
     #[must_use]
     pub(crate) const fn timeout(&self) -> Duration {
         self.timeout
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CorsConfig {
+    allow_any_origin: bool,
+    allow_origins: Vec<HeaderValue>,
+    allow_methods: Vec<Method>,
+    allow_headers: Vec<HeaderName>,
+    expose_headers: Vec<HeaderName>,
+    allow_credentials: bool,
+    max_age: Option<Duration>,
+}
+
+impl CorsConfig {
+    fn parse_csv(value: &str) -> Vec<String> {
+        value
+            .split(',')
+            .map(str::trim)
+            .filter(|entry| !entry.is_empty())
+            .map(str::to_owned)
+            .collect()
+    }
+
+    fn parse_bool(value: &str, key: &str) -> Result<bool, ServerError> {
+        match value.trim() {
+            "1" | "true" | "TRUE" | "True" => Ok(true),
+            "0" | "false" | "FALSE" | "False" => Ok(false),
+            _ => Err(ServerError::Configuration(format!(
+                "{key} true/false veya 1/0 olmalıdır"
+            ))),
+        }
+    }
+
+    pub fn from_env() -> Result<Option<Self>, ServerError> {
+        let raw_origins = match env::var("AUNSORM_CORS_ALLOW_ORIGINS") {
+            Ok(value) => value,
+            Err(env::VarError::NotPresent) => return Ok(None),
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(ServerError::Configuration(
+                    "AUNSORM_CORS_ALLOW_ORIGINS ASCII olmayan karakterler içeriyor".to_string(),
+                ))
+            }
+        };
+
+        let origin_entries = Self::parse_csv(&raw_origins);
+        if origin_entries.is_empty() {
+            return Err(ServerError::Configuration(
+                "AUNSORM_CORS_ALLOW_ORIGINS boş olamaz".to_string(),
+            ));
+        }
+
+        let allow_any_origin = origin_entries.iter().any(|entry| entry == "*");
+        if allow_any_origin && origin_entries.len() > 1 {
+            return Err(ServerError::Configuration(
+                "AUNSORM_CORS_ALLOW_ORIGINS '*' ile birlikte başka origin içeremez".to_string(),
+            ));
+        }
+
+        let allow_origins = if allow_any_origin {
+            Vec::new()
+        } else {
+            origin_entries
+                .iter()
+                .map(|entry| {
+                    HeaderValue::from_str(entry).map_err(|_| {
+                        ServerError::Configuration(format!(
+                            "AUNSORM_CORS_ALLOW_ORIGINS geçersiz origin içeriyor: {entry}"
+                        ))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        };
+
+        let methods_raw = env::var("AUNSORM_CORS_ALLOW_METHODS")
+            .unwrap_or_else(|_| "GET,POST,HEAD,DELETE,OPTIONS".to_string());
+        let method_entries = Self::parse_csv(&methods_raw);
+        if method_entries.is_empty() {
+            return Err(ServerError::Configuration(
+                "AUNSORM_CORS_ALLOW_METHODS boş olamaz".to_string(),
+            ));
+        }
+        let allow_methods = method_entries
+            .iter()
+            .map(|entry| {
+                let normalized = entry.trim().to_ascii_uppercase();
+                Method::from_bytes(normalized.as_bytes()).map_err(|_| {
+                    ServerError::Configuration(format!(
+                        "AUNSORM_CORS_ALLOW_METHODS geçersiz method içeriyor: {entry}"
+                    ))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let headers_raw = env::var("AUNSORM_CORS_ALLOW_HEADERS")
+            .unwrap_or_else(|_| "Authorization,Content-Type,Accept".to_string());
+        let header_entries = Self::parse_csv(&headers_raw);
+        if header_entries.is_empty() {
+            return Err(ServerError::Configuration(
+                "AUNSORM_CORS_ALLOW_HEADERS boş olamaz".to_string(),
+            ));
+        }
+        let allow_headers = header_entries
+            .iter()
+            .map(|entry| {
+                let normalized = entry.trim().to_ascii_lowercase();
+                HeaderName::from_bytes(normalized.as_bytes()).map_err(|_| {
+                    ServerError::Configuration(format!(
+                        "AUNSORM_CORS_ALLOW_HEADERS geçersiz header içeriyor: {entry}"
+                    ))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let expose_headers = match env::var("AUNSORM_CORS_EXPOSE_HEADERS") {
+            Ok(raw) => {
+                let entries = Self::parse_csv(&raw);
+                if entries.is_empty() {
+                    return Err(ServerError::Configuration(
+                        "AUNSORM_CORS_EXPOSE_HEADERS boş olamaz".to_string(),
+                    ));
+                }
+                entries
+                    .iter()
+                    .map(|entry| {
+                        let normalized = entry.trim().to_ascii_lowercase();
+                        HeaderName::from_bytes(normalized.as_bytes()).map_err(|_| {
+                            ServerError::Configuration(format!(
+                                "AUNSORM_CORS_EXPOSE_HEADERS geçersiz header içeriyor: {entry}"
+                            ))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            }
+            Err(env::VarError::NotPresent) => Vec::new(),
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(ServerError::Configuration(
+                    "AUNSORM_CORS_EXPOSE_HEADERS ASCII olmayan karakterler içeriyor".to_string(),
+                ))
+            }
+        };
+
+        let allow_credentials = match env::var("AUNSORM_CORS_ALLOW_CREDENTIALS") {
+            Ok(raw) => Self::parse_bool(&raw, "AUNSORM_CORS_ALLOW_CREDENTIALS")?,
+            Err(env::VarError::NotPresent) => false,
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(ServerError::Configuration(
+                    "AUNSORM_CORS_ALLOW_CREDENTIALS ASCII olmayan karakterler içeriyor".to_string(),
+                ))
+            }
+        };
+
+        if allow_any_origin && allow_credentials {
+            return Err(ServerError::Configuration(
+                "AUNSORM_CORS_ALLOW_CREDENTIALS etkinse origin '*' olamaz".to_string(),
+            ));
+        }
+
+        let max_age = match env::var("AUNSORM_CORS_MAX_AGE_SECS") {
+            Ok(raw) => {
+                let value = raw.parse::<u64>().map_err(|err| {
+                    ServerError::Configuration(format!(
+                        "AUNSORM_CORS_MAX_AGE_SECS geçerli bir sayı değil: {err}"
+                    ))
+                })?;
+                if value == 0 {
+                    return Err(ServerError::Configuration(
+                        "AUNSORM_CORS_MAX_AGE_SECS 0 olamaz".to_string(),
+                    ));
+                }
+                Some(Duration::from_secs(value))
+            }
+            Err(env::VarError::NotPresent) => None,
+            Err(env::VarError::NotUnicode(_)) => {
+                return Err(ServerError::Configuration(
+                    "AUNSORM_CORS_MAX_AGE_SECS ASCII olmayan karakterler içeriyor".to_string(),
+                ))
+            }
+        };
+
+        Ok(Some(Self {
+            allow_any_origin,
+            allow_origins,
+            allow_methods,
+            allow_headers,
+            expose_headers,
+            allow_credentials,
+            max_age,
+        }))
+    }
+
+    #[must_use]
+    pub(crate) const fn allow_any_origin(&self) -> bool {
+        self.allow_any_origin
+    }
+
+    #[must_use]
+    pub(crate) fn allow_origins(&self) -> &[HeaderValue] {
+        &self.allow_origins
+    }
+
+    #[must_use]
+    pub(crate) fn allow_methods(&self) -> &[Method] {
+        &self.allow_methods
+    }
+
+    #[must_use]
+    pub(crate) fn allow_headers(&self) -> &[HeaderName] {
+        &self.allow_headers
+    }
+
+    #[must_use]
+    pub(crate) fn expose_headers(&self) -> &[HeaderName] {
+        &self.expose_headers
+    }
+
+    #[must_use]
+    pub(crate) const fn allow_credentials(&self) -> bool {
+        self.allow_credentials
+    }
+
+    #[must_use]
+    pub(crate) const fn max_age(&self) -> Option<Duration> {
+        self.max_age
     }
 }
 
@@ -404,6 +630,8 @@ impl ServerConfig {
             }
         };
 
+        let cors = CorsConfig::from_env()?;
+
         let kid = env::var("AUNSORM_JWT_KID").unwrap_or_else(|_| "aunsorm-server".to_string());
         let seed_b64 = env::var("AUNSORM_JWT_SEED_B64");
         let key_pair = match seed_b64 {
@@ -537,6 +765,7 @@ impl ServerConfig {
             clock_snapshot,
             clock_refresh,
             revocation_webhook,
+            cors,
         )
     }
 
@@ -561,6 +790,7 @@ impl ServerConfig {
         clock_snapshot: SecureClockSnapshot,
         clock_refresh: Option<ClockRefreshConfig>,
         revocation_webhook: Option<RevocationWebhookConfig>,
+        cors: Option<CorsConfig>,
     ) -> Result<Self, ServerError> {
         if strict && matches!(ledger, LedgerBackend::Memory) {
             return Err(ServerError::Configuration(
@@ -608,6 +838,7 @@ impl ServerConfig {
             clock_snapshot,
             clock_refresh,
             revocation_webhook,
+            cors,
         })
     }
 
@@ -685,6 +916,7 @@ mod tests {
             sample_snapshot(),
             None,
             None,
+            None,
         );
 
         assert!(
@@ -707,6 +939,7 @@ mod tests {
             sample_calibration(),
             Duration::from_secs(0),
             sample_snapshot(),
+            None,
             None,
             None,
         );

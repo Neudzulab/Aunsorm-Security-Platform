@@ -100,6 +100,7 @@ fn demo_state_with_webhook(webhook: Option<RevocationWebhookConfig>) -> Arc<Serv
         clock_snapshot,
         None,
         webhook,
+        None,
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))

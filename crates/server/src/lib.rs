@@ -59,7 +59,9 @@ pub fn create_aunsorm_rng() -> AunsormNativeRng {
 }
 
 pub use clock_refresh::{ClockRefreshError, ClockRefreshService};
-pub use config::{FabricChaincodeConfig, LedgerBackend, RevocationWebhookConfig, ServerConfig};
+pub use config::{
+    CorsConfig, FabricChaincodeConfig, LedgerBackend, RevocationWebhookConfig, ServerConfig,
+};
 pub use error::{ApiError, ServerError};
 pub use quic::datagram::{
     AuditEvent, AuditOutcome, CounterSample, DatagramChannel, DatagramError, DatagramPayload,

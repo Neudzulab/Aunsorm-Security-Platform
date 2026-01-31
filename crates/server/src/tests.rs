@@ -325,6 +325,7 @@ fn setup_state_with_profile(
         clock_snapshot,
         None,
         webhook,
+        None,
     )
     .expect("config");
     Arc::new(ServerState::try_new(config).expect("state"))
