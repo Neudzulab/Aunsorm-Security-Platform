@@ -47,7 +47,7 @@ Use the CLI against a running stack:
 ```bash
 cargo run -p aunsorm-cli -- jwt verify --token <token> --format json
 ```
-Set `AUNSORM_SERVER_URL` or `HOSTNAME` in `.env` to point the CLI to a non-default deployment.
+Set `AUNSORM_SERVER_URL` or `HOST` in `.env` to point the CLI to a non-default deployment.
 
 ### Validation
 Run the full quality gate suite before committing changes:
