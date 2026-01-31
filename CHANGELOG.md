@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gecikmesiyle stdout log'larına aktarılır; `br/gzip/deflate/zstd`
   algoritmaları otomatik müzakere edilir ve gelen gövdeler aynı
   `Content-Encoding` değerleriyle açılır.
+- `aunsorm-server` CORS katmanı `AUNSORM_CORS_*` değişkenleriyle yapılandırılabilir
+  hale getirildi; origin, method ve header allowlist'leri ile isteğe bağlı
+  credential/max-age ayarları desteklenir.
 - Fabric DID registry için chaincode lifecycle scripti ve gateway event relay uygulaması eklendi.
 - `POST /blockchain/media/record` uç noktası, Fabric gateway yapılandırıldığında
   denetim izlerini zincire gönderip `ledgerReceipt` ile onay bilgisi döndürür.

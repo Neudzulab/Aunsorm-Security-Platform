@@ -27,6 +27,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 use time::OffsetDateTime;
 use tower_http::compression::CompressionLayer;
+use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer, ExposeHeaders};
 use tower_http::decompression::RequestDecompressionLayer;
 use tower_http::trace::{
     DefaultMakeSpan, DefaultOnFailure, DefaultOnRequest, DefaultOnResponse, TraceLayer,
@@ -220,7 +221,31 @@ fn generate_refresh_token() -> String {
     rng.fill_bytes(&mut buf);
     URL_SAFE_NO_PAD.encode(buf)
 }
-use crate::config::ServerConfig;
+
+fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
+    let allow_origin = if config.allow_any_origin() {
+        AllowOrigin::any()
+    } else {
+        AllowOrigin::list(config.allow_origins().iter().cloned())
+    };
+
+    let mut layer = CorsLayer::new()
+        .allow_origin(allow_origin)
+        .allow_methods(AllowMethods::list(config.allow_methods().iter().cloned()))
+        .allow_headers(AllowHeaders::list(config.allow_headers().iter().cloned()))
+        .expose_headers(ExposeHeaders::list(config.expose_headers().iter().cloned()));
+
+    if config.allow_credentials() {
+        layer = layer.allow_credentials(true);
+    }
+
+    if let Some(max_age) = config.max_age() {
+        layer = layer.max_age(max_age);
+    }
+
+    layer
+}
+use crate::config::{CorsConfig, ServerConfig};
 use crate::error::{ApiError, ServerError};
 use crate::fabric::{
     submit_audit_trail, AuditTrailSubmission, FabricAuditProofPayload, FabricDidError,
@@ -3251,6 +3276,12 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
         .layer(CompressionLayer::new())
         .layer(RequestDecompressionLayer::new());
 
+    let router = if let Some(cors) = state.cors() {
+        router.layer(build_cors_layer(cors))
+    } else {
+        router
+    };
+
     #[cfg(feature = "http3-experimental")]
     let router = {
         let port = state.listen_port();
@@ -3677,6 +3708,7 @@ fn build_test_state() -> Arc<ServerState> {
         clock_snapshot,
         None,
         None, // revocation_webhook
+        None, // cors
     )
     .expect("config is valid");
     Arc::new(ServerState::try_new(config).expect("state is constructed"))
