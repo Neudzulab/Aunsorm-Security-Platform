@@ -158,12 +158,13 @@
                     JWT token generation, OAuth 2.0 + PKCE flows, JWKS key publication, 
                     and token verification with JTI replay protection.
                 </p>
-                <a href="http://localhost:8080/?url=/auth-service.yaml" 
-                   class="service-link" target="_blank">
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="swagger" data-spec="/auth-service.yaml">
                     Open Swagger UI →
                 </a>
-                <a href="http://localhost:50025/?url=/auth-service.yaml" 
-                   class="service-link" target="_blank" style="margin-left: 1rem; background: #e74c3c;">
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="redoc" data-spec="/auth-service.yaml"
+                   style="margin-left: 1rem; background: #e74c3c;">
                     Open Redoc →
                 </a>
             </div>
@@ -178,12 +179,13 @@
                     AEAD encryption (AES-256-GCM, ChaCha20-Poly1305), digital signatures 
                     (Ed25519, RSA-PSS), and HKDF key derivation.
                 </p>
-                <a href="http://localhost:8080/?url=/crypto-service.yaml" 
-                   class="service-link" target="_blank">
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="swagger" data-spec="/crypto-service.yaml">
                     Open Swagger UI →
                 </a>
-                <a href="http://localhost:50025/?url=/crypto-service.yaml" 
-                   class="service-link" target="_blank" style="margin-left: 1rem; background: #e74c3c;">
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="redoc" data-spec="/crypto-service.yaml"
+                   style="margin-left: 1rem; background: #e74c3c;">
                     Open Redoc →
                 </a>
             </div>
@@ -198,12 +200,13 @@
                     Post-quantum cryptography: ML-KEM-768 key encapsulation, ML-DSA-65 
                     and SLH-DSA-128s digital signatures (NIST standards).
                 </p>
-                <a href="http://localhost:8080/?url=/pqc-service.yaml" 
-                   class="service-link" target="_blank">
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="swagger" data-spec="/pqc-service.yaml">
                     Open Swagger UI →
                 </a>
-                <a href="http://localhost:50025/?url=/pqc-service.yaml" 
-                   class="service-link" target="_blank" style="margin-left: 1rem; background: #e74c3c;">
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="redoc" data-spec="/pqc-service.yaml"
+                   style="margin-left: 1rem; background: #e74c3c;">
                     Open Redoc →
                 </a>
             </div>
@@ -250,19 +253,19 @@ cd openapi
 docker compose up -d
 
 # Open in browser
-# Swagger UI: http://localhost:8080
-# API Specs: http://localhost:50024/
+# Swagger UI: http://&lt;host&gt;:8080
+# API Specs: http://&lt;host&gt;:50024/
 
 # View specific service
-# Auth: http://localhost:8080/?url=/auth-service.yaml
-# Crypto: http://localhost:8080/?url=/crypto-service.yaml
-# PQC: http://localhost:8080/?url=/pqc-service.yaml</code>
+# Auth: http://&lt;host&gt;:8080/?url=/auth-service.yaml
+# Crypto: http://&lt;host&gt;:8080/?url=/crypto-service.yaml
+# PQC: http://&lt;host&gt;:8080/?url=/pqc-service.yaml</code>
             </div>
             
             <h2 style="margin-top: 2rem;">📝 Example API Call</h2>
             <div class="code-block">
                 <code># Generate JWT token
-curl -X POST http://localhost:50011/security/generate-media-token \
+curl -X POST http://&lt;host&gt;:50011/security/generate-media-token \
   -H "Content-Type: application/json" \
   -d '{
     "roomId": "test-room",
@@ -271,7 +274,7 @@ curl -X POST http://localhost:50011/security/generate-media-token \
   }'
 
 # Verify token
-curl -X POST http://localhost:50011/security/jwt-verify \
+curl -X POST http://&lt;host&gt;:50011/security/jwt-verify \
   -H "Content-Type: application/json" \
   -d '{"token": "YOUR_TOKEN_HERE"}'</code>
             </div>
@@ -287,6 +290,30 @@ curl -X POST http://localhost:50011/security/jwt-verify \
             </p>
         </footer>
     </div>
+    <script>
+        (() => {
+            const hostname = window.location.hostname;
+            const protocol = window.location.protocol || "http:";
+            if (!hostname) {
+                return;
+            }
+            const swaggerBase = `${protocol}//${hostname}:8080`;
+            const redocBase = `${protocol}//${hostname}:50025`;
+
+            document.querySelectorAll("[data-doc-link]").forEach((link) => {
+                const spec = link.getAttribute("data-spec");
+                const type = link.getAttribute("data-doc-link");
+                if (!spec || !type) {
+                    return;
+                }
+
+                if (type === "swagger") {
+                    link.href = `${swaggerBase}/?url=${spec}`;
+                } else if (type === "redoc") {
+                    link.href = `${redocBase}/?url=${spec}`;
+                }
+            });
+        })();
+    </script>
 </body>
 </html>
-

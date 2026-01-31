@@ -11,18 +11,18 @@ docker compose up -d
 ```
 
 ### Access Documentation
-- **Main Portal**: http://localhost:50024
-- **Swagger UI**: http://localhost:8080
-- **Redoc**: http://localhost:50025
-- **Individual Specs**: http://localhost:50024/[service-name].yaml
+- **Main Portal**: http://{host}:50024
+- **Swagger UI**: http://{host}:8080
+- **Redoc**: http://{host}:50025
+- **Individual Specs**: http://{host}:50024/[service-name].yaml
 
 ## 📚 Available Services
 
 | Service | Port | Swagger UI Link | Redoc Link | Description |
 |---------|------|-----------------|------------|-------------|
-| **Auth** | 50011 | [Open](http://localhost:8080/?url=http://localhost:50024/auth-service.yaml) | [Open](http://localhost:50025/?url=/auth-service.yaml) | JWT, OAuth 2.0 + PKCE |
-| **Crypto** | 50012 | [Open](http://localhost:8080/?url=http://localhost:50024/crypto-service.yaml) | [Open](http://localhost:50025/?url=/crypto-service.yaml) | AEAD, Signing, KDF |
-| **PQC** | 50018 | [Open](http://localhost:8080/?url=http://localhost:50024/pqc-service.yaml) | [Open](http://localhost:50025/?url=/pqc-service.yaml) | ML-KEM, ML-DSA, SLH-DSA |
+| **Auth** | 50011 | [Open](http://{host}:8080/?url=http://{host}:50024/auth-service.yaml) | [Open](http://{host}:50025/?url=/auth-service.yaml) | JWT, OAuth 2.0 + PKCE |
+| **Crypto** | 50012 | [Open](http://{host}:8080/?url=http://{host}:50024/crypto-service.yaml) | [Open](http://{host}:50025/?url=/crypto-service.yaml) | AEAD, Signing, KDF |
+| **PQC** | 50018 | [Open](http://{host}:8080/?url=http://{host}:50024/pqc-service.yaml) | [Open](http://{host}:50025/?url=/pqc-service.yaml) | ML-KEM, ML-DSA, SLH-DSA |
 | **X509** | 50013 | Coming Soon | Coming Soon | Certificate Management |
 | **KMS** | 50014 | Coming Soon | Coming Soon | Key Management |
 
@@ -30,7 +30,7 @@ docker compose up -d
 
 ### Using Swagger UI
 
-1. **Open Swagger UI**: Navigate to http://localhost:8080
+1. **Open Swagger UI**: Navigate to http://{host}:8080
 2. **Select Service**: Use dropdown to choose Auth/Crypto/PQC service
 3. **Try Endpoints**: 
    - Click "Try it out" on any endpoint
@@ -42,7 +42,7 @@ docker compose up -d
 
 ```bash
 # Using curl
-curl -X POST http://localhost:50011/security/generate-media-token \
+curl -X POST http://{host}:50011/security/generate-media-token \
   -H "Content-Type: application/json" \
   -d '{
     "roomId": "test-room",
@@ -51,7 +51,7 @@ curl -X POST http://localhost:50011/security/generate-media-token \
   }'
 
 # Using Swagger UI
-1. Go to http://localhost:8080/?url=http://localhost:50024/auth-service.yaml
+1. Go to http://{host}:8080/?url=http://{host}:50024/auth-service.yaml
 2. Navigate to POST /security/generate-media-token
 3. Click "Try it out"
 4. Fill in the request body
@@ -83,7 +83,7 @@ info:
   version: 0.5.0
   description: Service description
 servers:
-  - url: http://localhost:PORT
+  - url: http://{host}:PORT
 paths:
   /endpoint:
     post:
@@ -133,12 +133,12 @@ swagger-cli validate auth-service.yaml
 
 ### Import into Postman
 1. File → Import
-2. Choose OpenAPI spec URL: `http://localhost:50024/auth-service.yaml`
+2. Choose OpenAPI spec URL: `http://{host}:50024/auth-service.yaml`
 3. Postman auto-generates collection
 
 ### Import into Insomnia
 1. Create → Import from URL
-2. Paste: `http://localhost:50024/crypto-service.yaml`
+2. Paste: `http://{host}:50024/crypto-service.yaml`
 3. Test endpoints
 
 ### Generate Client Code
