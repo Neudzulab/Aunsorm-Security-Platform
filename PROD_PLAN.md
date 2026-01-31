@@ -208,7 +208,7 @@ This document tracks all remaining work required for production deployment.
     documentation updates, and validation suite requirements
 - [x] Development environment setup automation (devcontainer)
 - [x] Document validation suite (fmt/clippy/test/deny) in README quick start
-- [ ] CI/CD pipeline documentation
+- [x] CI/CD pipeline documentation (docs/src/operations/ci-cd-pipeline.md)
 - [x] Troubleshooting guide for common issues
 
 ---
