@@ -40,7 +40,7 @@ graph TD
    ```bash
    docker compose up --build
    ```
-3. Gateway will be reachable on `http://localhost:50010` (see port map below for service bindings).
+3. Gateway will be reachable on `http://<HOST>:50010` (replace `<HOST>` with your deployment host; see port map below for service bindings).
 
 ### CLI
 Use the CLI against a running stack:

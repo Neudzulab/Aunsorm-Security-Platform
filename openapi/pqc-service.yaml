@@ -17,8 +17,12 @@ info:
     name: MIT
 
 servers:
-  - url: http://localhost:50018
-    description: Local Development
+  - url: http://{host}:50018
+    description: Deployment host (configure HOST in .env or your runtime environment)
+    variables:
+      host:
+        default: aunsorm.local
+        description: Hostname or IP address for the PQC service
   - url: http://aunsorm-pqc:50018
     description: Docker Internal Network
 

@@ -19,8 +19,12 @@ info:
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: http://localhost:50011
-    description: Local Development
+  - url: http://{host}:50011
+    description: Deployment host (configure HOST in .env or your runtime environment)
+    variables:
+      host:
+        default: aunsorm.local
+        description: Hostname or IP address for the auth service
   - url: http://aunsorm-auth:50011
     description: Docker Internal Network
   - url: https://auth.aunsorm.production
@@ -262,7 +266,7 @@ paths:
                 redirect_uri:
                   type: string
                   description: OAuth callback URI
-                  example: http://localhost:8080/callback
+                  example: https://auth-client.aunsorm.local/callback
       responses:
         '200':
           description: Authorization initiated

@@ -15,8 +15,12 @@ info:
     name: MIT
 
 servers:
-  - url: http://localhost:50012
-    description: Local Development
+  - url: http://{host}:50012
+    description: Deployment host (configure HOST in .env or your runtime environment)
+    variables:
+      host:
+        default: aunsorm.local
+        description: Hostname or IP address for the crypto service
   - url: http://aunsorm-crypto:50012
     description: Docker Internal Network
 
