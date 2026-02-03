@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: Aunsorm X509 Service API
+  version: 0.5.0
+  description: |
+    Planned certificate authority and X.509 lifecycle APIs.
+
+    This spec is a placeholder for upcoming endpoints covering:
+    - CA generation and management
+    - CSR validation and signing
+    - Certificate issuance, renewal, and revocation
+  contact:
+    name: Aunsorm Security Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://{host}:50013
+    description: Deployment host (configure HOST in .env or your runtime environment)
+    variables:
+      host:
+        default: aunsorm.local
+        description: Hostname or IP address for the X509 service
+  - url: http://aunsorm-x509:50013
+    description: Docker Internal Network
+
+tags:
+  - name: Placeholder
+    description: Placeholder tag for planned X509 endpoints
+
+paths: {}
