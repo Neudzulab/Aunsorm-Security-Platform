@@ -186,6 +186,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Clarify CLI environment override variables in README quick start (AUNSORM_SERVER_URL/HOST)
 - [x] Document Redoc access links in OpenAPI README quick start and service table
 - [x] Revize: Replace hardcoded localhost references in OpenAPI landing page and README with host placeholders
+- [x] Revize: Remove remaining localhost references from OpenAPI specs and OpenAPI nginx configuration (ref: Revize hardcoded localhost replacements)
 - [ ] API reference documentation (OpenAPI spec)
 - [ ] Architecture decision records (ADRs)
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
