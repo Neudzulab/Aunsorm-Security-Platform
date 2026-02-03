@@ -33,8 +33,8 @@ export HOST=10.10.12.25   # or docs.aunsorm.internal
 | **Auth** | 50011 | [Open](http://{host}:8080/?url=http://{host}:50024/auth-service.yaml) | [Open](http://{host}:50025/?url=/auth-service.yaml) | JWT, OAuth 2.0 + PKCE |
 | **Crypto** | 50012 | [Open](http://{host}:8080/?url=http://{host}:50024/crypto-service.yaml) | [Open](http://{host}:50025/?url=/crypto-service.yaml) | AEAD, Signing, KDF |
 | **PQC** | 50018 | [Open](http://{host}:8080/?url=http://{host}:50024/pqc-service.yaml) | [Open](http://{host}:50025/?url=/pqc-service.yaml) | ML-KEM, ML-DSA, SLH-DSA |
-| **X509** | 50013 | Coming Soon | Coming Soon | Certificate Management |
-| **KMS** | 50014 | Coming Soon | Coming Soon | Key Management |
+| **X509** | 50013 | [Planned](http://{host}:8080/?url=http://{host}:50024/x509-service.yaml) | [Planned](http://{host}:50025/?url=/x509-service.yaml) | Certificate Management (placeholder spec) |
+| **KMS** | 50014 | [Planned](http://{host}:8080/?url=http://{host}:50024/kms-service.yaml) | [Planned](http://{host}:50025/?url=/kms-service.yaml) | Key Management (placeholder spec) |
 
 ## 📖 Interactive Testing
 
@@ -74,7 +74,9 @@ curl -X POST http://{host}:50011/security/generate-media-token \
 openapi/
 ├── auth-service.yaml          # Auth Service OpenAPI spec
 ├── crypto-service.yaml        # Crypto Service OpenAPI spec
+├── kms-service.yaml           # KMS Service OpenAPI placeholder spec
 ├── pqc-service.yaml          # PQC Service OpenAPI spec
+├── x509-service.yaml          # X509 Service OpenAPI placeholder spec
 ├── docker-compose.yaml       # Swagger UI setup
 ├── nginx.conf                # Nginx config for serving specs
 ├── index.html                # Landing page

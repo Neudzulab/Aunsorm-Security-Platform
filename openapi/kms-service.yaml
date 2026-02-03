@@ -1,0 +1,31 @@
+openapi: 3.0.3
+info:
+  title: Aunsorm KMS Service API
+  version: 0.5.0
+  description: |
+    Planned key management service APIs.
+
+    This spec is a placeholder for upcoming endpoints covering:
+    - Key generation and lifecycle management
+    - Key wrapping/unwrapping operations
+    - Rotation policies and audit metadata
+  contact:
+    name: Aunsorm Security Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://{host}:50014
+    description: Deployment host (configure HOST in .env or your runtime environment)
+    variables:
+      host:
+        default: aunsorm.local
+        description: Hostname or IP address for the KMS service
+  - url: http://aunsorm-kms:50014
+    description: Docker Internal Network
+
+tags:
+  - name: Placeholder
+    description: Placeholder tag for planned KMS endpoints
+
+paths: {}
