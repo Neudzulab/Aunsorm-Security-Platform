@@ -18,3 +18,4 @@ for the final decision.
 | ADR | Title | Status | Date |
 | --- | ----- | ------ | ---- |
 | 0000 | ADR template | Accepted | 2026-01-31 |
+| 0001 | Standardize on AunsormNativeRng for cryptographic randomness | Accepted | 2026-02-01 |
