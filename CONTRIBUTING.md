@@ -20,7 +20,8 @@ high-quality standards.
 3. Update or add tests alongside code changes. Every module must cover both
    success paths and relevant failure cases.
 4. Ensure work items map to entries in `PROD_PLAN.md` and keep plan checkboxes
-   in sync with shipped changes. For new endpoints, also update the server
+   in sync with shipped changes. Reference the matching `PROD_PLAN.md` task in
+   your PR description (task name or link). For new endpoints, also update the server
    endpoint tree in `README.md`, relevant OpenAPI YAML files under `openapi/`,
    and `port-map.yaml` if ports change.
 5. Do not suppress issues or warnings. Avoid `#[allow]`, `#[expect]`, or
