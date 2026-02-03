@@ -19,3 +19,4 @@ for the final decision.
 | --- | ----- | ------ | ---- |
 | 0000 | ADR template | Accepted | 2026-01-31 |
 | 0001 | Standardize on AunsormNativeRng for cryptographic randomness | Accepted | 2026-02-01 |
+| 0002 | Adopt path-based API versioning for public services | Accepted | 2026-02-14 |

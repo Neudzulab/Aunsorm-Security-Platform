@@ -191,6 +191,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Add explicit PROD_PLAN task reference guidance in CONTRIBUTING.md
 - [x] Revize: Replace localhost examples in JWT_AUTHENTICATION_GUIDE.md with HOST placeholders
 - [x] Revize: Add HOST override guidance to OpenAPI README quick start for docs links
+- [x] Revize: Add ADR 0002 documenting the path-based API versioning strategy
 - [ ] API reference documentation (OpenAPI spec)
 - [ ] Architecture decision records (ADRs)
   - [x] Create ADR template and index (docs/architecture/adr)
