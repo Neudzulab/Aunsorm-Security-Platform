@@ -11,9 +11,13 @@ docker compose up -d
 ```
 
 ### Set the Docs Host
-Set the host placeholder used in links below to match your environment (avoid hardcoding localhost in scripts or docs):
+Set the host placeholder used in links below to match your environment. Use the `HOST` override for any non-localhost deployments so docs links resolve correctly without hardcoding addresses:
 ```bash
 export HOST=docs.aunsorm.local
+```
+To use the current machine IP or a remote domain, export the new value before opening the docs:
+```bash
+export HOST=10.10.12.25   # or docs.aunsorm.internal
 ```
 
 ### Access Documentation
