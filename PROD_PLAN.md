@@ -190,6 +190,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Update OpenAPI landing page footer link to JWT guide to use the GitHub source URL
 - [ ] API reference documentation (OpenAPI spec)
 - [ ] Architecture decision records (ADRs)
+  - [x] Create ADR template and index (docs/architecture/adr)
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
 - [x] Incident response playbook
 - [x] Production deployment guide
