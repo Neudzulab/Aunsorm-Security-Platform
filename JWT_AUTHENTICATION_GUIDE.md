@@ -2,6 +2,9 @@
 
 Aunsorm sisteminde JWT token almanın farklı yöntemleri:
 
+> Örneklerde `HOST` ortam değişkeni varsayılan olarak `localhost` kabul edilir. Üretimde
+> `HOST` değerini gerçek alan adınız ile ayarlayın.
+
 ## 🎫 JWT Token Nasıl Alınır?
 
 ### 1. **Media Token (Zasian Entegrasyonu için)**
@@ -12,7 +15,7 @@ Aunsorm sisteminde JWT token almanın farklı yöntemleri:
 
 #### Request:
 ```bash
-curl -X POST http://localhost:50011/security/generate-media-token \
+curl -X POST http://${HOST:-localhost}:50011/security/generate-media-token \
   -H "Content-Type: application/json" \
   -d '{
     "roomId": "test-room",
@@ -47,7 +50,7 @@ curl -X POST http://localhost:50011/security/generate-media-token \
 code_verifier=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-43)
 code_challenge=$(echo -n "$code_verifier" | openssl dgst -sha256 -binary | base64url)
 
-curl -X POST http://localhost:50011/oauth/begin-auth \
+curl -X POST http://${HOST:-localhost}:50011/oauth/begin-auth \
   -H "Content-Type: application/json" \
   -d '{
     "client_id": "your-app-id",
@@ -59,7 +62,7 @@ curl -X POST http://localhost:50011/oauth/begin-auth \
 
 #### Step 2: Token Exchange  
 ```bash
-curl -X POST http://localhost:50011/oauth/token \
+curl -X POST http://${HOST:-localhost}:50011/oauth/token \
   -H "Content-Type: application/json" \
   -d '{
     "grant_type": "authorization_code",
@@ -101,7 +104,7 @@ let token = signer.sign(&mut claims)?;
 ### Endpoint: `POST /security/jwt-verify`
 
 ```bash
-curl -X POST http://localhost:50011/security/jwt-verify \
+curl -X POST http://${HOST:-localhost}:50011/security/jwt-verify \
   -H "Content-Type: application/json" \
   -d '{
     "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9..."
@@ -138,7 +141,7 @@ curl -X POST http://localhost:50011/security/jwt-verify \
 
 Public key'leri almak için:
 ```bash
-curl http://localhost:50011/oauth/jwks.json
+curl http://${HOST:-localhost}:50011/oauth/jwks.json
 ```
 
 ## ⚠️ Production Considerations
@@ -191,10 +194,10 @@ cargo run --example jwt_flow
 ### Debug Commands:
 ```bash
 # Service health check
-curl http://localhost:50011/health
+curl http://${HOST:-localhost}:50011/health
 
 # JWKS validation
-curl http://localhost:50011/oauth/jwks.json
+curl http://${HOST:-localhost}:50011/oauth/jwks.json
 
 # Service logs
 docker logs aun-auth-service --tail 20
