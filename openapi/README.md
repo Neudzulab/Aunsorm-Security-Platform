@@ -10,11 +10,17 @@ cd openapi
 docker compose up -d
 ```
 
+### Set the Docs Host
+Set the host placeholder used in links below to match your environment (avoid hardcoding localhost in scripts or docs):
+```bash
+export HOST=docs.aunsorm.local
+```
+
 ### Access Documentation
-- **Main Portal**: http://{host}:50024
-- **Swagger UI**: http://{host}:8080
-- **Redoc**: http://{host}:50025
-- **Individual Specs**: http://{host}:50024/[service-name].yaml
+- **Main Portal**: http://{host}:50024 (replace `{host}` with `$HOST`)
+- **Swagger UI**: http://{host}:8080 (replace `{host}` with `$HOST`)
+- **Redoc**: http://{host}:50025 (replace `{host}` with `$HOST`)
+- **Individual Specs**: http://{host}:50024/[service-name].yaml (replace `{host}` with `$HOST`)
 
 ## 📚 Available Services
 

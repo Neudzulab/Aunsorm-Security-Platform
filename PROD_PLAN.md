@@ -190,6 +190,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Update OpenAPI landing page footer link to JWT guide to use the GitHub source URL
 - [x] Revize: Add explicit PROD_PLAN task reference guidance in CONTRIBUTING.md
 - [x] Revize: Replace localhost examples in JWT_AUTHENTICATION_GUIDE.md with HOST placeholders
+- [ ] Revize: Add HOST override guidance to OpenAPI README quick start for docs links
 - [ ] API reference documentation (OpenAPI spec)
 - [ ] Architecture decision records (ADRs)
   - [x] Create ADR template and index (docs/architecture/adr)
