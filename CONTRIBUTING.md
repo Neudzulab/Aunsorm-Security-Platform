@@ -31,7 +31,7 @@ high-quality standards.
 6. Run the full validation suite before submitting a PR:
    ```bash
    cargo fmt --all
-   cargo clippy --all-targets --all-features
+   cargo clippy --all-targets --all-features -- -D warnings
    cargo test --all-features
    cargo deny check
    cargo audit
