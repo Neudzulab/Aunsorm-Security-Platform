@@ -198,6 +198,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Add placeholder OpenAPI specs for X509 and KMS services to document planned schemas
 - [ ] Architecture decision records (ADRs)
   - [x] Create ADR template and index (docs/architecture/adr)
+  - [x] Revize: Add ADR documenting the `devam` agent continuation workflow
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
 - [x] Incident response playbook
 - [x] Production deployment guide
