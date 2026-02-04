@@ -227,7 +227,7 @@ This document tracks all remaining work required for production deployment.
 ## Operational Readiness
 
 ### Incident Management
-- [ ] Define SLA/SLO targets
+- [x] Define SLA/SLO targets (docs/src/operations/sla-slo-targets.md)
 - [ ] Set up on-call rotation schedule
 - [ ] Configure PagerDuty / Opsgenie alerts
 - [ ] Create incident postmortem template
