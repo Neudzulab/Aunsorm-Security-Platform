@@ -184,6 +184,7 @@ This document tracks all remaining work required for production deployment.
 - [x] README.md - Quick start guide
 - [x] Add PROD_PLAN link in README documentation section
 - [x] port-map.yaml - Service port mapping
+- [x] Revize: Align agent charter references from PLAN.md to PROD_PLAN.md
 - [x] Revize: Clarify CLI environment override variables in README quick start (AUNSORM_SERVER_URL/HOST)
 - [x] Document Redoc access links in OpenAPI README quick start and service table
 - [x] Revize: Replace hardcoded localhost references in OpenAPI landing page and README with host placeholders
