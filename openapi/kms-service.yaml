@@ -25,7 +25,37 @@ servers:
     description: Docker Internal Network
 
 tags:
+  - name: Health
+    description: Planned health status endpoints
   - name: Placeholder
     description: Placeholder tag for planned KMS endpoints
 
-paths: {}
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Planned service health endpoint for KMS APIs.
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+        '503':
+          description: Service unavailable
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
