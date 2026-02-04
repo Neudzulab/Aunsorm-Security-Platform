@@ -118,6 +118,7 @@ cargo deny check
 ## Documentation
 - Architecture: `docs/architecture/`
 - Security & RNG: `docs/security/`
+- Production readiness plan: `PROD_PLAN.md`
 - Deployment guides: `docs/deployment/`
 - API references: `docs/api/`
 

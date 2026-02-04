@@ -182,6 +182,7 @@ This document tracks all remaining work required for production deployment.
 ### Technical Documentation
 - [x] PROJECT_SUMMARY.md - Architecture overview
 - [x] README.md - Quick start guide
+- [x] Add PROD_PLAN link in README documentation section
 - [x] port-map.yaml - Service port mapping
 - [x] Revize: Clarify CLI environment override variables in README quick start (AUNSORM_SERVER_URL/HOST)
 - [x] Document Redoc access links in OpenAPI README quick start and service table
