@@ -197,6 +197,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Align CONTRIBUTING validation commands with strict clippy warning handling
 - [x] Revize: Align CONTRIBUTING branch naming guidance with agent workflow
 - [x] Revize: Clarify cargo-deny advisory database fetch expectations in README validation section
+- [x] Revize: Add `.env` HOST and AUNSORM_SERVER_URL example in README quick start
 - [ ] API reference documentation (OpenAPI spec)
 - [x] Add placeholder OpenAPI specs for X509 and KMS services to document planned schemas
 - [ ] Architecture decision records (ADRs)

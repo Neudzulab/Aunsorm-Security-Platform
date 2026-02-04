@@ -49,6 +49,12 @@ cargo run -p aunsorm-cli -- jwt verify --token <token> --format json
 ```
 Set `AUNSORM_SERVER_URL` or `HOST` in `.env` to point the CLI to a non-default deployment.
 
+Example `.env` override:
+```bash
+HOST=<HOST>
+AUNSORM_SERVER_URL=http://<HOST>:50010
+```
+
 ### Validation
 Run the full quality gate suite before committing changes:
 ```bash
