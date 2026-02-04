@@ -11,7 +11,7 @@ kontrol noktalarını takip etmekten sorumludur.
 
 | Ajan | Birincil Kapsam | Ana Teslimatlar | Kritik Kontrol Noktaları |
 | ---- | --------------- | ---------------- | ------------------------ |
-| **Project Coordinator** | Planlama artefaktları (PLAN.md, ROADMAP.md, TODO.md) | Sprint hedeflerinin yayımı, revizyon kilidi politikasının uygulanması | Tüm maddelerde sorumlu ajan tayini, kilitli girdilerde değişiklik yapılmadığını doğrulama |
+| **Project Coordinator** | Planlama artefaktları (PROD_PLAN.md, ROADMAP.md, TODO.md) | Sprint hedeflerinin yayımı, revizyon kilidi politikasının uygulanması | Tüm maddelerde sorumlu ajan tayini, kilitli girdilerde değişiklik yapılmadığını doğrulama |
 | **Crypto Agent** | `crates/core`, `crates/pqc`, `crates/packet` | Kalibrasyon bağlamı, ratchet yaşam döngüsü, PQC köprüleri | `#![forbid(unsafe_code)]` ve `#![deny(warnings)]` denetimleri; fuzz/bench artefaktlarının güncelliği |
 | **Platform Agent** | `crates/cli`, `crates/server`, `crates/wasm` | Endpoint ağacı, CLI/WASM uyumu, dağıtım runbook'ları | README endpoint ağacı ↔ `crates/server` routes eşleşmesi, servis ağacı durum etiketleri |
 | **Identity Agent** | `crates/jwt`, `crates/x509`, `crates/kms`, `certifications/` | JWT/X.509/KMS akışları, sertifikasyon raporları | Known Answer Test (KAT) fixture'ları ve CI gating'in güncel tutulması |
@@ -25,9 +25,9 @@ alt dizinler oluşturulduğunda ek talimatlar sağlamaktan sorumludur.
 1. `[x]` olarak işaretlenen tüm maddeler revizyon kilidi altındadır.
    - Değişiklik ihtiyacı olduğunda aynı satır düzenlenmez; `Revize:` öneki ile
      yeni madde açılır ve orijinal girdiye referans verilir.
-   - Revizyon isteği PLAN.md'de yeni bir teslimat olarak listelenir ve sorumlu
+   - Revizyon isteği PROD_PLAN.md'de yeni bir teslimat olarak listelenir ve sorumlu
      ajan atanır.
-2. README, TODO ve PLAN artefaktları senkron tutulur.
+2. README, TODO ve PROD_PLAN artefaktları senkron tutulur.
    - Yeni endpoint veya özellik ekleyen her değişiklik README servis ağacında
      durum etiketi (✅/🚧/📋/🔮) ile belgelenir.
    - `crates/server/routes` güncellemeleri ile README ağacı karşılaştırılır.
@@ -46,7 +46,7 @@ alt dizinler oluşturulduğunda ek talimatlar sağlamaktan sorumludur.
 Aşağıdaki adımlar, yeni bir sprint hedefi kabul edilmeden önce tamamlanmalıdır:
 
 1. **Kapsam Doğrulaması**
-   - PLAN.md üzerinde yeni teslimat maddesi açıldı mı?
+   - PROD_PLAN.md üzerinde yeni teslimat maddesi açıldı mı?
    - Sorumlu ajan ve hedef tarih belirtildi mi?
 2. **Revizyon Kilidi Tarama**
    - README/TODO/ROADMAP içindeki `[x]` maddeleri üzerinde değişiklik
@@ -79,5 +79,5 @@ Aşağıdaki adımlar, yeni bir sprint hedefi kabul edilmeden önce tamamlanmal�
   dokümantasyon örnekleri kayda alınır ve bir sonraki sprint intake
   checklist'ine geri besleme yapılır.
 
-Bu kılavuz, `PLAN.md` üzerinde listelenen STEP-AUN-001 hedefinin tamamlandığını
+Bu kılavuz, `PROD_PLAN.md` üzerinde listelenen STEP-AUN-001 hedefinin tamamlandığını
 belgeler ve gelecekteki sprint'ler için standart referans olarak kullanılmalıdır.
