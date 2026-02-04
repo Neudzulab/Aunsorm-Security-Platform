@@ -15,7 +15,9 @@ high-quality standards.
   provided under `Legacy.md`).
 
 ## Development Workflow
-1. Fork the repository and create a feature branch off `work`.
+1. Fork the repository and create a feature branch off `work` using the
+   `agent/<domain>/<task-description>` naming convention (for example,
+   `agent/platform/k8s-helm-bootstrap`).
 2. Keep pull requests focused; split unrelated changes into separate branches.
 3. Update or add tests alongside code changes. Every module must cover both
    success paths and relevant failure cases.
