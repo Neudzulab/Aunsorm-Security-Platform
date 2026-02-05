@@ -127,7 +127,10 @@ Ensure the `git` CLI is available so `cargo deny check` can fetch the advisory d
 - Security & RNG: `docs/security/`
 - Production readiness plan: `PROD_PLAN.md`
 - Deployment guides: `docs/deployment/`
-- API references: `docs/api/`
+- API references: `docs/api/` and OpenAPI source specs in `openapi/`
+- Hosted API docs (HOST override aware):
+  - OpenAPI index: `http://${HOST:-localhost}:50024/`
+  - Redoc UI: `http://${HOST:-localhost}:50025/`
 
 ## License
 Licensed under the [Apache 2.0 License](LICENSE).
