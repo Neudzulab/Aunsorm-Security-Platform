@@ -21,3 +21,4 @@ for the final decision.
 | 0001 | Standardize on AunsormNativeRng for cryptographic randomness | Accepted | 2026-02-01 |
 | 0002 | Adopt path-based API versioning for public services | Accepted | 2026-02-14 |
 | 0003 | Formalize the `devam` continuation workflow for agent coordination | Accepted | 2026-03-01 |
+| 0004 | Require explicit PROD_PLAN task references in pull requests | Accepted | 2026-02-05 |
