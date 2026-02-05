@@ -236,7 +236,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Define SLA/SLO targets (docs/src/operations/sla-slo-targets.md)
 - [ ] Set up on-call rotation schedule
 - [ ] Configure PagerDuty / Opsgenie alerts
-- [ ] Create incident postmortem template
+- [x] Create incident postmortem template (docs/src/operations/incident-postmortem-template.md)
 - [ ] Establish change management process
 
 ### Backup & Disaster Recovery
