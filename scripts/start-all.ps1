@@ -110,6 +110,8 @@ function Build-Services {
 }
 
 function Start-AllServices {
+    $HostName = if ([string]::IsNullOrWhiteSpace($env:HOST)) { "localhost" } else { $env:HOST }
+
     Write-Status "Starting all microservices..." "Blue"
     
     try {
@@ -127,7 +129,7 @@ function Start-AllServices {
         Write-Host "`n$status`n"
         
         Write-Status "All services started successfully!"
-        Write-Status "Gateway available at: ${Blue}http://localhost:50010${Reset}"
+        Write-Status "Gateway available at: ${Blue}http://$HostName:50010${Reset}"
         
         return $true
     }

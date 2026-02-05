@@ -100,6 +100,7 @@ This document tracks all remaining work required for production deployment.
 
 ### Tooling & CLI
 - [x] Harden CLI default server URL inference so HOST-provided port/path/query hints are preserved
+- [x] Revize: Honor HOST overrides in dev scripts (start-all/test-all/deploy-gateway-cert)
 
 ---
 

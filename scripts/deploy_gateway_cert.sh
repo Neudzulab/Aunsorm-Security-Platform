@@ -14,7 +14,7 @@ Required arguments:
   --domain DOMAIN       Order içerisinde kullanılacak alan adı (tekrarlanabilir)
 
 Optional arguments:
-  --server URL          ACME sunucu taban adresi (varsayılan: http://localhost:4200)
+  --server URL          ACME sunucu taban adresi (varsayılan: http://${HOST:-localhost}:4200)
   --contact URI         ACME hesabına ek iletişim URI'sı ekle (tekrarlanabilir)
   --order-json PATH     Order yanıtının kaydedileceği dosya (varsayılan: çıktı klasörü)
   --finalize-json PATH  Finalize yanıtının kaydedileceği dosya (varsayılan: çıktı klasörü)
@@ -41,7 +41,7 @@ ensure_parent_dir() {
   fi
 }
 
-SERVER="http://localhost:4200"
+SERVER="http://${HOST:-localhost}:4200"
 CLI_BIN="aunsorm-cli"
 ACCOUNT=""
 CSR=""

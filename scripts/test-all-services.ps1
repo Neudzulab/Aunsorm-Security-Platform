@@ -29,8 +29,10 @@ Write-Host ""
 $SuccessCount = 0
 $TotalCount = $Services.Count
 
+$HostName = if ([string]::IsNullOrWhiteSpace($env:HOST)) { "localhost" } else { $env:HOST }
+
 foreach ($Service in $Services) {
-    $Url = "http://localhost:$($Service.Port)$($Service.TestPath)"
+    $Url = "http://$HostName:$($Service.Port)$($Service.TestPath)"
     Write-Host "$($Service.Name.PadRight(12)) ($($Service.Port)): " -NoNewline
     
     try {
@@ -64,7 +66,7 @@ Write-Host "══════════════════════�
 # Test CLI Gateway specific endpoints
 Write-Host "CLI Gateway Status: " -NoNewline
 try {
-    $CLIResponse = Invoke-WebRequest -Uri "http://localhost:50023/cli/status" -UseBasicParsing
+    $CLIResponse = Invoke-WebRequest -Uri "http://$HostName:50023/cli/status" -UseBasicParsing
     $CLIData = $CLIResponse.Content | ConvertFrom-Json
     Write-Host "✅ Available commands: $($CLIData.available_commands.Count)" -ForegroundColor Green
 }
@@ -75,7 +77,7 @@ catch {
 # Test Auth Service OAuth
 Write-Host "Auth OAuth JWKS:   " -NoNewline
 try {
-    $OAuthResponse = Invoke-WebRequest -Uri "http://localhost:50011/oauth/jwks.json" -UseBasicParsing
+    $OAuthResponse = Invoke-WebRequest -Uri "http://$HostName:50011/oauth/jwks.json" -UseBasicParsing
     Write-Host "✅ JWKS available" -ForegroundColor Green
 }
 catch {
