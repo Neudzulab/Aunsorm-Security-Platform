@@ -200,6 +200,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Clarify cargo-deny advisory database fetch expectations in README validation section
 - [x] Revize: Add `.env` HOST and AUNSORM_SERVER_URL example in README quick start
 - [x] Revize: Replace localhost defaults in port-map integration URLs with HOST placeholders
+- [x] Revize: Expand README API reference section with OpenAPI source and hosted docs entry points
 - [ ] API reference documentation (OpenAPI spec)
 - [x] Add placeholder OpenAPI specs for X509 and KMS services to document planned schemas
 - [x] Revize: Link placeholder X509/KMS OpenAPI specs from the documentation landing page
