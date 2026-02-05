@@ -238,7 +238,7 @@ This document tracks all remaining work required for production deployment.
 
 ### Incident Management
 - [x] Define SLA/SLO targets (docs/src/operations/sla-slo-targets.md)
-- [ ] Set up on-call rotation schedule
+- [x] Set up on-call rotation schedule
 - [ ] Configure PagerDuty / Opsgenie alerts
 - [x] Create incident postmortem template (docs/src/operations/incident-postmortem-template.md)
 - [ ] Establish change management process
