@@ -1,0 +1,61 @@
+openapi: 3.0.3
+info:
+  title: Aunsorm ID Service API
+  version: 0.5.0
+  description: |
+    Planned unique identity and ID lifecycle APIs.
+
+    This spec is a placeholder for upcoming endpoints covering:
+    - Deterministic ID generation policies
+    - ID reservation and lookup
+    - Audit metadata for issued identifiers
+  contact:
+    name: Aunsorm Security Team
+  license:
+    name: MIT
+
+servers:
+  - url: http://{host}:50016
+    description: Deployment host (configure HOST in .env or your runtime environment)
+    variables:
+      host:
+        default: aunsorm.local
+        description: Hostname or IP address for the ID service
+  - url: http://aunsorm-id:50016
+    description: Docker Internal Network
+
+tags:
+  - name: Health
+    description: Planned health status endpoints
+  - name: Placeholder
+    description: Placeholder tag for planned ID endpoints
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      description: Planned service health endpoint for ID APIs.
+      responses:
+        '200':
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+        '503':
+          description: Service unavailable
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string

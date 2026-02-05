@@ -233,6 +233,50 @@
                 </a>
             </div>
             
+
+            <div class="service-card">
+                <div class="service-header">
+                    <span class="service-icon">📱</span>
+                    <h3 class="service-title">MDM Service</h3>
+                </div>
+                <span class="service-port">Port 50015</span>
+                <p class="service-description">
+                    Mobile device management: enrollment, policy assignment,
+                    compliance checks, and lifecycle operations.
+                </p>
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="swagger" data-spec="/mdm-service.yaml"
+                   style="background: #999;">
+                    Planned Swagger UI →
+                </a>
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="redoc" data-spec="/mdm-service.yaml"
+                   style="margin-left: 1rem; background: #b03a2e;">
+                    Planned Redoc →
+                </a>
+            </div>
+
+            <div class="service-card">
+                <div class="service-header">
+                    <span class="service-icon">🆔</span>
+                    <h3 class="service-title">ID Service</h3>
+                </div>
+                <span class="service-port">Port 50016</span>
+                <p class="service-description">
+                    Identity ID operations: deterministic generation, reservation,
+                    lookup, and audit metadata for issued identifiers.
+                </p>
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="swagger" data-spec="/id-service.yaml"
+                   style="background: #999;">
+                    Planned Swagger UI →
+                </a>
+                <a href="#" class="service-link" target="_blank"
+                   data-doc-link="redoc" data-spec="/id-service.yaml"
+                   style="margin-left: 1rem; background: #b03a2e;">
+                    Planned Redoc →
+                </a>
+            </div>
             <div class="service-card">
                 <div class="service-header">
                     <span class="service-icon">🔑</span>
@@ -273,7 +317,9 @@ docker compose up -d
 # View specific service
 # Auth: http://&lt;host&gt;:8080/?url=/auth-service.yaml
 # Crypto: http://&lt;host&gt;:8080/?url=/crypto-service.yaml
-# PQC: http://&lt;host&gt;:8080/?url=/pqc-service.yaml</code>
+# PQC: http://&lt;host&gt;:8080/?url=/pqc-service.yaml
+# MDM: http://&lt;host&gt;:8080/?url=/mdm-service.yaml
+# ID: http://&lt;host&gt;:8080/?url=/id-service.yaml</code>
             </div>
             
             <h2 style="margin-top: 2rem;">📝 Example API Call</h2>
