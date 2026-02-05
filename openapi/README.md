@@ -35,6 +35,8 @@ export HOST=10.10.12.25   # or docs.aunsorm.internal
 | **PQC** | 50018 | [Open](http://{host}:8080/?url=http://{host}:50024/pqc-service.yaml) | [Open](http://{host}:50025/?url=/pqc-service.yaml) | ML-KEM, ML-DSA, SLH-DSA |
 | **X509** | 50013 | [Planned](http://{host}:8080/?url=http://{host}:50024/x509-service.yaml) | [Planned](http://{host}:50025/?url=/x509-service.yaml) | Certificate Management (placeholder spec) |
 | **KMS** | 50014 | [Planned](http://{host}:8080/?url=http://{host}:50024/kms-service.yaml) | [Planned](http://{host}:50025/?url=/kms-service.yaml) | Key Management (placeholder spec) |
+| **MDM** | 50015 | [Planned](http://{host}:8080/?url=http://{host}:50024/mdm-service.yaml) | [Planned](http://{host}:50025/?url=/mdm-service.yaml) | Device enrollment and policy management (placeholder spec) |
+| **ID** | 50016 | [Planned](http://{host}:8080/?url=http://{host}:50024/id-service.yaml) | [Planned](http://{host}:50025/?url=/id-service.yaml) | Unique ID lifecycle APIs (placeholder spec) |
 
 ## 📖 Interactive Testing
 
@@ -74,7 +76,9 @@ curl -X POST http://{host}:50011/security/generate-media-token \
 openapi/
 ├── auth-service.yaml          # Auth Service OpenAPI spec
 ├── crypto-service.yaml        # Crypto Service OpenAPI spec
+├── id-service.yaml            # ID Service OpenAPI placeholder spec
 ├── kms-service.yaml           # KMS Service OpenAPI placeholder spec
+├── mdm-service.yaml           # MDM Service OpenAPI placeholder spec
 ├── pqc-service.yaml          # PQC Service OpenAPI spec
 ├── x509-service.yaml          # X509 Service OpenAPI placeholder spec
 ├── docker-compose.yaml       # Swagger UI setup

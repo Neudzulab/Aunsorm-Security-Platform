@@ -204,6 +204,7 @@ This document tracks all remaining work required for production deployment.
 - [ ] API reference documentation (OpenAPI spec)
 - [x] Add placeholder OpenAPI specs for X509 and KMS services to document planned schemas
 - [x] Revize: Link placeholder X509/KMS OpenAPI specs from the documentation landing page
+- [x] Revize: Add placeholder OpenAPI specs for ID and MDM services and link them from the documentation landing page
 - [ ] Architecture decision records (ADRs)
   - [x] Create ADR template and index (docs/architecture/adr)
   - [x] Revize: Add ADR documenting the `devam` agent continuation workflow
