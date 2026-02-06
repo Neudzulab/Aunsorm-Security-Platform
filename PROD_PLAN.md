@@ -160,6 +160,7 @@ This document tracks all remaining work required for production deployment.
 ### Security Auditing
 - [ ] Third-party security audit (penetration testing)
 - [x] Dependency vulnerability scanning automation
+- [x] Revize: Update time crate to address RUSTSEC-2026-0009
 - [ ] Replace unmaintained or vulnerable crypto dependencies flagged by cargo-deny (atomic-polyfill, fxhash, pqcrypto-dilithium/kyber, ring 0.16.20) to restore advisory compliance
 - [x] Configure `cargo-deny` to fetch the RustSec advisory database via the git CLI fallback so checks succeed in restricted network environments
 - [ ] Static code analysis (cargo clippy strict mode)
@@ -202,6 +203,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Replace localhost defaults in port-map integration URLs with HOST placeholders
 - [x] Revize: Expand README API reference section with OpenAPI source and hosted docs entry points
 - [ ] API reference documentation (OpenAPI spec)
+- [x] Revize: Align OpenAPI landing page quick-start examples with available service specs
 - [x] Add placeholder OpenAPI specs for X509 and KMS services to document planned schemas
 - [x] Revize: Link placeholder X509/KMS OpenAPI specs from the documentation landing page
 - [x] Revize: Add placeholder OpenAPI specs for ID and MDM services and link them from the documentation landing page
