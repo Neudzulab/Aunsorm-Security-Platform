@@ -54,6 +54,7 @@ Example `.env` override:
 HOST=<HOST>
 AUNSORM_SERVER_URL=http://<HOST>:50010
 ```
+Prefer setting `HOST` so deployments can override the target without hardcoding `localhost` into scripts or configs.
 
 ### Validation
 Run the full quality gate suite before committing changes:
