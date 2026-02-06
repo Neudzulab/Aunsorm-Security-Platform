@@ -67,7 +67,8 @@ Aşağıdaki adımlar, yeni bir sprint hedefi kabul edilmeden önce tamamlanmal�
 6. **Onay ve Kilitleme**
    - Project Coordinator tarafından sprint intake formu gözden geçirildi mi?
    - Tüm ajanlar görev dağılımını `devam` komutuyla tetiklenecek sıraya göre
-     onayladı mı?
+     onayladı mı? (`devam`, PROD_PLAN.md'de ilgili teslimatın açıldığını ve
+     sorumluların hazır olduğunu doğrular.)
 
 ## Seremoni ve İzleme
 
