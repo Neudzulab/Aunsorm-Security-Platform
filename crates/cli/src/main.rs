@@ -90,13 +90,13 @@ fn default_server_url() -> String {
         return host_to_server_url(&host);
     }
 
-    "http://localhost:8080".to_string()
+    "http://localhost:50010".to_string()
 }
 
 fn host_to_server_url(host: &str) -> String {
     let trimmed = host.trim();
     if trimmed.is_empty() {
-        return "http://localhost:8080".to_string();
+        return "http://localhost:50010".to_string();
     }
 
     if let Ok(url) = Url::parse(trimmed) {
@@ -107,8 +107,8 @@ fn host_to_server_url(host: &str) -> String {
 
     if let Ok(ip) = trimmed.parse::<IpAddr>() {
         return match ip {
-            IpAddr::V6(addr) => format!("http://[{addr}]:8080"),
-            IpAddr::V4(_) => format!("http://{trimmed}:8080"),
+            IpAddr::V6(addr) => format!("http://[{addr}]:50010"),
+            IpAddr::V4(_) => format!("http://{trimmed}:50010"),
         };
     }
 
@@ -127,14 +127,14 @@ fn host_to_server_url(host: &str) -> String {
                     rendered.push(']');
                 }
                 Some(_) => rendered.push_str(url.host_str().unwrap_or("localhost")),
-                None => return "http://localhost:8080".to_string(),
+                None => return "http://localhost:50010".to_string(),
             }
 
             if let Some(port) = url.port() {
                 rendered.push(':');
                 rendered.push_str(&port.to_string());
             } else {
-                rendered.push_str(":8080");
+                rendered.push_str(":50010");
             }
 
             if has_path_segment {
@@ -164,7 +164,7 @@ fn host_to_server_url(host: &str) -> String {
         }
     }
 
-    format!("http://{trimmed}:8080")
+    format!("http://{trimmed}:50010")
 }
 
 /// Environment-aware default hostname
@@ -414,7 +414,7 @@ enum AcmeCommands {
 
 #[derive(Args)]
 struct AcmeDirectoryArgs {
-    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    /// ACME sunucu taban URL'si (ör. <http://localhost:50010>)
     #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Directory çıktısını JSON olarak yazdır
@@ -427,7 +427,7 @@ struct AcmeDirectoryArgs {
 
 #[derive(Args)]
 struct AcmeRegisterArgs {
-    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    /// ACME sunucu taban URL'si (ör. <http://localhost:50010>)
     #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
@@ -449,7 +449,7 @@ struct AcmeRegisterArgs {
 
 #[derive(Args)]
 struct AcmeOrderArgs {
-    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    /// ACME sunucu taban URL'si (ör. <http://localhost:50010>)
     #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
@@ -465,7 +465,7 @@ struct AcmeOrderArgs {
 
 #[derive(Args)]
 struct AcmeFinalizeArgs {
-    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    /// ACME sunucu taban URL'si (ör. <http://localhost:50010>)
     #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
@@ -481,7 +481,7 @@ struct AcmeFinalizeArgs {
 
 #[derive(Args)]
 struct AcmeFetchCertArgs {
-    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    /// ACME sunucu taban URL'si (ör. <http://localhost:50010>)
     #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
@@ -494,7 +494,7 @@ struct AcmeFetchCertArgs {
 
 #[derive(Args)]
 struct AcmeRevokeArgs {
-    /// ACME sunucu taban URL'si (ör. <http://localhost:8080>)
+    /// ACME sunucu taban URL'si (ör. <http://localhost:50010>)
     #[arg(long, default_value_t = default_server_url())]
     server: String,
     /// Hesap durum dosyası (anahtar + meta bilgiler)
@@ -4993,7 +4993,7 @@ mod tests {
             (HOST_VAR, Some("10.42.0.8")),
             (HOSTNAME_VAR, Some("cli-host")),
         ]);
-        assert_eq!(default_server_url(), "http://10.42.0.8:8080");
+        assert_eq!(default_server_url(), "http://10.42.0.8:50010");
     }
 
     #[test]
@@ -5004,7 +5004,7 @@ mod tests {
             (HOST_VAR, Some("10.42.0.8")),
             (HOSTNAME_VAR, Some("cli-host")),
         ]);
-        assert_eq!(default_server_url(), "http://10.42.0.8:8080");
+        assert_eq!(default_server_url(), "http://10.42.0.8:50010");
     }
 
     #[test]
@@ -5015,7 +5015,7 @@ mod tests {
             (HOST_VAR, Some("2001:db8::1")),
             (HOSTNAME_VAR, None),
         ]);
-        assert_eq!(default_server_url(), "http://[2001:db8::1]:8080");
+        assert_eq!(default_server_url(), "http://[2001:db8::1]:50010");
     }
 
     #[test]
@@ -5026,7 +5026,7 @@ mod tests {
             (HOST_VAR, None),
             (HOSTNAME_VAR, None),
         ]);
-        assert_eq!(default_server_url(), "http://localhost:8080");
+        assert_eq!(default_server_url(), "http://localhost:50010");
     }
 
     #[test]
@@ -5236,10 +5236,10 @@ mod tests {
 
     #[test]
     fn host_to_server_url_formats_ipv6_hosts() {
-        assert_eq!(host_to_server_url("::1"), "http://[::1]:8080");
+        assert_eq!(host_to_server_url("::1"), "http://[::1]:50010");
         assert_eq!(
             host_to_server_url("  fd00::feed  "),
-            "http://[fd00::feed]:8080"
+            "http://[fd00::feed]:50010"
         );
     }
 
@@ -5247,13 +5247,13 @@ mod tests {
     fn host_to_server_url_handles_ipv4_hostnames_and_empty_input() {
         assert_eq!(
             host_to_server_url("192.168.1.10"),
-            "http://192.168.1.10:8080"
+            "http://192.168.1.10:50010"
         );
         assert_eq!(
             host_to_server_url("aunsorm.local"),
-            "http://aunsorm.local:8080"
+            "http://aunsorm.local:50010"
         );
-        assert_eq!(host_to_server_url("   "), "http://localhost:8080");
+        assert_eq!(host_to_server_url("   "), "http://localhost:50010");
     }
 
     #[test]
