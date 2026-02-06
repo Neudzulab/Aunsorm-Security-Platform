@@ -209,6 +209,7 @@ This document tracks all remaining work required for production deployment.
   - [x] Create ADR template and index (docs/architecture/adr)
   - [x] Revize: Add ADR documenting the `devam` agent continuation workflow
   - [x] Revize: Add ADR documenting mandatory PROD_PLAN task references in PR descriptions
+  - [x] Revize: Add ADR documenting AGENTS.md scope inheritance and instruction precedence
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
 - [x] Incident response playbook
 - [x] Production deployment guide
