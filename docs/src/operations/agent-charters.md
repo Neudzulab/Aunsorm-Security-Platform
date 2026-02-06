@@ -69,6 +69,15 @@ Aşağıdaki adımlar, yeni bir sprint hedefi kabul edilmeden önce tamamlanmal�
    - Tüm ajanlar görev dağılımını `devam` komutuyla tetiklenecek sıraya göre
      onayladı mı? (`devam`, PROD_PLAN.md'de ilgili teslimatın açıldığını ve
      sorumluların hazır olduğunu doğrular.)
+   - `devam` öncesi beklentiler net mi?
+     - İlgili teslimatın PROD_PLAN.md'de `[ ]` olarak açıldığından ve
+       sorumlu ajanla hedef tarihin yazıldığından emin olundu mu?
+     - Revizyon kilidi altındaki maddeler için `Revize:` girdileri açıldı mı?
+     - Zorunlu kalite kapıları ve test listesi (fmt/clippy/test/deny + ek
+       entegrasyonlar) sprint planına işlendi mi?
+     - Dokümantasyon güncellemeleri (README, OpenAPI, port-map, mdBook)
+       ve sahipleri açıkça paylaşıldı mı?
+     - Dış bağımlılıklar veya blokajlar (HSM, NTP, DB, CI) listelendi mi?
 
 ## Seremoni ve İzleme
 
