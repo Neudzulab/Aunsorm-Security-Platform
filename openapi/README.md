@@ -114,6 +114,19 @@ paths:
 docker compose restart
 ```
 
+### Placeholder Spec Checklist
+
+When a service is planned but not yet implemented, use a placeholder spec and keep
+the documentation aligned with the planned status:
+
+1. Mark the service links as **Planned** in the service table above.
+2. Add "placeholder spec" language to the service description in the table.
+3. Ensure the spec `info.description` explicitly states it is a placeholder and
+   lists the planned scope.
+4. Keep the placeholder spec limited to high-level paths and schemas; avoid
+   implying endpoints are live.
+5. Update `index.html` so the service card is labeled as planned.
+
 ### Validate OpenAPI Specs
 
 ```bash
