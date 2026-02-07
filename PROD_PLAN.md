@@ -205,7 +205,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Expand README API reference section with OpenAPI source and hosted docs entry points
 - [x] Revize: Emphasize HOST override to avoid hardcoded localhost in README quick start
 - [x] Revize: Align CLI default server URL port with gateway port 50010
-- [x] Revize: Add placeholder OpenAPI spec contribution checklist to openapi/README.md
+- [x] Revize: Add README note to reference PROD_PLAN tasks in PR descriptions
 - [ ] API reference documentation (OpenAPI spec)
 - [x] Revize: Align OpenAPI landing page quick-start examples with available service specs
 - [x] Add placeholder OpenAPI specs for X509 and KMS services to document planned schemas
