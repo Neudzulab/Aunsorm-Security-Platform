@@ -73,7 +73,7 @@ high-quality standards.
 - Do not introduce `#[allow]` or `#[expect]` attributes to silence issues.
 - Prefer constant-time primitives and zeroization for sensitive material.
 - Avoid panics in library code; return typed errors using `thiserror`.
-- Gate optional functionality behind feature flags as defined in `PLAN.md`.
+- Gate optional functionality behind feature flags as defined in `PROD_PLAN.md`.
 - Provide descriptive commit messages using the format `component: summary`.
 
 ### Randomness and Security Requirements
