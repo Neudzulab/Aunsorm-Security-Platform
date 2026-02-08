@@ -75,6 +75,25 @@
             font-size: 1.5rem;
             color: #333;
         }
+
+        .service-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-top: 0.35rem;
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .service-status--planned {
+            background: rgba(153, 153, 153, 0.2);
+            color: #4d4d4d;
+            border: 1px solid rgba(153, 153, 153, 0.4);
+        }
         
         .service-port {
             display: inline-block;
@@ -214,7 +233,10 @@
             <div class="service-card">
                 <div class="service-header">
                     <span class="service-icon">📜</span>
-                    <h3 class="service-title">X509 Service</h3>
+                    <div>
+                        <h3 class="service-title">X509 Service</h3>
+                        <span class="service-status service-status--planned">Placeholder Spec</span>
+                    </div>
                 </div>
                 <span class="service-port">Port 50013</span>
                 <p class="service-description">
@@ -237,7 +259,10 @@
             <div class="service-card">
                 <div class="service-header">
                     <span class="service-icon">📱</span>
-                    <h3 class="service-title">MDM Service</h3>
+                    <div>
+                        <h3 class="service-title">MDM Service</h3>
+                        <span class="service-status service-status--planned">Placeholder Spec</span>
+                    </div>
                 </div>
                 <span class="service-port">Port 50015</span>
                 <p class="service-description">
@@ -259,7 +284,10 @@
             <div class="service-card">
                 <div class="service-header">
                     <span class="service-icon">🆔</span>
-                    <h3 class="service-title">ID Service</h3>
+                    <div>
+                        <h3 class="service-title">ID Service</h3>
+                        <span class="service-status service-status--planned">Placeholder Spec</span>
+                    </div>
                 </div>
                 <span class="service-port">Port 50016</span>
                 <p class="service-description">
@@ -280,7 +308,10 @@
             <div class="service-card">
                 <div class="service-header">
                     <span class="service-icon">🔑</span>
-                    <h3 class="service-title">KMS Service</h3>
+                    <div>
+                        <h3 class="service-title">KMS Service</h3>
+                        <span class="service-status service-status--planned">Placeholder Spec</span>
+                    </div>
                 </div>
                 <span class="service-port">Port 50014</span>
                 <p class="service-description">
