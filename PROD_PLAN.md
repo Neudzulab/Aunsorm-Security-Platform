@@ -198,6 +198,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Add HOST override guidance to OpenAPI README quick start for docs links
 - [x] Revize: Add ADR 0002 documenting the path-based API versioning strategy
 - [x] Revize: Align CONTRIBUTING validation commands with strict clippy warning handling
+- [x] Revize: Consolidate entropy mixing experiment documentation to remove stale TBD placeholders
 - [x] Revize: Align CONTRIBUTING branch naming guidance with agent workflow
 - [x] Revize: Clarify cargo-deny advisory database fetch expectations in README validation section
 - [x] Revize: Add `.env` HOST and AUNSORM_SERVER_URL example in README quick start
