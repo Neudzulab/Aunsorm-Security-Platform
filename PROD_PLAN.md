@@ -201,6 +201,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Consolidate entropy mixing experiment documentation to remove stale TBD placeholders
 - [x] Revize: Align CONTRIBUTING branch naming guidance with agent workflow
 - [x] Revize: Clarify cargo-deny advisory database fetch expectations in README validation section
+- [x] Revize: Add cargo audit command to README validation section
 - [x] Revize: Add `.env` HOST and AUNSORM_SERVER_URL example in README quick start
 - [x] Revize: Replace localhost defaults in port-map integration URLs with HOST placeholders
 - [x] Revize: Expand README API reference section with OpenAPI source and hosted docs entry points
