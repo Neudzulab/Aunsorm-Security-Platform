@@ -137,6 +137,13 @@ npm install -g @apidevtools/swagger-cli
 swagger-cli validate auth-service.yaml
 ```
 
+Validate all service specs in one pass:
+```bash
+for spec in *-service.yaml; do
+  swagger-cli validate "$spec"
+done
+```
+
 ## 🎨 Features
 
 ### OpenAPI 3.0 Compliance
