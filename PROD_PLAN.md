@@ -225,6 +225,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
 - [x] Incident response playbook
 - [x] Production deployment guide
+- [x] Revize: Fix typos and formatting in production-fix-instructions.md
 
 ### Compliance & Certifications
 - [x] SOC 2 Type II audit preparation

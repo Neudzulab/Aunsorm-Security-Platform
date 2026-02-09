@@ -43,7 +43,7 @@ kms-service:
 
 Bu servicelerde `environment:` bölümü olmamalı! `.env` dosyasından alacaklar.
 
-**DOĞRU YAPıDANDıRMA (environment yok):**
+**DOĞRU YAPILANDIRMA (environment yok):**
 ```yaml
 x509-service:
   container_name: aun-x509-service
