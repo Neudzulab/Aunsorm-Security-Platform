@@ -18,9 +18,24 @@ Bu runbook, Aunsorm üretim ortamında clock attestation hizmetinin hatasız şe
 1. `aunsorm-ntp-server` container imajının registry'de imzalı sürümü (`>=0.5.0`).
 2. Üretim `calibration_cert.pem` dosyası ve SHA-256 parmak izi.
 3. Vault'ta saklanan `ntp-signing-key.pem`; yalnızca init konteyneri tarafından okunabilir.
-4. `AUNSORM_CLOCK_MAX_AGE_SECS=30` politikası için orkestrasyon düzeyi konfigürasyonu.
-5. `AUNSORM_CLOCK_REFRESH_URL` ve `AUNSORM_CLOCK_REFRESH_INTERVAL_SECS` değerleri için production ortam değişkenleri (yalnızca HTTPS URL'leri kabul edilir).
-6. Prometheus ve Loki endpoint'lerinin yazma izinleri doğrulanmış olmalıdır.
+4. Attestation sertifikalarının production CA tarafından basıldığını doğrulayan sertifika zinciri.
+5. PPS/GPS donanımlı iki ayrı NTP düğümü ve L4/L7 HAProxy failover konfigürasyonu.
+6. `AUNSORM_CLOCK_MAX_AGE_SECS=30` politikası için orkestrasyon düzeyi konfigürasyonu.
+7. `AUNSORM_CLOCK_REFRESH_URL` ve `AUNSORM_CLOCK_REFRESH_INTERVAL_SECS` değerleri için production ortam değişkenleri (yalnızca HTTPS URL'leri kabul edilir).
+8. Prometheus ve Loki endpoint'lerinin yazma izinleri doğrulanmış olmalıdır.
+
+## 🧭 Üretim Topolojisi (HA + PPS/GPS)
+
+1. **Dual-Node NTP Cluster**: En az iki attestation node'u (farklı rack/zone) PPS/GPS modülleri ile çalıştırılır.
+2. **HAProxy Failover**: `ntp-attestation.prod.aunsorm` için aktif/pasif veya aktif/aktif sağlık kontrollü HAProxy katmanı zorunludur.
+3. **PPS/GPS Doğrulama**: `chrony`/`ptp4l` raporları günlük olarak toplanır; `stratum=1` dışındaki düğümler izole edilir.
+4. **Mock İmza Yasağı**: Production ortamında development mock imzaları kabul edilmez; tüm snapshot'lar üretim anahtarıyla imzalanmalıdır.
+
+## 🔁 Sertifika ve Anahtar Yaşam Döngüsü
+
+1. **CA Issuance**: Attestation imza sertifikaları yalnızca production CA'dan üretilir.
+2. **Quarterly Rotation**: İmzalama anahtarları üç ayda bir döndürülür; yeni fingerprint'ler `AUNSORM_CALIBRATION_FINGERPRINT` yayını öncesinde dağıtılır.
+3. **Dual Publish**: Geçiş döneminde eski + yeni anahtarlar birlikte yayımlanır, ardından eski anahtar devre dışı bırakılır.
 
 ## 🚀 Docker Compose Dağıtımı
 
