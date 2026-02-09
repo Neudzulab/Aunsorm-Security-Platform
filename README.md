@@ -63,6 +63,7 @@ cargo fmt --all
 cargo clippy --all-targets --all-features
 cargo test --all-features
 cargo deny check
+cargo audit
 ```
 Ensure the `git` CLI is available so `cargo deny check` can fetch the advisory database via its git fallback in restricted network environments.
 
