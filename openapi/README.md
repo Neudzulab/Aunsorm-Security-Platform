@@ -19,6 +19,10 @@ To use the current machine IP or a remote domain, export the new value before op
 ```bash
 export HOST=10.10.12.25   # or docs.aunsorm.internal
 ```
+For Windows PowerShell sessions, set the same variable like this:
+```powershell
+$env:HOST="docs.aunsorm.local"
+```
 
 ### Access Documentation
 - **Main Portal**: http://{host}:50024 (replace `{host}` with `$HOST`)
