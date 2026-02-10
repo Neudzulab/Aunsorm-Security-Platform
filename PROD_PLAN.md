@@ -211,6 +211,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Replace remaining PLAN.md references in contributor guidance (CONTRIBUTING.md)
 - [ ] API reference documentation (OpenAPI spec)
   - [x] Revize: Document bulk OpenAPI spec validation command in openapi/README.md
+  - [x] Revize: Add PowerShell HOST override example to OpenAPI documentation quick start
 - [x] Revize: Mark planned OpenAPI service cards as placeholder specs in the landing page
 - [x] Revize: Align OpenAPI landing page quick-start examples with available service specs
 - [x] Add placeholder OpenAPI specs for X509 and KMS services to document planned schemas
