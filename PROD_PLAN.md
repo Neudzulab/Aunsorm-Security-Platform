@@ -224,6 +224,7 @@ This document tracks all remaining work required for production deployment.
   - [x] Revize: Add ADR documenting mandatory PROD_PLAN task references in PR descriptions
   - [x] Revize: Add ADR documenting AGENTS.md scope inheritance and instruction precedence
   - [x] Revize: Add ADR documenting placeholder OpenAPI specs for planned services
+  - [x] Revize: Add ADR documenting completion criteria for API reference documentation milestone
 - [x] Disaster recovery runbook — documented in docs/src/operations/disaster-recovery-runbook.md
 - [x] Incident response playbook
 - [x] Production deployment guide

@@ -24,3 +24,4 @@ for the final decision.
 | 0004 | Require explicit PROD_PLAN task references in pull requests | Accepted | 2026-02-05 |
 | 0005 | Enforce AGENTS.md scope inheritance and instruction precedence | Accepted | 2026-02-05 |
 | 0006 | Require placeholder OpenAPI specs for planned services | Accepted | 2026-03-10 |
+| 0007 | Define completion criteria for API reference documentation | Accepted | 2026-02-10 |
