@@ -210,7 +210,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Add README note to reference PROD_PLAN tasks in PR descriptions
 - [x] Revize: Replace remaining PLAN.md references in contributor guidance (CONTRIBUTING.md)
 - [x] Revize: Add HOST placeholder guidance to OpenAPI landing page quick start
-- [ ] API reference documentation (OpenAPI spec)
+- [x] API reference documentation (OpenAPI spec)
   - [x] Revize: Document bulk OpenAPI spec validation command in openapi/README.md
   - [x] Revize: Add PowerShell HOST override example to OpenAPI documentation quick start
 - [x] Revize: Mark planned OpenAPI service cards as placeholder specs in the landing page
@@ -218,7 +218,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Add placeholder OpenAPI specs for X509 and KMS services to document planned schemas
 - [x] Revize: Link placeholder X509/KMS OpenAPI specs from the documentation landing page
 - [x] Revize: Add placeholder OpenAPI specs for ID and MDM services and link them from the documentation landing page
-- [ ] Architecture decision records (ADRs)
+- [x] Architecture decision records (ADRs)
   - [x] Create ADR template and index (docs/architecture/adr)
   - [x] Revize: Add ADR documenting the `devam` agent continuation workflow
   - [x] Revize: Add ADR documenting mandatory PROD_PLAN task references in PR descriptions
