@@ -10,6 +10,8 @@ Runs the standard formatting, linting, and test pipeline for the workspace.
 Options:
   --skip-fmt      Skip running `cargo fmt --all`
   --skip-clippy   Skip running `cargo clippy --all-targets --all-features`
+  --skip-deny     Skip running `cargo deny check`
+  --skip-audit    Skip running `cargo audit`
   --skip-tests    Skip running `cargo test --workspace --all-targets --all-features`
   -h, --help      Show this help message
 
@@ -20,6 +22,8 @@ USAGE
 
 skip_fmt=false
 skip_clippy=false
+skip_deny=false
+skip_audit=false
 skip_tests=false
 
 while (($# > 0)); do
@@ -29,6 +33,12 @@ while (($# > 0)); do
             ;;
         --skip-clippy)
             skip_clippy=true
+            ;;
+        --skip-deny)
+            skip_deny=true
+            ;;
+        --skip-audit)
+            skip_audit=true
             ;;
         --skip-tests)
             skip_tests=true
@@ -48,6 +58,8 @@ done
 
 fmt_status="Pending"
 clippy_status="Pending"
+deny_status="Pending"
+audit_status="Pending"
 tests_status="Pending"
 tests_summary_available="false"
 
@@ -67,6 +79,8 @@ print_summary() {
     echo "== Pipeline Summary =="
     printf '  fmt    : %s\n' "$fmt_status"
     printf '  clippy : %s\n' "$clippy_status"
+    printf '  deny   : %s\n' "$deny_status"
+    printf '  audit  : %s\n' "$audit_status"
     if [[ "$tests_summary_available" == "true" ]]; then
         printf '  tests  : %s (%d passed / %d failed / %d ignored)\n' \
             "$tests_status" \
@@ -127,6 +141,14 @@ run_tests() {
     return $status
 }
 
+run_deny() {
+    cargo deny check
+}
+
+run_audit() {
+    cargo audit
+}
+
 reset_test_totals() {
     tests_total_crates=0
     tests_total_passed=0
@@ -142,10 +164,11 @@ parse_test_summary() {
     local file="$1"
     local line
     local found=0
+    local test_result_pattern='test result: ([a-z]+)\. ([0-9]+) passed; ([0-9]+) failed; ([0-9]+) ignored; ([0-9]+) measured; ([0-9]+) filtered out'
     while IFS= read -r line; do
         local clean_line
         clean_line=$(printf '%s' "$line" | sed -E 's/\x1B\[[0-9;]*m//g')
-        if [[ $clean_line =~ test\ result:\ ([a-z]+)\.\ ([0-9]+)\ passed;\ ([0-9]+)\ failed;\ ([0-9]+)\ ignored;\ ([0-9]+)\ measured;\ ([0-9]+)\ filtered\ out ]]; then
+        if [[ $clean_line =~ $test_result_pattern ]]; then
             found=1
             local status="${BASH_REMATCH[1]}"
             local passed=${BASH_REMATCH[2]}
@@ -208,6 +231,30 @@ else
         clippy_status="Success"
     else
         clippy_status="Failed"
+        exit 1
+    fi
+fi
+
+if [[ "$skip_deny" == "true" ]]; then
+    deny_status="Skipped"
+    echo "Skipping cargo deny"
+else
+    if run_step "cargo deny check" run_deny; then
+        deny_status="Success"
+    else
+        deny_status="Failed"
+        exit 1
+    fi
+fi
+
+if [[ "$skip_audit" == "true" ]]; then
+    audit_status="Skipped"
+    echo "Skipping cargo audit"
+else
+    if run_step "cargo audit" run_audit; then
+        audit_status="Success"
+    else
+        audit_status="Failed"
         exit 1
     fi
 fi
