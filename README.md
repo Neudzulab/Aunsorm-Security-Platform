@@ -102,6 +102,11 @@ Ensure the `git` CLI is available so `cargo deny check` can fetch the advisory d
 - ✅ **CLI Gateway** (`:50023` → `/health`): Dedicated ingress for automation and CLI flows.
 - 📋 **Documentation surfaces**: OpenAPI spec server (`:50024`) and Redoc UI (`:50025`) remain reserved for spec delivery.
 
+## API Versioning Transition
+- **Current state (v0.5.x):** Primary routes are served as unversioned paths (for example `/oauth/token` and `/security/jwt-verify`) to preserve compatibility with existing clients.
+- **Target state (tracked in `PROD_PLAN.md`):** Path-based versioning (`/v1/...`, then `/v2/...`) will become the canonical contract as implementation work for API versioning is completed.
+- **Client guidance:** Treat unversioned routes as compatibility paths and prepare integrations to follow versioned prefixes once they are announced in release notes.
+
 ## Security Guarantees
 - **Deterministic entropy**: All cryptographic random generation uses `AunsormNativeRng`; OS RNG is only allowed for bootstrapping entropy.
 - **Replay resistance**: Clock attestation with strict max-age windows and calibration fingerprints gates every time-sensitive operation.
