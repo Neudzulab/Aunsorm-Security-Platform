@@ -210,6 +210,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Add README note to reference PROD_PLAN tasks in PR descriptions
 - [x] Revize: Require CONTRIBUTING workflow to document immediate PR creation after commit with PROD_PLAN task + validation summary
 - [x] Revize: Replace remaining PLAN.md references in contributor guidance (CONTRIBUTING.md)
+- [x] Revize: Replace service crate README curl examples with HOST placeholders (JWT/PQC/ACME/KMS)
 - [x] Revize: Add HOST placeholder guidance to OpenAPI landing page quick start
 - [x] API reference documentation (OpenAPI spec)
   - [x] Revize: Document bulk OpenAPI spec validation command in openapi/README.md

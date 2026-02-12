@@ -8,7 +8,7 @@ JWT katmanı Ed25519 (EdDSA) imzalı token üretimi ve doğrulamasını sağlar.
 
 ## Örnek İstek/Response
 ```bash
-curl -X POST http://localhost:50011/oauth/token \
+curl -X POST http://${HOST:-localhost}:50011/oauth/token \
   -H "Content-Type: application/json" \
   -d '{"grant_type":"client_credentials","client_id":"cli","client_secret":"secret"}'
 ```
