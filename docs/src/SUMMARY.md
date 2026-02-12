@@ -29,6 +29,7 @@
 - [Operasyon Runbook'u: Olay Müdahale](operations/incident-response-playbook.md)
 - [SLA/SLO Hedefleri](operations/sla-slo-targets.md)
 - [On-Call Rotasyon Planı](operations/on-call-rotation-schedule.md)
+- [PagerDuty / Opsgenie Alarm Yönlendirme Runbook'u](operations/pagerduty-opsgenie-alert-routing.md)
 - [Operasyon Runbook'u: Felaket Kurtarma](operations/disaster-recovery-runbook.md)
 - [OAuth API OpenAPI Şeması](operations/oauth-openapi.md)
 - [OAuth Web Entegrasyonu Rehberi](operations/oauth-web-integration.md)
