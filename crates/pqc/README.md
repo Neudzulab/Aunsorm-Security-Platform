@@ -8,7 +8,7 @@ PQC servisi, ML-KEM anahtar kapsülleme ve SLH-DSA / ML-DSA imzalama/verifikasyo
 
 ## Örnek İstek/Response
 ```bash
-curl -X POST http://localhost:50018/pqc/encapsulate \
+curl -X POST http://${HOST:-localhost}:50018/pqc/encapsulate \
   -H "Content-Type: application/json" \
   -d '{"algorithm":"ml-kem-768","publicKey":"BASE64_PUBLIC_KEY"}'
 ```

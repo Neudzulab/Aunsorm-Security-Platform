@@ -8,7 +8,7 @@ ACME servisi, RFC 8555 uyumlu hesap, nonce ve sipariş yönetimini sağlar. Doma
 
 ## Örnek İstek/Response
 ```bash
-curl -X POST http://localhost:50017/acme/new-account \
+curl -X POST http://${HOST:-localhost}:50017/acme/new-account \
   -H "Content-Type: application/json" \
   -d '{"contact":["mailto:ops@example.com"],"termsOfServiceAgreed":true}'
 ```

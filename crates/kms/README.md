@@ -8,7 +8,7 @@ KMS servisi, anahtar üretimi, rotasyonu ve erişim kontrolünü `BackendKind` a
 
 ## Örnek İstek/Response
 ```bash
-curl -X POST http://localhost:50014/kms/keys \
+curl -X POST http://${HOST:-localhost}:50014/kms/keys \
   -H "Content-Type: application/json" \
   -d '{"keyType":"ed25519","strict":true}'
 ```
