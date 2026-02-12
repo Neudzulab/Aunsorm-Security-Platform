@@ -249,6 +249,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Document validation suite (fmt/clippy/test/deny) in README quick start
 - [x] CI/CD pipeline documentation (docs/src/operations/ci-cd-pipeline.md)
 - [x] Troubleshooting guide for common issues
+- [x] Revize: Extend `scripts/test-all.sh` validation pipeline to run `cargo deny check` and `cargo audit`
 
 ---
 
