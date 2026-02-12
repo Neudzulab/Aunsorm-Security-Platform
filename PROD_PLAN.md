@@ -261,7 +261,8 @@ This document tracks all remaining work required for production deployment.
  - [x] Document service mapping, escalation baselines, and verification runbook (docs/src/operations/pagerduty-opsgenie-alert-routing.md)
  - [ ] Provision production integrations and validate live paging across all critical services
 - [x] Create incident postmortem template (docs/src/operations/incident-postmortem-template.md)
-- [ ] Establish change management process
+- [x] Establish change management process
+ - [x] Publish CAB workflow, change categories, and release evidence checklist (docs/src/operations/change-management-process.md)
 
 ### Backup & Disaster Recovery
 - [ ] Implement automated daily backups
