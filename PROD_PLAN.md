@@ -258,6 +258,8 @@ This document tracks all remaining work required for production deployment.
 - [x] Define SLA/SLO targets (docs/src/operations/sla-slo-targets.md)
 - [x] Set up on-call rotation schedule
 - [ ] Configure PagerDuty / Opsgenie alerts
+ - [x] Document service mapping, escalation baselines, and verification runbook (docs/src/operations/pagerduty-opsgenie-alert-routing.md)
+ - [ ] Provision production integrations and validate live paging across all critical services
 - [x] Create incident postmortem template (docs/src/operations/incident-postmortem-template.md)
 - [ ] Establish change management process
 
