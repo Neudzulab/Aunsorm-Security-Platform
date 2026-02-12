@@ -47,10 +47,15 @@ high-quality standards.
    - Add rustdoc examples for new public APIs.
 8. Rebase onto the latest `work` branch before requesting review to keep the
    history linear.
+9. After committing, open a PR immediately and include a clear summary,
+   validation results, and the referenced `PROD_PLAN.md` task in the PR body.
+   Never leave committed changes untracked by a PR.
 
 ## Code Review Checklist
 - Verify the change maps to a tracked item in `PROD_PLAN.md` and update the
   relevant checkboxes to reflect shipped scope.
+- Confirm the PR description links the matching `PROD_PLAN.md` task and records
+  the validation commands that were run.
 - Confirm cryptographic randomness flows through `AunsormNativeRng` (except for
   initial entropy seeding) and that no forbidden RNG fallbacks remain.
 - Ensure there are no deprecated dependencies, suppressed warnings, or mock
