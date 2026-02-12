@@ -212,6 +212,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Replace remaining PLAN.md references in contributor guidance (CONTRIBUTING.md)
 - [x] Revize: Replace service crate README curl examples with HOST placeholders (JWT/PQC/ACME/KMS)
 - [x] Revize: Add HOST placeholder guidance to OpenAPI landing page quick start
+- [x] Revize: Document API versioning transition guidance in README (unversioned compatibility paths + planned `/v1` migration)
 - [x] API reference documentation (OpenAPI spec)
   - [x] Revize: Document bulk OpenAPI spec validation command in openapi/README.md
   - [x] Revize: Add PowerShell HOST override example to OpenAPI documentation quick start
