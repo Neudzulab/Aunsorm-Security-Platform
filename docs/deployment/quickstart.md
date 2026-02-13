@@ -11,7 +11,7 @@
    ```
 2. Verify health and calibration:
    ```bash
-   curl http://localhost:50010/health | jq
+   curl http://${HOST:-localhost}:50010/health | jq
    ```
 3. Run CLI verification against the gateway:
    ```bash
