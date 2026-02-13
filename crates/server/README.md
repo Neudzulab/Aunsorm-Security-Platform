@@ -8,7 +8,7 @@ Aunsorm Server, gateway rolüyle OAuth2/PKCE, JWT üretimi, JTI doğrulaması, c
 
 ## Örnek İstek/Response
 ```bash
-curl -X POST http://localhost:50010/oauth/token \
+curl -X POST http://${HOST:-localhost}:50010/oauth/token \
   -H "Content-Type: application/json" \
   -d '{"grant_type":"authorization_code","code":"sample","code_verifier":"verifier","client_id":"cli","redirect_uri":"https://client/callback"}'
 ```
