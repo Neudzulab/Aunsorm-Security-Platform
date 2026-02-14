@@ -272,9 +272,9 @@ This document tracks all remaining work required for production deployment.
 ### Backup & Disaster Recovery
 - [ ] Implement automated daily backups
 - [ ] Test backup restoration procedures
-- [ ] Define Recovery Time Objective (RTO) and Recovery Point Objective (RPO)
+- [x] Define Recovery Time Objective (RTO) and Recovery Point Objective (RPO)
 - [ ] Set up cross-region disaster recovery
-- [ ] Document backup retention policies
+- [x] Document backup retention policies
 
 ### Cost Optimization
 - [ ] Right-size container resources
