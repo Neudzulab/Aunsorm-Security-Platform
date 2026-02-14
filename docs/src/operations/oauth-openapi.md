@@ -15,7 +15,7 @@ parametreleri içerir:
 
 - `client_id`: RFC 6749 §2.2 tanımıyla eşleşen istemci kimliği.
 - `allowed_redirects`: HTTPS kökenli (ve yalnızca yerel geliştirme için HTTP
-  localhost) geri dönüş URL'leri listesi.
+  `${HOST:-localhost}`) geri dönüş URL'leri listesi.
 - `allowed_scopes`: Yetkilendirme isteği sırasında talep edilebilecek kapsamlar.
 - `fabric`: Opsiyonel Hyperledger Fabric zincir yapılandırması; kanal ve chaincode
   adlarıyla medya kayıtlarının zincire gönderilmesini sağlar.
@@ -30,7 +30,7 @@ clients.insert(
     OAuthClient::new(
         vec![
             "https://docs.example.com/oauth/callback".to_owned(),
-            "http://localhost:5173/callback".to_owned(),
+            format!("http://{}:5173/callback", std::env::var("HOST").unwrap_or_else(|_| "localhost".to_owned())),
         ],
         vec!["read".to_owned(), "write".to_owned()],
     ),
@@ -114,7 +114,7 @@ info:
 servers:
   - url: https://aunsorm.example.com
     description: Production Aunsorm Server
-  - url: https://localhost:8080
+  - url: https://${HOST:-localhost}:8080
     description: Local development server
 paths:
   /oauth/begin-auth:
