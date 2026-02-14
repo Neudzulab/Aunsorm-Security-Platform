@@ -209,6 +209,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Align CLI default server URL port with gateway port 50010
 - [x] Revize: Add README note to reference PROD_PLAN tasks in PR descriptions
 - [x] Revize: Require CONTRIBUTING workflow to document immediate PR creation after commit with PROD_PLAN task + validation summary
+- [x] Revize: Add a reusable PR body template in CONTRIBUTING.md with explicit PROD_PLAN task and validation sections
 - [x] Revize: Replace remaining PLAN.md references in contributor guidance (CONTRIBUTING.md)
 - [x] Revize: Replace service crate README curl examples with HOST placeholders (JWT/PQC/ACME/KMS)
 - [x] Revize: Replace remaining localhost examples in server/docs quick starts with HOST placeholders (crates/server/README.md, docs/api/overview.md, docs/deployment/quickstart.md)
