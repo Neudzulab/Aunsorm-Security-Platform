@@ -116,7 +116,7 @@ Aunsorm sunucusu, CLI çıktılarıyla birebir uyumlu JSON döndüren iki uç sa
   inspect --format json` çıktısıyla aynı alanlara sahiptir.
 
   ```bash
-  curl -sS http://localhost:8080/calib/inspect \
+  curl -sS http://${HOST:-localhost}:8080/calib/inspect \
     -H 'Content-Type: application/json' \
     -d '{
           "org_salt": "V2VBcmVLdXQuZXU=",
@@ -155,7 +155,7 @@ Aunsorm sunucusu, CLI çıktılarıyla birebir uyumlu JSON döndüren iki uç sa
   kalır ancak sonuç alanı `false` olarak işaretlenir.
 
   ```bash
-  curl -sS -w '\nHTTP %{http_code}\n' http://localhost:8080/calib/verify \
+  curl -sS -w '\nHTTP %{http_code}\n' http://${HOST:-localhost}:8080/calib/verify \
     -H 'Content-Type: application/json' \
     -d '{
           "org_salt": "V2VBcmVLdXQuZXU=",

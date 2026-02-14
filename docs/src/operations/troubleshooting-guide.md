@@ -89,7 +89,7 @@ maksimum yaş sınırını aşıyor.
 
 1. `docker compose ps` komutuyla konteyner durumlarını kontrol edin.
 2. `docker compose logs -f <servis>` ile hatalı servisin loglarını inceleyin.
-3. Gateway için `curl http://localhost:50010/health` isteğiyle sağlık kontrolünü
+3. Gateway için `curl http://${HOST:-localhost}:50010/health` isteğiyle sağlık kontrolünü
    manuel doğrulayın.
 
 ## Fabric Entegrasyonu Yapılandırma Hataları
