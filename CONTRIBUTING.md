@@ -51,6 +51,29 @@ high-quality standards.
    validation results, and the referenced `PROD_PLAN.md` task in the PR body.
    Never leave committed changes untracked by a PR.
 
+### Pull Request Description Template
+
+Use this minimal structure in every PR body to keep plan/task traceability
+auditable:
+
+```md
+## Summary
+- <what changed>
+
+## PROD_PLAN.md Task
+- <exact checkbox text or link>
+
+## Validation
+- `cargo fmt --all`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo test --all-features`
+- `cargo deny check`
+- `cargo audit`
+```
+
+If any command cannot run in your environment, explicitly explain why and what
+follow-up is required before merge.
+
 ## Code Review Checklist
 - Verify the change maps to a tracked item in `PROD_PLAN.md` and update the
   relevant checkboxes to reflect shipped scope.
