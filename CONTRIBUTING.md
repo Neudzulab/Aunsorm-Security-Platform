@@ -71,7 +71,8 @@ Then follow the standard flow:
 ### Pull Request Description Template
 
 Use this minimal structure in every PR body to keep plan/task traceability
-auditable:
+auditable. The same scaffold is available in `.github/pull_request_template.md`
+for GitHub-native PR creation:
 
 ```md
 ## Summary
