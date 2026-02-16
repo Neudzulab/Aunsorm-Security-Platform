@@ -1,0 +1,239 @@
+# Apply order:
+# 1. Ensure image pull secrets and TLS/database secrets exist in `aunsorm-platform` namespace.
+# 2. Apply this manifest to provision the namespace, shared config, and baseline workloads.
+# 3. Apply networking manifests under `config/kubernetes/networking/` for ingress/service-mesh exposure.
+#
+# Placeholder secrets required before production rollout:
+# - `aunsorm-app-secrets` (DATABASE_URL, JWT_SIGNING_KEY, KMS_MASTER_KEY)
+# - `aunsorm-image-pull` (registry credentials, only if private registry is used)
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aunsorm-shared-config
+  namespace: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+data:
+  RUST_LOG: info
+  HOST: 0.0.0.0
+  GATEWAY_PORT: "50010"
+  AUTH_PORT: "50011"
+  CRYPTO_PORT: "50012"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aunsorm-gateway
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-gateway
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: aunsorm-gateway
+  template:
+    metadata:
+      labels:
+        app: aunsorm-gateway
+        app.kubernetes.io/part-of: aunsorm
+    spec:
+      imagePullSecrets:
+        - name: aunsorm-image-pull
+      containers:
+        - name: gateway
+          image: ghcr.io/neudzulab/aunsorm-gateway:0.5.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 50010
+          envFrom:
+            - configMapRef:
+                name: aunsorm-shared-config
+            - secretRef:
+                name: aunsorm-app-secrets
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aunsorm-gateway
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-gateway
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  selector:
+    app: aunsorm-gateway
+  ports:
+    - name: http
+      port: 50010
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aunsorm-auth-service
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-auth-service
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: aunsorm-auth-service
+  template:
+    metadata:
+      labels:
+        app: aunsorm-auth-service
+        app.kubernetes.io/part-of: aunsorm
+    spec:
+      imagePullSecrets:
+        - name: aunsorm-image-pull
+      containers:
+        - name: auth-service
+          image: ghcr.io/neudzulab/aunsorm-auth-service:0.5.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 50011
+          envFrom:
+            - configMapRef:
+                name: aunsorm-shared-config
+            - secretRef:
+                name: aunsorm-app-secrets
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 400m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aunsorm-auth-service
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-auth-service
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  selector:
+    app: aunsorm-auth-service
+  ports:
+    - name: http
+      port: 50011
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aunsorm-crypto-service
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-crypto-service
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: aunsorm-crypto-service
+  template:
+    metadata:
+      labels:
+        app: aunsorm-crypto-service
+        app.kubernetes.io/part-of: aunsorm
+    spec:
+      imagePullSecrets:
+        - name: aunsorm-image-pull
+      containers:
+        - name: crypto-service
+          image: ghcr.io/neudzulab/aunsorm-crypto-service:0.5.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 50012
+          envFrom:
+            - configMapRef:
+                name: aunsorm-shared-config
+            - secretRef:
+                name: aunsorm-app-secrets
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 400m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aunsorm-crypto-service
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-crypto-service
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  selector:
+    app: aunsorm-crypto-service
+  ports:
+    - name: http
+      port: 50012
+      targetPort: http
