@@ -27,6 +27,10 @@ scope. Before writing code, confirm these checkpoints:
 3. Keep `README.md`, OpenAPI specs, and `port-map.yaml` synchronized when
    endpoint or port behavior changes.
 4. Run and record validation commands in the PR body immediately after commit.
+5. Open the PR right after `git commit` so no committed work remains without a
+   tracked `PROD_PLAN.md` task reference.
+
+Then follow the standard flow:
 
 1. Fork the repository and create a feature branch off `work` using the
    `agent/<domain>/<task-description>` naming convention (for example,
