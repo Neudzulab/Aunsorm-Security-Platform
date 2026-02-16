@@ -67,7 +67,7 @@ This document tracks all remaining work required for production deployment.
 
 ### Docker & Orchestration
 - [ ] Migrate from Docker Compose to Kubernetes
-- [ ] Implement Horizontal Pod Autoscaling (HPA)
+- [x] Implement Horizontal Pod Autoscaling (HPA)
 - [ ] Configure resource limits (CPU/memory) per service
 - [ ] Set up liveness and readiness probes
 - [ ] Configure rolling updates with zero downtime

@@ -1,7 +1,9 @@
 # Apply order:
 # 1. Ensure image pull secrets and TLS/database secrets exist in `aunsorm-platform` namespace.
-# 2. Apply this manifest to provision the namespace, shared config, and baseline workloads.
-# 3. Apply networking manifests under `config/kubernetes/networking/` for ingress/service-mesh exposure.
+# 2. Ensure the Kubernetes Metrics Server is installed so HPA targets can resolve CPU metrics.
+# 3. Apply this manifest to provision the namespace, shared config, and baseline workloads.
+# 4. Apply networking manifests under `config/kubernetes/networking/` for ingress/service-mesh exposure.
+# 5. Validate autoscaling with `kubectl get hpa -n aunsorm-platform` after workload traffic ramps.
 #
 # Placeholder secrets required before production rollout:
 # - `aunsorm-app-secrets` (DATABASE_URL, JWT_SIGNING_KEY, KMS_MASTER_KEY)
@@ -98,6 +100,29 @@ spec:
       port: 50010
       targetPort: http
 ---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aunsorm-gateway
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-gateway
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aunsorm-gateway
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -168,6 +193,29 @@ spec:
       port: 50011
       targetPort: http
 ---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aunsorm-auth-service
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-auth-service
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aunsorm-auth-service
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -237,3 +285,26 @@ spec:
     - name: http
       port: 50012
       targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aunsorm-crypto-service
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-crypto-service
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aunsorm-crypto-service
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
