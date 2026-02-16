@@ -302,6 +302,7 @@ This document tracks all remaining work required for production deployment.
 
 ### Next Sprint (v0.5.1)
 - [ ] Kubernetes deployment manifests
+  - [x] Revize: Add baseline Kubernetes deployment/service manifests for gateway, auth, and crypto services under config/kubernetes
 - [ ] PostgreSQL migration scripts
 - [ ] Prometheus metrics standardization
 - [ ] API versioning implementation
