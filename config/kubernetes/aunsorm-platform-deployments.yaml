@@ -41,6 +41,11 @@ metadata:
 spec:
   replicas: 2
   revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: aunsorm-gateway
@@ -134,6 +139,11 @@ metadata:
 spec:
   replicas: 2
   revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: aunsorm-auth-service
@@ -227,6 +237,11 @@ metadata:
 spec:
   replicas: 2
   revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: aunsorm-crypto-service
