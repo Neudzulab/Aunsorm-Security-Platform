@@ -138,6 +138,7 @@ Ensure the `git` CLI is available so `cargo deny check` can fetch the advisory d
 - API references: `docs/api/` and OpenAPI source specs in `openapi/`
 - Hosted API docs (HOST override aware):
   - OpenAPI index: `http://${HOST:-localhost}:50024/`
+  - Swagger UI: `http://${HOST:-localhost}:8080/`
   - Redoc UI: `http://${HOST:-localhost}:50025/`
 
 ## License
