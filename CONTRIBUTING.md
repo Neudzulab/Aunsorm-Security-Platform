@@ -15,6 +15,19 @@ high-quality standards.
   provided under `Legacy.md`).
 
 ## Development Workflow
+### `devam` Continuation Checklist
+
+When a maintainer prompts with `devam`, continue from the active branch by
+completing the highest-priority pending `PROD_PLAN.md` item that matches your
+scope. Before writing code, confirm these checkpoints:
+
+1. Re-read `AGENTS.md` files that apply to files you plan to touch.
+2. Link the change to an existing unchecked `PROD_PLAN.md` task, or add a new
+   `Revize:` checkbox if the work updates an already completed area.
+3. Keep `README.md`, OpenAPI specs, and `port-map.yaml` synchronized when
+   endpoint or port behavior changes.
+4. Run and record validation commands in the PR body immediately after commit.
+
 1. Fork the repository and create a feature branch off `work` using the
    `agent/<domain>/<task-description>` naming convention (for example,
    `agent/platform/k8s-helm-bootstrap`).
