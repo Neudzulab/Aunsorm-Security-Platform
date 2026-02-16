@@ -205,6 +205,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Add `.env` HOST and AUNSORM_SERVER_URL example in README quick start
 - [x] Revize: Replace localhost defaults in port-map integration URLs with HOST placeholders
 - [x] Revize: Expand README API reference section with OpenAPI source and hosted docs entry points
+- [x] Revize: Add Swagger UI access link to README hosted API docs section
 - [x] Revize: Emphasize HOST override to avoid hardcoded localhost in README quick start
 - [x] Revize: Align CLI default server URL port with gateway port 50010
 - [x] Revize: Add README note to reference PROD_PLAN tasks in PR descriptions
