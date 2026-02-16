@@ -212,6 +212,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Require CONTRIBUTING workflow to document immediate PR creation after commit with PROD_PLAN task + validation summary
 - [x] Revize: Add a reusable PR body template in CONTRIBUTING.md with explicit PROD_PLAN task and validation sections
 - [x] Revize: Clarify `devam` continuation workflow in CONTRIBUTING.md so follow-up commits preserve task priority and PR traceability
+- [x] Revize: Add a GitHub pull request template file that mirrors CONTRIBUTING required sections (Summary, PROD_PLAN.md task, Validation)
 - [x] Revize: Replace remaining PLAN.md references in contributor guidance (CONTRIBUTING.md)
 - [x] Revize: Replace service crate README curl examples with HOST placeholders (JWT/PQC/ACME/KMS)
 - [x] Revize: Replace remaining localhost examples in server/docs quick starts with HOST placeholders (crates/server/README.md, docs/api/overview.md, docs/deployment/quickstart.md)
