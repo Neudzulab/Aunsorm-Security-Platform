@@ -3150,22 +3150,10 @@ pub async fn transparency_tree(
 }
 
 #[allow(clippy::cognitive_complexity)]
-#[allow(clippy::too_many_lines)]
-/// Yönlendirici yapısını oluşturur.
-///
-/// # Panics
-/// `http3-experimental` özelliği etkin ve `Alt-Svc` başlığı oluşturulamazsa panikler.
-pub fn build_router(state: &Arc<ServerState>) -> Router {
-    let service_mode = detect_service_mode();
-    tracing::info!("🔧 SERVICE_MODE: {:?}", service_mode);
+fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerState>> {
+    let mut router = Router::new();
 
-    let mut router = Router::new()
-        // Health endpoints (available on all services)
-        .route("/health", get(health))
-        .route("/metrics", get(metrics));
-
-    // Service-specific routes based on SERVICE_MODE
-    match service_mode.as_deref() {
+    match service_mode {
         Some("gateway") => {
             tracing::info!("🌐 Building GATEWAY routes");
             router = router
@@ -3309,6 +3297,31 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .route("/http3/capabilities", get(http3_capabilities));
         }
     }
+
+    router
+}
+
+#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::too_many_lines)]
+/// Yönlendirici yapısını oluşturur.
+///
+/// # Panics
+/// `http3-experimental` özelliği etkin ve `Alt-Svc` başlığı oluşturulamazsa panikler.
+pub fn build_router(state: &Arc<ServerState>) -> Router {
+    let service_mode = detect_service_mode();
+    tracing::info!("🔧 SERVICE_MODE: {:?}", service_mode);
+
+    let health_router = Router::new()
+        // Health endpoints (available on all services)
+        .route("/health", get(health))
+        .route("/metrics", get(metrics));
+
+    let service_router = build_service_mode_router(service_mode.as_deref());
+    let router = Router::new()
+        .merge(health_router.clone())
+        .merge(service_router.clone())
+        .nest("/v1", health_router)
+        .nest("/v1", service_router);
 
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
@@ -3791,6 +3804,23 @@ mod health_tests {
     }
 
     #[tokio::test]
+    async fn v1_health_endpoint_is_available() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/v1/health")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().contains_key(header::ETAG));
+    }
+
+    #[tokio::test]
     async fn health_returns_not_modified_for_matching_if_none_match() {
         let state = build_test_state();
         let router = build_router(&state);
@@ -3908,6 +3938,22 @@ mod pqc_tests {
         assert!(signatures.iter().any(|entry| {
             entry.get("algorithm").and_then(serde_json::Value::as_str) == Some("ml-dsa-65")
         }));
+    }
+
+    #[tokio::test]
+    async fn v1_pqc_capabilities_endpoint_is_available() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/v1/pqc/capabilities")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }
 

@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Access token revocation notifications now emit the same client context as
   refresh token events, keeping downstream auditing consistent regardless of
   token type.
+- `aunsorm-server` now exposes `/v1/...` compatibility aliases for active
+  HTTP endpoints (including `/v1/health` and `/v1/pqc/capabilities`) while
+  keeping unversioned routes operational during the transition period.
 - `aunsorm-server` Strict kipte kalibrasyon doğrulama hatalarını audit telemetri
   olayları (`AuditEvent::Failure`) olarak kaydeder; entegrasyon testleri HTTP
   422 yanıtını ve telemetri tetikleyicisini doğrular.
