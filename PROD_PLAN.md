@@ -316,6 +316,7 @@ This document tracks all remaining work required for production deployment.
   - [x] Revize: Add PodDisruptionBudget manifests for gateway/auth/crypto workloads to preserve quorum during voluntary node drains
 - [ ] PostgreSQL migration scripts
 - [ ] Prometheus metrics standardization
+  - [x] Revize: Add baseline Prometheus scrape annotations and ServiceMonitor manifests for gateway/auth/crypto Kubernetes services
 - [ ] API versioning implementation
 
 ---

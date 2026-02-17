@@ -1,0 +1,87 @@
+# Apply order:
+# 1. Ensure Prometheus Operator CRDs are installed (`ServiceMonitor` in `monitoring.coreos.com/v1`).
+# 2. Ensure the `aunsorm-platform-deployments.yaml` services are already running in `aunsorm-platform`.
+# 3. Apply this manifest to standardize scrape intervals/labels across gateway/auth/crypto services.
+# 4. Confirm active targets from Prometheus UI (`/targets`) and alert on missing `job="aunsorm-*"` series.
+#
+# Placeholder dependencies required before production rollout:
+# - `kube-prometheus-stack` (or equivalent Prometheus Operator installation)
+# - `prometheus-operated` service in the `monitoring` namespace
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aunsorm-gateway-metrics
+  namespace: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+    monitoring.aunsorm.io/profile: production
+spec:
+  namespaceSelector:
+    matchNames:
+      - aunsorm-platform
+  selector:
+    matchLabels:
+      app: aunsorm-gateway
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+      relabelings:
+        - action: replace
+          targetLabel: service
+          replacement: gateway
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aunsorm-auth-metrics
+  namespace: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+    monitoring.aunsorm.io/profile: production
+spec:
+  namespaceSelector:
+    matchNames:
+      - aunsorm-platform
+  selector:
+    matchLabels:
+      app: aunsorm-auth-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+      relabelings:
+        - action: replace
+          targetLabel: service
+          replacement: auth
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aunsorm-crypto-metrics
+  namespace: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+    monitoring.aunsorm.io/profile: production
+spec:
+  namespaceSelector:
+    matchNames:
+      - aunsorm-platform
+  selector:
+    matchLabels:
+      app: aunsorm-crypto-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+      relabelings:
+        - action: replace
+          targetLabel: service
+          replacement: crypto

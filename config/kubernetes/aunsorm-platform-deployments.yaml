@@ -97,6 +97,10 @@ metadata:
   labels:
     app: aunsorm-gateway
     app.kubernetes.io/part-of: aunsorm
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "50010"
 spec:
   selector:
     app: aunsorm-gateway
@@ -209,6 +213,10 @@ metadata:
   labels:
     app: aunsorm-auth-service
     app.kubernetes.io/part-of: aunsorm
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "50011"
 spec:
   selector:
     app: aunsorm-auth-service
@@ -321,6 +329,10 @@ metadata:
   labels:
     app: aunsorm-crypto-service
     app.kubernetes.io/part-of: aunsorm
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "50012"
 spec:
   selector:
     app: aunsorm-crypto-service
