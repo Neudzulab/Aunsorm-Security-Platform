@@ -222,6 +222,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Replace localhost examples in operations and calibration runbooks with HOST placeholders (docs/src/architecture/calibration.md, docs/src/operations/troubleshooting-guide.md, docs/src/operations/oauth-openapi.md)
 - [x] Revize: Add HOST placeholder guidance to OpenAPI landing page quick start
 - [x] Revize: Document API versioning transition guidance in README (unversioned compatibility paths + planned `/v1` migration)
+- [x] Revize: Add `/v1` compatibility route aliases in `aunsorm-server` and validate `/v1/health` + `/v1/pqc/capabilities` coverage
 - [x] API reference documentation (OpenAPI spec)
   - [x] Revize: Document bulk OpenAPI spec validation command in openapi/README.md
   - [x] Revize: Add PowerShell HOST override example to OpenAPI documentation quick start
