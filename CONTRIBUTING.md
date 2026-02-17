@@ -81,6 +81,10 @@ for GitHub-native PR creation:
 ## PROD_PLAN.md Task
 - <exact checkbox text or link>
 
+## Continuation Context
+- Prompt: `devam` (or `N/A` for non-continuation work)
+- Why this task was selected now
+
 ## Validation
 - `cargo fmt --all`
 - `cargo clippy --all-targets --all-features -- -D warnings`
@@ -91,6 +95,9 @@ for GitHub-native PR creation:
 
 If any command cannot run in your environment, explicitly explain why and what
 follow-up is required before merge.
+
+For `devam` follow-ups, this section is mandatory so reviewers can quickly
+verify branch continuity and task-priority decisions.
 
 ## Code Review Checklist
 - Verify the change maps to a tracked item in `PROD_PLAN.md` and update the

@@ -4,6 +4,10 @@
 ## PROD_PLAN.md Task
 - <exact checkbox text or link>
 
+## Continuation Context
+- Prompt: `devam` (or `N/A`)
+- Why this task was selected now
+
 ## Validation
 - `cargo fmt --all`
 - `cargo clippy --all-targets --all-features -- -D warnings`
