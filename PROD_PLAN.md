@@ -152,6 +152,7 @@ This document tracks all remaining work required for production deployment.
 ### Test Coverage
 - [ ] Achieve >80% unit test coverage
 - [ ] Complete integration test suite for all services
+- [x] Revize: Replace stale PLAN.md references in ignored OAuth integration tests with PROD_PLAN.md for devam traceability
 - [ ] Add end-to-end test scenarios
 - [ ] Implement chaos engineering tests (fault injection)
 - [ ] Add load testing (Locust / k6)
