@@ -228,7 +228,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - README ACME roadmap anlatımı, yayınlanan onboarding uçlarını ve v0.5.0 için kalan authorization/finalize/revoke planını yansıtacak şekilde güncellendi.
 - README mimari ağacı VibeCO formatıyla yeniden yazıldı; endpoint durum etiketleri ve servis ağaç disiplini notları güncellendi.
-- PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.
+- PROD_PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.
 - README ve `docs/src/operations/acme-gateway-automation.md` ACME sertifika iptali (`acme revoke`) ve operasyonel geri dönüş
   prosedürlerini içerecek şekilde genişletildi.
 - Hyperledger Fabric DID doğrulama planı (`docs/src/operations/blockchain-integration.md`) ve uyumluluk kontrol listesi güncellemeleri.
@@ -242,7 +242,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Blockchain retention runbook documented CI fixtures linking policy versions to on-chain anchors (`docs/src/innovation/blockchain.md`, `docs/src/operations/blockchain-integration.md`).
 - README ACME roadmap anlatımı, yayınlanan onboarding uçlarını ve v0.5.0 için kalan authorization/finalize/revoke planını yansıtacak şekilde güncellendi.
 - README mimari ağacı VibeCO formatıyla yeniden yazıldı; endpoint durum etiketleri ve servis ağaç disiplini notları güncellendi.
-- PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.
+- PROD_PLAN.md ve PROJECT_SUMMARY.md VibeCO yol haritası ve ilerleme tablolarıyla yeniden hizalandı; güncel ilerleme kaydı eklendi.
 - Hyperledger Fabric DID doğrulama planı (`docs/src/operations/blockchain-integration.md`) ve uyumluluk kontrol listesi güncellemeleri.
 - README HTTP/3 service tree and discovery section updated with `GET /http3/capabilities` usage examples.
 - `crates/server/AGENTS.md` now requires README + CHANGELOG updates whenever a new HTTP endpoint is introduced.
