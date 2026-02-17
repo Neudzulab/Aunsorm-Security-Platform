@@ -20,7 +20,7 @@ Bu belge, Aunsorm ekibinin uzman geri bildirimleri toplaması, rakip/piyasa anal
    - Yanıtların `%` skorlaması ile özetlenmesi ve açık uçlu yorumların tematik analizi.
 4. **Belgeleme**
    - `docs/src/operations/feedback-log/` altında tarih bazlı notlar.
-   - Ana risk/öneri maddelerini PLAN.md üzerinde ilgili sprint planlarına referansla ilişkilendir.
+   - Ana risk/öneri maddelerini PROD_PLAN.md üzerinde ilgili sprint planlarına referansla ilişkilendir.
 
 ## 3. Rakip ve Piyasa Analizi
 1. **Rakip Haritalaması**
@@ -55,7 +55,7 @@ Bu belge, Aunsorm ekibinin uzman geri bildirimleri toplaması, rakip/piyasa anal
    - Bölüm 4: Karar oturumu – kısa/orta/uzun vadeli yol haritası maddeleri.
 3. **Sonrası (T+7 gün)**
    - Kararlar için sahip atanması ve Jira/Linear kartlarının açılması.
-   - PLAN.md ve README hedef tablolarının güncellenmesi.
+   - PROD_PLAN.md ve README hedef tablolarının güncellenmesi.
    - Bir sonraki tur için geri bildirim süreç iyileştirme maddeleri.
 
 ## 6. Başarı Metrikleri

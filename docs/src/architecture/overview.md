@@ -19,7 +19,7 @@ Aunsorm bileşenleri dört ana katmana ayrılır:
      katmanı; gelecekteki nonce, hesap ve domain doğrulama iş akışlarına
      temel oluşturur.
 
-Bu katmanlar `PLAN.md` ve sprint checklist'leriyle hizalıdır.
+Bu katmanlar `PROD_PLAN.md` ve sprint checklist'leriyle hizalıdır.
 
 Devam eden mimari kararları ve belgelenmesi gereken boşlukları
 [Mimari Boşluk Analizi](gap-analysis.md) sayfasında takip ediyoruz.
