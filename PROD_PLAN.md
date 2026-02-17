@@ -218,6 +218,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Replace remaining PLAN.md references in contributor guidance (CONTRIBUTING.md)
 - [x] Revize: Replace remaining PLAN.md references in architecture and operations docs (docs/src/architecture/overview.md, docs/src/operations/market-intelligence.md)
 - [x] Revize: Update AGENTS revision lock policy to reference PROD_PLAN.md instead of legacy PLAN.md
+- [x] Revize: Normalize legacy CHANGELOG documentation bullets to reference PROD_PLAN.md instead of PLAN.md
 - [x] Revize: Replace service crate README curl examples with HOST placeholders (JWT/PQC/ACME/KMS)
 - [x] Revize: Replace remaining localhost examples in server/docs quick starts with HOST placeholders (crates/server/README.md, docs/api/overview.md, docs/deployment/quickstart.md)
 - [x] Revize: Replace localhost examples in operations and calibration runbooks with HOST placeholders (docs/src/architecture/calibration.md, docs/src/operations/troubleshooting-guide.md, docs/src/operations/oauth-openapi.md)
