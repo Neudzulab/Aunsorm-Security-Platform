@@ -277,14 +277,67 @@ pub struct HealthResponse {
     clock: ClockHealthStatus,
 }
 
-pub async fn health(State(state): State<Arc<ServerState>>) -> Json<HealthResponse> {
+fn health_etag(response: &HealthResponse) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(response.status.as_bytes());
+    hasher.update(response.clock.status.as_bytes());
+    hasher.update(response.clock.max_ms.to_string().as_bytes());
+    hasher.update(response.clock.authority.as_bytes());
+    hasher.update(response.clock.attested_unix_ms.to_string().as_bytes());
+    hasher.update(if response.clock.refresh_enabled {
+        b"1"
+    } else {
+        b"0"
+    });
+    hasher.update(
+        response
+            .clock
+            .message
+            .as_deref()
+            .unwrap_or_default()
+            .as_bytes(),
+    );
+    format!("W/\"{:x}\"", hasher.finalize())
+}
+
+pub async fn health(
+    State(state): State<Arc<ServerState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
     let clock = state.clock_health_status().await;
     let status = if clock.status == "ok" {
         "OK"
     } else {
         "DEGRADED"
     };
-    Json(HealthResponse { status, clock })
+
+    let response_payload = HealthResponse { status, clock };
+    let etag = health_etag(&response_payload);
+
+    let is_not_modified = headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value == etag);
+
+    if is_not_modified {
+        let mut response = StatusCode::NOT_MODIFIED.into_response();
+        if let Ok(etag_value) = HeaderValue::from_str(&etag) {
+            response.headers_mut().insert(header::ETAG, etag_value);
+        }
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+        return response;
+    }
+
+    let mut response = Json(response_payload).into_response();
+    if let Ok(etag_value) = HeaderValue::from_str(&etag) {
+        response.headers_mut().insert(header::ETAG, etag_value);
+    }
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    response
 }
 
 pub async fn metrics(State(state): State<Arc<ServerState>>) -> Result<impl IntoResponse, ApiError> {
@@ -3712,6 +3765,71 @@ fn build_test_state() -> Arc<ServerState> {
     )
     .expect("config is valid");
     Arc::new(ServerState::try_new(config).expect("state is constructed"))
+}
+
+#[cfg(test)]
+mod health_tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn health_includes_etag_header() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/health")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().contains_key(header::ETAG));
+    }
+
+    #[tokio::test]
+    async fn health_returns_not_modified_for_matching_if_none_match() {
+        let state = build_test_state();
+        let router = build_router(&state);
+
+        let first = router
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/health")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("first request succeeds");
+
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .expect("etag is present")
+            .to_owned();
+
+        let second = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/health")
+                    .header(header::IF_NONE_MATCH, etag)
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("second request succeeds");
+
+        assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
+        let body = to_bytes(second.into_body(), usize::MAX)
+            .await
+            .expect("body is collected");
+        assert!(body.is_empty(), "304 responses should not include a body");
+    }
 }
 
 #[cfg(test)]
