@@ -127,7 +127,7 @@ cargo deny check
 
 ### 5. Revision Lock Policy
 
-Items marked as `[x]` (completed) in README, PLAN.md, or TODO.md are locked:
+Items marked as `[x]` (completed) in README, PROD_PLAN.md, or TODO.md are locked:
 - Do not reopen completed items
 - Create a new item with `Revize:` prefix if changes are needed
 - Reference the original item in the revision
