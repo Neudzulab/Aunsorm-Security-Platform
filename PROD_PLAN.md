@@ -111,6 +111,7 @@ This document tracks all remaining work required for production deployment.
 - [ ] Add comprehensive input validation
 - [x] Implement request/response compression (tower-http katmanları ile tüm HTTP servisleri otomatik müzakere kullanıyor)
 - [ ] Add ETag support for caching
+ - [x] Revize: Add conditional GET ETag handling for `/health` endpoint in `crates/server`
 - [x] Implement CORS policies
 - [ ] Add OpenAPI/Swagger documentation generation
 
