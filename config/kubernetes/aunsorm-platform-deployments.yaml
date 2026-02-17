@@ -128,6 +128,20 @@ spec:
           type: Utilization
           averageUtilization: 70
 ---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aunsorm-gateway
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-gateway
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aunsorm-gateway
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -226,6 +240,20 @@ spec:
           type: Utilization
           averageUtilization: 70
 ---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aunsorm-auth-service
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-auth-service
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aunsorm-auth-service
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -323,3 +351,17 @@ spec:
         target:
           type: Utilization
           averageUtilization: 70
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aunsorm-crypto-service
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-crypto-service
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aunsorm-crypto-service
