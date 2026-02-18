@@ -54,7 +54,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   karşı `tests/tests/acme_staging.rs` hesabı roundtrip testini çalıştırır;
   secrets eksikse erken hata verilir ve sonuçlar `docs/src/operations/acme/production-deploy.md`
 
-## [0.5.0] - 2025-02-01
+## [0.5.0] - 2026-02-19
 
 ### Added
 - Post-quantum cryptography expansion with ML-KEM key encapsulation and SLH-DSA / ML-DSA signing pipelines across PQC service endpoints.
