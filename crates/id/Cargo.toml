@@ -7,13 +7,17 @@ license = "Apache-2.0"
 description = "Head-anchored unique identifier generator shared across Aunsorm projects."
 readme = "README.md"
 authors = ["Aunsorm Authors <security@aunsorm.dev>"]
+repository = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+homepage = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+keywords = ["identity", "uuid", "identifier", "security", "zero-trust"]
+categories = ["cryptography", "data-structures"]
 
 [features]
 default = []
 serde = ["dep:serde"]
 
 [dependencies]
-aunsorm-core = { path = "../core" }
+aunsorm-core = { path = "../core", version = "0.5" }
 base64 = { workspace = true }
 hex = { workspace = true }
 once_cell = "1"

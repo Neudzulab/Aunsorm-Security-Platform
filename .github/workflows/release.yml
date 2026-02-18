@@ -1,0 +1,161 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  # ── 1. Full test suite must be green before we publish ──────────────────────
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust ${{ vars.MSRV || '1.76.0' }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.76.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo test --all-features
+        env:
+          PROPTEST_CASES: "64"
+        run: cargo test --all-features
+
+  # ── 2. Publish library crates to crates.io (topological order) ─────────────
+  publish:
+    name: Publish to crates.io
+    needs: test
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.76.0
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.76.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Publish in dependency order; --no-verify skips redundant local build.
+      # Each step sleeps briefly so the index can propagate before dependents are published.
+      - name: Publish aunsorm-core
+        run: cargo publish -p aunsorm-core --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for index propagation
+        run: sleep 30
+
+      - name: Publish aunsorm-pqc
+        run: cargo publish -p aunsorm-pqc --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish aunsorm-mdm
+        run: cargo publish -p aunsorm-mdm --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for index propagation
+        run: sleep 30
+
+      - name: Publish aunsorm-id
+        run: cargo publish -p aunsorm-id --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish aunsorm-kms
+        run: cargo publish -p aunsorm-kms --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish aunsorm-packet
+        run: cargo publish -p aunsorm-packet --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish aunsorm-acme
+        run: cargo publish -p aunsorm-acme --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Publish aunsorm-x509
+        run: cargo publish -p aunsorm-x509 --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for index propagation
+        run: sleep 30
+
+      - name: Publish aunsorm-jwt
+        run: cargo publish -p aunsorm-jwt --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ── 3. Create GitHub Release with changelog excerpt ─────────────────────────
+  github-release:
+    name: GitHub Release
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract CHANGELOG section
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          # Grab lines between this version heading and the next one
+          NOTES=$(awk "/^## \[?v?${VERSION//./\\.}\]?/{found=1; next} found && /^## /{exit} found" CHANGELOG.md)
+          # Fallback if no matching section found
+          if [ -z "$NOTES" ]; then
+            NOTES="See [CHANGELOG.md](CHANGELOG.md) for details."
+          fi
+          {
+            echo "NOTES<<EOF"
+            echo "$NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Aunsorm ${{ github.ref_name }}"
+          body: |
+            ## What's changed
+
+            ${{ steps.changelog.outputs.NOTES }}
+
+            ---
+
+            ### Install via Cargo
+
+            ```toml
+            [dependencies]
+            aunsorm-core   = "${{ steps.version.outputs.VERSION }}"
+            aunsorm-jwt    = "${{ steps.version.outputs.VERSION }}"
+            aunsorm-kms    = "${{ steps.version.outputs.VERSION }}"
+            aunsorm-pqc    = "${{ steps.version.outputs.VERSION }}"
+            aunsorm-packet = "${{ steps.version.outputs.VERSION }}"
+            aunsorm-x509   = "${{ steps.version.outputs.VERSION }}"
+            aunsorm-acme   = "${{ steps.version.outputs.VERSION }}"
+            aunsorm-id     = "${{ steps.version.outputs.VERSION }}"
+            aunsorm-mdm    = "${{ steps.version.outputs.VERSION }}"
+            ```
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

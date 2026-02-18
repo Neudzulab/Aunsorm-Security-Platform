@@ -5,6 +5,12 @@ edition = "2021"
 license = "Apache-2.0"
 description = "Post-quantum cryptography bridge for Aunsorm secure tooling"
 rust-version = "1.76"
+readme = "README.md"
+authors = ["Aunsorm Authors <security@aunsorm.dev>"]
+repository = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+homepage = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+keywords = ["post-quantum", "pqc", "ml-kem", "ml-dsa", "cryptography"]
+categories = ["cryptography", "no-std"]
 
 [features]
 default = ["kem-mlkem-768", "sig-mldsa-65"]

@@ -2,11 +2,15 @@
 name = "aunsorm-jwt"
 version = "0.5.0"
 edition = "2021"
-authors = ["Aunsorm Identity Team"]
-description = "Ed25519 tabanlı JWT/JWKS ve JTI store bileşeni"
+authors = ["Aunsorm Authors <security@aunsorm.dev>"]
+description = "Ed25519-based JWT signing, JWKS endpoint and JTI store for Aunsorm"
 license = "Apache-2.0"
-repository = "https://example.com/aunsorm"
+repository = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+homepage = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
 rust-version = "1.76"
+readme = "README.md"
+keywords = ["jwt", "jwks", "ed25519", "authentication", "security"]
+categories = ["cryptography", "authentication", "web-programming"]
 
 [features]
 default = ["sqlite"]
@@ -24,8 +28,8 @@ ed25519-dalek = { version = "~2.1", default-features = false, features = ["std",
 hex = { workspace = true }
 sha2 = { workspace = true }
 hkdf = "0.12"
-aunsorm-kms = { path = "../kms", optional = true }
-aunsorm-core = { path = "../core" }
+aunsorm-kms = { path = "../kms", version = "0.5", optional = true }
+aunsorm-core = { path = "../core", version = "0.5" }
 chacha20poly1305 = { workspace = true }
 
 [dependencies.rusqlite]

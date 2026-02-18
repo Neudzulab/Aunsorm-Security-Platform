@@ -5,6 +5,7 @@ edition = "2021"
 license = "Apache-2.0"
 description = "OAuth-like control plane for the Aunsorm secure tooling suite"
 rust-version = "1.76"
+publish = false
 
 [features]
 default = []

@@ -4,7 +4,13 @@ version = "0.5.0"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.76"
-description = "Aunsorm paket formatı, AEAD şifreleme ve oturum ratchet entegrasyonu"
+description = "Packet format, AEAD encryption and session ratchet integration for Aunsorm"
+readme = "README.md"
+authors = ["Aunsorm Authors <security@aunsorm.dev>"]
+repository = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+homepage = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+keywords = ["encryption", "aead", "ratchet", "session", "cryptography"]
+categories = ["cryptography", "network-programming"]
 
 [features]
 default = []
@@ -12,7 +18,7 @@ aes-siv = ["dep:aes-siv"]
 hpke = ["dep:hpke"]
 
 [dependencies]
-aunsorm-core = { path = "../core" }
+aunsorm-core = { path = "../core", version = "0.5" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

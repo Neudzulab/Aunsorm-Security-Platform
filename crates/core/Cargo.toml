@@ -7,6 +7,10 @@ license = "Apache-2.0"
 description = "Core cryptographic primitives for the Aunsorm security toolkit."
 readme = "README.md"
 authors = ["Aunsorm Authors <security@aunsorm.dev>"]
+repository = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+homepage = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+keywords = ["cryptography", "security", "zero-trust", "entropy", "rng"]
+categories = ["cryptography", "authentication"]
 
 [dependencies]
 argon2 = { workspace = true }

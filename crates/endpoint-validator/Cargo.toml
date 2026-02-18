@@ -4,6 +4,8 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 version.workspace = true
+description = "Internal endpoint discovery and validation tool for Aunsorm CI"
+publish = false
 
 [dependencies]
 anyhow = { workspace = true }

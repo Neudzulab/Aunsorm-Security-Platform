@@ -5,6 +5,11 @@ edition = "2021"
 license = "Apache-2.0"
 description = "ACME protocol primitives for the Aunsorm security suite"
 readme = "README.md"
+authors = ["Aunsorm Authors <security@aunsorm.dev>"]
+repository = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+homepage = "https://github.com/Neudzulab/Aunsorm-Security-Platform"
+keywords = ["acme", "certificate", "tls", "cryptography", "security"]
+categories = ["cryptography", "network-programming"]
 
 [dependencies]
 base64 = { workspace = true }
@@ -27,7 +32,7 @@ hkdf = "0.12"
 rcgen = { version = "0.14", features = ["pem", "x509-parser"] }
 async-trait = "0.1"
 pem = "3"
-aunsorm-core = { path = "../core" }
+aunsorm-core = { path = "../core", version = "0.5" }
 aunsorm-x509 = { path = "../x509" }
 aunsorm-kms = { path = "../kms" }
 

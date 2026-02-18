@@ -6,6 +6,7 @@ authors = ["Aunsorm Project Team"]
 license = "Apache-2.0"
 rust-version = "1.76"
 description = "WebAssembly bindings for the Aunsorm security toolkit"
+publish = false
 
 [features]
 default = []
