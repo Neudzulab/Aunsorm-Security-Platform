@@ -300,6 +300,13 @@ fn health_etag(response: &HealthResponse) -> String {
     format!("W/\"{:x}\"", hasher.finalize())
 }
 
+fn weak_etag_from_json<T: Serialize>(payload: &T) -> Option<String> {
+    serde_json::to_vec(payload).ok().map(|bytes| {
+        let digest = Sha256::digest(bytes);
+        format!("W/\"{digest:x}\"")
+    })
+}
+
 pub async fn health(
     State(state): State<Arc<ServerState>>,
     headers: HeaderMap,
@@ -795,8 +802,41 @@ fn build_signature_capabilities() -> Vec<SignatureCapability> {
     .collect()
 }
 
-async fn pqc_capabilities() -> Json<PqcCapabilitiesResponse> {
-    Json(build_pqc_capabilities_document())
+async fn pqc_capabilities(headers: HeaderMap) -> impl IntoResponse {
+    let response_payload = build_pqc_capabilities_document();
+    let etag = weak_etag_from_json(&response_payload);
+
+    let is_not_modified = headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .zip(etag.as_deref())
+        .is_some_and(|(incoming, current)| incoming == current);
+
+    if is_not_modified {
+        let mut response = StatusCode::NOT_MODIFIED.into_response();
+        if let Some(etag) = etag
+            .as_deref()
+            .and_then(|value| HeaderValue::from_str(value).ok())
+        {
+            response.headers_mut().insert(header::ETAG, etag);
+        }
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+        return response;
+    }
+
+    let mut response = Json(response_payload).into_response();
+    if let Some(etag) = etag
+        .as_deref()
+        .and_then(|value| HeaderValue::from_str(value).ok())
+    {
+        response.headers_mut().insert(header::ETAG, etag);
+    }
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    response
 }
 
 #[cfg(feature = "http3-experimental")]
@@ -3954,6 +3994,70 @@ mod pqc_tests {
             .expect("request succeeds");
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn pqc_capabilities_includes_etag_header() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/pqc/capabilities")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().contains_key(header::ETAG));
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok()),
+            Some("no-cache")
+        );
+    }
+
+    #[tokio::test]
+    async fn pqc_capabilities_honors_if_none_match() {
+        let state = build_test_state();
+        let first = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/pqc/capabilities")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .expect("etag is present")
+            .to_str()
+            .expect("etag is valid header")
+            .to_owned();
+
+        let second = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/pqc/capabilities")
+                    .header(header::IF_NONE_MATCH, etag)
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
+        assert!(second.headers().contains_key(header::ETAG));
+        let body = to_bytes(second.into_body(), usize::MAX)
+            .await
+            .expect("body is collected");
+        assert!(body.is_empty(), "304 responses should not include a body");
     }
 }
 
