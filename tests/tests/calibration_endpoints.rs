@@ -134,6 +134,31 @@ async fn post_calibration_verify(
     (status, parsed)
 }
 
+async fn post_calibration_verify_raw(
+    state: &Arc<ServerState>,
+    body: serde_json::Value,
+) -> (StatusCode, String) {
+    let app = build_router(state);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/calib/verify")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    (status, String::from_utf8_lossy(&body).to_string())
+}
+
 #[tokio::test]
 async fn strict_calibration_verify_rejects_mismatch_and_records_audit_event() {
     let (state, _ledger_dir) = strict_state();
@@ -179,5 +204,34 @@ async fn strict_calibration_verify_accepts_match_without_audit_failure() {
     let (status, body) = post_calibration_verify(&state, payload).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body.results.fingerprint_hex, Some(true));
+    assert!(state.audit_events().await.is_empty());
+}
+
+#[tokio::test]
+async fn strict_calibration_verify_rejects_invalid_inputs_before_audit_logging() {
+    let (state, _ledger_dir) = strict_state();
+    let invalid_salt_payload = json!({
+        "org_salt": "@@not-base64@@",
+        "calib_text": "Test calibration for audit proof",
+    });
+
+    let (status, body) = post_calibration_verify_raw(&state, invalid_salt_payload).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body.contains("org_salt base64 decode failed"),
+        "response should explain decode failure"
+    );
+    assert!(state.audit_events().await.is_empty());
+
+    let empty_text_payload = json!({
+        "org_salt": STANDARD.encode(b"test-salt"),
+        "calib_text": " \n\t",
+    });
+    let (status, body) = post_calibration_verify_raw(&state, empty_text_payload).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body.contains("calibration text cannot be empty"),
+        "response should explain empty calibration text"
+    );
     assert!(state.audit_events().await.is_empty());
 }
