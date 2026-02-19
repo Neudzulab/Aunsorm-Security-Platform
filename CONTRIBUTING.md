@@ -31,6 +31,8 @@ scope. Before writing code, confirm these checkpoints:
 5. Run and record validation commands in the PR body immediately after commit.
 6. Open the PR right after `git commit` so no committed work remains without a
    tracked `PROD_PLAN.md` task reference.
+7. If `git status --short` is clean after validation, do not open a PR just to
+   satisfy process steps—only committed changes should be submitted.
 
 Then follow the standard flow:
 
@@ -69,6 +71,8 @@ Then follow the standard flow:
 9. After committing, open a PR immediately and include a clear summary,
    validation results, and the referenced `PROD_PLAN.md` task in the PR body.
    Never leave committed changes untracked by a PR.
+10. If a continuation ends without code or documentation updates, record the
+    validation evidence in the handoff notes and skip PR creation for that run.
 
 ### Pull Request Description Template
 
