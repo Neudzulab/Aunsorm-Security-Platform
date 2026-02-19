@@ -24,10 +24,12 @@ scope. Before writing code, confirm these checkpoints:
 1. Re-read `AGENTS.md` files that apply to files you plan to touch.
 2. Link the change to an existing unchecked `PROD_PLAN.md` task, or add a new
    `Revize:` checkbox if the work updates an already completed area.
-3. Keep `README.md`, OpenAPI specs, and `port-map.yaml` synchronized when
+3. Check `git status --short --branch` before editing to confirm whether you
+   are continuing in-progress local work or starting a fresh continuation.
+4. Keep `README.md`, OpenAPI specs, and `port-map.yaml` synchronized when
    endpoint or port behavior changes.
-4. Run and record validation commands in the PR body immediately after commit.
-5. Open the PR right after `git commit` so no committed work remains without a
+5. Run and record validation commands in the PR body immediately after commit.
+6. Open the PR right after `git commit` so no committed work remains without a
    tracked `PROD_PLAN.md` task reference.
 
 Then follow the standard flow:

@@ -218,6 +218,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Extend PR template and CONTRIBUTING scaffold with a required `Continuation Context` section for `devam` handoffs
 - [x] Revize: Add a GitHub pull request template file that mirrors CONTRIBUTING required sections (Summary, PROD_PLAN.md task, Validation)
 - [x] Revize: Replace remaining PLAN.md references in contributor guidance (CONTRIBUTING.md)
+- [x] Revize: Require `devam` continuation checklist to verify git working tree state before implementation
 - [x] Revize: Replace remaining PLAN.md references in architecture and operations docs (docs/src/architecture/overview.md, docs/src/operations/market-intelligence.md)
 - [x] Revize: Update AGENTS revision lock policy to reference PROD_PLAN.md instead of legacy PLAN.md
 - [x] Revize: Normalize legacy CHANGELOG documentation bullets to reference PROD_PLAN.md instead of PLAN.md
