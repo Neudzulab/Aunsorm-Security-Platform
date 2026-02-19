@@ -3957,6 +3957,67 @@ mod pqc_tests {
     }
 }
 
+#[cfg(test)]
+mod versioning_tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn v1_random_number_endpoint_matches_unversioned_contract() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/v1/random/number")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body is collected");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("payload parses");
+        assert!(
+            payload
+                .get("value")
+                .and_then(serde_json::Value::as_u64)
+                .is_some(),
+            "random number response should include an unsigned integer value"
+        );
+    }
+
+    #[tokio::test]
+    async fn v1_oauth_transparency_endpoint_is_available() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/v1/oauth/transparency")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body is collected");
+        let payload: serde_json::Value = serde_json::from_slice(&body).expect("payload parses");
+        assert!(
+            payload
+                .get("entries")
+                .and_then(serde_json::Value::as_array)
+                .is_some(),
+            "transparency response should include an entries array"
+        );
+    }
+}
+
 #[cfg(all(test, feature = "http3-experimental"))]
 mod http3_tests {
     use super::*;
