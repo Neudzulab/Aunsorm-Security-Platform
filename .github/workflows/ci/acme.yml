@@ -1,17 +1,6 @@
 name: ACME Staging Smoke
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    paths:
-      - "crates/acme/**"
-      - "tests/**"
-      - "docs/src/operations/acme/**"
-      - ".github/workflows/ci/acme.yml"
-      - "README.md"
-      - "ROADMAP.md"
   workflow_dispatch:
 
 jobs:
