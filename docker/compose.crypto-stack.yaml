@@ -1,0 +1,49 @@
+name: aunsorm-crypto-stack
+
+networks:
+  aunsorm-network:
+    driver: bridge
+
+services:
+  crypto-service:
+    container_name: aun-crypto-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.crypto
+    env_file:
+      - ../.env
+    ports:
+      - "50012:50012"
+    networks:
+      - aunsorm-network
+    depends_on:
+      - rng-service
+    restart: unless-stopped
+
+  pqc-service:
+    container_name: aun-pqc-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.pqc
+    env_file:
+      - ../.env
+    ports:
+      - "50018:50018"
+    networks:
+      - aunsorm-network
+    depends_on:
+      - rng-service
+    restart: unless-stopped
+
+  rng-service:
+    container_name: aun-rng-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rng
+    env_file:
+      - ../.env
+    ports:
+      - "50019:50019"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
