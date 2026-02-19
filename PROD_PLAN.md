@@ -163,6 +163,7 @@ This document tracks all remaining work required for production deployment.
 ### Security Auditing
 - [ ] Third-party security audit (penetration testing)
 - [x] Dependency vulnerability scanning automation
+- [x] Revize: Disable push/pull_request workflow triggers for CI/release pipelines and keep manual dispatch-only execution to control token usage
 - [x] Revize: Update time crate to address RUSTSEC-2026-0009
 - [ ] Replace unmaintained or vulnerable crypto dependencies flagged by cargo-deny (atomic-polyfill, fxhash, pqcrypto-dilithium/kyber, ring 0.16.20) to restore advisory compliance
 - [x] Configure `cargo-deny` to fetch the RustSec advisory database via the git CLI fallback so checks succeed in restricted network environments
