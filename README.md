@@ -40,7 +40,18 @@ graph TD
    ```bash
    docker compose up --build
    ```
-3. Gateway will be reachable on `http://<HOST>:50010` (replace `<HOST>` with your deployment host; see port map below for service bindings).
+3. Start only the stack you need (microservice-based deployment):
+   ```bash
+   # Auth only (+ required RNG foundation)
+   HOST=<HOST> docker compose -f docker/compose.auth-stack.yaml up --build
+
+   # Identity bundle (auth/x509/kms/mdm/id/acme + required RNG)
+   HOST=<HOST> docker compose -f docker/compose.identity-stack.yaml up --build
+
+   # Crypto bundle (crypto/pqc + required RNG)
+   HOST=<HOST> docker compose -f docker/compose.crypto-stack.yaml up --build
+   ```
+4. Gateway will be reachable on `http://<HOST>:50010` (replace `<HOST>` with your deployment host; see port map below for service bindings).
 
 ### CLI
 Use the CLI against a running stack:

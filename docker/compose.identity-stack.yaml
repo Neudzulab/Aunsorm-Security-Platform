@@ -1,0 +1,119 @@
+name: aunsorm-identity-stack
+
+networks:
+  aunsorm-network:
+    driver: bridge
+
+services:
+  auth-service:
+    container_name: aun-auth-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.auth
+    env_file:
+      - ../.env
+    ports:
+      - "50011:50011"
+    volumes:
+      - aunsorm-auth-data:/srv/data
+    networks:
+      - aunsorm-network
+    depends_on:
+      - rng-service
+    restart: unless-stopped
+
+  x509-service:
+    container_name: aun-x509-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.x509
+    env_file:
+      - ../.env
+    ports:
+      - "50013:50013"
+    networks:
+      - aunsorm-network
+    depends_on:
+      - rng-service
+    restart: unless-stopped
+
+  kms-service:
+    container_name: aun-kms-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.kms
+    env_file:
+      - ../.env
+    ports:
+      - "50014:50014"
+    networks:
+      - aunsorm-network
+    depends_on:
+      - rng-service
+    restart: unless-stopped
+
+  mdm-service:
+    container_name: aun-mdm-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.mdm
+    env_file:
+      - ../.env
+    ports:
+      - "50015:50015"
+    volumes:
+      - aunsorm-mdm-data:/srv/data
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  id-service:
+    container_name: aun-id-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.id
+    env_file:
+      - ../.env
+    ports:
+      - "50016:50016"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+  acme-service:
+    container_name: aun-acme-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.acme
+    env_file:
+      - ../.env
+    ports:
+      - "50017:50017"
+    volumes:
+      - aunsorm-acme-data:/srv/data
+    networks:
+      - aunsorm-network
+    depends_on:
+      - rng-service
+    restart: unless-stopped
+
+  rng-service:
+    container_name: aun-rng-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rng
+    env_file:
+      - ../.env
+    ports:
+      - "50019:50019"
+    networks:
+      - aunsorm-network
+    restart: unless-stopped
+
+volumes:
+  aunsorm-auth-data:
+    driver: local
+  aunsorm-mdm-data:
+    driver: local
+  aunsorm-acme-data:
+    driver: local

@@ -67,6 +67,7 @@ This document tracks all remaining work required for production deployment.
 
 ### Docker & Orchestration
 - [ ] Migrate from Docker Compose to Kubernetes
+- [x] Revize: Add purpose-based Docker Compose stack files so auth/identity/crypto users can deploy only required services with mandatory RNG dependency
 - [x] Implement Horizontal Pod Autoscaling (HPA)
 - [x] Configure resource limits (CPU/memory) per service
 - [x] Set up liveness and readiness probes
