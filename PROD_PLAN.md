@@ -161,6 +161,7 @@ This document tracks all remaining work required for production deployment.
 - [ ] Complete integration test suite for all services
 - [x] Revize: Replace stale PLAN.md references in ignored OAuth integration tests with PROD_PLAN.md for devam traceability
 - [x] Revize: Add calibration `/calib/verify` invalid-input regression coverage for strict-mode error handling and audit-log guardrails
+- [x] Revize: Add gateway e2e smoke regression for `/health` and `/pqc/capabilities` conditional GET behavior in `tests/tests/e2e_gateway_smoke.rs`
 - [ ] Add end-to-end test scenarios
 - [ ] Implement chaos engineering tests (fault injection)
 - [ ] Add load testing (Locust / k6)
