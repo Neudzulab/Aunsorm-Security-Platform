@@ -275,6 +275,12 @@ impl OAuthClient {
         expected.ct_eq(&actual).into()
     }
 
+    /// Returns `true` if this client has a secret configured (i.e. requires
+    /// `client_secret` for `client_credentials` grant).
+    pub fn has_secret(&self) -> bool {
+        self.client_secret_hash.is_some()
+    }
+
     pub fn allows_redirect(&self, candidate: &str) -> bool {
         self.allowed_redirects
             .iter()
@@ -595,6 +601,62 @@ fn default_oauth_clients() -> HashMap<String, OAuthClient> {
         ),
     );
 
+    // TakeMDM auth-service client — used by auth-service for client_credentials token delegation
+    let mut takemdm_roles = HashMap::new();
+    takemdm_roles.insert(
+        DEFAULT_SERVICE_ROLE.to_owned(),
+        RolePolicy::new(
+            vec![
+                "read".to_owned(),
+                "write".to_owned(),
+                "introspect".to_owned(),
+                "admin".to_owned(),
+            ],
+            Duration::from_secs(900),     // 15 min access token
+            Duration::from_secs(604_800), // 7 day refresh token
+            false,
+        ),
+    );
+    takemdm_roles.insert(
+        "admin".to_owned(),
+        RolePolicy::new(
+            vec![
+                "read".to_owned(),
+                "write".to_owned(),
+                "introspect".to_owned(),
+                "admin".to_owned(),
+            ],
+            Duration::from_secs(900),
+            Duration::from_secs(604_800),
+            false,
+        ),
+    );
+    takemdm_roles.insert(
+        "user".to_owned(),
+        RolePolicy::new(
+            vec!["read".to_owned(), "write".to_owned()],
+            Duration::from_secs(900),
+            Duration::from_secs(604_800),
+            false,
+        ),
+    );
+    // Also accept client_id from environment if customized
+    let takemdm_client_id = std::env::var("TAKEMDM_CLIENT_ID")
+        .unwrap_or_else(|_| "takemdm-auth".to_string());
+    clients.insert(
+        takemdm_client_id,
+        OAuthClient::new(
+            vec!["https://mdm.taketaxi.eu/panel/auth/callback".to_string()],
+            vec![
+                "read".to_string(),
+                "write".to_string(),
+                "introspect".to_string(),
+                "admin".to_string(),
+            ],
+            DEFAULT_SERVICE_ROLE,
+            takemdm_roles,
+        ),
+    );
     clients
 }
 

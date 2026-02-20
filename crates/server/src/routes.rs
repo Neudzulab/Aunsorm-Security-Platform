@@ -24,7 +24,7 @@ use std::collections::HashSet;
 use std::env;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use time::OffsetDateTime;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer, ExposeHeaders};
@@ -1328,6 +1328,7 @@ pub async fn verify_jwt_token(
     Json(verify_token_for_audience(&state, request.token.trim(), state.audience()).await)
 }
 
+#[allow(dead_code)]
 pub async fn verify_media_token(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<JwtVerifyRequest>,
@@ -2227,9 +2228,15 @@ pub enum OAuthTokenRequest {
     #[serde(rename = "client_credentials")]
     ClientCredentials {
         client_id: String,
-        client_secret: String,
+        #[serde(default)]
+        client_secret: Option<String>,
         #[serde(default)]
         scope: Option<String>,
+        #[serde(default)]
+        expires_in: Option<u64>,
+        /// Custom claims to embed in the token (sub, email, role, permissions, sessionId, etc.)
+        #[serde(default)]
+        extras: Option<serde_json::Map<String, Value>>,
     },
 }
 
@@ -2402,6 +2409,8 @@ pub async fn exchange_token(
             client_id,
             client_secret,
             scope,
+            expires_in: requested_ttl,
+            extras,
         } => {
             let client_id = client_id.trim();
             if client_id.is_empty() {
@@ -2411,13 +2420,25 @@ pub async fn exchange_token(
                 .oauth_client(client_id)
                 .ok_or_else(|| ApiError::invalid_client("client_id kayıtlı değil"))?;
 
-            if !client.verify_secret(client_secret.trim()) {
+            // Verify client_secret if the client has one configured
+            if let Some(secret) = &client_secret {
+                if !client.verify_secret(secret.trim()) {
+                    return Err(ApiError::invalid_client(
+                        "client_secret geçersiz",
+                    ));
+                }
+            } else if client.has_secret() {
                 return Err(ApiError::invalid_client(
-                    "client_secret geçersiz veya bu istemci için client_credentials yetkisi yok",
+                    "client_secret gereklidir",
                 ));
             }
 
-            let role = client.default_role().to_owned();
+            let role = extras
+                .as_ref()
+                .and_then(|e| e.get("role"))
+                .and_then(|v| v.as_str())
+                .map(|r| r.to_owned())
+                .unwrap_or_else(|| client.default_role().to_owned());
             let policy = state
                 .role_policy(client_id, &role)
                 .ok_or_else(|| ApiError::invalid_grant("Rol politikası bulunamadı"))?;
@@ -2433,9 +2454,21 @@ pub async fn exchange_token(
                 }
             }
 
-            let session_ttl = policy.session_ttl();
+            let session_ttl = if let Some(ttl) = requested_ttl {
+                let max = policy.session_ttl().as_secs();
+                Duration::from_secs(ttl.min(max))
+            } else {
+                policy.session_ttl()
+            };
             let refresh_ttl = policy.refresh_ttl();
-            let subject = format!("client:{client_id}");
+
+            // Use subject from extras if provided, otherwise use client:<client_id>
+            let subject = extras
+                .as_ref()
+                .and_then(|e| e.get("sub"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_owned())
+                .unwrap_or_else(|| format!("client:{client_id}"));
 
             let mut claims = Claims::new();
             claims.subject = Some(subject.clone());
@@ -2454,6 +2487,14 @@ pub async fn exchange_token(
                 .insert("grantType".to_string(), Value::String("client_credentials".to_string()));
             if let Some(ref s) = normalized_scope {
                 claims.extras.insert("scope".to_string(), Value::String(s.clone()));
+            }
+            // Merge caller-provided extras into claims
+            if let Some(extra_map) = extras {
+                for (key, value) in extra_map {
+                    if key != "sub" && key != "role" {
+                        claims.extras.insert(key, value);
+                    }
+                }
             }
 
             let access_token = state
@@ -3542,7 +3583,7 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/oauth/transparency", get(oauth_transparency))
                 // JWT endpoints (auth service)
                 .route("/cli/jwt/verify", post(verify_jwt_token))
-                .route("/security/jwt-verify", post(verify_media_token))
+                .route("/security/jwt-verify", post(verify_jwt_token))
                 .route("/security/generate-media-token", post(generate_media_token))
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
                 .route("/security/jwe/decrypt", post(security_jwe_decrypt));
@@ -3634,7 +3675,7 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/oauth/transparency", get(oauth_transparency))
                 // JWT endpoints
                 .route("/cli/jwt/verify", post(verify_jwt_token))
-                .route("/security/jwt-verify", post(verify_media_token))
+                .route("/security/jwt-verify", post(verify_jwt_token))
                 .route("/security/generate-media-token", post(generate_media_token))
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
                 .route("/security/jwe/decrypt", post(security_jwe_decrypt))
