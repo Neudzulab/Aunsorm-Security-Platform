@@ -839,10 +839,51 @@ async fn pqc_capabilities(headers: HeaderMap) -> impl IntoResponse {
     response
 }
 
+fn respond_with_conditional_etag<T: Serialize>(
+    status: StatusCode,
+    payload: T,
+    headers: HeaderMap,
+) -> Response {
+    let etag = weak_etag_from_json(&payload);
+
+    let is_not_modified = headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .zip(etag.as_deref())
+        .is_some_and(|(incoming, current)| incoming == current);
+
+    if is_not_modified {
+        let mut response = StatusCode::NOT_MODIFIED.into_response();
+        if let Some(etag) = etag
+            .as_deref()
+            .and_then(|value| HeaderValue::from_str(value).ok())
+        {
+            response.headers_mut().insert(header::ETAG, etag);
+        }
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+        return response;
+    }
+
+    let mut response = (status, Json(payload)).into_response();
+    if let Some(etag) = etag
+        .as_deref()
+        .and_then(|value| HeaderValue::from_str(value).ok())
+    {
+        response.headers_mut().insert(header::ETAG, etag);
+    }
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    response
+}
+
 #[cfg(feature = "http3-experimental")]
 async fn http3_capabilities(
     State(state): State<Arc<ServerState>>,
-) -> (StatusCode, Json<Http3CapabilitiesResponse>) {
+    headers: HeaderMap,
+) -> impl IntoResponse {
     let response = Http3CapabilitiesResponse {
         enabled: true,
         status: Cow::Borrowed("active"),
@@ -877,13 +918,14 @@ async fn http3_capabilities(
             )),
         },
     };
-    (StatusCode::OK, Json(response))
+    respond_with_conditional_etag(StatusCode::OK, response, headers)
 }
 
 #[cfg(not(feature = "http3-experimental"))]
 async fn http3_capabilities(
     State(_state): State<Arc<ServerState>>,
-) -> (StatusCode, Json<Http3CapabilitiesResponse>) {
+    headers: HeaderMap,
+) -> impl IntoResponse {
     let response = Http3CapabilitiesResponse {
         enabled: false,
         status: Cow::Borrowed("feature_disabled"),
@@ -898,7 +940,7 @@ async fn http3_capabilities(
             )),
         },
     };
-    (StatusCode::NOT_IMPLEMENTED, Json(response))
+    respond_with_conditional_etag(StatusCode::NOT_IMPLEMENTED, response, headers)
 }
 
 const APPLICATION_JOSE_JSON: &str = "application/jose+json";
@@ -1603,9 +1645,7 @@ pub async fn security_jwe_encrypt(
         .map_err(|_| ApiError::invalid_request("org_salt base64 çözümleme hatası"))?;
 
     if org_salt_bytes.len() < 8 {
-        return Err(ApiError::invalid_request(
-            "org_salt en az 8 bayt olmalıdır",
-        ));
+        return Err(ApiError::invalid_request("org_salt en az 8 bayt olmalıdır"));
     }
 
     let salts = if let Some(raw) = request.salts {
@@ -1613,7 +1653,9 @@ pub async fn security_jwe_encrypt(
             let bytes = URL_SAFE_NO_PAD
                 .decode(s.trim_end_matches('='))
                 .or_else(|_| Ok::<Vec<u8>, base64::DecodeError>(s.as_bytes().to_vec()))
-                .map_err(|_| ApiError::invalid_request(format!("{field} base64 çözümleme hatası")))?;
+                .map_err(|_| {
+                    ApiError::invalid_request(format!("{field} base64 çözümleme hatası"))
+                })?;
             if bytes.len() < 8 {
                 return Err(ApiError::invalid_request(format!(
                     "{field} en az 8 bayt olmalıdır"
@@ -1624,9 +1666,8 @@ pub async fn security_jwe_encrypt(
         let cal = decode_salt(&raw.calibration, "salts.calibration")?;
         let chain = decode_salt(&raw.chain, "salts.chain")?;
         let coord = decode_salt(&raw.coord, "salts.coord")?;
-        Salts::new(cal, chain, coord).map_err(|err| {
-            ApiError::invalid_request(format!("Geçersiz salt seti: {err}"))
-        })?
+        Salts::new(cal, chain, coord)
+            .map_err(|err| ApiError::invalid_request(format!("Geçersiz salt seti: {err}")))?
     } else {
         // org_salt'tan hash tabanlı türetim
         let mut h = Sha256::new();
@@ -1640,7 +1681,7 @@ pub async fn security_jwe_encrypt(
         h.update(&org_salt_bytes);
         let coord: [u8; 32] = h.finalize_reset().into();
         Salts::new(cal.to_vec(), chain.to_vec(), coord.to_vec())
-            .map_err(|err| ApiError::server_error(format!("Salt türetim hatası: {err}")))?  
+            .map_err(|err| ApiError::server_error(format!("Salt türetim hatası: {err}")))?
     };
 
     let key_pair = state.signer().key_pair().clone();
@@ -1653,14 +1694,16 @@ pub async fn security_jwe_encrypt(
         &request.calibration_note,
         &salts,
     )
-    .map_err(|err| ApiError::server_error(format!("JWE şifreleme hatası: {err}")))?
-    ;
+    .map_err(|err| ApiError::server_error(format!("JWE şifreleme hatası: {err}")))?;
 
-    Ok((StatusCode::CREATED, Json(JweEncryptResponse {
-        jwe,
-        algorithm: "Ed25519-XC20P",
-        kid,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(JweEncryptResponse {
+            jwe,
+            algorithm: "Ed25519-XC20P",
+            kid,
+        }),
+    ))
 }
 
 /// Sunucunun public anahtarıyla doğrulayarak JWE zarfını çözer.
@@ -1692,9 +1735,7 @@ pub async fn security_jwe_decrypt(
         .map_err(|_| ApiError::invalid_request("org_salt base64 çözümleme hatası"))?;
 
     if org_salt_bytes.len() < 8 {
-        return Err(ApiError::invalid_request(
-            "org_salt en az 8 bayt olmalıdır",
-        ));
+        return Err(ApiError::invalid_request("org_salt en az 8 bayt olmalıdır"));
     }
 
     let salts = if let Some(raw) = request.salts {
@@ -1702,7 +1743,9 @@ pub async fn security_jwe_decrypt(
             let bytes = URL_SAFE_NO_PAD
                 .decode(s.trim_end_matches('='))
                 .or_else(|_| Ok::<Vec<u8>, base64::DecodeError>(s.as_bytes().to_vec()))
-                .map_err(|_| ApiError::invalid_request(format!("{field} base64 çözümleme hatası")))?;
+                .map_err(|_| {
+                    ApiError::invalid_request(format!("{field} base64 çözümleme hatası"))
+                })?;
             if bytes.len() < 8 {
                 return Err(ApiError::invalid_request(format!(
                     "{field} en az 8 bayt olmalıdır"
@@ -1713,9 +1756,8 @@ pub async fn security_jwe_decrypt(
         let cal = decode_salt(&raw.calibration, "salts.calibration")?;
         let chain = decode_salt(&raw.chain, "salts.chain")?;
         let coord = decode_salt(&raw.coord, "salts.coord")?;
-        Salts::new(cal, chain, coord).map_err(|err| {
-            ApiError::invalid_request(format!("Geçersiz salt seti: {err}"))
-        })?
+        Salts::new(cal, chain, coord)
+            .map_err(|err| ApiError::invalid_request(format!("Geçersiz salt seti: {err}")))?
     } else {
         let mut h = Sha256::new();
         h.update(b"aunsorm/jwe/salt-calibration");
@@ -1728,13 +1770,14 @@ pub async fn security_jwe_decrypt(
         h.update(&org_salt_bytes);
         let coord: [u8; 32] = h.finalize_reset().into();
         Salts::new(cal.to_vec(), chain.to_vec(), coord.to_vec())
-            .map_err(|err| ApiError::server_error(format!("Salt türetim hatası: {err}")))?  
+            .map_err(|err| ApiError::server_error(format!("Salt türetim hatası: {err}")))?
     };
 
     let public_key = state.signer().key_pair().public_key();
     let kid = public_key.kid().to_owned();
 
-    let plaintext = request.jwe
+    let plaintext = request
+        .jwe
         .decrypt_with_calibration_text(
             &public_key,
             &org_salt_bytes,
@@ -2423,14 +2466,10 @@ pub async fn exchange_token(
             // Verify client_secret if the client has one configured
             if let Some(secret) = &client_secret {
                 if !client.verify_secret(secret.trim()) {
-                    return Err(ApiError::invalid_client(
-                        "client_secret geçersiz",
-                    ));
+                    return Err(ApiError::invalid_client("client_secret geçersiz"));
                 }
             } else if client.has_secret() {
-                return Err(ApiError::invalid_client(
-                    "client_secret gereklidir",
-                ));
+                return Err(ApiError::invalid_client("client_secret gereklidir"));
             }
 
             let role = extras
@@ -2482,11 +2521,14 @@ pub async fn exchange_token(
             claims
                 .extras
                 .insert("role".to_string(), Value::String(role.clone()));
-            claims
-                .extras
-                .insert("grantType".to_string(), Value::String("client_credentials".to_string()));
+            claims.extras.insert(
+                "grantType".to_string(),
+                Value::String("client_credentials".to_string()),
+            );
             if let Some(ref s) = normalized_scope {
-                claims.extras.insert("scope".to_string(), Value::String(s.clone()));
+                claims
+                    .extras
+                    .insert("scope".to_string(), Value::String(s.clone()));
             }
             // Merge caller-provided extras into claims
             if let Some(extra_map) = extras {
@@ -2513,7 +2555,9 @@ pub async fn exchange_token(
                 .as_ref()
                 .map(serde_json::to_string)
                 .transpose()
-                .map_err(|err| ApiError::server_error(format!("audience serileştirilemedi: {err}")))?;
+                .map_err(|err| {
+                    ApiError::server_error(format!("audience serileştirilemedi: {err}"))
+                })?;
             state
                 .record_token(&jti, expires_at, Some(&subject), audience_repr.as_deref())
                 .await
@@ -2537,14 +2581,18 @@ pub async fn exchange_token(
                     },
                 )
                 .await
-                .map_err(|err| ApiError::server_error(format!("Refresh token kaydı başarısız: {err}")))?;
+                .map_err(|err| {
+                    ApiError::server_error(format!("Refresh token kaydı başarısız: {err}"))
+                })?;
 
             state
                 .record_audit_event(
                     "oauth.client_credentials",
                     subject.clone(),
                     AuditOutcome::Success,
-                    format!("oauth://token?client={client_id}&grant=client_credentials&role={role}"),
+                    format!(
+                        "oauth://token?client={client_id}&grant=client_credentials&role={role}"
+                    ),
                 )
                 .await;
 
@@ -4414,6 +4462,81 @@ mod pqc_tests {
 
         assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
         assert!(second.headers().contains_key(header::ETAG));
+        let body = to_bytes(second.into_body(), usize::MAX)
+            .await
+            .expect("body is collected");
+        assert!(body.is_empty(), "304 responses should not include a body");
+    }
+}
+
+#[cfg(test)]
+mod http3_capabilities_tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn http3_capabilities_includes_etag_header() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/http3/capabilities")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert!(matches!(
+            response.status(),
+            StatusCode::OK | StatusCode::NOT_IMPLEMENTED
+        ));
+        assert!(response.headers().contains_key(header::ETAG));
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok()),
+            Some("no-cache")
+        );
+    }
+
+    #[tokio::test]
+    async fn http3_capabilities_honors_if_none_match() {
+        let state = build_test_state();
+        let router = build_router(&state);
+
+        let first = router
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/http3/capabilities")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("first request succeeds");
+
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .expect("etag is present")
+            .to_owned();
+
+        let second = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/http3/capabilities")
+                    .header(header::IF_NONE_MATCH, etag)
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("second request succeeds");
+
+        assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
         let body = to_bytes(second.into_body(), usize::MAX)
             .await
             .expect("body is collected");
