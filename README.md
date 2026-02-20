@@ -147,7 +147,7 @@ Ensure the `git` CLI is available so `cargo deny check` can fetch the advisory d
 - Production readiness plan: `PROD_PLAN.md`
 - Contribution workflow: PR descriptions must reference a `PROD_PLAN.md` task (see `CONTRIBUTING.md`)
 - Deployment guides: `docs/deployment/`
-- API references: `docs/api/` and OpenAPI source specs in `openapi/`
+- API references: `docs/api/`, generated OpenAPI catalog artifacts (`docs/api/openapi-catalog.*`), and OpenAPI source specs in `openapi/`
 - Hosted API docs (HOST override aware):
   - OpenAPI index: `http://${HOST:-localhost}:50024/`
   - Swagger UI: `http://${HOST:-localhost}:8080/`

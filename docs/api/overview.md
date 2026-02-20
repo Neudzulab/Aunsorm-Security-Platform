@@ -32,3 +32,4 @@ curl -X POST http://${HOST:-localhost}:50011/oauth/token \
 ## Validation
 - Update the corresponding `openapi/*` files when endpoints change.
 - Keep port bindings synchronized with `port-map.yaml` and `.env.example`.
+- Regenerate the OpenAPI catalog artifacts with `python3 scripts/generate_openapi_catalog.py`.
