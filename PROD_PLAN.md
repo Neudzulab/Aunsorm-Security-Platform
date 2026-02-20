@@ -117,6 +117,7 @@ This document tracks all remaining work required for production deployment.
  - [x] Revize: Add conditional GET ETag handling for `/http3/capabilities` in `crates/server`
 - [x] Implement CORS policies
 - [ ] Add OpenAPI/Swagger documentation generation
+ - [x] Revize: Generate `docs/api/openapi-catalog.md` + `docs/api/openapi-catalog.json` from `openapi/*-service.yaml` and enforce freshness in CI
 
 ### PQC (Post-Quantum Cryptography)
 - [ ] Complete ML-KEM-1024 implementation

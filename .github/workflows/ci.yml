@@ -86,6 +86,10 @@ jobs:
         run: cargo doc --all-features --no-deps
       - name: Build mdBook
         run: mdbook build docs
+      - name: Generate OpenAPI catalog artifacts
+        run: python3 scripts/generate_openapi_catalog.py
+      - name: Verify OpenAPI catalog artifacts are committed
+        run: git diff --exit-code -- docs/api/openapi-catalog.md docs/api/openapi-catalog.json
       - name: Upload mdBook artifact
         uses: actions/upload-artifact@v4
         with:

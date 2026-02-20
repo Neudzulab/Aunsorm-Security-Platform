@@ -148,6 +148,12 @@ for spec in *-service.yaml; do
 done
 ```
 
+Generate docs catalog artifacts consumed by `docs/api` and CI:
+```bash
+cd ..
+python3 scripts/generate_openapi_catalog.py
+```
+
 ## 🎨 Features
 
 ### OpenAPI 3.0 Compliance
