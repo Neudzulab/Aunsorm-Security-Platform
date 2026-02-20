@@ -237,6 +237,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Document API versioning transition guidance in README (unversioned compatibility paths + planned `/v1` migration)
 - [x] Revize: Add `/v1` compatibility route aliases in `aunsorm-server` and validate `/v1/health` + `/v1/pqc/capabilities` coverage
 - [x] Revize: Extend `/v1` compatibility coverage tests for random and OAuth transparency endpoints in `aunsorm-server`
+- [x] Revize: Extend `/v1` compatibility coverage tests for HTTP/3 capabilities endpoint parity in `aunsorm-server`
 - [x] API reference documentation (OpenAPI spec)
   - [x] Revize: Document bulk OpenAPI spec validation command in openapi/README.md
   - [x] Revize: Add PowerShell HOST override example to OpenAPI documentation quick start

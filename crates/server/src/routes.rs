@@ -4612,6 +4612,33 @@ mod versioning_tests {
     }
 
     #[tokio::test]
+    async fn v1_http3_capabilities_endpoint_preserves_cache_contract() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/v1/http3/capabilities")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert!(matches!(
+            response.status(),
+            StatusCode::OK | StatusCode::NOT_IMPLEMENTED
+        ));
+        assert!(response.headers().contains_key(header::ETAG));
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok()),
+            Some("no-cache")
+        );
+    }
+
+    #[tokio::test]
     async fn oauth_transparency_includes_etag_header() {
         let state = build_test_state();
         let response = build_router(&state)
