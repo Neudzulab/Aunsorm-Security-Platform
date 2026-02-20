@@ -21,6 +21,7 @@ use aunsorm_mdm::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use hmac::{Hmac, Mac};
+use subtle::ConstantTimeEq;
 use rand_core::RngCore;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -224,6 +225,9 @@ pub struct OAuthClient {
     allowed_scopes: Vec<String>,
     default_role: String,
     role_policies: HashMap<String, RolePolicy>,
+    /// SHA-256 hash of the client secret. `None` means this client cannot use
+    /// the `client_credentials` grant.
+    client_secret_hash: Option<[u8; 32]>,
 }
 
 impl OAuthClient {
@@ -238,7 +242,37 @@ impl OAuthClient {
             allowed_scopes,
             default_role: default_role.into(),
             role_policies,
+            client_secret_hash: None,
         }
+    }
+
+    /// Create a client that supports `client_credentials` grant using the
+    /// SHA-256 hash of the provided `secret`.
+    pub fn new_with_secret(
+        allowed_redirects: Vec<String>,
+        allowed_scopes: Vec<String>,
+        default_role: impl Into<String>,
+        role_policies: HashMap<String, RolePolicy>,
+        secret: &str,
+    ) -> Self {
+        let hash: [u8; 32] = Sha256::digest(secret.as_bytes()).into();
+        Self {
+            allowed_redirects,
+            allowed_scopes,
+            default_role: default_role.into(),
+            role_policies,
+            client_secret_hash: Some(hash),
+        }
+    }
+
+    /// Verify a plaintext `client_secret` in constant time.
+    /// Returns `false` if this client has no secret configured.
+    pub fn verify_secret(&self, candidate: &str) -> bool {
+        let Some(expected) = &self.client_secret_hash else {
+            return false;
+        };
+        let actual: [u8; 32] = Sha256::digest(candidate.as_bytes()).into();
+        expected.ct_eq(&actual).into()
     }
 
     pub fn allows_redirect(&self, candidate: &str) -> bool {
@@ -535,6 +569,32 @@ fn default_oauth_clients() -> HashMap<String, OAuthClient> {
             webapp_roles,
         ),
     );
+
+    // Machine-to-machine service account that uses client_credentials grant.
+    // Secret: "aunsorm-service-secret" (override via AUNSORM_SERVICE_CLIENT_SECRET env var).
+    let service_secret = std::env::var("AUNSORM_SERVICE_CLIENT_SECRET")
+        .unwrap_or_else(|_| "aunsorm-service-secret".to_owned());
+    let mut service_roles = HashMap::new();
+    service_roles.insert(
+        DEFAULT_SERVICE_ROLE.to_owned(),
+        RolePolicy::new(
+            vec!["introspect".to_owned()],
+            Duration::from_secs(600),
+            Duration::from_secs(7_200),
+            false,
+        ),
+    );
+    clients.insert(
+        "service-client".to_string(),
+        OAuthClient::new_with_secret(
+            vec![],
+            vec!["introspect".to_string()],
+            DEFAULT_SERVICE_ROLE,
+            service_roles,
+            &service_secret,
+        ),
+    );
+
     clients
 }
 

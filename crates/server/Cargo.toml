@@ -56,6 +56,7 @@ time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
 hyper = { version = "1", features = ["full"] }
 hmac = "0.12"
 sha1 = { version = "0.10", default-features = false, features = ["std"] }
+subtle = { workspace = true }
 opentelemetry = { version = "0.24", optional = true }
 opentelemetry_sdk = { version = "0.24", optional = true, features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.17", optional = true, features = ["http-proto"] }

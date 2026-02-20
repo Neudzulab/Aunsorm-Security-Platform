@@ -3414,3 +3414,91 @@ async fn blockchain_media_record_contract() {
     //           with `recordId`, `ledgerAnchor`, and `nextPollAfter` fields for follow-up polling.
     todo!("Enable once blockchain media recording ledger is implemented");
 }
+
+// ── client_credentials grant (RFC 6749 §4.4) ─────────────────────────────────
+
+#[tokio::test]
+async fn client_credentials_grant_succeeds_with_correct_secret() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let payload = json!({
+        "grant_type": "client_credentials",
+        "client_id": "service-client",
+        "client_secret": "aunsorm-service-secret"
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/token")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.expect("body");
+    let token_response: Value = serde_json::from_slice(&body).expect("json");
+
+    assert!(
+        token_response["access_token"].as_str().is_some(),
+        "access_token must be present"
+    );
+    assert_eq!(token_response["token_type"], "Bearer");
+    assert_eq!(token_response["mfaVerified"], false);
+    assert_eq!(token_response["role"], "service");
+}
+
+#[tokio::test]
+async fn client_credentials_grant_rejects_wrong_secret() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let payload = json!({
+        "grant_type": "client_credentials",
+        "client_id": "service-client",
+        "client_secret": "wrong-secret"
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/token")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn client_credentials_grant_rejects_client_without_secret() {
+    // demo-client has no client_secret_hash configured, so client_credentials must fail.
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let payload = json!({
+        "grant_type": "client_credentials",
+        "client_id": "demo-client",
+        "client_secret": "anything"
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/oauth/token")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}

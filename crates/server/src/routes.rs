@@ -2033,6 +2033,14 @@ pub enum OAuthTokenRequest {
         #[serde(default)]
         scope: Option<String>,
     },
+    /// RFC 6749 §4.4 – Machine-to-machine (no user involved).
+    #[serde(rename = "client_credentials")]
+    ClientCredentials {
+        client_id: String,
+        client_secret: String,
+        #[serde(default)]
+        scope: Option<String>,
+    },
 }
 
 #[derive(Serialize)]
@@ -2198,6 +2206,125 @@ pub async fn exchange_token(
                 refresh_expires_in: auth_request.refresh_ttl.as_secs(),
                 role: auth_request.role,
                 mfa_verified: mfa_passed,
+            }))
+        }
+        OAuthTokenRequest::ClientCredentials {
+            client_id,
+            client_secret,
+            scope,
+        } => {
+            let client_id = client_id.trim();
+            if client_id.is_empty() {
+                return Err(ApiError::invalid_request("client_id gereklidir"));
+            }
+            let client = state
+                .oauth_client(client_id)
+                .ok_or_else(|| ApiError::invalid_client("client_id kayıtlı değil"))?;
+
+            if !client.verify_secret(client_secret.trim()) {
+                return Err(ApiError::invalid_client(
+                    "client_secret geçersiz veya bu istemci için client_credentials yetkisi yok",
+                ));
+            }
+
+            let role = client.default_role().to_owned();
+            let policy = state
+                .role_policy(client_id, &role)
+                .ok_or_else(|| ApiError::invalid_grant("Rol politikası bulunamadı"))?;
+
+            let normalized_scope = normalize_scope(scope.as_deref(), client.allowed_scopes())?;
+            if let Some(ref scope_value) = normalized_scope {
+                for token in scope_value.split_whitespace() {
+                    if !policy.allows_scope(token) {
+                        return Err(ApiError::invalid_scope(format!(
+                            "scope role için yetkili değil: {token}"
+                        )));
+                    }
+                }
+            }
+
+            let session_ttl = policy.session_ttl();
+            let refresh_ttl = policy.refresh_ttl();
+            let subject = format!("client:{client_id}");
+
+            let mut claims = Claims::new();
+            claims.subject = Some(subject.clone());
+            claims.issuer = Some(state.issuer().to_owned());
+            claims.audience = Some(Audience::Single(state.audience().to_owned()));
+            claims.set_issued_now();
+            claims.set_expiration_from_now(session_ttl);
+            claims
+                .extras
+                .insert("clientId".to_string(), Value::String(client_id.to_string()));
+            claims
+                .extras
+                .insert("role".to_string(), Value::String(role.clone()));
+            claims
+                .extras
+                .insert("grantType".to_string(), Value::String("client_credentials".to_string()));
+            if let Some(ref s) = normalized_scope {
+                claims.extras.insert("scope".to_string(), Value::String(s.clone()));
+            }
+
+            let access_token = state
+                .signer()
+                .sign(&mut claims)
+                .map_err(|err| ApiError::server_error(format!("Token imzalanamadı: {err}")))?;
+            let jti = claims
+                .jwt_id
+                .clone()
+                .ok_or_else(|| ApiError::server_error("JTI üretilemedi"))?;
+            let expires_at = claims
+                .expiration
+                .ok_or_else(|| ApiError::server_error("exp claim is missing"))?;
+            let audience_repr = claims
+                .audience
+                .as_ref()
+                .map(serde_json::to_string)
+                .transpose()
+                .map_err(|err| ApiError::server_error(format!("audience serileştirilemedi: {err}")))?;
+            state
+                .record_token(&jti, expires_at, Some(&subject), audience_repr.as_deref())
+                .await
+                .map_err(|err| ApiError::server_error(format!("Token kaydı başarısız: {err}")))?;
+
+            let now = SystemTime::now();
+            let refresh_token = generate_refresh_token();
+            let refresh_expires_at = now + refresh_ttl;
+            state
+                .issue_refresh_token(
+                    &refresh_token,
+                    RefreshTokenRecord {
+                        client_id: client_id.to_owned(),
+                        subject: Some(subject.clone()),
+                        role: role.clone(),
+                        scope: normalized_scope,
+                        issued_at: now,
+                        expires_at: refresh_expires_at,
+                        session_ttl,
+                        mfa_verified: false,
+                    },
+                )
+                .await
+                .map_err(|err| ApiError::server_error(format!("Refresh token kaydı başarısız: {err}")))?;
+
+            state
+                .record_audit_event(
+                    "oauth.client_credentials",
+                    subject.clone(),
+                    AuditOutcome::Success,
+                    format!("oauth://token?client={client_id}&grant=client_credentials&role={role}"),
+                )
+                .await;
+
+            Ok(Json(OAuthTokenResponse {
+                access_token,
+                token_type: "Bearer".to_string(),
+                expires_in: session_ttl.as_secs(),
+                refresh_token,
+                refresh_expires_in: refresh_ttl.as_secs(),
+                role,
+                mfa_verified: false,
             }))
         }
         OAuthTokenRequest::RefreshToken {
