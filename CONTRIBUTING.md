@@ -26,13 +26,15 @@ scope. Before writing code, confirm these checkpoints:
    `Revize:` checkbox if the work updates an already completed area.
 3. Check `git status --short --branch` before editing to confirm whether you
    are continuing in-progress local work or starting a fresh continuation.
-4. Keep `README.md`, OpenAPI specs, and `port-map.yaml` synchronized when
+4. If `git status --short` is already clean, pick the next highest-priority
+   pending task in `PROD_PLAN.md` that matches your scope before making edits.
+5. Keep `README.md`, OpenAPI specs, and `port-map.yaml` synchronized when
    endpoint or port behavior changes.
-5. Run and record validation commands in the PR body immediately after commit.
-6. Open the PR right after `git commit` so no committed work remains without a
+6. Run and record validation commands in the PR body immediately after commit.
+7. Open the PR right after `git commit` so no committed work remains without a
    tracked `PROD_PLAN.md` task reference.
-7. If `git status --short` is clean after validation, do not open a PR just to
-   satisfy process steps—only committed changes should be submitted.
+8. If `git status --short` is clean after validation, do not create an empty
+   commit or PR; continuation runs without changes should end with handoff notes only.
 
 Then follow the standard flow:
 
