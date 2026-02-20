@@ -3395,13 +3395,146 @@ async fn test_acme_service_debug() {
 }
 
 #[tokio::test]
-#[ignore = "pending /security/jwe/encrypt implementation"]
-async fn security_jwe_encrypt_contract() {
-    // Request: POST /security/jwe/encrypt with a media envelope payload containing
-    //          audience, ttlSeconds, and plaintext media session metadata for hybrid encryption.
-    // Response: 201 Created with a JSON body exposing compact JWE (field `token`) and
-    //           derived key metadata required by the consuming WebRTC bridge.
-    todo!("Finalize once the /security/jwe/encrypt endpoint is wired to crypto services");
+async fn security_jwe_encrypt_returns_envelope() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let payload = json!({
+        "payload": "hello jwe world",
+        "org_salt": "aunsorm-org-salt-2025",
+        "calibration_note": "Aunsorm Test 2025"
+    });
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwe/encrypt")
+                .header("content-type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = to_bytes(response.into_body(), usize::MAX).await.expect("body");
+    let enc: Value = serde_json::from_slice(&body).expect("json");
+
+    assert_eq!(enc["algorithm"], "Ed25519-XC20P");
+    assert!(enc["kid"].as_str().is_some(), "kid must be present");
+    assert!(enc["jwe"]["protected"].as_str().is_some(), "protected header must be present");
+    assert!(enc["jwe"]["nonce"].as_str().is_some(), "nonce must be present");
+    assert!(enc["jwe"]["ciphertext"].as_str().is_some(), "ciphertext must be present");
+    assert!(enc["jwe"]["tag"].as_str().is_some(), "tag must be present");
+    assert!(enc["jwe"]["signature"].as_str().is_some(), "signature must be present");
+}
+
+#[tokio::test]
+async fn security_jwe_encrypt_decrypt_roundtrip() {
+    let state = setup_state();
+
+    // Encrypt
+    let enc_app = build_router(&state);
+    let enc_payload = json!({
+        "payload": "round-trip payload 🔐",
+        "org_salt": "aunsorm-org-salt-2025",
+        "calibration_note": "Aunsorm Test 2025"
+    });
+    let enc_response = enc_app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwe/encrypt")
+                .header("content-type", "application/json")
+                .body(Body::from(enc_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(enc_response.status(), StatusCode::CREATED);
+    let enc_body = to_bytes(enc_response.into_body(), usize::MAX).await.expect("body");
+    let enc: Value = serde_json::from_slice(&enc_body).expect("json");
+
+    // Decrypt
+    let dec_app = build_router(&state);
+    let dec_payload = json!({
+        "jwe": enc["jwe"],
+        "org_salt": "aunsorm-org-salt-2025",
+        "calibration_note": "Aunsorm Test 2025"
+    });
+    let dec_response = dec_app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwe/decrypt")
+                .header("content-type", "application/json")
+                .body(Body::from(dec_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(dec_response.status(), StatusCode::OK);
+    let dec_body = to_bytes(dec_response.into_body(), usize::MAX).await.expect("body");
+    let dec: Value = serde_json::from_slice(&dec_body).expect("json");
+
+    assert_eq!(dec["payload"], "round-trip payload 🔐");
+}
+
+#[tokio::test]
+async fn security_jwe_decrypt_rejects_tampered_ciphertext() {
+    let state = setup_state();
+
+    // Encrypt first
+    let enc_app = build_router(&state);
+    let enc_payload = json!({
+        "payload": "secret data",
+        "org_salt": "aunsorm-org-salt-2025",
+        "calibration_note": "Aunsorm Test 2025"
+    });
+    let enc_response = enc_app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwe/encrypt")
+                .header("content-type", "application/json")
+                .body(Body::from(enc_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    let enc_body = to_bytes(enc_response.into_body(), usize::MAX).await.expect("body");
+    let mut enc: Value = serde_json::from_slice(&enc_body).expect("json");
+
+    // Tamper the ciphertext
+    enc["jwe"]["ciphertext"] = json!("AAAAAAAAAAAAAAAAAAAAAA");
+
+    let dec_app = build_router(&state);
+    let dec_payload = json!({
+        "jwe": enc["jwe"],
+        "org_salt": "aunsorm-org-salt-2025",
+        "calibration_note": "Aunsorm Test 2025"
+    });
+    let dec_response = dec_app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/jwe/decrypt")
+                .header("content-type", "application/json")
+                .body(Body::from(dec_payload.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    // Tampered envelope must be rejected
+    assert!(
+        dec_response.status().is_client_error() || dec_response.status().is_server_error(),
+        "tampered JWE must be rejected, got {}",
+        dec_response.status(),
+    );
 }
 
 #[tokio::test]

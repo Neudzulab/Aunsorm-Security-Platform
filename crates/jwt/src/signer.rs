@@ -32,6 +32,12 @@ impl JwtSigner {
         self.key.kid()
     }
 
+    /// Dahili `Ed25519KeyPair`'e referans döndürür (örn. JWE şifrelemesi için).
+    #[must_use]
+    pub fn key_pair(&self) -> &Ed25519KeyPair {
+        &self.key
+    }
+
     /// Claims'i imzalayıp JWT üretir.
     ///
     /// # Errors

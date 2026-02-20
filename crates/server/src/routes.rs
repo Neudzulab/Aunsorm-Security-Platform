@@ -1,5 +1,5 @@
 use aunsorm_acme::AcmeJws;
-use aunsorm_jwt::{Audience, Claims, Jwk, JwtError, VerificationOptions};
+use aunsorm_jwt::{Audience, Claims, HybridJwe, Jwk, JwtError, VerificationOptions};
 use aunsorm_pqc::{kem::KemAlgorithm, signature::SignatureAlgorithm};
 use axum::body::{to_bytes, Body};
 #[cfg(feature = "http3-experimental")]
@@ -265,7 +265,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use time::format_description::well_known::Rfc3339;
 
-use aunsorm_core::{calib_from_text, Calibration};
+use aunsorm_core::{calib_from_text, Calibration, Salts};
 
 const ZASIAN_MEDIA_AUDIENCE: &str = "zasian-media";
 
@@ -1559,8 +1559,198 @@ pub async fn generate_media_token(
     }))
 }
 
-pub async fn security_jwe_encrypt() -> Response {
-    todo!("Planned for v0.6.0: envelope encryption service stub")
+/// İstemcinin gönderdiği düz metin payload'ı sunucunun Ed25519 anahtarıyla JWE zarfına şifreler.
+///
+/// POST /security/jwe/encrypt
+#[derive(Deserialize)]
+pub struct JweEncryptRequest {
+    /// Şifrelenecek ham metin (UTF-8).
+    pub payload: String,
+    /// Kalibrasyon üretimi için org_salt (base64url ya da düz ASCII ≥8 bayt).
+    pub org_salt: String,
+    /// Kalibrasyon notu (örn. "Aunsorm Prod 2025").
+    pub calibration_note: String,
+    /// Opsiyonel salt seti.  Gönderilmezse org_salt'tan türetilir.
+    #[serde(default)]
+    pub salts: Option<JweSaltsInput>,
+}
+
+#[derive(Deserialize)]
+pub struct JweSaltsInput {
+    /// kalibrasyon tuzu, base64url (≥8 bayt decode edilmiş)
+    pub calibration: String,
+    /// zincir tuzu, base64url (≥8 bayt)
+    pub chain: String,
+    /// koordinat tuzu, base64url (≥8 bayt)
+    pub coord: String,
+}
+
+#[derive(Serialize)]
+pub struct JweEncryptResponse {
+    pub jwe: HybridJwe,
+    pub algorithm: &'static str,
+    pub kid: String,
+}
+
+pub async fn security_jwe_encrypt(
+    State(state): State<Arc<ServerState>>,
+    Json(request): Json<JweEncryptRequest>,
+) -> std::result::Result<impl IntoResponse, ApiError> {
+    let org_salt_bytes = URL_SAFE_NO_PAD
+        .decode(request.org_salt.trim_end_matches('='))
+        .or_else(|_| Ok::<Vec<u8>, base64::DecodeError>(request.org_salt.as_bytes().to_vec()))
+        .map_err(|_| ApiError::invalid_request("org_salt base64 çözümleme hatası"))?;
+
+    if org_salt_bytes.len() < 8 {
+        return Err(ApiError::invalid_request(
+            "org_salt en az 8 bayt olmalıdır",
+        ));
+    }
+
+    let salts = if let Some(raw) = request.salts {
+        let decode_salt = |s: &str, field: &str| -> Result<Vec<u8>, ApiError> {
+            let bytes = URL_SAFE_NO_PAD
+                .decode(s.trim_end_matches('='))
+                .or_else(|_| Ok::<Vec<u8>, base64::DecodeError>(s.as_bytes().to_vec()))
+                .map_err(|_| ApiError::invalid_request(format!("{field} base64 çözümleme hatası")))?;
+            if bytes.len() < 8 {
+                return Err(ApiError::invalid_request(format!(
+                    "{field} en az 8 bayt olmalıdır"
+                )));
+            }
+            Ok(bytes)
+        };
+        let cal = decode_salt(&raw.calibration, "salts.calibration")?;
+        let chain = decode_salt(&raw.chain, "salts.chain")?;
+        let coord = decode_salt(&raw.coord, "salts.coord")?;
+        Salts::new(cal, chain, coord).map_err(|err| {
+            ApiError::invalid_request(format!("Geçersiz salt seti: {err}"))
+        })?
+    } else {
+        // org_salt'tan hash tabanlı türetim
+        let mut h = Sha256::new();
+        h.update(b"aunsorm/jwe/salt-calibration");
+        h.update(&org_salt_bytes);
+        let cal: [u8; 32] = h.finalize_reset().into();
+        h.update(b"aunsorm/jwe/salt-chain");
+        h.update(&org_salt_bytes);
+        let chain: [u8; 32] = h.finalize_reset().into();
+        h.update(b"aunsorm/jwe/salt-coord");
+        h.update(&org_salt_bytes);
+        let coord: [u8; 32] = h.finalize_reset().into();
+        Salts::new(cal.to_vec(), chain.to_vec(), coord.to_vec())
+            .map_err(|err| ApiError::server_error(format!("Salt türetim hatası: {err}")))?  
+    };
+
+    let key_pair = state.signer().key_pair().clone();
+    let kid = key_pair.kid().to_owned();
+
+    let jwe = HybridJwe::encrypt_with_calibration_text(
+        request.payload.as_bytes(),
+        &key_pair,
+        &org_salt_bytes,
+        &request.calibration_note,
+        &salts,
+    )
+    .map_err(|err| ApiError::server_error(format!("JWE şifreleme hatası: {err}")))?
+    ;
+
+    Ok((StatusCode::CREATED, Json(JweEncryptResponse {
+        jwe,
+        algorithm: "Ed25519-XC20P",
+        kid,
+    })))
+}
+
+/// Sunucunun public anahtarıyla doğrulayarak JWE zarfını çözer.
+///
+/// POST /security/jwe/decrypt
+#[derive(Deserialize)]
+pub struct JweDecryptRequest {
+    pub jwe: HybridJwe,
+    pub org_salt: String,
+    pub calibration_note: String,
+    #[serde(default)]
+    pub salts: Option<JweSaltsInput>,
+}
+
+#[derive(Serialize)]
+pub struct JweDecryptResponse {
+    /// Çözülmüş payload (UTF-8 metin olarak).
+    pub payload: String,
+    pub kid: String,
+}
+
+pub async fn security_jwe_decrypt(
+    State(state): State<Arc<ServerState>>,
+    Json(request): Json<JweDecryptRequest>,
+) -> std::result::Result<impl IntoResponse, ApiError> {
+    let org_salt_bytes = URL_SAFE_NO_PAD
+        .decode(request.org_salt.trim_end_matches('='))
+        .or_else(|_| Ok::<Vec<u8>, base64::DecodeError>(request.org_salt.as_bytes().to_vec()))
+        .map_err(|_| ApiError::invalid_request("org_salt base64 çözümleme hatası"))?;
+
+    if org_salt_bytes.len() < 8 {
+        return Err(ApiError::invalid_request(
+            "org_salt en az 8 bayt olmalıdır",
+        ));
+    }
+
+    let salts = if let Some(raw) = request.salts {
+        let decode_salt = |s: &str, field: &str| -> Result<Vec<u8>, ApiError> {
+            let bytes = URL_SAFE_NO_PAD
+                .decode(s.trim_end_matches('='))
+                .or_else(|_| Ok::<Vec<u8>, base64::DecodeError>(s.as_bytes().to_vec()))
+                .map_err(|_| ApiError::invalid_request(format!("{field} base64 çözümleme hatası")))?;
+            if bytes.len() < 8 {
+                return Err(ApiError::invalid_request(format!(
+                    "{field} en az 8 bayt olmalıdır"
+                )));
+            }
+            Ok(bytes)
+        };
+        let cal = decode_salt(&raw.calibration, "salts.calibration")?;
+        let chain = decode_salt(&raw.chain, "salts.chain")?;
+        let coord = decode_salt(&raw.coord, "salts.coord")?;
+        Salts::new(cal, chain, coord).map_err(|err| {
+            ApiError::invalid_request(format!("Geçersiz salt seti: {err}"))
+        })?
+    } else {
+        let mut h = Sha256::new();
+        h.update(b"aunsorm/jwe/salt-calibration");
+        h.update(&org_salt_bytes);
+        let cal: [u8; 32] = h.finalize_reset().into();
+        h.update(b"aunsorm/jwe/salt-chain");
+        h.update(&org_salt_bytes);
+        let chain: [u8; 32] = h.finalize_reset().into();
+        h.update(b"aunsorm/jwe/salt-coord");
+        h.update(&org_salt_bytes);
+        let coord: [u8; 32] = h.finalize_reset().into();
+        Salts::new(cal.to_vec(), chain.to_vec(), coord.to_vec())
+            .map_err(|err| ApiError::server_error(format!("Salt türetim hatası: {err}")))?  
+    };
+
+    let public_key = state.signer().key_pair().public_key();
+    let kid = public_key.kid().to_owned();
+
+    let plaintext = request.jwe
+        .decrypt_with_calibration_text(
+            &public_key,
+            &org_salt_bytes,
+            &request.calibration_note,
+            &salts,
+        )
+        .map_err(|err| match err {
+            JwtError::Signature | JwtError::InvalidJwe(_) => {
+                ApiError::invalid_grant(format!("JWE doğrulama/çözme hatası: {err}"))
+            }
+            other => ApiError::server_error(format!("JWE çözme hatası: {other}")),
+        })?;
+
+    let payload = String::from_utf8(plaintext)
+        .map_err(|_| ApiError::unprocessable_entity("Çözülen payload geçerli UTF-8 değil"))?;
+
+    Ok(Json(JweDecryptResponse { payload, kid }))
 }
 
 fn format_timestamp(time: SystemTime) -> String {
@@ -3354,7 +3544,8 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/cli/jwt/verify", post(verify_jwt_token))
                 .route("/security/jwt-verify", post(verify_media_token))
                 .route("/security/generate-media-token", post(generate_media_token))
-                .route("/security/jwe/encrypt", post(security_jwe_encrypt));
+                .route("/security/jwe/encrypt", post(security_jwe_encrypt))
+                .route("/security/jwe/decrypt", post(security_jwe_decrypt));
         }
         Some("acme-service") => {
             tracing::info!("🔒 Building ACME SERVICE routes");
@@ -3446,6 +3637,7 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/security/jwt-verify", post(verify_media_token))
                 .route("/security/generate-media-token", post(generate_media_token))
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
+                .route("/security/jwe/decrypt", post(security_jwe_decrypt))
                 // MDM endpoints
                 .route("/mdm/register", post(register_device))
                 .route("/mdm/policy/:platform", get(fetch_policy))
