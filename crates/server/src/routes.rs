@@ -3575,7 +3575,8 @@ pub struct TransparencyRecord {
 
 pub async fn transparency_tree(
     State(state): State<Arc<ServerState>>,
-) -> Json<TransparencyResponse> {
+    headers: HeaderMap,
+) -> Response {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -3588,7 +3589,7 @@ pub async fn transparency_tree(
         .expect("transcript hash")
         .map(hex::encode);
 
-    Json(TransparencyResponse {
+    let response = TransparencyResponse {
         domain: "aunsorm-server".to_string(),
         tree_head: "abc123def456".to_string(),
         latest_sequence: 1,
@@ -3599,7 +3600,9 @@ pub async fn transparency_tree(
             key_id: "test".to_string(),
             action: "publish".to_string(),
         }],
-    })
+    };
+
+    respond_with_conditional_etag(StatusCode::OK, response, headers)
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -4636,6 +4639,71 @@ mod versioning_tests {
                 .and_then(|value| value.to_str().ok()),
             Some("no-cache")
         );
+    }
+
+    #[tokio::test]
+    async fn transparency_tree_includes_etag_header() {
+        let state = build_test_state();
+        let response = build_router(&state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/transparency/tree")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().contains_key(header::ETAG));
+        assert_eq!(
+            response
+                .headers()
+                .get(header::CACHE_CONTROL)
+                .and_then(|value| value.to_str().ok()),
+            Some("no-cache")
+        );
+    }
+
+    #[tokio::test]
+    async fn v1_transparency_tree_honors_if_none_match() {
+        let state = build_test_state();
+        let router = build_router(&state);
+
+        let first = router
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/v1/transparency/tree")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("first request succeeds");
+
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .expect("etag is present")
+            .to_owned();
+
+        let second = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/v1/transparency/tree")
+                    .header(header::IF_NONE_MATCH, etag)
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("second request succeeds");
+
+        assert_eq!(second.status(), StatusCode::NOT_MODIFIED);
+        let body = to_bytes(second.into_body(), usize::MAX)
+            .await
+            .expect("body is collected");
+        assert!(body.is_empty(), "304 responses should not include a body");
     }
 
     #[tokio::test]
