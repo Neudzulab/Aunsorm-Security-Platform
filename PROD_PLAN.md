@@ -218,6 +218,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Revize: Require CONTRIBUTING workflow to document immediate PR creation after commit with PROD_PLAN task + validation summary
 - [x] Revize: Add a reusable PR body template in CONTRIBUTING.md with explicit PROD_PLAN task and validation sections
 - [x] Revize: Clarify `devam` continuation workflow in CONTRIBUTING.md so follow-up commits preserve task priority and PR traceability
+- [x] Revize: Clarify `devam` workflow for clean-branch continuations so agents select the next pending PROD_PLAN task before editing
 - [x] Revize: Extend PR template and CONTRIBUTING scaffold with a required `Continuation Context` section for `devam` handoffs
 - [x] Revize: Add a GitHub pull request template file that mirrors CONTRIBUTING required sections (Summary, PROD_PLAN.md task, Validation)
 - [x] Revize: Replace remaining PLAN.md references in contributor guidance (CONTRIBUTING.md)
