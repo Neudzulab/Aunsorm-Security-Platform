@@ -1,0 +1,101 @@
+# Zasian Media Platform — Minimum Aunsorm Stack
+#
+# Zasian için gerekli tek Aunsorm servisi: auth-service
+#   POST /security/generate-media-token  — Zasian media JWT üretimi
+#   POST /security/jwt-verify            — Zasian token doğrulama
+#   POST /security/jwe/encrypt           — JWE zarf şifreleme
+#   POST /security/jwe/decrypt           — JWE zarf çözme
+#   POST /oauth/token (client_credentials) — Servis hesabı M2M token
+#   POST /oauth/introspect               — Token içgözlem
+#
+# Kullanım:
+#   cp ../.env.example ../.env  # veya mevcut .env dosyasını düzenleyin
+#   docker compose -f docker/compose.zasian-stack.yaml up -d
+#
+# Ortam değişkenleri (zorunlu):
+#   ZASIAN_WEBSOCKET_URL  — Zasian signaling endpoint (örn. wss://HOST:50036/zasian)
+#   AUNSORM_CLOCK_ATTESTATION — SecureClockSnapshot JSON (base64 veya ham)
+#   AUNSORM_CALIBRATION_FINGERPRINT — Kalibrasyon hex parmak izi
+#
+# Opsiyonel geçersiz kılmalar:
+#   ZASIAN_HOST           — Zasian host (ZASIAN_WEBSOCKET_URL yoksa kullanılır)
+#   AUNSORM_SERVICE_CLIENT_SECRET — M2M client secret (varsayılan: aunsorm-service-secret)
+#   AUNSORM_TOKEN_TTL_SECS — Token geçerlilik süresi saniyeleri (varsayılan: 3600)
+
+name: zasian-aunsorm
+
+networks:
+  zasian-network:
+    driver: bridge
+
+services:
+
+  # ─── PostgreSQL — JWT ledger ve refresh token kalıcı depolama ────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: zasian-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aunsorm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aunsorm_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-aunsorm_auth}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - zasian-pg-data:/var/lib/postgresql/data
+    networks:
+      - zasian-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aunsorm} -d ${POSTGRES_DB:-aunsorm_auth}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ─── Aunsorm Auth Service — Zasian'ın tüm JWT/JWE ihtiyaçları ───────────
+  auth-service:
+    container_name: zasian-auth-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.auth
+    env_file:
+      - ../.env
+    environment:
+      # Servis modu — yalnızca Zasian endpoint'lerini açar
+      SERVICE_MODE: auth-service
+      AUNSORM_LISTEN: 0.0.0.0:50011
+
+      # Zasian entegrasyon URL'leri
+      # ZASIAN_WEBSOCKET_URL ve ZASIAN_HOST .env üzerinden gelir;
+      # aşağıdaki satırları .env'e ekleyin:
+      #   ZASIAN_WEBSOCKET_URL=wss://217.160.159.182:50036/zasian
+      #   ZASIAN_HOST=217.160.159.182
+
+      # SQLite ledger (PostgreSQL geçişi PROD_PLAN.md'de planlandı)
+      # Şimdilik /srv/data/auth.db olarak volume'a yazılır.
+      AUNSORM_LEDGER_PATH: /srv/data/auth.db
+
+      # Log seviyesi
+      RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "50011:50011"
+    volumes:
+      - zasian-auth-data:/srv/data
+    networks:
+      - zasian-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:50011/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+volumes:
+  zasian-pg-data:
+    driver: local
+  zasian-auth-data:
+    driver: local
