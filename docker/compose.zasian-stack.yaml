@@ -1,16 +1,34 @@
 # Zasian Media Platform — Minimum Aunsorm Stack
 #
-# Zasian için gerekli tek Aunsorm servisi: auth-service
+# MyeOffice frontend stack bu compose'a şu şekilde bağlanır:
+#   nginx gateway → host.docker.internal:50010 → auth-service
+#
+# MyeOffice'in kullandığı endpoint'ler:
 #   POST /security/generate-media-token  — Zasian media JWT üretimi
 #   POST /security/jwt-verify            — Zasian token doğrulama
 #   POST /security/jwe/encrypt           — JWE zarf şifreleme
 #   POST /security/jwe/decrypt           — JWE zarf çözme
 #   POST /oauth/token (client_credentials) — Servis hesabı M2M token
 #   POST /oauth/introspect               — Token içgözlem
+#   GET  /health                         — Health check
+#
+# Port Matrisi (MyeOffice uyumu):
+#   50010 — Aunsorm Gateway (MyeOffice nginx → host.docker.internal:50010)
+#           auth-service doğrudan 50010'da dinler (ayrı gateway yok)
+#   50011 — (internal) auth-service native port (50010'a map'lenir)
+#   5433  — PostgreSQL (host erişimi, isteğe bağlı)
 #
 # Kullanım:
-#   cp ../.env.example ../.env  # veya mevcut .env dosyasını düzenleyin
+#   cp ../.env.example ../.env   # veya mevcut .env dosyasını düzenleyin
 #   docker compose -f docker/compose.zasian-stack.yaml up -d
+#
+# MyeOffice nginx ayarları (zaten mevcut):
+#   nginx.conf:       upstream aunsorm_api { server host.docker.internal:50010; }
+#   nginx-https.conf: upstream aunsorm_api { server host.docker.internal:50010; }
+#
+# MyeOffice environment (docker-compose.yml):
+#   AUNSORM_INTERNAL_BASE_URL=http://host.docker.internal:50010
+#   NEXT_PUBLIC_AUNSORM_BASE_URL=http://localhost:50047/aunsorm  (gateway proxy)
 #
 # Ortam değişkenleri (zorunlu):
 #   ZASIAN_WEBSOCKET_URL  — Zasian signaling endpoint (örn. wss://HOST:50036/zasian)
@@ -53,6 +71,8 @@ services:
     restart: unless-stopped
 
   # ─── Aunsorm Auth Service — Zasian'ın tüm JWT/JWE ihtiyaçları ───────────
+  # MyeOffice nginx gateway bu servise host.docker.internal:50010 üzerinden bağlanır.
+  # auth-service kendi native 50011'de dinler, Docker port mapping ile 50010'a açılır.
   auth-service:
     container_name: zasian-auth-service
     build:
@@ -78,7 +98,14 @@ services:
       # Log seviyesi
       RUST_LOG: ${RUST_LOG:-info}
     ports:
-      - "50011:50011"
+      # ⚠️ KRİTİK: MyeOffice frontend stack bu porta bağlanır!
+      # nginx.conf:       upstream aunsorm_api { server host.docker.internal:50010; }
+      # nginx-https.conf: upstream aunsorm_api { server host.docker.internal:50010; }
+      # docker-compose.yml: AUNSORM_INTERNAL_BASE_URL=http://host.docker.internal:50010
+      #
+      # auth-service 50011'de dinler → Docker 50010:50011 map'ler
+      # Böylece MyeOffice dışarıdan 50010'a bağlanır, servis 50011'de çalışır.
+      - "50010:50011"
     volumes:
       - zasian-auth-data:/srv/data
     networks:
@@ -93,6 +120,8 @@ services:
       retries: 3
       start_period: 15s
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   zasian-pg-data:
