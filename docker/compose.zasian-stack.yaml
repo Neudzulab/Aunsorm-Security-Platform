@@ -43,7 +43,7 @@
 name: zasian-aunsorm
 
 networks:
-  zasian-network:
+  aunsorm-network:
     driver: bridge
 
 services:
@@ -61,7 +61,7 @@ services:
     volumes:
       - zasian-pg-data:/var/lib/postgresql/data
     networks:
-      - zasian-network
+      - aunsorm-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aunsorm} -d ${POSTGRES_DB:-aunsorm_auth}"]
       interval: 10s
@@ -109,10 +109,10 @@ services:
     volumes:
       - zasian-auth-data:/srv/data
     networks:
-      - zasian-network
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - aunsorm-network
+    # NOT: AUNSORM_LEDGER_PATH=SQLite kullandığı için postgres bağımlılığı yok.
+    # Postgres bağımlılığı auth-service'i postgres health check'ine köle eder ve
+    # soğuk başlangıçta port 50010'da hiçbir şey olmaz → nginx 502.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:50011/health"]
       interval: 30s
