@@ -105,7 +105,7 @@ services:
     volumes:
       - ./nginx/zasian-gateway.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
-      - aunsorm-network
+      aunsorm-network: {}
       # host.docker.internal alias'ı: Zasian SFU bu network'e katıldığında
       # host.docker.internal:50010 DNS sorgusu bu container'a gelir (port 50010'da dinliyor).
       # Zasian SFU compose'una tek ekleme:
