@@ -100,7 +100,7 @@ services:
       - aunsorm-network
       - zasian-media-network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
