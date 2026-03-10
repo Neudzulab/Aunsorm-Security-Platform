@@ -135,11 +135,12 @@ services:
 
       # Log seviyesi
       RUST_LOG: ${RUST_LOG:-info}
+    ports:
+      - "50011:50011"
     volumes:
       - zasian-auth-data:/srv/data
     networks:
       - aunsorm-network
-    # Dışa port açılmıyor — gateway üzerinden erişilir (zasian-aunsorm-gateway:80).
     # NOT: AUNSORM_LEDGER_PATH=SQLite kullandığı için postgres bağımlılığı yok.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:50011/health"]
