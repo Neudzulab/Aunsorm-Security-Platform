@@ -135,6 +135,8 @@ services:
 
       # Log seviyesi
       RUST_LOG: ${RUST_LOG:-info}
+      # ANSI renk kodlarını kapat (terminalde bozuk görünen \e[1m \e[0m karakterleri)
+      NO_COLOR: "1"
     ports:
       - "50011:50011"
     volumes:
