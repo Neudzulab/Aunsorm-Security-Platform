@@ -105,7 +105,7 @@ impl Claims {
                 return Err(JwtError::InvalidClaim("extras", CUSTOM_KEY_FORMAT_ERROR));
             }
         }
-        for (key, value) in &self.extras {
+        for (_key, value) in &self.extras {
             if !validate_custom_value(value) {
                 return Err(JwtError::InvalidClaim("extras", CUSTOM_KEY_FORMAT_ERROR));
             }
