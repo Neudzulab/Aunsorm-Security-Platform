@@ -1370,7 +1370,6 @@ pub async fn verify_jwt_token(
     Json(verify_token_for_audience(&state, request.token.trim(), state.audience()).await)
 }
 
-#[allow(dead_code)]
 pub async fn verify_media_token(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<JwtVerifyRequest>,
@@ -3641,7 +3640,8 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/oauth/transparency", get(oauth_transparency))
                 // JWT endpoints (auth service)
                 .route("/cli/jwt/verify", post(verify_jwt_token))
-                .route("/security/jwt-verify", post(verify_jwt_token))
+                // /security/jwt-verify: Zasian media token'larını doğrular (aud: zasian-media)
+                .route("/security/jwt-verify", post(verify_media_token))
                 .route("/security/generate-media-token", post(generate_media_token))
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
                 .route("/security/jwe/decrypt", post(security_jwe_decrypt));
