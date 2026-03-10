@@ -13,10 +13,18 @@
 #   GET  /health                         — Health check
 #
 # Port Matrisi (MyeOffice uyumu):
-#   50010 — Aunsorm Gateway (MyeOffice nginx → host.docker.internal:50010)
-#           auth-service doğrudan 50010'da dinler (ayrı gateway yok)
-#   50011 — (internal) auth-service native port (50010'a map'lenir)
+#   50010 — nginx Gateway (MyeOffice nginx → host.docker.internal:50010 → gateway → auth-service)
+#   50011 — auth-service doğrudan host erişimi
 #   5433  — PostgreSQL (host erişimi, isteğe bağlı)
+#
+# Zasian SFU (Docker içi) erişim yöntemleri:
+#   A) Container DNS: http://zasian-auth-service:50011  ← ÖNERİLEN
+#      Zasian SFU compose'una ekleyin:
+#        networks: [zasian-media-network]
+#        environment:
+#          ZASIAN_WS_AUNSORM_URL: http://zasian-auth-service:50011
+#   B) Host port:  http://HOST_PUBLIC_IP:50011 
+#      (host.docker.internal Linux'ta çalışmıyor!)
 #
 # Kullanım:
 #   cp ../.env.example ../.env   # veya mevcut .env dosyasını düzenleyin
@@ -143,6 +151,9 @@ services:
       - zasian-auth-data:/srv/data
     networks:
       - aunsorm-network
+      # Zasian SFU bu network üzerinden doğrudan erişebilir (Linux'ta host.docker.internal çalışmıyor):
+      #   http://zasian-auth-service:50011/security/jwt-verify
+      - zasian-media-network
     # NOT: AUNSORM_LEDGER_PATH=SQLite kullandığı için postgres bağımlılığı yok.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:50011/health"]
