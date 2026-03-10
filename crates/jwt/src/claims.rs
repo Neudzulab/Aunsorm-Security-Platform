@@ -98,20 +98,15 @@ impl Claims {
             }
         }
         for key in self.extras.keys() {
-            eprintln!("[DEBUG] Validating extras key: {key}");
             if RESERVED_STANDARD_CLAIMS.contains(&key.as_str()) {
-                eprintln!("[DEBUG] Key '{key}' is reserved");
                 return Err(JwtError::InvalidClaim("extras", RESERVED_KEY_ERROR));
             }
             if !is_camel_case(key) {
-                eprintln!("[DEBUG] Key '{key}' is not camelCase");
                 return Err(JwtError::InvalidClaim("extras", CUSTOM_KEY_FORMAT_ERROR));
             }
         }
         for (key, value) in &self.extras {
-            eprintln!("[DEBUG] Validating extras value for key '{key}': {value:?}");
             if !validate_custom_value(value) {
-                eprintln!("[DEBUG] Value for key '{key}' failed validation");
                 return Err(JwtError::InvalidClaim("extras", CUSTOM_KEY_FORMAT_ERROR));
             }
         }
