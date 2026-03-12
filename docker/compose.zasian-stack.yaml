@@ -8,6 +8,8 @@
 #   POST /security/jwt-verify            — Zasian token doğrulama
 #   POST /security/jwe/encrypt           — JWE zarf şifreleme
 #   POST /security/jwe/decrypt           — JWE zarf çözme
+#   POST /sfu/context                    — E2EE oturum başlatma
+#   POST /sfu/context/step               — E2EE anahtar değişimi adımı
 #   POST /oauth/token (client_credentials) — Servis hesabı M2M token
 #   POST /oauth/introspect               — Token içgözlem
 #   GET  /health                         — Health check
@@ -15,6 +17,7 @@
 # Port Matrisi (MyeOffice uyumu):
 #   50010 — nginx Gateway (MyeOffice nginx → host.docker.internal:50010 → gateway → auth-service)
 #   50011 — auth-service doğrudan host erişimi
+#   50021 — e2ee-service doğrudan host erişimi (Zasian SFU container DNS: zasian-e2ee-service:50021)
 #   5433  — PostgreSQL (host erişimi, isteğe bağlı)
 #
 # Zasian SFU (Docker içi) erişim yöntemleri:
@@ -23,7 +26,8 @@
 #        networks: [zasian-media-network]
 #        environment:
 #          ZASIAN_WS_AUNSORM_URL: http://zasian-auth-service:50011
-#   B) Host port:  http://HOST_PUBLIC_IP:50011 
+#          ZASIAN_E2EE_URL: http://zasian-e2ee-service:50021
+#   B) Host port:  http://HOST_PUBLIC_IP:50011 / :50021
 #      (host.docker.internal Linux'ta çalışmıyor!)
 #
 # Kullanım:
@@ -171,8 +175,120 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  # ─── Aunsorm E2EE Service — Zasian medya kanalları için uçtan uca şifreleme ─
+  # Sağladığı endpoint'ler:
+  #   POST /security/jwe/encrypt   — Medya paketi şifreleme
+  #   POST /security/jwe/decrypt   — Medya paketi çözme
+  #   POST /sfu/context            — E2EE oturum başlatma (HKDF anahtar türetme)
+  #   POST /sfu/context/step       — ECDH anahtar değişimi adımı
+  #
+  # Zasian SFU bu servise ZASIAN_E2EE_URL üzerinden ulaşır:
+  #   Container DNS: http://zasian-e2ee-service:50021
+  e2ee-service:
+    container_name: zasian-e2ee-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.e2ee
+    env_file:
+      - ../.env
+    environment:
+      SERVICE_MODE: e2ee-service
+      AUNSORM_LISTEN: 0.0.0.0:50021
+      AUNSORM_LEDGER_PATH: /srv/data/e2ee.db
+      RUST_LOG: ${RUST_LOG:-info}
+      NO_COLOR: "1"
+    ports:
+      - "50021:50021"
+    volumes:
+      - zasian-e2ee-data:/srv/data
+    networks:
+      - aunsorm-network
+      # Zasian SFU bu network üzerinden container DNS ile erişir:
+      #   http://zasian-e2ee-service:50021
+      - zasian-media-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:50021/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ─── Aunsorm ID Service — Benzersiz/kriptografik ID üretimi ─────────────────────
+  # Sağladığı endpoint'ler:
+  #   POST /id/generate   — Kriptografik kimlik üretimi
+  #   HEAD /id/generate   — Kapasite kontrol
+  #
+  # Zasian SFU bu servise ZASIAN_ID_URL üzerinden ulaşır:
+  #   Container DNS: http://zasian-id-service:50016
+  id-service:
+    container_name: zasian-id-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.id
+    env_file:
+      - ../.env
+    environment:
+      SERVICE_MODE: id-service
+      AUNSORM_LISTEN: 0.0.0.0:50016
+      RUST_LOG: ${RUST_LOG:-info}
+      NO_COLOR: "1"
+    ports:
+      - "50016:50016"
+    networks:
+      - aunsorm-network
+      - zasian-media-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:50016/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ─── Aunsorm RNG Service — Harici RNG endpoint'i (fallback) ────────────────
+  # NOT: Aunsorm servisleri önce AunsormNativeRng (HKDF+NEUDZ-PCS) kullanır.
+  # Bu servis Native RNG başarısız olduğunda fallback veya harici istemciler
+  # için mevcuttur. HTTP /random/number overhead'i 6.4s (vs native 1.5s).
+  #
+  # Sağladığı endpoint:
+  #   GET /random/number   — Kriptografik rastgele sayı (fallback)
+  rng-service:
+    container_name: zasian-rng-service
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.rng
+    env_file:
+      - ../.env
+    environment:
+      SERVICE_MODE: rng-service
+      AUNSORM_LISTEN: 0.0.0.0:50019
+      RUST_LOG: ${RUST_LOG:-info}
+      NO_COLOR: "1"
+    ports:
+      - "50019:50019"
+    networks:
+      - aunsorm-network
+      - zasian-media-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:50019/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   zasian-pg-data:
     driver: local
   zasian-auth-data:
     driver: local
+  zasian-e2ee-data:
+    driver: local
+  # id-service ve rng-service stateless — volume gerekmez.

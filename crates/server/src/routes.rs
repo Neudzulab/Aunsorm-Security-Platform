@@ -879,6 +879,37 @@ fn respond_with_conditional_etag<T: Serialize>(
     response
 }
 
+#[derive(Serialize)]
+struct QuicFingerprintResponse {
+    fingerprint_hex: String,
+    certificate_sha256: String,
+}
+
+/// GET /security/quic-fingerprint
+///
+/// Zasian SFU ve diğer servisler QUIC/TLS kalibrasyon parmak izini bu
+/// endpoint üzerinden alır. `certificate_sha256` alanı kolon-ayrılmış
+/// büyük harf hex çiftleri formatındadır (ör. "AA:BB:CC:...").
+async fn quic_fingerprint(
+    State(state): State<Arc<ServerState>>,
+) -> impl IntoResponse {
+    let hex = state.audit_proof_document().await.calibration_fingerprint;
+    let certificate_sha256 = hex
+        .as_bytes()
+        .chunks(2)
+        .map(|chunk| {
+            std::str::from_utf8(chunk)
+                .unwrap_or("??")
+                .to_uppercase()
+        })
+        .collect::<Vec<_>>()
+        .join(":");
+    Json(QuicFingerprintResponse {
+        fingerprint_hex: hex,
+        certificate_sha256,
+    })
+}
+
 #[cfg(feature = "http3-experimental")]
 async fn http3_capabilities(
     State(state): State<Arc<ServerState>>,
@@ -3620,6 +3651,8 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/transparency/tree", get(transparency_tree))
                 .route("/pqc/capabilities", get(pqc_capabilities))
                 .route("/http3/capabilities", get(http3_capabilities))
+                // QUIC/TLS kalibrasyon parmak izi
+                .route("/security/quic-fingerprint", get(quic_fingerprint))
                 // Proxy JWT endpoints to auth service
                 .route("/security/jwt-verify", post(proxy_jwt_verify))
                 .route("/security/generate-media-token", post(proxy_media_token))
@@ -3644,7 +3677,9 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/security/jwt-verify", post(verify_media_token))
                 .route("/security/generate-media-token", post(generate_media_token))
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
-                .route("/security/jwe/decrypt", post(security_jwe_decrypt));
+                .route("/security/jwe/decrypt", post(security_jwe_decrypt))
+                // QUIC/TLS kalibrasyon parmak izi
+                .route("/security/quic-fingerprint", get(quic_fingerprint));
         }
         Some("acme-service") => {
             tracing::info!("🔒 Building ACME SERVICE routes");
@@ -3695,6 +3730,25 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 // SFU endpoints (sfu service)
                 .route("/sfu/context", post(create_sfu_context))
                 .route("/sfu/context/step", post(next_sfu_step));
+        }
+        Some("rng-service") => {
+            tracing::info!("🎲 Building RNG SERVICE routes");
+            router = router
+                // Native RNG endpoint — Aunsorm servisleri AunsormNativeRng ile doğrudan üretir,
+                // bu endpoint fallback veya harici istemciler için mevcuttur.
+                .route("/random/number", get(random_number));
+        }
+        Some("e2ee-service") => {
+            tracing::info!("🔒 Building E2EE SERVICE routes");
+            router = router
+                // JWE şifreleme/çözme (Zasian E2EE medya kanalları için)
+                .route("/security/jwe/encrypt", post(security_jwe_encrypt))
+                .route("/security/jwe/decrypt", post(security_jwe_decrypt))
+                // SFU E2EE oturum yönetimi
+                .route("/sfu/context", post(create_sfu_context))
+                .route("/sfu/context/step", post(next_sfu_step))
+                // QUIC/TLS kalibrasyon parmak izi
+                .route("/security/quic-fingerprint", get(quic_fingerprint));
         }
         _ => {
             tracing::info!(
@@ -3752,7 +3806,9 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/sfu/context/step", post(next_sfu_step))
                 // Transparency endpoints
                 .route("/transparency/tree", get(transparency_tree))
-                .route("/http3/capabilities", get(http3_capabilities));
+                .route("/http3/capabilities", get(http3_capabilities))
+                // QUIC/TLS kalibrasyon parmak izi
+                .route("/security/quic-fingerprint", get(quic_fingerprint));
         }
     }
 
