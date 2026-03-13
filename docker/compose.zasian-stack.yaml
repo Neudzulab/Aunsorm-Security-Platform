@@ -17,16 +17,19 @@
 # Port Matrisi (MyeOffice uyumu):
 #   50010 — nginx Gateway (MyeOffice nginx → host.docker.internal:50010 → gateway → auth-service)
 #   50011 — auth-service doğrudan host erişimi
-#   50021 — e2ee-service doğrudan host erişimi (Zasian SFU container DNS: zasian-e2ee-service:50021)
+#   50021 — e2ee-service doğrudan host erişimi (Zasian SFU container DNS: aun-e2ee-service:50021)
 #   5433  — PostgreSQL (host erişimi, isteğe bağlı)
 #
 # Zasian SFU (Docker içi) erişim yöntemleri:
-#   A) Container DNS: http://zasian-auth-service:50011  ← ÖNERİLEN
+#   A) Container DNS: http://aun-auth-service:50011  ← ÖNERİLEN
 #      Zasian SFU compose'una ekleyin:
-#        networks: [zasian-media-network]
+#        networks:
+#          aunsorm-network:
+#            external: true
+#            name: aunsorm-network
 #        environment:
-#          ZASIAN_WS_AUNSORM_URL: http://zasian-auth-service:50011
-#          ZASIAN_E2EE_URL: http://zasian-e2ee-service:50021
+#          ZASIAN_WS_AUNSORM_URL: http://aun-auth-service:50011
+#          ZASIAN_E2EE_URL: http://aun-e2ee-service:50021
 #   B) Host port:  http://HOST_PUBLIC_IP:50011 / :50021
 #      (host.docker.internal Linux'ta çalışmıyor!)
 #
@@ -52,19 +55,11 @@
 #   AUNSORM_SERVICE_CLIENT_SECRET — M2M client secret (varsayılan: aunsorm-service-secret)
 #   AUNSORM_TOKEN_TTL_SECS — Token geçerlilik süresi saniyeleri (varsayılan: 3600)
 
-name: zasian-aunsorm
+name: aunsorm
 
 networks:
   aunsorm-network:
-    driver: bridge
-  # Zasian SFU container'larının gateway'e ulaşması için paylaşılan network.
-  # Zasian compose dosyasına ekleyin:
-  #   networks:
-  #     zasian-media-network:
-  #       external: true
-  #       name: zasian-media-network
-  zasian-media-network:
-    name: zasian-media-network
+    name: aunsorm-network
     driver: bridge
 
 services:
@@ -72,7 +67,7 @@ services:
   # ─── PostgreSQL — JWT ledger ve refresh token kalıcı depolama ────────────
   postgres:
     image: postgres:16-alpine
-    container_name: zasian-postgres
+    container_name: aun-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-aunsorm}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aunsorm_secret}
@@ -80,7 +75,7 @@ services:
     ports:
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
-      - zasian-pg-data:/var/lib/postgresql/data
+      - aunsorm-pg-data:/var/lib/postgresql/data
     networks:
       - aunsorm-network
     healthcheck:
@@ -91,12 +86,12 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # ─── Aunsorm Gateway — Tek giriş noktası (host:50010 + zasian-media-network) ─
+  # ─── Aunsorm Gateway — Tek giriş noktası (host:50010 + aunsorm-network) ─
   # MyeOffice nginx:  host.docker.internal:50010 → gateway:80 → auth-service:50011
-  # Zasian SFU:       zasian-aunsorm-gateway:80   → auth-service:50011
+  # Zasian SFU:       aun-gateway:80             → auth-service:50011
   gateway:
     image: nginx:1.27-alpine
-    container_name: zasian-aunsorm-gateway
+    container_name: aun-gateway
     depends_on:
       auth-service:
         condition: service_healthy
@@ -109,14 +104,16 @@ services:
     volumes:
       - ./nginx/zasian-gateway.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
-      aunsorm-network: {}
+      aunsorm-network:
+        aliases:
+          - host.docker.internal
       # host.docker.internal alias'ı: Zasian SFU bu network'e katıldığında
       # host.docker.internal:50010 DNS sorgusu bu container'a gelir (port 50010'da dinliyor).
       # Zasian SFU compose'una tek ekleme:
-      #   networks: [zasian-media-network]
-      zasian-media-network:
-        aliases:
-          - host.docker.internal
+      #   networks:
+      #     aunsorm-network:
+      #       external: true
+      #       name: aunsorm-network
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/health || exit 1"]
       interval: 30s
@@ -130,7 +127,7 @@ services:
   # ─── Aunsorm Auth Service — Yalnızca iç network'te çalışır ─────────────
   # Dışarıya doğrudan port açmaz — tüm trafik gateway üzerinden geçer.
   auth-service:
-    container_name: zasian-auth-service
+    container_name: aun-auth-service
     build:
       context: ..
       dockerfile: docker/Dockerfile.auth
@@ -158,12 +155,11 @@ services:
     ports:
       - "50011:50011"
     volumes:
-      - zasian-auth-data:/srv/data
+      - aunsorm-auth-data:/srv/data
     networks:
       - aunsorm-network
-      # Zasian SFU bu network üzerinden doğrudan erişebilir (Linux'ta host.docker.internal çalışmıyor):
-      #   http://zasian-auth-service:50011/security/jwt-verify
-      - zasian-media-network
+      # Zasian SFU bu network üzerinden doğrudan erişebilir:
+      #   http://aun-auth-service:50011/security/jwt-verify
     # NOT: AUNSORM_LEDGER_PATH=SQLite kullandığı için postgres bağımlılığı yok.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:50011/health"]
@@ -183,9 +179,9 @@ services:
   #   POST /sfu/context/step       — ECDH anahtar değişimi adımı
   #
   # Zasian SFU bu servise ZASIAN_E2EE_URL üzerinden ulaşır:
-  #   Container DNS: http://zasian-e2ee-service:50021
+  #   Container DNS: http://aun-e2ee-service:50021
   e2ee-service:
-    container_name: zasian-e2ee-service
+    container_name: aun-e2ee-service
     build:
       context: ..
       dockerfile: docker/Dockerfile.e2ee
@@ -200,12 +196,11 @@ services:
     ports:
       - "50021:50021"
     volumes:
-      - zasian-e2ee-data:/srv/data
+      - aunsorm-e2ee-data:/srv/data
     networks:
       - aunsorm-network
       # Zasian SFU bu network üzerinden container DNS ile erişir:
-      #   http://zasian-e2ee-service:50021
-      - zasian-media-network
+      #   http://aun-e2ee-service:50021
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:50021/health"]
       interval: 30s
@@ -222,9 +217,9 @@ services:
   #   HEAD /id/generate   — Kapasite kontrol
   #
   # Zasian SFU bu servise ZASIAN_ID_URL üzerinden ulaşır:
-  #   Container DNS: http://zasian-id-service:50016
+  #   Container DNS: http://aun-id-service:50016
   id-service:
-    container_name: zasian-id-service
+    container_name: aun-id-service
     build:
       context: ..
       dockerfile: docker/Dockerfile.id
@@ -239,7 +234,6 @@ services:
       - "50016:50016"
     networks:
       - aunsorm-network
-      - zasian-media-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:50016/health"]
       interval: 30s
@@ -258,7 +252,7 @@ services:
   # Sağladığı endpoint:
   #   GET /random/number   — Kriptografik rastgele sayı (fallback)
   rng-service:
-    container_name: zasian-rng-service
+    container_name: aun-rng-service
     build:
       context: ..
       dockerfile: docker/Dockerfile.rng
@@ -273,7 +267,6 @@ services:
       - "50019:50019"
     networks:
       - aunsorm-network
-      - zasian-media-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:50019/health"]
       interval: 30s
@@ -285,10 +278,10 @@ services:
       - "host.docker.internal:host-gateway"
 
 volumes:
-  zasian-pg-data:
+  aunsorm-pg-data:
     driver: local
-  zasian-auth-data:
+  aunsorm-auth-data:
     driver: local
-  zasian-e2ee-data:
+  aunsorm-e2ee-data:
     driver: local
   # id-service ve rng-service stateless — volume gerekmez.

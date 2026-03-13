@@ -10,10 +10,10 @@ agent'lar için referans kılavuzudur.
 ```
 Zasian SFU (Docker)
   │
-  ├─► zasian-media-network
+  ├─► aunsorm-network
   │     │
-  │     ├─► zasian-auth-service:50011   (JWT üretim/doğrulama)
-  │     └─► zasian-e2ee-service:50021   (JWE şifreleme + SFU E2EE oturum)
+  │     ├─► aun-auth-service:50011      (JWT üretim/doğrulama)
+  │     └─► aun-e2ee-service:50021      (JWE şifreleme + SFU E2EE oturum)
   │
   └─► host.docker.internal:50010 (nginx gateway → auth-service)
 
@@ -122,21 +122,21 @@ services:
   sfu:
     # ...mevcut config...
     networks:
-      - zasian-media-network
+      - aunsorm-network
     environment:
       # Auth service — JWT üretim/doğrulama
-      ZASIAN_WS_AUNSORM_URL: http://zasian-auth-service:50011
+      ZASIAN_WS_AUNSORM_URL: http://aun-auth-service:50011
       # E2EE service — JWE şifreleme + SFU oturum yönetimi
-      ZASIAN_E2EE_URL: http://zasian-e2ee-service:50021
+      ZASIAN_E2EE_URL: http://aun-e2ee-service:50021
 
 networks:
-  zasian-media-network:
+  aunsorm-network:
     external: true
-    name: zasian-media-network
+    name: aunsorm-network
 ```
 
 > `host.docker.internal` Linux'ta container içinden çözümlenmiyor.
-> Container DNS kullanın: `zasian-auth-service:50011`, `zasian-e2ee-service:50021`.
+> Container DNS kullanın: `aun-auth-service:50011`, `aun-e2ee-service:50021`.
 
 ---
 
@@ -166,11 +166,11 @@ Token üretiminde `AunsormNativeRng` kullanılır — `OsRng` doğrudan çağrı
   (`verify_jwt_token` değil — bu `aunsorm-clients` audience bekler)
 
 ### E2EE service'e bağlanamıyor
-- `zasian-media-network`'e katılıp katılmadığını kontrol edin
-- Container adı: `zasian-e2ee-service`, port: `50021`
-- `docker network inspect zasian-media-network` ile bağlı container'ları listeleyin
+- `aunsorm-network` ağına katılıp katılmadığını kontrol edin
+- Container adı: `aun-e2ee-service`, port: `50021`
+- `docker network inspect aunsorm-network` ile bağlı container'ları listeleyin
 
 ### host.docker.internal çözümlenmiyor (Linux)
-- Zasian SFU `zasian-media-network`'e bağlı olmalı
+- Zasian SFU `aunsorm-network` ağına bağlı olmalı
 - Gateway container `host.docker.internal` alias'ına sahip (port 50010'da dinliyor)
-- Doğrudan container DNS tercih edin: `zasian-auth-service`, `zasian-e2ee-service`
+- Doğrudan container DNS tercih edin: `aun-auth-service`, `aun-e2ee-service`

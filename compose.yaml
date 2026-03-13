@@ -2,6 +2,7 @@ name: aunsorm
 
 networks:
   aunsorm-network:
+    name: aunsorm-network
     driver: bridge
 
 services:
