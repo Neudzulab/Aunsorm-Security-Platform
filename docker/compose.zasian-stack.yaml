@@ -154,12 +154,14 @@ services:
       NO_COLOR: "1"
     ports:
       - "50011:50011"
+      - "50011:50011/udp"   # HTTP/3 QUIC dinleyicisi
     volumes:
       - aunsorm-auth-data:/srv/data
     networks:
       - aunsorm-network
       # Zasian SFU bu network üzerinden doğrudan erişebilir:
       #   http://aun-auth-service:50011/security/jwt-verify
+      #   HTTP/3 QUIC: udp://aun-auth-service:50011
     # NOT: AUNSORM_LEDGER_PATH=SQLite kullandığı için postgres bağımlılığı yok.
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:50011/health"]
@@ -195,12 +197,14 @@ services:
       NO_COLOR: "1"
     ports:
       - "50021:50021"
+      - "50021:50021/udp"   # HTTP/3 QUIC dinleyicisi (SFU datagram kanalı)
     volumes:
       - aunsorm-e2ee-data:/srv/data
     networks:
       - aunsorm-network
       # Zasian SFU bu network üzerinden container DNS ile erişir:
-      #   http://aun-e2ee-service:50021
+      #   HTTP/1.1: http://aun-e2ee-service:50021
+      #   HTTP/3 QUIC: udp://aun-e2ee-service:50021  (Alt-Svc upgrade veya doğrudan)
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:50021/health"]
       interval: 30s

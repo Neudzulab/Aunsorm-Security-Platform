@@ -3748,7 +3748,9 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/sfu/context", post(create_sfu_context))
                 .route("/sfu/context/step", post(next_sfu_step))
                 // QUIC/TLS kalibrasyon parmak izi
-                .route("/security/quic-fingerprint", get(quic_fingerprint));
+                .route("/security/quic-fingerprint", get(quic_fingerprint))
+                // HTTP/3 kapasite keşif endpoint'i (Zasian SFU QUIC bağlantısı için)
+                .route("/http3/capabilities", get(http3_capabilities));
         }
         _ => {
             tracing::info!(
