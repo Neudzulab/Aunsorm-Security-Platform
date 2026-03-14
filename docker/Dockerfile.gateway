@@ -10,9 +10,9 @@ COPY Cargo.lock ./
 # Copy all source code
 COPY . .
 
-# Build server binary (will be used as gateway)
-# Docker layers will cache based on Cargo.lock changes
-RUN cargo build --release --locked -p aunsorm-server
+# Build server binary (will be used as gateway) with HTTP/3 support.
+# Docker layers will cache based on Cargo.lock changes.
+RUN cargo build --release --locked -p aunsorm-server --features http3-experimental
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \

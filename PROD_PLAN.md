@@ -115,6 +115,7 @@ This document tracks all remaining work required for production deployment.
  - [x] Revize: Add conditional GET ETag handling for `/health` endpoint in `crates/server`
  - [x] Revize: Add conditional GET ETag handling for `/pqc/capabilities` and `/v1/pqc/capabilities` in `crates/server`
  - [x] Revize: Add conditional GET ETag handling for `/http3/capabilities` in `crates/server`
+ - [x] Revize: Enable `http3-experimental` in gateway/e2ee Docker builds and expose UDP QUIC ports in `compose.yaml`
  - [x] Revize: Add conditional GET ETag handling for `/oauth/transparency` and `/v1/oauth/transparency` in `crates/server`
  - [x] Revize: Add conditional GET ETag handling for `/transparency/tree` and `/v1/transparency/tree` in `crates/server`
 - [x] Implement CORS policies

@@ -16,6 +16,7 @@ services:
       - .env
     ports:
       - "50010:50010"
+      - "50010:50010/udp"
     networks:
       - aunsorm-network
     depends_on:
@@ -44,6 +45,7 @@ services:
       - .env
     ports:
       - "50011:50011"
+      - "50011:50011/udp"
     volumes:
       - aunsorm-auth-data:/srv/data
     networks:
@@ -208,6 +210,7 @@ services:
       - .env
     ports:
       - "50021:50021"
+      - "50021:50021/udp"
     volumes:
       - aunsorm-e2ee-data:/srv/data
     networks:
