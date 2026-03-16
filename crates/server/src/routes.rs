@@ -3679,7 +3679,9 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
                 .route("/security/jwe/decrypt", post(security_jwe_decrypt))
                 // QUIC/TLS kalibrasyon parmak izi
-                .route("/security/quic-fingerprint", get(quic_fingerprint));
+                .route("/security/quic-fingerprint", get(quic_fingerprint))
+                // HTTP/3 kapasite keşif endpoint'i (Zasian SFU QUIC bağlantısı için)
+                .route("/http3/capabilities", get(http3_capabilities));
         }
         Some("acme-service") => {
             tracing::info!("🔒 Building ACME SERVICE routes");
