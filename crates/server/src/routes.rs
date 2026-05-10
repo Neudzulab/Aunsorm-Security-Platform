@@ -1,3 +1,11 @@
+use aes_gcm::{
+    aead::{Aead, Payload},
+    Aes256Gcm, KeyInit, Nonce,
+};
+use argon2::{
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    Argon2,
+};
 use aunsorm_acme::AcmeJws;
 use aunsorm_jwt::{Audience, Claims, HybridJwe, Jwk, JwtError, VerificationOptions};
 use aunsorm_pqc::{kem::KemAlgorithm, signature::SignatureAlgorithm};
@@ -253,7 +261,7 @@ use crate::fabric::{
 };
 use crate::quic::datagram::AuditOutcome;
 #[cfg(feature = "http3-experimental")]
-use crate::quic::datagram::{DatagramChannel, MAX_PAYLOAD_BYTES};
+use crate::quic::datagram::{AudioPcmDatagram, DatagramChannel, MAX_PAYLOAD_BYTES};
 #[cfg(feature = "http3-experimental")]
 use crate::quic::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
 use crate::state::{AuditProofDocument, ClockHealthStatus, RefreshTokenRecord, ServerState};
@@ -268,6 +276,7 @@ use time::format_description::well_known::Rfc3339;
 use aunsorm_core::{calib_from_text, Calibration, Salts};
 
 const ZASIAN_MEDIA_AUDIENCE: &str = "zasian-media";
+const PASSWORD_HASH_ALGORITHM: &str = "argon2id";
 
 const MIN_ORG_SALT_LEN: usize = 8;
 
@@ -649,6 +658,7 @@ struct Http3DatagramCapabilities {
     supported: bool,
     max_payload_bytes: Option<usize>,
     channels: Vec<Http3DatagramChannelDescriptor>,
+    audio_profile: Option<Http3AudioDatagramProfile>,
     notes: Option<Cow<'static, str>>,
 }
 
@@ -659,6 +669,17 @@ struct Http3CapabilitiesResponse {
     alt_svc_port: Option<u16>,
     alt_svc_max_age: Option<u32>,
     datagrams: Http3DatagramCapabilities,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Http3AudioDatagramProfile {
+    channel: u8,
+    sample_rate_hz: u32,
+    channels: u8,
+    sample_format: Cow<'static, str>,
+    frame_samples: u16,
+    frame_duration_ms: u16,
+    fragmentation: Cow<'static, str>,
 }
 
 pub async fn random_number(
@@ -912,9 +933,25 @@ async fn http3_capabilities(
                         "Oturum ratchet ilerleme gözlemleri (RatchetProbe)",
                     ),
                 },
+                Http3DatagramChannelDescriptor {
+                    channel: DatagramChannel::Audio.as_u8(),
+                    label: Cow::Borrowed("audio"),
+                    purpose: Cow::Borrowed("96kHz mono PCM ses shard'ları (AudioPcmDatagram)"),
+                },
             ],
+            audio_profile: Some(Http3AudioDatagramProfile {
+                channel: DatagramChannel::Audio.as_u8(),
+                sample_rate_hz: AudioPcmDatagram::SAMPLE_RATE_HZ,
+                channels: AudioPcmDatagram::CHANNELS,
+                sample_format: Cow::Borrowed("pcm_s16le"),
+                frame_samples: AudioPcmDatagram::FRAME_SAMPLES,
+                frame_duration_ms: AudioPcmDatagram::FRAME_DURATION_MS,
+                fragmentation: Cow::Borrowed(
+                    "10ms / 960-sample frame'ler 1350B wire sınırı nedeniyle çoklu datagram shard'larına bölünür; shard'lar fragment_index ve fragment_count alanlarıyla yeniden birleştirilir.",
+                ),
+            }),
             notes: Some(Cow::Borrowed(
-                "Datagram yükleri postcard ile serileştirilir; en fazla 1150 bayt payload desteklenir.",
+                "Datagram yükleri postcard ile serileştirilir; en fazla 1150 bayt payload desteklenir. Audio channel 96kHz mono PCM_s16le shard'ları taşır.",
             )),
         },
     };
@@ -935,6 +972,7 @@ async fn http3_capabilities(
             supported: false,
             max_payload_bytes: None,
             channels: Vec::new(),
+            audio_profile: None,
             notes: Some(Cow::Borrowed(
                 "HTTP/3 desteği pasif. `--features http3-experimental` ile derleyerek etkinleştirin.",
             )),
@@ -1376,6 +1414,294 @@ pub async fn verify_media_token(
     Json(request): Json<JwtVerifyRequest>,
 ) -> Json<JwtVerifyResponse> {
     Json(verify_token_for_audience(&state, request.token.trim(), ZASIAN_MEDIA_AUDIENCE).await)
+}
+
+#[derive(Deserialize)]
+pub struct PasswordHashRequest {
+    pub password: String,
+}
+
+#[derive(Serialize)]
+pub struct PasswordHashResponse {
+    pub algorithm: &'static str,
+    pub hash: String,
+}
+
+#[derive(Deserialize)]
+pub struct PasswordVerifyRequest {
+    pub password: String,
+    pub hash: String,
+}
+
+#[derive(Serialize)]
+pub struct PasswordVerifyResponse {
+    pub valid: bool,
+    pub algorithm: String,
+}
+
+#[derive(Deserialize)]
+pub struct EncryptRequest {
+    pub payload_b64: String,
+    pub key_material: String,
+    #[serde(default)]
+    pub aad_b64: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct EncryptResponse {
+    pub encrypted_payload_b64: String,
+    pub iv_b64: String,
+    pub auth_tag_b64: String,
+    pub algorithm: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct DecryptRequest {
+    pub encrypted_payload_b64: String,
+    pub iv_b64: String,
+    pub auth_tag_b64: String,
+    pub key_material: String,
+    #[serde(default)]
+    pub aad_b64: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct DecryptResponse {
+    pub payload_b64: String,
+    pub algorithm: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+fn decode_base64_or_ascii(value: &str, field: &str) -> Result<Vec<u8>, ApiError> {
+    URL_SAFE_NO_PAD
+        .decode(value.trim_end_matches('='))
+        .or_else(|_| STANDARD.decode(value))
+        .or_else(|_| Ok::<Vec<u8>, base64::DecodeError>(value.as_bytes().to_vec()))
+        .map_err(|err| ApiError::invalid_request(format!("{field} decode failed: {err}")))
+}
+
+fn derive_aes256_key_from_material(key_material: &str) -> Result<[u8; 32], ApiError> {
+    let material = decode_base64_or_ascii(key_material, "key_material")?;
+    if material.is_empty() {
+        return Err(ApiError::invalid_request("key_material gereklidir"));
+    }
+
+    if material.len() == 32 {
+        let mut key = [0_u8; 32];
+        key.copy_from_slice(&material);
+        return Ok(key);
+    }
+
+    let digest: [u8; 32] = Sha256::digest(&material).into();
+    Ok(digest)
+}
+
+fn resolve_encrypt_aad(
+    session_id: Option<&str>,
+    aad_b64: Option<&str>,
+) -> Result<Vec<u8>, ApiError> {
+    if let Some(aad_b64) = aad_b64 {
+        return decode_base64_or_ascii(aad_b64, "aad_b64");
+    }
+
+    Ok(session_id
+        .map(|session_id| format!("hd-audio-e2ee:{session_id}").into_bytes())
+        .unwrap_or_default())
+}
+
+pub async fn security_encrypt(
+    Json(request): Json<EncryptRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let payload = decode_base64_or_ascii(&request.payload_b64, "payload_b64")?;
+    if payload.is_empty() {
+        return Err(ApiError::invalid_request("payload_b64 bos olamaz"));
+    }
+
+    let key = derive_aes256_key_from_material(&request.key_material)?;
+    let aad = resolve_encrypt_aad(request.session_id.as_deref(), request.aad_b64.as_deref())?;
+
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|err| ApiError::server_error(format!("AES-256-GCM init failed: {err}")))?;
+    let mut iv = [0_u8; 12];
+    let mut rng = AunsormNativeRng::new();
+    rng.fill_bytes(&mut iv);
+
+    let encrypted = cipher
+        .encrypt(
+            Nonce::from_slice(&iv),
+            Payload {
+                msg: payload.as_slice(),
+                aad: aad.as_slice(),
+            },
+        )
+        .map_err(|err| ApiError::server_error(format!("AES-256-GCM encrypt failed: {err}")))?;
+
+    if encrypted.len() < 16 {
+        return Err(ApiError::server_error(
+            "AES-256-GCM ciphertext boyutu auth tag icin yetersiz".to_owned(),
+        ));
+    }
+
+    let tag_offset = encrypted.len() - 16;
+    let ciphertext = &encrypted[..tag_offset];
+    let auth_tag = &encrypted[tag_offset..];
+
+    Ok((
+        StatusCode::CREATED,
+        Json(EncryptResponse {
+            encrypted_payload_b64: URL_SAFE_NO_PAD.encode(ciphertext),
+            iv_b64: URL_SAFE_NO_PAD.encode(iv),
+            auth_tag_b64: URL_SAFE_NO_PAD.encode(auth_tag),
+            algorithm: "aes-256-gcm",
+            session_id: request.session_id,
+        }),
+    ))
+}
+
+pub async fn security_decrypt(
+    Json(request): Json<DecryptRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let ciphertext =
+        decode_base64_or_ascii(&request.encrypted_payload_b64, "encrypted_payload_b64")?;
+    let iv = decode_base64_or_ascii(&request.iv_b64, "iv_b64")?;
+    let auth_tag = decode_base64_or_ascii(&request.auth_tag_b64, "auth_tag_b64")?;
+    if iv.len() != 12 {
+        return Err(ApiError::invalid_request(
+            "iv_b64 12 bayt decode edilmelidir",
+        ));
+    }
+    if auth_tag.len() != 16 {
+        return Err(ApiError::invalid_request(
+            "auth_tag_b64 16 bayt decode edilmelidir",
+        ));
+    }
+
+    let key = derive_aes256_key_from_material(&request.key_material)?;
+    let aad = resolve_encrypt_aad(request.session_id.as_deref(), request.aad_b64.as_deref())?;
+
+    let mut combined = ciphertext;
+    combined.extend_from_slice(&auth_tag);
+
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|err| ApiError::server_error(format!("AES-256-GCM init failed: {err}")))?;
+    let decrypted = cipher
+        .decrypt(
+            Nonce::from_slice(iv.as_slice()),
+            Payload {
+                msg: combined.as_slice(),
+                aad: aad.as_slice(),
+            },
+        )
+        .map_err(|_| ApiError::invalid_request("ciphertext dogrulanamadi"))?;
+
+    Ok(Json(DecryptResponse {
+        payload_b64: URL_SAFE_NO_PAD.encode(decrypted),
+        algorithm: "aes-256-gcm",
+        session_id: request.session_id,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct GenerateSecretRequest {
+    /// "hmac" | "jwt" | "encryption" | "generic" — accepted but not used (type is always base64url)
+    #[serde(rename = "type", default)]
+    pub _secret_type: Option<String>,
+    /// Kaç byte üretilecek (default: 32, max: 128)
+    #[serde(default)]
+    pub length: Option<usize>,
+}
+
+#[derive(Serialize)]
+pub struct GenerateSecretResponse {
+    pub secret: String,
+    pub length: usize,
+    pub encoding: &'static str,
+}
+
+pub async fn security_generate_secret(
+    Json(request): Json<GenerateSecretRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let length = request.length.unwrap_or(32).min(128).max(1);
+    let mut buf = vec![0_u8; length];
+    let mut rng = AunsormNativeRng::new();
+    rng.fill_bytes(&mut buf);
+    let secret = URL_SAFE_NO_PAD.encode(&buf);
+    Ok((
+        StatusCode::CREATED,
+        Json(GenerateSecretResponse {
+            secret,
+            length,
+            encoding: "base64url",
+        }),
+    ))
+}
+
+fn hash_password_with_aunsorm_rng(password: &str) -> Result<String, ApiError> {
+    let mut rng = AunsormNativeRng::new();
+    let mut salt_bytes = [0_u8; 16];
+    rng.fill_bytes(&mut salt_bytes);
+    let salt = SaltString::encode_b64(&salt_bytes)
+        .map_err(|err| ApiError::server_error(format!("Şifre hash salt üretilemedi: {err}")))?;
+
+    Argon2::default()
+        .hash_password(password.as_bytes(), &salt)
+        .map(|hash| hash.to_string())
+        .map_err(|err| ApiError::server_error(format!("Şifre hash üretilemedi: {err}")))
+}
+
+pub async fn security_password_hash(
+    Json(request): Json<PasswordHashRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if request.password.is_empty() {
+        return Err(ApiError::invalid_request("password gereklidir"));
+    }
+
+    let hash = hash_password_with_aunsorm_rng(&request.password)?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(PasswordHashResponse {
+            algorithm: PASSWORD_HASH_ALGORITHM,
+            hash,
+        }),
+    ))
+}
+
+pub async fn security_password_verify(
+    Json(request): Json<PasswordVerifyRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if request.password.is_empty() {
+        return Err(ApiError::invalid_request("password gereklidir"));
+    }
+
+    let normalized_hash = request.hash.trim();
+    if normalized_hash.is_empty() {
+        return Err(ApiError::invalid_request("hash gereklidir"));
+    }
+
+    let parsed_hash = match PasswordHash::new(normalized_hash) {
+        Ok(hash) => hash,
+        Err(_) => {
+            return Ok(Json(PasswordVerifyResponse {
+                valid: false,
+                algorithm: "unknown".to_string(),
+            }))
+        }
+    };
+
+    let algorithm = parsed_hash.algorithm.to_string();
+    let valid = Argon2::default()
+        .verify_password(request.password.as_bytes(), &parsed_hash)
+        .is_ok();
+
+    Ok(Json(PasswordVerifyResponse { valid, algorithm }))
 }
 
 async fn verify_token_for_audience(
@@ -3624,6 +3950,9 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 // Proxy JWT endpoints to auth service
                 .route("/security/jwt-verify", post(proxy_jwt_verify))
                 .route("/security/generate-media-token", post(proxy_media_token))
+                .route("/security/generate-secret", post(security_generate_secret))
+                .route("/security/password-hash", post(proxy_password_hash))
+                .route("/security/password-verify", post(proxy_password_verify))
                 // Proxy ID endpoints to id service
                 .route("/id/generate", post(proxy_id_generate))
                 .route("/id/generate", head(proxy_id_generate_head))
@@ -3643,6 +3972,11 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/cli/jwt/verify", post(verify_jwt_token))
                 .route("/security/jwt-verify", post(verify_jwt_token))
                 .route("/security/generate-media-token", post(generate_media_token))
+                .route("/security/generate-secret", post(security_generate_secret))
+                .route("/security/password-hash", post(security_password_hash))
+                .route("/security/password-verify", post(security_password_verify))
+                .route("/security/encrypt", post(security_encrypt))
+                .route("/security/decrypt", post(security_decrypt))
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
                 .route("/security/jwe/decrypt", post(security_jwe_decrypt));
         }
@@ -3735,6 +4069,11 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/cli/jwt/verify", post(verify_jwt_token))
                 .route("/security/jwt-verify", post(verify_jwt_token))
                 .route("/security/generate-media-token", post(generate_media_token))
+                .route("/security/generate-secret", post(security_generate_secret))
+                .route("/security/password-hash", post(security_password_hash))
+                .route("/security/password-verify", post(security_password_verify))
+                .route("/security/encrypt", post(security_encrypt))
+                .route("/security/decrypt", post(security_decrypt))
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
                 .route("/security/jwe/decrypt", post(security_jwe_decrypt))
                 // MDM endpoints
@@ -3990,6 +4329,61 @@ async fn proxy_media_token(
     }
 
     match request.send().await {
+        Ok(response) => {
+            let status_code = match response.status().as_u16() {
+                200 => StatusCode::OK,
+                400 => StatusCode::BAD_REQUEST,
+                404 => StatusCode::NOT_FOUND,
+                422 => StatusCode::UNPROCESSABLE_ENTITY,
+                500 => StatusCode::INTERNAL_SERVER_ERROR,
+                _ => StatusCode::BAD_GATEWAY,
+            };
+            match response.json::<serde_json::Value>().await {
+                Ok(json) => (status_code, Json(json)).into_response(),
+                Err(_) => (StatusCode::BAD_GATEWAY, "Proxy error").into_response(),
+            }
+        }
+        Err(_) => (StatusCode::BAD_GATEWAY, "Auth service unavailable").into_response(),
+    }
+}
+
+#[allow(clippy::option_if_let_else)]
+async fn proxy_password_hash(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
+    let client = reqwest::Client::new();
+    match client
+        .post("http://aun-auth-service:50011/security/password-hash")
+        .json(&payload)
+        .send()
+        .await
+    {
+        Ok(response) => {
+            let status_code = match response.status().as_u16() {
+                200 => StatusCode::OK,
+                201 => StatusCode::CREATED,
+                400 => StatusCode::BAD_REQUEST,
+                404 => StatusCode::NOT_FOUND,
+                422 => StatusCode::UNPROCESSABLE_ENTITY,
+                500 => StatusCode::INTERNAL_SERVER_ERROR,
+                _ => StatusCode::BAD_GATEWAY,
+            };
+            match response.json::<serde_json::Value>().await {
+                Ok(json) => (status_code, Json(json)).into_response(),
+                Err(_) => (StatusCode::BAD_GATEWAY, "Proxy error").into_response(),
+            }
+        }
+        Err(_) => (StatusCode::BAD_GATEWAY, "Auth service unavailable").into_response(),
+    }
+}
+
+#[allow(clippy::option_if_let_else)]
+async fn proxy_password_verify(Json(payload): Json<serde_json::Value>) -> impl IntoResponse {
+    let client = reqwest::Client::new();
+    match client
+        .post("http://aun-auth-service:50011/security/password-verify")
+        .json(&payload)
+        .send()
+        .await
+    {
         Ok(response) => {
             let status_code = match response.status().as_u16() {
                 200 => StatusCode::OK,
@@ -4317,6 +4711,123 @@ mod health_tests {
             .await
             .expect("body is collected");
         assert!(body.is_empty(), "304 responses should not include a body");
+    }
+}
+
+#[cfg(test)]
+mod password_endpoint_tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn password_hash_and_verify_round_trip_succeeds() {
+        let state = build_test_state();
+        let router = build_router(&state);
+
+        let hash_response = router
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/security/password-hash")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"password":"supersecret123"}"#))
+                    .expect("request is built"),
+            )
+            .await
+            .expect("hash request succeeds");
+
+        assert_eq!(hash_response.status(), StatusCode::CREATED);
+        let hash_body = to_bytes(hash_response.into_body(), usize::MAX)
+            .await
+            .expect("hash body collected");
+        let hash_json: serde_json::Value =
+            serde_json::from_slice(&hash_body).expect("hash json parsed");
+        let hash = hash_json["hash"].as_str().expect("hash string present");
+        assert!(hash.starts_with("$argon2id$"));
+        assert_eq!(hash_json["algorithm"], PASSWORD_HASH_ALGORITHM);
+
+        let verify_response = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/security/password-verify")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "password": "supersecret123",
+                            "hash": hash
+                        })
+                        .to_string(),
+                    ))
+                    .expect("request is built"),
+            )
+            .await
+            .expect("verify request succeeds");
+
+        assert_eq!(verify_response.status(), StatusCode::OK);
+        let verify_body = to_bytes(verify_response.into_body(), usize::MAX)
+            .await
+            .expect("verify body collected");
+        let verify_json: serde_json::Value =
+            serde_json::from_slice(&verify_body).expect("verify json parsed");
+        assert_eq!(verify_json["valid"], true);
+        assert_eq!(verify_json["algorithm"], PASSWORD_HASH_ALGORITHM);
+    }
+
+    #[tokio::test]
+    async fn password_verify_returns_false_for_wrong_password() {
+        let hash = hash_password_with_aunsorm_rng("supersecret123").expect("hash created");
+        let response = security_password_verify(Json(PasswordVerifyRequest {
+            password: "wrong-password".to_string(),
+            hash,
+        }))
+        .await
+        .expect("verify response");
+
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body collected");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("json parsed");
+        assert_eq!(json["valid"], false);
+        assert_eq!(json["algorithm"], PASSWORD_HASH_ALGORITHM);
+    }
+
+    #[tokio::test]
+    async fn password_hash_rejects_empty_passwords() {
+        let result = security_password_hash(Json(PasswordHashRequest {
+            password: String::new(),
+        }))
+        .await;
+
+        let error = match result {
+            Ok(_) => panic!("empty password should fail"),
+            Err(error) => error,
+        };
+        let response = error.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn password_verify_handles_malformed_hashes_without_crashing() {
+        let response = security_password_verify(Json(PasswordVerifyRequest {
+            password: "supersecret123".to_string(),
+            hash: "not-a-password-hash".to_string(),
+        }))
+        .await
+        .expect("verify response");
+
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body collected");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("json parsed");
+        assert_eq!(json["valid"], false);
+        assert_eq!(json["algorithm"], "unknown");
     }
 }
 
@@ -4830,7 +5341,14 @@ mod http3_tests {
         assert_eq!(payload.alt_svc_port, Some(state.listen_port()));
         assert_eq!(payload.alt_svc_max_age, Some(ALT_SVC_MAX_AGE));
         assert_eq!(payload.datagrams.max_payload_bytes, Some(MAX_PAYLOAD_BYTES));
-        assert_eq!(payload.datagrams.channels.len(), 3);
+        assert_eq!(payload.datagrams.channels.len(), 4);
+        let audio = payload
+            .datagrams
+            .audio_profile
+            .expect("audio profile is exposed");
+        assert_eq!(audio.channel, DatagramChannel::Audio.as_u8());
+        assert_eq!(audio.sample_rate_hz, AudioPcmDatagram::SAMPLE_RATE_HZ);
+        assert_eq!(audio.frame_samples, AudioPcmDatagram::FRAME_SAMPLES);
     }
 }
 

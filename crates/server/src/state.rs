@@ -21,12 +21,12 @@ use aunsorm_mdm::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use hmac::{Hmac, Mac};
-use subtle::ConstantTimeEq;
 use rand_core::RngCore;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use tokio::sync::{Mutex, RwLock};
 use tokio::task::JoinHandle;
 use url::Url;
@@ -641,8 +641,8 @@ fn default_oauth_clients() -> HashMap<String, OAuthClient> {
         ),
     );
     // Also accept client_id from environment if customized
-    let takemdm_client_id = std::env::var("TAKEMDM_CLIENT_ID")
-        .unwrap_or_else(|_| "takemdm-auth".to_string());
+    let takemdm_client_id =
+        std::env::var("TAKEMDM_CLIENT_ID").unwrap_or_else(|_| "takemdm-auth".to_string());
     clients.insert(
         takemdm_client_id,
         OAuthClient::new(

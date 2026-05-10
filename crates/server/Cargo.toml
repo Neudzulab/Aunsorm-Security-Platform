@@ -25,9 +25,12 @@ http3-experimental = [
 ]
 
 [dependencies]
+aes-gcm = { version = "0.10", features = ["aes"] }
+argon2 = { workspace = true }
 axum = { version = "0.7", features = ["json"] }
 base64 = { workspace = true }
 serde = { workspace = true }
+serde_bytes = "0.11"
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 sha2 = { workspace = true }

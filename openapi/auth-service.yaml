@@ -204,6 +204,227 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /security/password-hash:
+    post:
+      tags:
+        - JWT
+      summary: Hash a user password
+      description: |
+        Generates a dedicated password hash inside the Aunsorm auth boundary.
+        The current implementation uses Argon2id with a native Aunsorm RNG salt.
+      operationId: hashPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+              properties:
+                password:
+                  type: string
+                  format: password
+                  example: supersecret123
+      responses:
+        '201':
+          description: Password hash generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - algorithm
+                  - hash
+                properties:
+                  algorithm:
+                    type: string
+                    example: argon2id
+                  hash:
+                    type: string
+                    example: $argon2id$v=19$m=19456,t=2,p=1$...
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /security/password-verify:
+    post:
+      tags:
+        - JWT
+      summary: Verify a user password against a stored hash
+      description: |
+        Verifies a plaintext password against a previously generated password hash.
+        Malformed or unsupported hashes return `valid=false` without leaking sensitive details.
+      operationId: verifyPasswordHash
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+                - hash
+              properties:
+                password:
+                  type: string
+                  format: password
+                  example: supersecret123
+                hash:
+                  type: string
+                  example: $argon2id$v=19$m=19456,t=2,p=1$...
+      responses:
+        '200':
+          description: Password verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - valid
+                  - algorithm
+                properties:
+                  valid:
+                    type: boolean
+                    example: true
+                  algorithm:
+                    type: string
+                    example: argon2id
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /security/encrypt:
+    post:
+      tags:
+        - JWT
+      summary: Encrypt a binary payload with AES-256-GCM
+      description: |
+        Encrypts a base64url payload using AES-256-GCM. Clients may pass session-derived
+        key material and optional AAD/session identifiers for HD audio datagram workflows.
+      operationId: encryptBinaryPayload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - payload_b64
+                - key_material
+              properties:
+                payload_b64:
+                  type: string
+                  description: Base64url-encoded plaintext payload
+                key_material:
+                  type: string
+                  description: Raw or base64/base64url-encoded key material
+                aad_b64:
+                  type: string
+                  nullable: true
+                  description: Optional base64url-encoded additional authenticated data
+                session_id:
+                  type: string
+                  nullable: true
+                  description: Optional logical session identifier
+      responses:
+        '201':
+          description: Payload encrypted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - encrypted_payload_b64
+                  - iv_b64
+                  - auth_tag_b64
+                  - algorithm
+                properties:
+                  encrypted_payload_b64:
+                    type: string
+                  iv_b64:
+                    type: string
+                  auth_tag_b64:
+                    type: string
+                  algorithm:
+                    type: string
+                    example: aes-256-gcm
+                  session_id:
+                    type: string
+                    nullable: true
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /security/decrypt:
+    post:
+      tags:
+        - JWT
+      summary: Decrypt a binary payload with AES-256-GCM
+      description: |
+        Decrypts a base64url ciphertext previously produced by `/security/encrypt`.
+      operationId: decryptBinaryPayload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - encrypted_payload_b64
+                - iv_b64
+                - auth_tag_b64
+                - key_material
+              properties:
+                encrypted_payload_b64:
+                  type: string
+                iv_b64:
+                  type: string
+                auth_tag_b64:
+                  type: string
+                key_material:
+                  type: string
+                aad_b64:
+                  type: string
+                  nullable: true
+                session_id:
+                  type: string
+                  nullable: true
+      responses:
+        '200':
+          description: Payload decrypted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - payload_b64
+                  - algorithm
+                properties:
+                  payload_b64:
+                    type: string
+                  algorithm:
+                    type: string
+                    example: aes-256-gcm
+                  session_id:
+                    type: string
+                    nullable: true
+        '400':
+          description: Invalid request payload or authentication failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /oauth/jwks.json:
     get:
       tags:

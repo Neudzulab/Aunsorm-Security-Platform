@@ -505,6 +505,8 @@ dependencies = [
 name = "aunsorm-server"
 version = "0.5.0"
 dependencies = [
+ "aes-gcm",
+ "argon2",
  "aunsorm-acme",
  "aunsorm-core",
  "aunsorm-id",
@@ -537,6 +539,7 @@ dependencies = [
  "rustls 0.22.4",
  "rustls-pki-types",
  "serde",
+ "serde_bytes",
  "serde_json",
  "sha1",
  "sha2",
@@ -3599,6 +3602,16 @@ dependencies = [
  "js-sys",
  "serde",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "serde_bytes"
+version = "0.11.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
+dependencies = [
+ "serde",
+ "serde_core",
 ]
 
 [[package]]

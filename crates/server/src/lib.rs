@@ -64,9 +64,10 @@ pub use config::{
 };
 pub use error::{ApiError, ServerError};
 pub use quic::datagram::{
-    AuditEvent, AuditOutcome, CounterSample, DatagramChannel, DatagramError, DatagramPayload,
-    GaugeSample, HistogramBucket, HistogramSample, OtelPayload, QuicDatagramV1, RatchetProbe,
-    RatchetStatus, MAX_PAYLOAD_BYTES, MAX_WIRE_BYTES,
+    AudioPcmDatagram, AudioSampleFormat, AuditEvent, AuditOutcome, CounterSample, DatagramChannel,
+    DatagramError, DatagramPayload, GaugeSample, HistogramBucket, HistogramSample, OtelPayload,
+    QuicDatagramV1, RatchetProbe, RatchetStatus, MAX_AUDIO_FRAGMENT_BYTES, MAX_PAYLOAD_BYTES,
+    MAX_WIRE_BYTES,
 };
 #[cfg(feature = "http3-experimental")]
 pub use quic::{build_alt_svc_header_value, spawn_http3_poc, Http3PocGuard, ALT_SVC_MAX_AGE};

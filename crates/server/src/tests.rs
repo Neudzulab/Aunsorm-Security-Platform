@@ -3417,16 +3417,30 @@ async fn security_jwe_encrypt_returns_envelope() {
         .expect("response");
 
     assert_eq!(response.status(), StatusCode::CREATED);
-    let body = to_bytes(response.into_body(), usize::MAX).await.expect("body");
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
     let enc: Value = serde_json::from_slice(&body).expect("json");
 
     assert_eq!(enc["algorithm"], "Ed25519-XC20P");
     assert!(enc["kid"].as_str().is_some(), "kid must be present");
-    assert!(enc["jwe"]["protected"].as_str().is_some(), "protected header must be present");
-    assert!(enc["jwe"]["nonce"].as_str().is_some(), "nonce must be present");
-    assert!(enc["jwe"]["ciphertext"].as_str().is_some(), "ciphertext must be present");
+    assert!(
+        enc["jwe"]["protected"].as_str().is_some(),
+        "protected header must be present"
+    );
+    assert!(
+        enc["jwe"]["nonce"].as_str().is_some(),
+        "nonce must be present"
+    );
+    assert!(
+        enc["jwe"]["ciphertext"].as_str().is_some(),
+        "ciphertext must be present"
+    );
     assert!(enc["jwe"]["tag"].as_str().is_some(), "tag must be present");
-    assert!(enc["jwe"]["signature"].as_str().is_some(), "signature must be present");
+    assert!(
+        enc["jwe"]["signature"].as_str().is_some(),
+        "signature must be present"
+    );
 }
 
 #[tokio::test]
@@ -3453,7 +3467,9 @@ async fn security_jwe_encrypt_decrypt_roundtrip() {
         .expect("response");
 
     assert_eq!(enc_response.status(), StatusCode::CREATED);
-    let enc_body = to_bytes(enc_response.into_body(), usize::MAX).await.expect("body");
+    let enc_body = to_bytes(enc_response.into_body(), usize::MAX)
+        .await
+        .expect("body");
     let enc: Value = serde_json::from_slice(&enc_body).expect("json");
 
     // Decrypt
@@ -3476,7 +3492,9 @@ async fn security_jwe_encrypt_decrypt_roundtrip() {
         .expect("response");
 
     assert_eq!(dec_response.status(), StatusCode::OK);
-    let dec_body = to_bytes(dec_response.into_body(), usize::MAX).await.expect("body");
+    let dec_body = to_bytes(dec_response.into_body(), usize::MAX)
+        .await
+        .expect("body");
     let dec: Value = serde_json::from_slice(&dec_body).expect("json");
 
     assert_eq!(dec["payload"], "round-trip payload 🔐");
@@ -3505,7 +3523,9 @@ async fn security_jwe_decrypt_rejects_tampered_ciphertext() {
         .await
         .expect("response");
 
-    let enc_body = to_bytes(enc_response.into_body(), usize::MAX).await.expect("body");
+    let enc_body = to_bytes(enc_response.into_body(), usize::MAX)
+        .await
+        .expect("body");
     let mut enc: Value = serde_json::from_slice(&enc_body).expect("json");
 
     // Tamper the ciphertext
@@ -3535,6 +3555,119 @@ async fn security_jwe_decrypt_rejects_tampered_ciphertext() {
         "tampered JWE must be rejected, got {}",
         dec_response.status(),
     );
+}
+
+#[tokio::test]
+async fn security_encrypt_decrypt_roundtrip() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let payload = URL_SAFE_NO_PAD.encode([1_u8, 2, 3, 4, 5, 6]);
+    let key_material = URL_SAFE_NO_PAD.encode([7_u8; 32]);
+    let encrypt_request = json!({
+        "payload_b64": payload,
+        "key_material": key_material,
+        "session_id": "hd-session-1"
+    });
+
+    let encrypt_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/encrypt")
+                .header("content-type", "application/json")
+                .body(Body::from(encrypt_request.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(encrypt_response.status(), StatusCode::CREATED);
+    let encrypt_body = to_bytes(encrypt_response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let encrypted: Value = serde_json::from_slice(&encrypt_body).expect("json");
+    assert_eq!(encrypted["algorithm"], "aes-256-gcm");
+    assert!(encrypted["encrypted_payload_b64"].as_str().is_some());
+    assert!(encrypted["iv_b64"].as_str().is_some());
+    assert!(encrypted["auth_tag_b64"].as_str().is_some());
+
+    let decrypt_request = json!({
+        "encrypted_payload_b64": encrypted["encrypted_payload_b64"],
+        "iv_b64": encrypted["iv_b64"],
+        "auth_tag_b64": encrypted["auth_tag_b64"],
+        "key_material": key_material,
+        "session_id": "hd-session-1"
+    });
+    let decrypt_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/decrypt")
+                .header("content-type", "application/json")
+                .body(Body::from(decrypt_request.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(decrypt_response.status(), StatusCode::OK);
+    let decrypt_body = to_bytes(decrypt_response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let decrypted: Value = serde_json::from_slice(&decrypt_body).expect("json");
+    assert_eq!(decrypted["algorithm"], "aes-256-gcm");
+    assert_eq!(decrypted["payload_b64"], payload);
+}
+
+#[tokio::test]
+async fn security_decrypt_rejects_wrong_key() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    let encrypt_request = json!({
+        "payload_b64": URL_SAFE_NO_PAD.encode([9_u8, 8, 7, 6]),
+        "key_material": URL_SAFE_NO_PAD.encode([5_u8; 32]),
+        "session_id": "hd-session-2"
+    });
+    let encrypt_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/encrypt")
+                .header("content-type", "application/json")
+                .body(Body::from(encrypt_request.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    let encrypt_body = to_bytes(encrypt_response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let encrypted: Value = serde_json::from_slice(&encrypt_body).expect("json");
+
+    let decrypt_request = json!({
+        "encrypted_payload_b64": encrypted["encrypted_payload_b64"],
+        "iv_b64": encrypted["iv_b64"],
+        "auth_tag_b64": encrypted["auth_tag_b64"],
+        "key_material": URL_SAFE_NO_PAD.encode([4_u8; 32]),
+        "session_id": "hd-session-2"
+    });
+    let decrypt_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/security/decrypt")
+                .header("content-type", "application/json")
+                .body(Body::from(decrypt_request.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(decrypt_response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -3573,7 +3706,9 @@ async fn client_credentials_grant_succeeds_with_correct_secret() {
         .expect("response");
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = to_bytes(response.into_body(), usize::MAX).await.expect("body");
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
     let token_response: Value = serde_json::from_slice(&body).expect("json");
 
     assert!(

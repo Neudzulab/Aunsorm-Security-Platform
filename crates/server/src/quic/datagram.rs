@@ -8,6 +8,8 @@ use thiserror::Error;
 pub const MAX_PAYLOAD_BYTES: usize = 1150;
 /// QUIC datagram paketinin (başlık + yük) izin verilen en yüksek toplam boyutu.
 pub const MAX_WIRE_BYTES: usize = 1350;
+/// HD audio hattı için tek datagrama sığmasına izin verilen en yüksek PCM shard boyutu.
+pub const MAX_AUDIO_FRAGMENT_BYTES: usize = 960;
 
 /// HTTP/3 QUIC datagramları için hata türü.
 #[derive(Debug, Error)]
@@ -44,6 +46,8 @@ pub enum DatagramChannel {
     Audit = 1,
     /// Oturum ratchet gözlemleri.
     Ratchet = 2,
+    /// 96kHz PCM ses shard'ları.
+    Audio = 3,
 }
 
 impl DatagramChannel {
@@ -73,6 +77,7 @@ impl<'de> Deserialize<'de> for DatagramChannel {
             0 => Ok(Self::Telemetry),
             1 => Ok(Self::Audit),
             2 => Ok(Self::Ratchet),
+            3 => Ok(Self::Audio),
             other => Err(D::Error::custom(format!(
                 "unknown datagram channel: {other}"
             ))),
@@ -90,6 +95,8 @@ pub enum DatagramPayload {
     Audit(AuditEvent),
     /// Oturum ratchet gözlemi.
     Ratchet(RatchetProbe),
+    /// 96kHz PCM ses shard'ı.
+    Audio(AudioPcmDatagram),
 }
 
 impl DatagramPayload {
@@ -100,6 +107,7 @@ impl DatagramPayload {
             Self::Otel(_) => DatagramChannel::Telemetry,
             Self::Audit(_) => DatagramChannel::Audit,
             Self::Ratchet(_) => DatagramChannel::Ratchet,
+            Self::Audio(_) => DatagramChannel::Audio,
         }
     }
 
@@ -107,6 +115,74 @@ impl DatagramPayload {
         postcard::to_allocvec(self)
             .map(|bytes| bytes.len())
             .map_err(|err| DatagramError::Serialization(err.to_string()))
+    }
+}
+
+/// HD audio datagramları için örnek formatı.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioSampleFormat {
+    /// Signed 16-bit little-endian PCM.
+    S16Le,
+}
+
+/// 96kHz PCM ses datagramı.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AudioPcmDatagram {
+    pub stream_id: u32,
+    pub sample_rate_hz: u32,
+    pub channels: u8,
+    pub sample_format: AudioSampleFormat,
+    pub frame_samples: u16,
+    pub frame_duration_ms: u16,
+    pub fragment_index: u8,
+    pub fragment_count: u8,
+    #[serde(with = "serde_bytes")]
+    pub payload: Vec<u8>,
+}
+
+impl AudioPcmDatagram {
+    pub const SAMPLE_RATE_HZ: u32 = 96_000;
+    pub const CHANNELS: u8 = 1;
+    pub const FRAME_SAMPLES: u16 = 960;
+    pub const FRAME_DURATION_MS: u16 = 10;
+
+    /// Tek bir PCM shard'ı oluşturur.
+    ///
+    /// # Errors
+    ///
+    /// Fragment bilgisi geçersizse veya payload shard sınırını aşarsa
+    /// [`DatagramError`] döner.
+    pub fn new(
+        stream_id: u32,
+        fragment_index: u8,
+        fragment_count: u8,
+        payload: Vec<u8>,
+    ) -> Result<Self, DatagramError> {
+        if fragment_count == 0 || fragment_index >= fragment_count {
+            return Err(DatagramError::Deserialization(
+                "audio fragment metadata is invalid".to_owned(),
+            ));
+        }
+        if payload.len() > MAX_AUDIO_FRAGMENT_BYTES {
+            return Err(DatagramError::PayloadTooLarge {
+                actual: payload.len(),
+                max: MAX_AUDIO_FRAGMENT_BYTES,
+            });
+        }
+
+        Ok(Self {
+            stream_id,
+            sample_rate_hz: Self::SAMPLE_RATE_HZ,
+            channels: Self::CHANNELS,
+            sample_format: AudioSampleFormat::S16Le,
+            frame_samples: Self::FRAME_SAMPLES,
+            frame_duration_ms: Self::FRAME_DURATION_MS,
+            fragment_index,
+            fragment_count,
+            payload,
+        })
     }
 }
 
@@ -386,6 +462,32 @@ mod tests {
                 name,
                 value
             } if name == "sfu_contexts" && value.is_nan()
+        ));
+    }
+
+    #[test]
+    fn audio_channel_datagram_round_trips() {
+        let payload = AudioPcmDatagram::new(7, 0, 2, vec![0x55; 480]).expect("audio payload");
+        let frame = QuicDatagramV1::new(9, 1_726_092_800_123, DatagramPayload::Audio(payload))
+            .expect("datagram constructed");
+        let encoded = frame.encode().expect("datagram encodes");
+        let decoded = QuicDatagramV1::decode(&encoded).expect("datagram decodes");
+
+        assert_eq!(decoded.channel, DatagramChannel::Audio);
+        assert!(encoded.len() <= MAX_WIRE_BYTES);
+    }
+
+    #[test]
+    fn audio_channel_rejects_oversized_fragments() {
+        let err = AudioPcmDatagram::new(7, 0, 1, vec![0x11; MAX_AUDIO_FRAGMENT_BYTES + 1])
+            .expect_err("oversized fragments must fail");
+
+        assert!(matches!(
+            err,
+            DatagramError::PayloadTooLarge {
+                actual,
+                max: MAX_AUDIO_FRAGMENT_BYTES
+            } if actual == MAX_AUDIO_FRAGMENT_BYTES + 1
         ));
     }
 }

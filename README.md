@@ -115,6 +115,8 @@ Ensure the `git` CLI is available so `cargo deny check` can fetch the advisory d
 
 ## API Versioning Transition
 - **Current state (v0.5.x):** Primary routes are served as unversioned paths (for example `/oauth/token` and `/security/jwt-verify`) to preserve compatibility with existing clients.
+- **Password hashing:** Dedicated user-account password endpoints are available at `/security/password-hash` and `/security/password-verify`.
+- **Binary encryption:** AES-256-GCM helper endpoints are available at `/security/encrypt` and `/security/decrypt`; HD audio datagram clients use this surface with compact binary envelopes while preserving existing session/key rotation flows.
 - **Versioned compatibility:** `/v1/...` aliases are now available for active gateway/service endpoints alongside unversioned routes.
 - **Target state (tracked in `PROD_PLAN.md`):** Path-based versioning (`/v1/...`, then `/v2/...`) will become the canonical contract as implementation work for API versioning is completed.
 - **Client guidance:** Treat unversioned routes as compatibility paths and prepare integrations to follow versioned prefixes once they are announced in release notes.

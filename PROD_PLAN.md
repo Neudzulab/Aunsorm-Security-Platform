@@ -54,6 +54,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Multi-factor authentication (MFA) for admin operations
 - [x] Role-based access control (RBAC) enforcement
 - [x] OAuth 2.0 refresh token rotation
+- [x] Revize: Add dedicated `/security/password-hash` + `/security/password-verify` endpoints for first-party account flows and document the Argon2id contract in auth service docs/OpenAPI
 - [ ] Token revocation webhook notifications
  - [ ] Implement signed webhook payloads with timestamped nonce validation
  - [ ] Add replay protection storage (Redis) with TTL tuned to webhook retry window
@@ -110,11 +111,13 @@ This document tracks all remaining work required for production deployment.
 ### REST API Hardening
 - [ ] Implement API versioning strategy (v1, v2, etc.)
 - [ ] Add comprehensive input validation
+- [x] Revize: Add `/security/encrypt` + `/security/decrypt` AES-256-GCM helpers for HD audio datagram payloads while keeping session-driven key rotation external to the endpoint contract
 - [x] Implement request/response compression (tower-http katmanları ile tüm HTTP servisleri otomatik müzakere kullanıyor)
 - [ ] Add ETag support for caching
  - [x] Revize: Add conditional GET ETag handling for `/health` endpoint in `crates/server`
  - [x] Revize: Add conditional GET ETag handling for `/pqc/capabilities` and `/v1/pqc/capabilities` in `crates/server`
  - [x] Revize: Add conditional GET ETag handling for `/http3/capabilities` in `crates/server`
+ - [x] Revize: Extend `/http3/capabilities` with HD audio datagram profile metadata and `AudioPcmDatagram` shard format in `crates/server`
  - [x] Revize: Add conditional GET ETag handling for `/oauth/transparency` and `/v1/oauth/transparency` in `crates/server`
  - [x] Revize: Add conditional GET ETag handling for `/transparency/tree` and `/v1/transparency/tree` in `crates/server`
 - [x] Implement CORS policies
