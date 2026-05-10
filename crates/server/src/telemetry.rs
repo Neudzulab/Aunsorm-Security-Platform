@@ -101,7 +101,8 @@ pub fn init_tracing(service_name: &str) -> Result<TelemetryGuard, TelemetryError
                 .with(
                     tracing_subscriber::fmt::layer()
                         .with_timer(SystemTime)
-                        .with_target(true),
+                        .with_target(true)
+                        .with_ansi(false),
                 );
             set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
             true
@@ -111,7 +112,8 @@ pub fn init_tracing(service_name: &str) -> Result<TelemetryGuard, TelemetryError
                 .with(
                     tracing_subscriber::fmt::layer()
                         .with_timer(SystemTime)
-                        .with_target(true),
+                        .with_target(true)
+                        .with_ansi(false),
                 );
             set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
             false
@@ -125,7 +127,8 @@ pub fn init_tracing(service_name: &str) -> Result<TelemetryGuard, TelemetryError
             .with(
                 tracing_subscriber::fmt::layer()
                     .with_timer(SystemTime)
-                    .with_target(true),
+                    .with_target(true)
+                    .with_ansi(false),
             );
         set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
         false

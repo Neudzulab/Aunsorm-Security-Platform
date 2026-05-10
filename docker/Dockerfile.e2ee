@@ -5,8 +5,8 @@ FROM rustlang/rust:nightly AS builder
 WORKDIR /build
 COPY . .
 
-# Build server binary (E2EE endpoints)
-RUN cargo build --release --locked -p aunsorm-server
+# Build server binary (E2EE endpoints) with HTTP/3 support.
+RUN cargo build --release --locked -p aunsorm-server --features http3-experimental
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
