@@ -25,6 +25,8 @@ metadata:
     app.kubernetes.io/part-of: aunsorm
 data:
   RUST_LOG: info
+  AUNSORM_LOG_FORMAT: json
+  AUNSORM_OTEL_ENDPOINT: http://aunsorm-otel-collector.aunsorm-platform.svc.cluster.local:4318
   HOST: 0.0.0.0
   GATEWAY_PORT: "50010"
   AUTH_PORT: "50011"

@@ -49,6 +49,10 @@ alınabilecek şekilde hazırlanmıştır.
    `/tmp/dr-restore` dizinine açın. `sqlite3 tokens.db 'PRAGMA integrity_check;'`
    komutunun `ok` döndürdüğünü ve arşivlerin `tar -tzf`/`unzstd --test`
    komutlarıyla doğrulandığını kaydedin.
+   PostgreSQL geçişi etkin ortamlarda `postgres/daily/<stamp>/` altındaki
+   `aunsorm-postgres-*.dump.zst` dosyasını indirin, `.sha256` kontrolünü
+   çalıştırın ve izole bir veritabanına `pg_restore --list` ile katalog
+   okunabilirliğini doğrulayın.
 
 3. **Clock snapshot doğrulaması:** `config/clock/prod-primary.json` ile
    `config/clock/prod-dr.json` dosyalarının SHA-256 özetlerini `sha256sum`

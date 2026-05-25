@@ -1,0 +1,73 @@
+# Apply order:
+# 1. Ensure Prometheus Operator CRDs are installed (`Probe` in `monitoring.coreos.com/v1`).
+# 2. Ensure a blackbox exporter service named `prometheus-blackbox-exporter` exists in `monitoring`.
+# 3. Apply `aunsorm-platform-deployments.yaml` so gateway/auth/crypto services resolve in-cluster.
+# 4. Apply this manifest to track service health endpoint uptime for SLA reporting.
+#
+# Placeholder dependencies required before production rollout:
+# - `kube-prometheus-stack` with blackbox exporter enabled, or equivalent exporter service
+# - Alertmanager rules consuming `probe_success{namespace="aunsorm-platform"}`
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: aunsorm-gateway-uptime
+  namespace: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+    monitoring.aunsorm.io/profile: production
+spec:
+  interval: 30s
+  module: http_2xx
+  prober:
+    url: prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      labels:
+        service: gateway
+        tier: "1"
+      static:
+        - http://aunsorm-gateway.aunsorm-platform.svc.cluster.local:50010/health
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: aunsorm-auth-uptime
+  namespace: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+    monitoring.aunsorm.io/profile: production
+spec:
+  interval: 30s
+  module: http_2xx
+  prober:
+    url: prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      labels:
+        service: auth
+        tier: "0"
+      static:
+        - http://aunsorm-auth-service.aunsorm-platform.svc.cluster.local:50011/health
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Probe
+metadata:
+  name: aunsorm-crypto-uptime
+  namespace: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+    monitoring.aunsorm.io/profile: production
+spec:
+  interval: 30s
+  module: http_2xx
+  prober:
+    url: prometheus-blackbox-exporter.monitoring.svc.cluster.local:9115
+  targets:
+    staticConfig:
+      labels:
+        service: crypto
+        tier: "1"
+      static:
+        - http://aunsorm-crypto-service.aunsorm-platform.svc.cluster.local:50012/health
+

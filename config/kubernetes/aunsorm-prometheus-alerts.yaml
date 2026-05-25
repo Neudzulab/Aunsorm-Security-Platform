@@ -1,0 +1,108 @@
+# Apply order:
+# 1. Ensure Prometheus Operator CRDs are installed (`PrometheusRule` in `monitoring.coreos.com/v1`).
+# 2. Apply `aunsorm-platform-deployments.yaml` and `aunsorm-prometheus-metrics.yaml`.
+# 3. Apply this manifest to create baseline production alerts for gateway/auth/crypto targets.
+# 4. Confirm Alertmanager routes `severity="critical|warning"` to PagerDuty or Opsgenie.
+#
+# Placeholder dependencies required before production rollout:
+# - Alertmanager receiver routes for `team="platform"` and `team="identity"`
+# - Grafana dashboards that link to these alert names
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aunsorm-platform-alerts
+  namespace: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+    monitoring.aunsorm.io/profile: production
+spec:
+  groups:
+    - name: aunsorm.platform.availability
+      rules:
+        - alert: AunsormGatewayMetricsTargetDown
+          expr: up{namespace="aunsorm-platform", service="gateway"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: Aunsorm gateway metrics target is down
+            description: Prometheus cannot scrape the gateway /metrics endpoint for more than 2 minutes.
+            runbook_url: https://github.com/neudzulab/Aunsorm-Security-Platform/blob/main/docs/src/operations/incident-response-playbook.md
+        - alert: AunsormAuthMetricsTargetDown
+          expr: up{namespace="aunsorm-platform", service="auth"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: identity
+          annotations:
+            summary: Aunsorm auth metrics target is down
+            description: Prometheus cannot scrape the auth-service /metrics endpoint for more than 2 minutes.
+            runbook_url: https://github.com/neudzulab/Aunsorm-Security-Platform/blob/main/docs/src/operations/incident-response-playbook.md
+        - alert: AunsormCryptoMetricsTargetDown
+          expr: up{namespace="aunsorm-platform", service="crypto"} == 0
+          for: 2m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: Aunsorm crypto metrics target is down
+            description: Prometheus cannot scrape the crypto-service /metrics endpoint for more than 2 minutes.
+            runbook_url: https://github.com/neudzulab/Aunsorm-Security-Platform/blob/main/docs/src/operations/incident-response-playbook.md
+    - name: aunsorm.platform.oauth
+      rules:
+        - alert: AunsormPendingAuthRequestsHigh
+          expr: aunsorm_pending_auth_requests > 100
+          for: 10m
+          labels:
+            severity: warning
+            team: identity
+          annotations:
+            summary: Pending OAuth authorization requests are elevated
+            description: More than 100 PKCE authorization requests have remained pending for at least 10 minutes.
+            runbook_url: https://github.com/neudzulab/Aunsorm-Security-Platform/blob/main/docs/src/operations/oauth-web-integration.md
+        - alert: AunsormActiveTokenMetricMissing
+          expr: absent(aunsorm_active_tokens)
+          for: 5m
+          labels:
+            severity: critical
+            team: identity
+          annotations:
+            summary: Active OAuth token metric is missing
+            description: Prometheus has not received the aunsorm_active_tokens series for at least 5 minutes.
+            runbook_url: https://github.com/neudzulab/Aunsorm-Security-Platform/blob/main/docs/src/operations/incident-response-playbook.md
+    - name: aunsorm.platform.uptime
+      rules:
+        - alert: AunsormHealthProbeFailing
+          expr: probe_success{namespace="aunsorm-platform", service=~"gateway|auth|crypto"} == 0
+          for: 3m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: Aunsorm health probe is failing
+            description: Blackbox uptime checks for {{ $labels.service }} have failed for at least 3 minutes.
+            runbook_url: https://github.com/neudzulab/Aunsorm-Security-Platform/blob/main/docs/src/operations/incident-response-playbook.md
+    - name: aunsorm.platform.backups
+      rules:
+        - alert: AunsormPostgresBackupJobFailed
+          expr: kube_job_status_failed{namespace="aunsorm-platform", job_name=~"aunsorm-postgres-daily-backup-.*"} > 0
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: Aunsorm PostgreSQL backup job failed
+            description: The PostgreSQL daily backup job {{ $labels.job_name }} has failed and may have missed the RPO window.
+            runbook_url: https://github.com/neudzulab/Aunsorm-Security-Platform/blob/main/docs/src/operations/disaster-recovery-runbook.md
+        - alert: AunsormPostgresBackupCronJobSuspended
+          expr: kube_cronjob_spec_suspend{namespace="aunsorm-platform", cronjob="aunsorm-postgres-daily-backup"} == 1
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: Aunsorm PostgreSQL backup CronJob is suspended
+            description: The PostgreSQL daily backup CronJob is suspended; confirm this is tied to an approved change window.
+            runbook_url: https://github.com/neudzulab/Aunsorm-Security-Platform/blob/main/docs/src/operations/disaster-recovery-runbook.md

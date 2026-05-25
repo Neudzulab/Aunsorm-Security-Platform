@@ -12,7 +12,7 @@ COPY . .
 
 # Build server binary (crypto endpoints)
 # Docker layers will cache based on Cargo.lock changes
-RUN cargo build --release --locked -p aunsorm-server
+RUN cargo build --release --locked -p aunsorm-server --features otel
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \

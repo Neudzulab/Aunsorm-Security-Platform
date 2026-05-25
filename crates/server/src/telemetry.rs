@@ -13,6 +13,11 @@ use tracing_subscriber::layer::SubscriberExt;
 /// These constants are introduced ahead of the instrumentation work so that
 /// service teams can align dashboards and alert rules while the counters and
 /// histograms are wired into the runtime.
+pub const METRIC_PENDING_AUTH_REQUESTS: &str = "aunsorm_pending_auth_requests";
+pub const METRIC_ACTIVE_TOKENS: &str = "aunsorm_active_tokens";
+pub const METRIC_SFU_CONTEXTS: &str = "aunsorm_sfu_contexts";
+pub const METRIC_MDM_REGISTERED_DEVICES: &str = "aunsorm_mdm_registered_devices";
+
 #[allow(dead_code)] // Reserved for future OpenTelemetry instrumentation
 pub const METRIC_JWE_GENERATED_TOTAL: &str = "aunsorm_server_jwe_generated_total";
 
@@ -79,6 +84,8 @@ impl Drop for TelemetryGuard {
 /// Ortam değişkenlerinden tracing/telemetri aboneliğini başlatır.
 ///
 /// * `AUNSORM_LOG` veya `RUST_LOG` log filtresini belirler.
+/// * `AUNSORM_LOG_FORMAT=json` veya `AUNSORM_LOG_JSON=1` yapılandırılmış JSON
+///   log çıktısını etkinleştirir.
 /// * `AUNSORM_OTEL_ENDPOINT` veya `OTEL_EXPORTER_OTLP_ENDPOINT` ayarlanırsa
 ///   OTLP/HTTP üzerinden OpenTelemetry ihracatı açılır.
 ///
@@ -89,52 +96,144 @@ pub fn init_tracing(service_name: &str) -> Result<TelemetryGuard, TelemetryError
     let filter = env::var("AUNSORM_LOG")
         .or_else(|_| env::var("RUST_LOG"))
         .unwrap_or_else(|_| "info".to_string());
+    let json_logs = json_logs_enabled();
     #[cfg(not(feature = "otel"))]
     let _ = service_name;
     #[cfg(feature = "otel")]
     let otel_enabled = {
         if let Some((layer, provider)) = otel_layer(service_name)? {
             global::set_tracer_provider(provider);
-            let subscriber = tracing_subscriber::registry()
-                .with(layer)
-                .with(EnvFilter::try_new(filter.as_str())?)
-                .with(
-                    tracing_subscriber::fmt::layer()
-                        .with_timer(SystemTime)
-                        .with_target(true)
-                        .with_ansi(false),
-                );
-            set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
+            if json_logs {
+                let subscriber = tracing_subscriber::registry()
+                    .with(layer)
+                    .with(EnvFilter::try_new(filter.as_str())?)
+                    .with(
+                        tracing_subscriber::fmt::layer()
+                            .json()
+                            .with_timer(SystemTime)
+                            .with_target(true)
+                            .with_ansi(false),
+                    );
+                set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
+            } else {
+                let subscriber = tracing_subscriber::registry()
+                    .with(layer)
+                    .with(EnvFilter::try_new(filter.as_str())?)
+                    .with(
+                        tracing_subscriber::fmt::layer()
+                            .with_timer(SystemTime)
+                            .with_target(true)
+                            .with_ansi(false),
+                    );
+                set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
+            }
             true
         } else {
-            let subscriber = tracing_subscriber::registry()
-                .with(EnvFilter::try_new(filter.as_str())?)
-                .with(
-                    tracing_subscriber::fmt::layer()
-                        .with_timer(SystemTime)
-                        .with_target(true)
-                        .with_ansi(false),
-                );
-            set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
+            if json_logs {
+                let subscriber = tracing_subscriber::registry()
+                    .with(EnvFilter::try_new(filter.as_str())?)
+                    .with(
+                        tracing_subscriber::fmt::layer()
+                            .json()
+                            .with_timer(SystemTime)
+                            .with_target(true)
+                            .with_ansi(false),
+                    );
+                set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
+            } else {
+                let subscriber = tracing_subscriber::registry()
+                    .with(EnvFilter::try_new(filter.as_str())?)
+                    .with(
+                        tracing_subscriber::fmt::layer()
+                            .with_timer(SystemTime)
+                            .with_target(true)
+                            .with_ansi(false),
+                    );
+                set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
+            }
             false
         }
     };
 
     #[cfg(not(feature = "otel"))]
     let otel_enabled = {
-        let subscriber = tracing_subscriber::registry()
-            .with(EnvFilter::try_new(filter)?)
-            .with(
-                tracing_subscriber::fmt::layer()
-                    .with_timer(SystemTime)
-                    .with_target(true)
-                    .with_ansi(false),
-            );
-        set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
+        if json_logs {
+            let subscriber = tracing_subscriber::registry()
+                .with(EnvFilter::try_new(filter)?)
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .json()
+                        .with_timer(SystemTime)
+                        .with_target(true)
+                        .with_ansi(false),
+                );
+            set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
+        } else {
+            let subscriber = tracing_subscriber::registry()
+                .with(EnvFilter::try_new(filter)?)
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .with_timer(SystemTime)
+                        .with_target(true)
+                        .with_ansi(false),
+                );
+            set_global_default(subscriber).map_err(TelemetryError::Subscriber)?;
+        }
         false
     };
 
     Ok(TelemetryGuard { otel_enabled })
+}
+
+fn json_logs_enabled() -> bool {
+    env::var("AUNSORM_LOG_FORMAT")
+        .map(|value| value.eq_ignore_ascii_case("json"))
+        .unwrap_or(false)
+        || env::var("AUNSORM_LOG_JSON")
+            .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "True"))
+            .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod json_log_tests {
+    use super::json_logs_enabled;
+    use std::{
+        env,
+        sync::{Mutex, OnceLock},
+    };
+
+    static ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn env_lock() -> &'static Mutex<()> {
+        ENV_MUTEX.get_or_init(|| Mutex::new(()))
+    }
+
+    fn clear_env() {
+        env::remove_var("AUNSORM_LOG_FORMAT");
+        env::remove_var("AUNSORM_LOG_JSON");
+    }
+
+    #[test]
+    fn enables_json_logs_from_format_env() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
+        clear_env();
+        env::set_var("AUNSORM_LOG_FORMAT", "json");
+
+        assert!(json_logs_enabled());
+
+        clear_env();
+    }
+
+    #[test]
+    fn enables_json_logs_from_boolean_env() {
+        let _guard = env_lock().lock().expect("env mutex poisoned");
+        clear_env();
+        env::set_var("AUNSORM_LOG_JSON", "1");
+
+        assert!(json_logs_enabled());
+
+        clear_env();
+    }
 }
 
 #[cfg(feature = "otel")]

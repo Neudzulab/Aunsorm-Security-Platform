@@ -1,0 +1,116 @@
+# Apply order:
+# 1. Ensure network policy allows app pods to reach this collector on 4318/TCP.
+# 2. Apply this manifest before workloads that set `AUNSORM_OTEL_ENDPOINT`.
+# 3. Configure the `OTLP_HTTP_EXPORTER_ENDPOINT` environment variable from a Secret or ConfigMap.
+# 4. Confirm traces arrive in Jaeger, Tempo, or the configured OTLP backend.
+#
+# Placeholder dependencies required before production rollout:
+# - OTLP/HTTP backend endpoint, such as Jaeger, Tempo, or an upstream collector
+# - NetworkPolicy allowing egress from `aunsorm-platform` to the trace backend
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aunsorm-otel-collector-config
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-otel-collector
+    app.kubernetes.io/part-of: aunsorm
+data:
+  collector.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch: {}
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 256
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+    exporters:
+      otlphttp:
+        endpoint: ${env:OTLP_HTTP_EXPORTER_ENDPOINT}
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlphttp]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aunsorm-otel-collector
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-otel-collector
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aunsorm-otel-collector
+  template:
+    metadata:
+      labels:
+        app: aunsorm-otel-collector
+        app.kubernetes.io/part-of: aunsorm
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector-contrib:0.100.0
+          args:
+            - --config=/etc/otelcol/collector.yaml
+          ports:
+            - name: otlp-http
+              containerPort: 4318
+            - name: health
+              containerPort: 13133
+          env:
+            - name: OTLP_HTTP_EXPORTER_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: aunsorm-observability-secrets
+                  key: OTLP_HTTP_EXPORTER_ENDPOINT
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 13133
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: aunsorm-otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aunsorm-otel-collector
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-otel-collector
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  selector:
+    app: aunsorm-otel-collector
+  ports:
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http

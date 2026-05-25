@@ -95,10 +95,16 @@ This document tracks all remaining work required for production deployment.
 ### Monitoring & Observability
 - [ ] Deploy Prometheus + Grafana for metrics
 - [ ] Configure alerting rules for critical errors
+ - [x] Revize: Add baseline PrometheusRule alerts for gateway/auth/crypto scrape failures and OAuth metric anomalies under `config/kubernetes`
 - [ ] Set up distributed tracing (Jaeger / OpenTelemetry)
+ - [x] Revize: Add baseline OTLP collector deployment config and enable `otel` feature in gateway/auth/crypto Docker builds
 - [ ] Implement structured logging with log aggregation (ELK / Loki)
+ - [x] Revize: Add JSON log format switch for `aunsorm-server` and baseline Loki/Promtail scrape contract under `config/kubernetes`
 - [ ] Create operational dashboards for each service
+ - [x] Revize: Add baseline Grafana dashboard JSON for canonical Aunsorm Prometheus metrics under `config/grafana`
 - [ ] Configure uptime monitoring and SLA tracking
+ - [x] Revize: Add Prometheus Operator Probe manifests for gateway/auth/crypto health endpoint uptime tracking
+ - [x] Revize: Add critical `probe_success` alert coverage for gateway/auth/crypto uptime probes
 
 ### Tooling & CLI
 - [x] Harden CLI default server URL inference so HOST-provided port/path/query hints are preserved
@@ -302,7 +308,10 @@ This document tracks all remaining work required for production deployment.
 
 ### Backup & Disaster Recovery
 - [ ] Implement automated daily backups
+ - [x] Revize: Add Kubernetes PostgreSQL daily backup CronJob with compressed dump and checksum upload to S3-compatible storage
+ - [x] Revize: Add Prometheus alerts for PostgreSQL backup job failures and suspended backup CronJob state
 - [ ] Test backup restoration procedures
+ - [x] Revize: Document PostgreSQL backup checksum and `pg_restore --list` spot-check in the disaster recovery runbook
 - [x] Define Recovery Time Objective (RTO) and Recovery Point Objective (RPO)
 - [ ] Set up cross-region disaster recovery
 - [x] Document backup retention policies
@@ -334,9 +343,14 @@ This document tracks all remaining work required for production deployment.
   - [x] Revize: Define zero-downtime rolling update parameters (`maxUnavailable: 0`, `maxSurge: 1`) for baseline gateway/auth/crypto deployments
   - [x] Revize: Add PodDisruptionBudget manifests for gateway/auth/crypto workloads to preserve quorum during voluntary node drains
 - [ ] PostgreSQL migration scripts
+  - [x] Revize: Add initial PostgreSQL schema migrations for JTI, token, refresh token, and transparency ledgers under `migrations/postgres`
+  - [x] Revize: Add Bash and PowerShell migration runners that apply PostgreSQL scripts in lexical order via `psql`
+  - [x] Revize: Add dedicated PostgreSQL backup container build that packages `pg_dump`, AWS CLI, and zstd for daily backup jobs
 - [ ] Prometheus metrics standardization
   - [x] Revize: Add baseline Prometheus scrape annotations and ServiceMonitor manifests for gateway/auth/crypto Kubernetes services
+  - [x] Revize: Centralize canonical `/metrics` Prometheus gauge names in `crates/server::telemetry` and assert type lines in regression coverage
 - [ ] API versioning implementation
+  - [x] Revize: Add `/v1/metrics` regression coverage to preserve versioned Prometheus endpoint compatibility
 
 ---
 

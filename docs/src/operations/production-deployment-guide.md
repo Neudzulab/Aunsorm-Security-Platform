@@ -36,9 +36,10 @@ hazırlanmıştır.
    - `scripts/pkg-check.sh` çıktısında uyarı veya kullanım dışı
      bağımlılık olmadığından emin olun.
 3. **Veri düzlemi**
-   - PostgreSQL hedefleniyorsa migration betikleri (`scripts/migrate.sh`)
-     production DSN ile çalıştırılmalı; SQLite yalnızca geliştirme için
-     kullanılabilir.
+   - PostgreSQL hedefleniyorsa migration betikleri
+     (`scripts/apply-postgres-migrations.sh` veya
+     `scripts/apply-postgres-migrations.ps1`) production DSN ile sıralı
+     uygulanmalı; SQLite yalnızca geliştirme için kullanılabilir.
    - `AUNSORM_JTI_DB` konumu tmpfs üzerinde olmalı ve yedeklemeye dahil
      edilmelidir.
 4. **Ağ ve sertifika hazırlığı**
@@ -100,6 +101,25 @@ hazırlanmıştır.
    - `prometheus` hedef listesinde `gateway`, `auth-service`,
      `pqc-service` ve `rng-service` entry'lerinin `UP` olduğunu kontrol
      edin.
+   - `kubectl apply -f config/kubernetes/aunsorm-prometheus-alerts.yaml`
+     sonrası Alertmanager hedeflerinde `Aunsorm*` kurallarının yüklendiğini
+     ve PagerDuty/Opsgenie route'larına eşleştiğini doğrulayın.
+   - `kubectl apply -f config/kubernetes/aunsorm-uptime-probes.yaml`
+     sonrası `probe_success{namespace="aunsorm-platform"}` serilerinin
+     gateway/auth/crypto servisleri için üretildiğini doğrulayın.
+   - `kubectl apply -f config/kubernetes/aunsorm-loki-logging.yaml`
+     sonrası log collector yapılandırmasına `promtail-aunsorm.yaml` içeriğini
+     taşıyın ve Loki'de `{namespace="aunsorm-platform"}` sorgusunu doğrulayın.
+   - `kubectl apply -f config/kubernetes/aunsorm-otel-collector.yaml`
+     sonrası gateway/auth/crypto pod'larının
+     `AUNSORM_OTEL_ENDPOINT=http://aunsorm-otel-collector...:4318` değerini
+     aldığını ve trace backend'ine span gönderdiğini doğrulayın.
+   - `docker/Dockerfile.postgres-backup` ile
+     `ghcr.io/neudzulab/aunsorm-postgres-backup:0.5.0` imajını build/push
+     edin; imaj `pg_dump`, AWS CLI ve zstd araçlarını içerir.
+   - `kubectl apply -f config/kubernetes/aunsorm-postgres-backup-cronjob.yaml`
+     sonrası ilk `aunsorm-postgres-daily-backup` job'unun S3 bucket'a `.dump.zst`
+     ve `.sha256` nesnelerini yazdığını doğrulayın.
 
 ## Sürüm Yükseltme Prosedürü
 

@@ -1,0 +1,48 @@
+# Apply order:
+# 1. Ensure Loki and Promtail (or Grafana Agent Flow) are installed in the `monitoring` namespace.
+# 2. Apply `aunsorm-platform-deployments.yaml` so pods emit `AUNSORM_LOG_FORMAT=json`.
+# 3. Mount or translate this scrape config into the cluster log collector.
+# 4. Confirm Loki queries can filter by `namespace="aunsorm-platform"` and `app`.
+#
+# Placeholder dependencies required before production rollout:
+# - Loki write endpoint and retention policy
+# - Promtail or Grafana Agent deployment managed by platform SRE
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aunsorm-loki-promtail-config
+  namespace: aunsorm-platform
+  labels:
+    app.kubernetes.io/part-of: aunsorm
+    observability.aunsorm.io/profile: production
+data:
+  promtail-aunsorm.yaml: |
+    scrape_configs:
+      - job_name: aunsorm-platform-pods
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - aunsorm-platform
+        pipeline_stages:
+          - json:
+              expressions:
+                level: level
+                target: target
+                message: fields.message
+          - labels:
+              level:
+              target:
+          - output:
+              source: message
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - source_labels: [__meta_kubernetes_pod_container_name]
+            target_label: container
+

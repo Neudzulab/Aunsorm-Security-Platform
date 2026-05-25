@@ -12,7 +12,7 @@ COPY . .
 
 # Build server binary (auth endpoints) with HTTP/3 support.
 # Docker layers will cache based on Cargo.lock changes.
-RUN cargo build --release --locked -p aunsorm-server --features http3-experimental
+RUN cargo build --release --locked -p aunsorm-server --features http3-experimental,otel
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \

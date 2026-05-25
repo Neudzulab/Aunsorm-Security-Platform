@@ -1209,10 +1209,32 @@ async fn pkce_flow_succeeds() {
         .await
         .expect("metrics body");
     let metrics_text = String::from_utf8(metrics_body.to_vec()).expect("metrics str");
-    assert!(metrics_text.contains("aunsorm_pending_auth_requests"));
-    assert!(metrics_text.contains("aunsorm_active_tokens"));
-    assert!(metrics_text.contains("aunsorm_sfu_contexts"));
-    assert!(metrics_text.contains("aunsorm_mdm_registered_devices"));
+    assert!(metrics_text.contains("# TYPE aunsorm_pending_auth_requests gauge"));
+    assert!(metrics_text.contains("# TYPE aunsorm_active_tokens gauge"));
+    assert!(metrics_text.contains("# TYPE aunsorm_sfu_contexts gauge"));
+    assert!(metrics_text.contains("# TYPE aunsorm_mdm_registered_devices gauge"));
+
+    let versioned_metrics_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/metrics")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("versioned metrics");
+    assert_eq!(versioned_metrics_response.status(), StatusCode::OK);
+    let versioned_metrics_body = to_bytes(versioned_metrics_response.into_body(), usize::MAX)
+        .await
+        .expect("versioned metrics body");
+    let versioned_metrics_text =
+        String::from_utf8(versioned_metrics_body.to_vec()).expect("versioned metrics str");
+    assert!(versioned_metrics_text.contains("# TYPE aunsorm_pending_auth_requests gauge"));
+    assert!(versioned_metrics_text.contains("# TYPE aunsorm_active_tokens gauge"));
+    assert!(versioned_metrics_text.contains("# TYPE aunsorm_sfu_contexts gauge"));
+    assert!(versioned_metrics_text.contains("# TYPE aunsorm_mdm_registered_devices gauge"));
 
     let transparency_response = app
         .clone()

@@ -1,0 +1,13 @@
+# syntax=docker/dockerfile:1
+
+FROM postgres:16-alpine
+
+RUN apk add --no-cache aws-cli zstd
+
+RUN addgroup -S aunsorm-backup && adduser -S -G aunsorm-backup -u 10070 aunsorm-backup
+
+USER aunsorm-backup
+WORKDIR /backup
+
+ENTRYPOINT ["/bin/sh"]
+

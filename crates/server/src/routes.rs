@@ -47,6 +47,10 @@ use crate::acme::{
     AcmeProblem, FinalizeOrderOutcome, NewAccountOutcome, NewOrderOutcome, OrderLookupOutcome,
     RevokeCertOutcome,
 };
+use crate::telemetry::{
+    METRIC_ACTIVE_TOKENS, METRIC_MDM_REGISTERED_DEVICES, METRIC_PENDING_AUTH_REQUESTS,
+    METRIC_SFU_CONTEXTS,
+};
 
 mod acme;
 
@@ -368,18 +372,22 @@ pub async fn metrics(State(state): State<Arc<ServerState>>) -> Result<impl IntoR
         .map_err(|err| ApiError::server_error(format!("Kayıtlı cihaz sayısı alınamadı: {err}",)))?;
 
     let metrics_text = format!(
-        "# HELP aunsorm_pending_auth_requests Pending PKCE authorization requests\n\
-         # TYPE aunsorm_pending_auth_requests gauge\n\
-         aunsorm_pending_auth_requests {pending}\n\n\
-         # HELP aunsorm_active_tokens Active OAuth tokens\n\
-         # TYPE aunsorm_active_tokens gauge\n\
-         aunsorm_active_tokens {active}\n\n\
-         # HELP aunsorm_sfu_contexts Active SFU contexts\n\
-         # TYPE aunsorm_sfu_contexts gauge\n\
-         aunsorm_sfu_contexts {sfu}\n\n\
-         # HELP aunsorm_mdm_registered_devices Registered MDM devices\n\
-         # TYPE aunsorm_mdm_registered_devices gauge\n\
-         aunsorm_mdm_registered_devices {devices}\n",
+        "# HELP {pending_name} Pending PKCE authorization requests\n\
+         # TYPE {pending_name} gauge\n\
+         {pending_name} {pending}\n\n\
+         # HELP {active_name} Active OAuth tokens\n\
+         # TYPE {active_name} gauge\n\
+         {active_name} {active}\n\n\
+         # HELP {sfu_name} Active SFU contexts\n\
+         # TYPE {sfu_name} gauge\n\
+         {sfu_name} {sfu}\n\n\
+         # HELP {devices_name} Registered MDM devices\n\
+         # TYPE {devices_name} gauge\n\
+         {devices_name} {devices}\n",
+        pending_name = METRIC_PENDING_AUTH_REQUESTS,
+        active_name = METRIC_ACTIVE_TOKENS,
+        sfu_name = METRIC_SFU_CONTEXTS,
+        devices_name = METRIC_MDM_REGISTERED_DEVICES,
     );
 
     Ok((
@@ -911,18 +919,12 @@ struct QuicFingerprintResponse {
 /// Zasian SFU ve diğer servisler QUIC/TLS kalibrasyon parmak izini bu
 /// endpoint üzerinden alır. `certificate_sha256` alanı kolon-ayrılmış
 /// büyük harf hex çiftleri formatındadır (ör. "AA:BB:CC:...").
-async fn quic_fingerprint(
-    State(state): State<Arc<ServerState>>,
-) -> impl IntoResponse {
+async fn quic_fingerprint(State(state): State<Arc<ServerState>>) -> impl IntoResponse {
     let hex = state.audit_proof_document().await.calibration_fingerprint;
     let certificate_sha256 = hex
         .as_bytes()
         .chunks(2)
-        .map(|chunk| {
-            std::str::from_utf8(chunk)
-                .unwrap_or("??")
-                .to_uppercase()
-        })
+        .map(|chunk| std::str::from_utf8(chunk).unwrap_or("??").to_uppercase())
         .collect::<Vec<_>>()
         .join(":");
     Json(QuicFingerprintResponse {

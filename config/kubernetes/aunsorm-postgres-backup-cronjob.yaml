@@ -1,0 +1,95 @@
+# Apply order:
+# 1. Ensure `aunsorm-app-secrets` contains `DATABASE_URL`.
+# 2. Ensure `aunsorm-backup-secrets` contains `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+#    `AWS_REGION`, and `S3_BACKUP_BUCKET`.
+# 3. Apply this manifest after PostgreSQL production migration scripts are validated.
+# 4. Confirm the first backup object and `.sha256` checksum are written to the configured bucket.
+#
+# Placeholder dependencies required before production rollout:
+# - S3-compatible bucket with object lock and lifecycle policy matching `backup-retention-policy.md`
+# - IAM principal restricted to write backup prefixes and read only during approved restore drills
+# - `ghcr.io/neudzulab/aunsorm-postgres-backup:0.5.0` built from `docker/Dockerfile.postgres-backup`
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: aunsorm-postgres-daily-backup
+  namespace: aunsorm-platform
+  labels:
+    app: aunsorm-postgres-backup
+    app.kubernetes.io/part-of: aunsorm
+spec:
+  schedule: "17 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: aunsorm-postgres-backup
+            app.kubernetes.io/part-of: aunsorm
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: postgres-backup
+              image: ghcr.io/neudzulab/aunsorm-postgres-backup:0.5.0
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: aunsorm-app-secrets
+                      key: DATABASE_URL
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: aunsorm-backup-secrets
+                      key: AWS_ACCESS_KEY_ID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: aunsorm-backup-secrets
+                      key: AWS_SECRET_ACCESS_KEY
+                - name: AWS_REGION
+                  valueFrom:
+                    secretKeyRef:
+                      name: aunsorm-backup-secrets
+                      key: AWS_REGION
+                - name: S3_BACKUP_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: aunsorm-backup-secrets
+                      key: S3_BACKUP_BUCKET
+                - name: BACKUP_ENV
+                  value: prod-primary
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  stamp="$(date -u +%Y-%m-%dT%H%M%SZ)"
+                  workdir="/tmp/aunsorm-postgres-backup"
+                  mkdir -p "${workdir}"
+                  dump="${workdir}/aunsorm-postgres-${stamp}.dump"
+                  archive="${dump}.zst"
+                  checksum="${archive}.sha256"
+                  pg_dump "${DATABASE_URL}" --format=custom --no-owner --no-privileges --file="${dump}"
+                  zstd -T0 --rm "${dump}"
+                  sha256sum "${archive}" > "${checksum}"
+                  prefix="s3://${S3_BACKUP_BUCKET}/${BACKUP_ENV}/postgres/daily/${stamp}"
+                  aws s3 cp "${archive}" "${prefix}/$(basename "${archive}")" --only-show-errors
+                  aws s3 cp "${checksum}" "${prefix}/$(basename "${checksum}")" --only-show-errors
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: true
+                runAsUser: 70
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
