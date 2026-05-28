@@ -2792,6 +2792,7 @@ fn handle_jwt_verify(args: &JwtVerifyArgs) -> CliResult<()> {
         issuer: args.issuer.clone(),
         subject: args.subject.clone(),
         audience: args.audience.clone(),
+        replay_namespace: None,
         require_jti: !args.allow_missing_jti,
         now: None,
     };

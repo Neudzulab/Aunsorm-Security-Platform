@@ -28,7 +28,7 @@ use hex::{decode, decode_to_slice};
 use sha2::{Digest, Sha256};
 use std::array;
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -56,6 +56,7 @@ mod acme;
 
 // Global registered devices set for testing
 static REGISTERED_DEVICES: Mutex<Option<HashSet<String>>> = Mutex::new(None);
+static QUIC_REPLAY_GRACE_TRACKER: Mutex<Option<HashMap<String, SystemTime>>> = Mutex::new(None);
 
 fn service_mode_from_binary_name(name: &str) -> Option<&'static str> {
     match name {
@@ -1401,8 +1402,17 @@ async fn acme_revoke_certificate(
 
 // JWT Verify endpoint
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct JwtVerifyRequest {
     pub token: String,
+    #[serde(default)]
+    pub token_purpose: Option<String>,
+    #[serde(default)]
+    pub token_intent: Option<String>,
+    #[serde(default)]
+    pub transport: Option<String>,
+    #[serde(default)]
+    pub reconnect_grace_ms: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -1426,26 +1436,44 @@ pub struct JwtPayload {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayDiagnostics {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jti: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub: Option<String>,
+    #[serde(rename = "roomId", skip_serializing_if = "Option::is_none")]
+    pub room_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Serialize)]
 pub struct JwtVerifyResponse {
     pub valid: bool,
     #[serde(default)]
     pub payload: Option<JwtPayload>,
     #[serde(default)]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replay: Option<ReplayDiagnostics>,
 }
 
 pub async fn verify_jwt_token(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<JwtVerifyRequest>,
 ) -> Json<JwtVerifyResponse> {
-    Json(verify_token_for_audience(&state, request.token.trim(), state.audience()).await)
+    Json(verify_token_for_audience(&state, request, state.audience()).await)
 }
 
 pub async fn verify_media_token(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<JwtVerifyRequest>,
 ) -> Json<JwtVerifyResponse> {
-    Json(verify_token_for_audience(&state, request.token.trim(), ZASIAN_MEDIA_AUDIENCE).await)
+    Json(verify_token_for_audience(&state, request, ZASIAN_MEDIA_AUDIENCE).await)
 }
 
 #[derive(Deserialize)]
@@ -1738,18 +1766,34 @@ pub async fn security_password_verify(
 
 async fn verify_token_for_audience(
     state: &Arc<ServerState>,
-    token: &str,
+    request: JwtVerifyRequest,
     expected_audience: &str,
 ) -> JwtVerifyResponse {
     tracing::info!("ROUTES.RS: verifying token with expected audience {expected_audience}");
 
+    let token = request.token.trim();
     let normalized_token = sanitize_token_input(token);
+    let request_purpose = resolve_token_purpose(&request);
+    let request_transport = normalize_contract_value(request.transport.as_deref());
+    let replay_namespace = build_replay_namespace(
+        expected_audience,
+        request_purpose.as_deref(),
+        request_transport.as_deref(),
+    );
 
     if normalized_token.is_empty() {
         return JwtVerifyResponse {
             valid: false,
             payload: None,
             error: Some("Token is required".to_string()),
+            replay: Some(ReplayDiagnostics {
+                jti: None,
+                sub: None,
+                room_id: None,
+                purpose: request_purpose,
+                transport: request_transport,
+                reason: "token-missing".to_string(),
+            }),
         };
     }
 
@@ -1759,19 +1803,28 @@ async fn verify_token_for_audience(
     let options = VerificationOptions {
         issuer: Some(issuer.clone()),
         audience: Some(expected_audience.to_owned()),
+        replay_namespace: Some(replay_namespace.clone()),
         require_jti: true,
         ..VerificationOptions::default()
     };
 
     match verifier.verify(normalized_token.as_ref(), &options) {
         Ok(claims) => {
-            let payload_value = match serde_json::to_value(&claims) {
+            let (payload, room_id) = match build_jwt_payload(&claims, &issuer, expected_audience) {
                 Ok(value) => value,
                 Err(err) => {
                     return JwtVerifyResponse {
                         valid: false,
                         payload: None,
-                        error: Some(format!("Token payload error: {err}")),
+                        error: Some(err),
+                        replay: Some(ReplayDiagnostics {
+                            jti: claims.jwt_id.clone(),
+                            sub: claims.subject.clone(),
+                            room_id: extract_room_id_from_claims(&claims),
+                            purpose: resolved_purpose_from_claims(&claims, request_purpose.clone()),
+                            transport: request_transport,
+                            reason: "payload-serialization-error".to_string(),
+                        }),
                     };
                 }
             };
@@ -1784,6 +1837,17 @@ async fn verify_token_for_audience(
                             valid: false,
                             payload: None,
                             error: Some("Token revoked or expired".to_string()),
+                            replay: Some(ReplayDiagnostics {
+                                jti: claims.jwt_id.clone(),
+                                sub: claims.subject.clone(),
+                                room_id,
+                                purpose: resolved_purpose_from_claims(
+                                    &claims,
+                                    request_purpose.clone(),
+                                ),
+                                transport: request_transport,
+                                reason: "token-ledger-inactive".to_string(),
+                            }),
                         };
                     }
                     Err(err) => {
@@ -1791,68 +1855,418 @@ async fn verify_token_for_audience(
                             valid: false,
                             payload: None,
                             error: Some(format!("Token ledger error: {err}")),
+                            replay: Some(ReplayDiagnostics {
+                                jti: claims.jwt_id.clone(),
+                                sub: claims.subject.clone(),
+                                room_id,
+                                purpose: resolved_purpose_from_claims(
+                                    &claims,
+                                    request_purpose.clone(),
+                                ),
+                                transport: request_transport,
+                                reason: "token-ledger-error".to_string(),
+                            }),
                         };
                     }
                 }
             }
 
-            let related_id = extract_related_id(&payload_value);
-
-            // Build extras map by removing standard JWT keys from the serialized
-            // claim object. This prevents key collisions when we also expose
-            // canonical top-level fields (subject/audience/issuer/etc.).
-            let mut extras = serde_json::Map::new();
-            if let serde_json::Value::Object(map) = &payload_value {
-                for (k, v) in map {
-                    match k.as_str() {
-                        "iss" | "sub" | "aud" | "exp" | "nbf" | "iat" | "jti" => {
-                            // skip standard JWT names
-                        }
-                        "extras" => {
-                            if let serde_json::Value::Object(inner) = v {
-                                for (inner_key, inner_value) in inner {
-                                    extras.insert(inner_key.clone(), inner_value.clone());
-                                }
-                            }
-                        }
-                        _ => {
-                            extras.insert(k.clone(), v.clone());
-                        }
-                    }
+            let purpose = resolved_purpose_from_claims(&claims, request_purpose);
+            let should_track_grace = should_apply_quic_reconnect_grace(
+                purpose.as_deref(),
+                request_transport.as_deref(),
+            );
+            if should_track_grace {
+                let grace_ms = resolve_reconnect_grace_ms(request.reconnect_grace_ms);
+                if let Some(key) = build_grace_replay_key(
+                    claims.jwt_id.as_deref(),
+                    claims.subject.as_deref(),
+                    room_id.as_deref(),
+                    purpose.as_deref(),
+                    request_transport.as_deref(),
+                ) {
+                    record_quic_replay_acceptance(&key, SystemTime::now(), Duration::from_millis(grace_ms));
                 }
             }
 
-            let payload = JwtPayload {
-                subject: claims
-                    .subject
-                    .clone()
-                    .unwrap_or_else(|| "unknown".to_string()),
-                audience: audience_to_string(claims.audience.as_ref(), expected_audience),
-                issuer: claims.issuer.clone().unwrap_or_else(|| issuer.clone()),
-                expiration: claims.expiration.map_or(0, system_time_to_unix_seconds),
-                issued_at: claims.issued_at.map(system_time_to_unix_seconds),
-                not_before: claims.not_before.map(system_time_to_unix_seconds),
-                related_id,
-                jwt_id: claims.jwt_id.clone(),
-                extras: if extras.is_empty() {
-                    None
-                } else {
-                    Some(extras)
-                },
+            let replay = ReplayDiagnostics {
+                jti: claims.jwt_id.clone(),
+                sub: claims.subject.clone(),
+                room_id,
+                purpose,
+                transport: request_transport,
+                reason: "accepted".to_string(),
             };
+
+            tracing::info!(
+                jti = replay.jti.as_deref().unwrap_or("<none>"),
+                sub = replay.sub.as_deref().unwrap_or("<none>"),
+                room_id = replay.room_id.as_deref().unwrap_or("<none>"),
+                purpose = replay.purpose.as_deref().unwrap_or("<none>"),
+                transport = replay.transport.as_deref().unwrap_or("<none>"),
+                reason = replay.reason.as_str(),
+                "jwt replay decision"
+            );
 
             JwtVerifyResponse {
                 valid: true,
                 payload: Some(payload),
                 error: None,
+                replay: Some(replay),
             }
         }
-        Err(err) => JwtVerifyResponse {
-            valid: false,
-            payload: None,
-            error: Some(map_jwt_error(&err)),
-        },
+        Err(err) => {
+            if matches!(err, JwtError::Replay)
+                && should_apply_quic_reconnect_grace(
+                    request_purpose.as_deref(),
+                    request_transport.as_deref(),
+                )
+            {
+                let grace_ms = resolve_reconnect_grace_ms(request.reconnect_grace_ms);
+                let stateless_verifier = match aunsorm_jwt::JwtVerifier::from_jwks(state.jwks()) {
+                    Ok(verifier) => verifier,
+                    Err(build_err) => {
+                        return JwtVerifyResponse {
+                            valid: false,
+                            payload: None,
+                            error: Some(format!("Token verification setup error: {build_err}")),
+                            replay: Some(ReplayDiagnostics {
+                                jti: None,
+                                sub: None,
+                                room_id: None,
+                                purpose: request_purpose,
+                                transport: request_transport,
+                                reason: "grace-verifier-build-error".to_string(),
+                            }),
+                        };
+                    }
+                };
+                match stateless_verifier.verify(normalized_token.as_ref(), &options) {
+                    Ok(claims) => {
+                        let purpose = resolved_purpose_from_claims(&claims, request_purpose);
+                        let room_id = extract_room_id_from_claims(&claims);
+                        let replay_key = build_grace_replay_key(
+                            claims.jwt_id.as_deref(),
+                            claims.subject.as_deref(),
+                            room_id.as_deref(),
+                            purpose.as_deref(),
+                            request_transport.as_deref(),
+                        );
+                        let now = SystemTime::now();
+                        let within_grace = replay_key.as_deref().is_some_and(|key| {
+                            is_quic_replay_within_grace(
+                                key,
+                                now,
+                                Duration::from_millis(grace_ms),
+                            )
+                        });
+
+                        if within_grace {
+                            let (payload, _) = match build_jwt_payload(&claims, &issuer, expected_audience)
+                            {
+                                Ok(value) => value,
+                                Err(payload_err) => {
+                                    return JwtVerifyResponse {
+                                        valid: false,
+                                        payload: None,
+                                        error: Some(payload_err),
+                                        replay: Some(ReplayDiagnostics {
+                                            jti: claims.jwt_id.clone(),
+                                            sub: claims.subject.clone(),
+                                            room_id,
+                                            purpose,
+                                            transport: request_transport,
+                                            reason: "payload-serialization-error".to_string(),
+                                        }),
+                                    };
+                                }
+                            };
+
+                            let replay = ReplayDiagnostics {
+                                jti: claims.jwt_id.clone(),
+                                sub: claims.subject.clone(),
+                                room_id,
+                                purpose,
+                                transport: request_transport,
+                                reason: "reconnect-grace-accepted".to_string(),
+                            };
+
+                            tracing::info!(
+                                jti = replay.jti.as_deref().unwrap_or("<none>"),
+                                sub = replay.sub.as_deref().unwrap_or("<none>"),
+                                room_id = replay.room_id.as_deref().unwrap_or("<none>"),
+                                purpose = replay.purpose.as_deref().unwrap_or("<none>"),
+                                transport = replay.transport.as_deref().unwrap_or("<none>"),
+                                reason = replay.reason.as_str(),
+                                "jwt replay decision"
+                            );
+
+                            return JwtVerifyResponse {
+                                valid: true,
+                                payload: Some(payload),
+                                error: None,
+                                replay: Some(replay),
+                            };
+                        }
+
+                        let replay = ReplayDiagnostics {
+                            jti: claims.jwt_id.clone(),
+                            sub: claims.subject.clone(),
+                            room_id,
+                            purpose,
+                            transport: request_transport,
+                            reason: "replay-detected".to_string(),
+                        };
+
+                        tracing::warn!(
+                            jti = replay.jti.as_deref().unwrap_or("<none>"),
+                            sub = replay.sub.as_deref().unwrap_or("<none>"),
+                            room_id = replay.room_id.as_deref().unwrap_or("<none>"),
+                            purpose = replay.purpose.as_deref().unwrap_or("<none>"),
+                            transport = replay.transport.as_deref().unwrap_or("<none>"),
+                            reason = replay.reason.as_str(),
+                            "jwt replay decision"
+                        );
+
+                        return JwtVerifyResponse {
+                            valid: false,
+                            payload: None,
+                            error: Some(map_jwt_error(&err)),
+                            replay: Some(replay),
+                        };
+                    }
+                    Err(verify_err) => {
+                        return JwtVerifyResponse {
+                            valid: false,
+                            payload: None,
+                            error: Some(map_jwt_error(&verify_err)),
+                            replay: Some(ReplayDiagnostics {
+                                jti: None,
+                                sub: None,
+                                room_id: None,
+                                purpose: request_purpose,
+                                transport: request_transport,
+                                reason: "grace-verification-failed".to_string(),
+                            }),
+                        };
+                    }
+                }
+            }
+
+            let replay = ReplayDiagnostics {
+                jti: None,
+                sub: None,
+                room_id: None,
+                purpose: request_purpose,
+                transport: request_transport,
+                reason: if matches!(err, JwtError::Replay) {
+                    "replay-detected".to_string()
+                } else {
+                    "verification-failed".to_string()
+                },
+            };
+
+            if matches!(err, JwtError::Replay) {
+                tracing::warn!(
+                    jti = replay.jti.as_deref().unwrap_or("<none>"),
+                    sub = replay.sub.as_deref().unwrap_or("<none>"),
+                    room_id = replay.room_id.as_deref().unwrap_or("<none>"),
+                    purpose = replay.purpose.as_deref().unwrap_or("<none>"),
+                    transport = replay.transport.as_deref().unwrap_or("<none>"),
+                    reason = replay.reason.as_str(),
+                    "jwt replay decision"
+                );
+            }
+
+            JwtVerifyResponse {
+                valid: false,
+                payload: None,
+                error: Some(map_jwt_error(&err)),
+                replay: Some(replay),
+            }
+        }
     }
+}
+
+fn build_jwt_payload(
+    claims: &Claims,
+    issuer: &str,
+    expected_audience: &str,
+) -> Result<(JwtPayload, Option<String>), String> {
+    let payload_value = serde_json::to_value(claims)
+        .map_err(|err| format!("Token payload error: {err}"))?;
+    let related_id = extract_related_id(&payload_value);
+
+    let mut extras = serde_json::Map::new();
+    if let serde_json::Value::Object(map) = &payload_value {
+        for (k, v) in map {
+            match k.as_str() {
+                "iss" | "sub" | "aud" | "exp" | "nbf" | "iat" | "jti" => {}
+                "extras" => {
+                    if let serde_json::Value::Object(inner) = v {
+                        for (inner_key, inner_value) in inner {
+                            extras.insert(inner_key.clone(), inner_value.clone());
+                        }
+                    }
+                }
+                _ => {
+                    extras.insert(k.clone(), v.clone());
+                }
+            }
+        }
+    }
+
+    let room_id = claims
+        .extras
+        .get("roomId")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+
+    let payload = JwtPayload {
+        subject: claims
+            .subject
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string()),
+        audience: audience_to_string(claims.audience.as_ref(), expected_audience),
+        issuer: claims.issuer.clone().unwrap_or_else(|| issuer.to_string()),
+        expiration: claims.expiration.map_or(0, system_time_to_unix_seconds),
+        issued_at: claims.issued_at.map(system_time_to_unix_seconds),
+        not_before: claims.not_before.map(system_time_to_unix_seconds),
+        related_id,
+        jwt_id: claims.jwt_id.clone(),
+        extras: if extras.is_empty() { None } else { Some(extras) },
+    };
+
+    Ok((payload, room_id))
+}
+
+fn normalize_contract_value(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|candidate| !candidate.is_empty())
+        .map(str::to_owned)
+}
+
+fn resolve_token_purpose(request: &JwtVerifyRequest) -> Option<String> {
+    if let Some(purpose) = normalize_contract_value(request.token_purpose.as_deref()) {
+        return Some(purpose);
+    }
+
+    match normalize_contract_value(request.token_intent.as_deref()).as_deref() {
+        Some("quic-replay-retry") => Some("quic-join".to_string()),
+        Some(intent) => Some(intent.to_string()),
+        None => None,
+    }
+}
+
+fn resolved_purpose_from_claims(claims: &Claims, requested_purpose: Option<String>) -> Option<String> {
+    requested_purpose.or_else(|| {
+        claims
+            .extras
+            .get("tokenPurpose")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    })
+}
+
+fn build_replay_namespace(
+    audience: &str,
+    purpose: Option<&str>,
+    transport: Option<&str>,
+) -> String {
+    let purpose = purpose.unwrap_or("default");
+    let transport = transport.unwrap_or("default");
+    format!("aud={audience};purpose={purpose};transport={transport}")
+}
+
+fn should_apply_quic_reconnect_grace(purpose: Option<&str>, transport: Option<&str>) -> bool {
+    let purpose_quic = purpose
+        .map(|value| {
+            let normalized = value.to_ascii_lowercase();
+            normalized == "quic-join" || normalized == "quic-replay-retry"
+        })
+        .unwrap_or(false);
+    let transport_quic = transport
+        .map(|value| {
+            let normalized = value.to_ascii_lowercase();
+            normalized.contains("quic") || normalized.contains("webtransport")
+        })
+        .unwrap_or(false);
+    purpose_quic || transport_quic
+}
+
+fn resolve_reconnect_grace_ms(requested: Option<u64>) -> u64 {
+    const DEFAULT_QUIC_REPLAY_GRACE_MS: u64 = 2_500;
+    const MAX_QUIC_REPLAY_GRACE_MS: u64 = 15_000;
+
+    let configured = env::var("AUNSORM_QUIC_REPLAY_GRACE_MS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_QUIC_REPLAY_GRACE_MS);
+    requested
+        .unwrap_or(configured)
+        .clamp(0, MAX_QUIC_REPLAY_GRACE_MS)
+}
+
+fn extract_room_id_from_claims(claims: &Claims) -> Option<String> {
+    claims
+        .extras
+        .get("roomId")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+}
+
+fn build_grace_replay_key(
+    jti: Option<&str>,
+    subject: Option<&str>,
+    room_id: Option<&str>,
+    purpose: Option<&str>,
+    transport: Option<&str>,
+) -> Option<String> {
+    let jti = jti?.trim();
+    if jti.is_empty() {
+        return None;
+    }
+    let subject = subject.unwrap_or("<none>");
+    let room_id = room_id.unwrap_or("<none>");
+    let purpose = purpose.unwrap_or("<none>");
+    let transport = transport.unwrap_or("<none>");
+    Some(format!(
+        "jti={jti};sub={subject};roomId={room_id};purpose={purpose};transport={transport}"
+    ))
+}
+
+fn is_quic_replay_within_grace(key: &str, now: SystemTime, grace: Duration) -> bool {
+    let mut guard = match QUIC_REPLAY_GRACE_TRACKER.lock() {
+        Ok(guard) => guard,
+        Err(_) => return false,
+    };
+    let map = guard.get_or_insert_with(HashMap::new);
+    prune_quic_replay_tracker(map, now, grace);
+    map.get(key)
+        .and_then(|timestamp| now.duration_since(*timestamp).ok())
+        .is_some_and(|elapsed| elapsed <= grace)
+}
+
+fn record_quic_replay_acceptance(key: &str, now: SystemTime, grace: Duration) {
+    let Ok(mut guard) = QUIC_REPLAY_GRACE_TRACKER.lock() else {
+        return;
+    };
+    let map = guard.get_or_insert_with(HashMap::new);
+    prune_quic_replay_tracker(map, now, grace);
+    map.insert(key.to_string(), now);
+}
+
+fn prune_quic_replay_tracker(
+    map: &mut HashMap<String, SystemTime>,
+    now: SystemTime,
+    grace: Duration,
+) {
+    map.retain(|_, timestamp| {
+        now.duration_since(*timestamp)
+            .map(|elapsed| elapsed <= grace)
+            .unwrap_or(true)
+    });
 }
 
 #[derive(Deserialize)]

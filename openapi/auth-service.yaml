@@ -172,31 +172,14 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - token
-              properties:
-                token:
-                  type: string
-                  description: JWT token to verify
-                  example: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9...
+              $ref: '#/components/schemas/JwtVerifyRequest'
       responses:
         '200':
           description: Token verification result
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  valid:
-                    type: boolean
-                    example: true
-                  payload:
-                    $ref: '#/components/schemas/JwtPayload'
-                  error:
-                    type: string
-                    nullable: true
-                    example: null
+                $ref: '#/components/schemas/JwtVerifyResponse'
         '400':
           description: Invalid token format
           content:
@@ -671,6 +654,88 @@ paths:
 
 components:
   schemas:
+    JwtVerifyRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          description: JWT token to verify
+          example: eyJ0eXAiOiJKV1QiLCJhbGciOiJFZERTQSJ9...
+        tokenPurpose:
+          type: string
+          nullable: true
+          description: Caller-declared replay partition purpose (e.g. quic-join, control-join)
+          example: quic-join
+        tokenIntent:
+          type: string
+          nullable: true
+          description: Intent hint used as purpose fallback (e.g. quic-replay-retry)
+          example: quic-replay-retry
+        transport:
+          type: string
+          nullable: true
+          description: Transport hint (e.g. quic, webtransport, ws)
+          example: quic
+        reconnectGraceMs:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+          description: Optional QUIC replay grace window override in milliseconds
+          example: 2500
+
+    ReplayDiagnostics:
+      type: object
+      required:
+        - reason
+      properties:
+        jti:
+          type: string
+          nullable: true
+          example: 9a05c8cb00b52a2e79403e58d7f27b4e
+        sub:
+          type: string
+          nullable: true
+          example: user123
+        roomId:
+          type: string
+          nullable: true
+          example: test-room
+        purpose:
+          type: string
+          nullable: true
+          example: quic-join
+        transport:
+          type: string
+          nullable: true
+          example: quic
+        reason:
+          type: string
+          example: reconnect-grace-accepted
+
+    JwtVerifyResponse:
+      type: object
+      required:
+        - valid
+      properties:
+        valid:
+          type: boolean
+          example: true
+        payload:
+          allOf:
+            - $ref: '#/components/schemas/JwtPayload'
+          nullable: true
+        error:
+          type: string
+          nullable: true
+          example: null
+        replay:
+          allOf:
+            - $ref: '#/components/schemas/ReplayDiagnostics'
+          nullable: true
+
     JwtPayload:
       type: object
       properties:

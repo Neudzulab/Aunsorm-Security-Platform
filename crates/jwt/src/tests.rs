@@ -224,6 +224,49 @@ fn rejects_replay_in_memory_store() {
 }
 
 #[test]
+fn replay_namespace_partitions_jti_replay_scope() {
+    let key = Ed25519KeyPair::generate("kid-replay-scope").expect("key");
+    let signer = JwtSigner::new(key.clone());
+    let mut claims = Claims::new();
+    claims.set_expiration_from_now(Duration::from_secs(60));
+    claims.ensure_jwt_id();
+    let token = signer.sign(&mut claims).expect("jwt");
+    let store = Arc::new(InMemoryJtiStore::default());
+    let verifier = JwtVerifier::new([key.public_key()]).with_store(store);
+
+    verifier
+        .verify(
+            &token,
+            &VerificationOptions {
+                replay_namespace: Some("purpose=control-join;transport=ws".to_string()),
+                ..VerificationOptions::default()
+            },
+        )
+        .expect("first scope should pass");
+
+    verifier
+        .verify(
+            &token,
+            &VerificationOptions {
+                replay_namespace: Some("purpose=quic-join;transport=quic".to_string()),
+                ..VerificationOptions::default()
+            },
+        )
+        .expect("different scope should pass");
+
+    let err = verifier
+        .verify(
+            &token,
+            &VerificationOptions {
+                replay_namespace: Some("purpose=quic-join;transport=quic".to_string()),
+                ..VerificationOptions::default()
+            },
+        )
+        .expect_err("same scope should replay");
+    assert!(matches!(err, JwtError::Replay));
+}
+
+#[test]
 fn purge_expired_allows_reuse_after_expiration() {
     let store = Arc::new(InMemoryJtiStore::default());
 

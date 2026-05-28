@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -138,7 +139,8 @@ impl JwtVerifier {
         if let Some(store) = &self.store {
             if let Some(jti_value) = jti {
                 let expires_at = claims.expiration;
-                if !store.check_and_insert(jti_value, expires_at)? {
+                let replay_key = replay_store_key(jti_value, options.replay_namespace.as_deref());
+                if !store.check_and_insert(replay_key.as_ref(), expires_at)? {
                     return Err(JwtError::Replay);
                 }
             }
@@ -207,6 +209,7 @@ pub struct VerificationOptions {
     pub issuer: Option<String>,
     pub subject: Option<String>,
     pub audience: Option<String>,
+    pub replay_namespace: Option<String>,
     pub require_jti: bool,
     pub now: Option<SystemTime>,
 }
@@ -217,9 +220,17 @@ impl Default for VerificationOptions {
             issuer: None,
             subject: None,
             audience: None,
+            replay_namespace: None,
             require_jti: true,
             now: None,
         }
+    }
+}
+
+fn replay_store_key<'a>(jti: &'a str, namespace: Option<&str>) -> Cow<'a, str> {
+    match namespace {
+        Some(scope) if !scope.trim().is_empty() => Cow::Owned(format!("{scope}::{jti}")),
+        _ => Cow::Borrowed(jti),
     }
 }
 
