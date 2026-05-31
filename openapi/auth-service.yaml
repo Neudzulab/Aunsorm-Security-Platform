@@ -33,6 +33,8 @@ servers:
 tags:
   - name: JWT
     description: JWT token generation and verification
+  - name: Sessions
+    description: Session key material and HMAC helpers for first-party applications
   - name: OAuth 2.0
     description: OAuth 2.0 authorization flows with PKCE
   - name: Health
@@ -282,6 +284,176 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /sessions:
+    post:
+      tags:
+        - Sessions
+      summary: Create an application session key
+      description: |
+        Creates session key material for first-party applications such as MyeOffice.
+        The response contract is compatible with browser-server session signing flows.
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - room
+                - identity
+              properties:
+                room:
+                  type: string
+                  example: user-sessions
+                identity:
+                  type: string
+                  example: user-123
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '201':
+          description: Session key material created
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - sessionId
+                  - key
+                properties:
+                  sessionId:
+                    type: string
+                    example: sess_user-123_abcd
+                  key:
+                    $ref: '#/components/schemas/SessionKey'
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /sessions/{sessionId}/keys:
+    post:
+      tags:
+        - Sessions
+      summary: Rotate a session key
+      operationId: rotateSessionKey
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Session key rotated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - key
+                properties:
+                  key:
+                    $ref: '#/components/schemas/SessionKey'
+        '400':
+          description: Invalid session ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /security/hmac-sign:
+    post:
+      tags:
+        - Sessions
+      summary: Sign data with HMAC-SHA256
+      operationId: hmacSign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data
+                - secret
+              properties:
+                data:
+                  type: string
+                secret:
+                  type: string
+                  description: Raw or base64/base64url-encoded HMAC key material
+      responses:
+        '200':
+          description: HMAC signature generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - data
+                  - signature
+                  - algorithm
+                properties:
+                  data:
+                    type: string
+                  signature:
+                    type: string
+                    description: Base64url-encoded HMAC signature
+                  algorithm:
+                    type: string
+                    example: hmac-sha256
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /security/hmac-verify:
+    post:
+      tags:
+        - Sessions
+      summary: Verify an HMAC-SHA256 signature
+      operationId: hmacVerify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data
+                - signature
+                - secret
+              properties:
+                data:
+                  type: string
+                signature:
+                  type: string
+                secret:
+                  type: string
+      responses:
+        '200':
+          description: HMAC verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - valid
+                  - algorithm
+                properties:
+                  valid:
+                    type: boolean
+                  algorithm:
+                    type: string
+                    example: hmac-sha256
 
   /security/encrypt:
     post:
@@ -797,6 +969,24 @@ components:
         x:
           type: string
           description: Base64url encoded public key
+
+    SessionKey:
+      type: object
+      required:
+        - id
+        - material
+        - expiresAt
+      properties:
+        id:
+          type: integer
+          format: int32
+          example: 372549123
+        material:
+          type: string
+          description: Base64url-encoded 256-bit key material
+        expiresAt:
+          type: string
+          format: date-time
 
     Error:
       type: object

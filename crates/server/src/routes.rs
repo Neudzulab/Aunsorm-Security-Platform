@@ -25,6 +25,7 @@ use base64::{
 };
 use ed25519_dalek::SIGNATURE_LENGTH;
 use hex::{decode, decode_to_slice};
+use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 use std::array;
 use std::borrow::Cow;
@@ -373,22 +374,18 @@ pub async fn metrics(State(state): State<Arc<ServerState>>) -> Result<impl IntoR
         .map_err(|err| ApiError::server_error(format!("Kayıtlı cihaz sayısı alınamadı: {err}",)))?;
 
     let metrics_text = format!(
-        "# HELP {pending_name} Pending PKCE authorization requests\n\
-         # TYPE {pending_name} gauge\n\
-         {pending_name} {pending}\n\n\
-         # HELP {active_name} Active OAuth tokens\n\
-         # TYPE {active_name} gauge\n\
-         {active_name} {active}\n\n\
-         # HELP {sfu_name} Active SFU contexts\n\
-         # TYPE {sfu_name} gauge\n\
-         {sfu_name} {sfu}\n\n\
-         # HELP {devices_name} Registered MDM devices\n\
-         # TYPE {devices_name} gauge\n\
-         {devices_name} {devices}\n",
-        pending_name = METRIC_PENDING_AUTH_REQUESTS,
-        active_name = METRIC_ACTIVE_TOKENS,
-        sfu_name = METRIC_SFU_CONTEXTS,
-        devices_name = METRIC_MDM_REGISTERED_DEVICES,
+        "# HELP {METRIC_PENDING_AUTH_REQUESTS} Pending PKCE authorization requests\n\
+         # TYPE {METRIC_PENDING_AUTH_REQUESTS} gauge\n\
+         {METRIC_PENDING_AUTH_REQUESTS} {pending}\n\n\
+         # HELP {METRIC_ACTIVE_TOKENS} Active OAuth tokens\n\
+         # TYPE {METRIC_ACTIVE_TOKENS} gauge\n\
+         {METRIC_ACTIVE_TOKENS} {active}\n\n\
+         # HELP {METRIC_SFU_CONTEXTS} Active SFU contexts\n\
+         # TYPE {METRIC_SFU_CONTEXTS} gauge\n\
+         {METRIC_SFU_CONTEXTS} {sfu}\n\n\
+         # HELP {METRIC_MDM_REGISTERED_DEVICES} Registered MDM devices\n\
+         # TYPE {METRIC_MDM_REGISTERED_DEVICES} gauge\n\
+         {METRIC_MDM_REGISTERED_DEVICES} {devices}\n",
     );
 
     Ok((
@@ -1688,7 +1685,7 @@ pub struct GenerateSecretResponse {
 pub async fn security_generate_secret(
     Json(request): Json<GenerateSecretRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let length = request.length.unwrap_or(32).min(128).max(1);
+    let length = request.length.unwrap_or(32).clamp(1, 128);
     let mut buf = vec![0_u8; length];
     let mut rng = AunsormNativeRng::new();
     rng.fill_bytes(&mut buf);
@@ -1701,6 +1698,174 @@ pub async fn security_generate_secret(
             encoding: "base64url",
         }),
     ))
+}
+
+#[derive(Deserialize)]
+pub struct CreateSessionRequest {
+    pub room: String,
+    pub identity: String,
+    #[serde(default)]
+    pub metadata: Option<Value>,
+}
+
+#[derive(Serialize)]
+pub struct SessionKeyResponse {
+    pub id: u32,
+    pub material: String,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: String,
+}
+
+#[derive(Serialize)]
+pub struct CreateSessionResponse {
+    #[serde(rename = "sessionId")]
+    pub session_id: String,
+    pub key: SessionKeyResponse,
+}
+
+#[derive(Serialize)]
+pub struct RotateSessionKeyResponse {
+    pub key: SessionKeyResponse,
+}
+
+fn generate_session_key(expires_at: SystemTime) -> SessionKeyResponse {
+    let mut rng = AunsormNativeRng::new();
+    let mut key_bytes = [0_u8; 32];
+    let mut key_id_bytes = [0_u8; 4];
+    rng.fill_bytes(&mut key_bytes);
+    rng.fill_bytes(&mut key_id_bytes);
+
+    SessionKeyResponse {
+        id: u32::from_be_bytes(key_id_bytes),
+        material: URL_SAFE_NO_PAD.encode(key_bytes),
+        expires_at: format_timestamp(expires_at),
+    }
+}
+
+pub async fn create_session(
+    Json(request): Json<CreateSessionRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if request.room.trim().is_empty() {
+        return Err(ApiError::invalid_request("room gereklidir"));
+    }
+    if request.identity.trim().is_empty() {
+        return Err(ApiError::invalid_request("identity gereklidir"));
+    }
+    if request.room.chars().any(char::is_control) || request.identity.chars().any(char::is_control)
+    {
+        return Err(ApiError::invalid_request(
+            "room ve identity kontrol karakteri iÃ§eremez",
+        ));
+    }
+    let _metadata = request.metadata.as_ref();
+
+    let mut rng = AunsormNativeRng::new();
+    let mut session_id_bytes = [0_u8; 24];
+    rng.fill_bytes(&mut session_id_bytes);
+    let expires_at = SystemTime::now() + Duration::from_secs(60 * 60 * 4);
+
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateSessionResponse {
+            session_id: format!(
+                "sess_{}_{}",
+                request.identity,
+                URL_SAFE_NO_PAD.encode(session_id_bytes)
+            ),
+            key: generate_session_key(expires_at),
+        }),
+    ))
+}
+
+pub async fn rotate_session_key(
+    Path(session_id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    if session_id.trim().is_empty() || session_id.chars().any(char::is_control) {
+        return Err(ApiError::invalid_request("session_id geÃ§ersiz"));
+    }
+
+    let expires_at = SystemTime::now() + Duration::from_secs(60 * 60 * 4);
+    Ok(Json(RotateSessionKeyResponse {
+        key: generate_session_key(expires_at),
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct HmacSignRequest {
+    pub data: String,
+    pub secret: String,
+}
+
+#[derive(Serialize)]
+pub struct HmacSignResponse {
+    pub data: String,
+    pub signature: String,
+    pub algorithm: &'static str,
+}
+
+#[derive(Deserialize)]
+pub struct HmacVerifyRequest {
+    pub data: String,
+    pub signature: String,
+    pub secret: String,
+}
+
+#[derive(Serialize)]
+pub struct HmacVerifyResponse {
+    pub valid: bool,
+    pub algorithm: &'static str,
+}
+
+type HmacSha256 = Hmac<Sha256>;
+
+fn hmac_key_from_secret(secret: &str) -> Result<Vec<u8>, ApiError> {
+    let key = decode_base64_or_ascii(secret, "secret")?;
+    if key.is_empty() {
+        return Err(ApiError::invalid_request("secret gereklidir"));
+    }
+    Ok(key)
+}
+
+pub async fn security_hmac_sign(
+    Json(request): Json<HmacSignRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if request.data.is_empty() {
+        return Err(ApiError::invalid_request("data gereklidir"));
+    }
+    let key = hmac_key_from_secret(&request.secret)?;
+    let mut mac = <HmacSha256 as Mac>::new_from_slice(&key)
+        .map_err(|err| ApiError::invalid_request(format!("secret geÃ§ersiz: {err}")))?;
+    mac.update(request.data.as_bytes());
+    let signature = URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
+
+    Ok(Json(HmacSignResponse {
+        data: request.data,
+        signature,
+        algorithm: "hmac-sha256",
+    }))
+}
+
+pub async fn security_hmac_verify(
+    Json(request): Json<HmacVerifyRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    if request.data.is_empty() {
+        return Err(ApiError::invalid_request("data gereklidir"));
+    }
+    let key = hmac_key_from_secret(&request.secret)?;
+    let mut mac = <HmacSha256 as Mac>::new_from_slice(&key)
+        .map_err(|err| ApiError::invalid_request(format!("secret geÃ§ersiz: {err}")))?;
+    mac.update(request.data.as_bytes());
+    let signature = URL_SAFE_NO_PAD
+        .decode(request.signature.trim_end_matches('='))
+        .or_else(|_| STANDARD.decode(&request.signature));
+    let valid = signature
+        .map(|signature_bytes| mac.verify_slice(&signature_bytes).is_ok())
+        .unwrap_or(false);
+
+    Ok(Json(HmacVerifyResponse {
+        valid,
+        algorithm: "hmac-sha256",
+    }))
 }
 
 fn hash_password_with_aunsorm_rng(password: &str) -> Result<String, ApiError> {
@@ -1764,6 +1929,7 @@ pub async fn security_password_verify(
     Ok(Json(PasswordVerifyResponse { valid, algorithm }))
 }
 
+#[allow(clippy::cognitive_complexity)]
 async fn verify_token_for_audience(
     state: &Arc<ServerState>,
     request: JwtVerifyRequest,
@@ -1872,10 +2038,8 @@ async fn verify_token_for_audience(
             }
 
             let purpose = resolved_purpose_from_claims(&claims, request_purpose);
-            let should_track_grace = should_apply_quic_reconnect_grace(
-                purpose.as_deref(),
-                request_transport.as_deref(),
-            );
+            let should_track_grace =
+                should_apply_quic_reconnect_grace(purpose.as_deref(), request_transport.as_deref());
             if should_track_grace {
                 let grace_ms = resolve_reconnect_grace_ms(request.reconnect_grace_ms);
                 if let Some(key) = build_grace_replay_key(
@@ -1885,7 +2049,11 @@ async fn verify_token_for_audience(
                     purpose.as_deref(),
                     request_transport.as_deref(),
                 ) {
-                    record_quic_replay_acceptance(&key, SystemTime::now(), Duration::from_millis(grace_ms));
+                    record_quic_replay_acceptance(
+                        &key,
+                        SystemTime::now(),
+                        Duration::from_millis(grace_ms),
+                    );
                 }
             }
 
@@ -1954,37 +2122,33 @@ async fn verify_token_for_audience(
                         );
                         let now = SystemTime::now();
                         let within_grace = replay_key.as_deref().is_some_and(|key| {
-                            is_quic_replay_within_grace(
-                                key,
-                                now,
-                                Duration::from_millis(grace_ms),
-                            )
+                            is_quic_replay_within_grace(key, now, Duration::from_millis(grace_ms))
                         });
 
                         if within_grace {
-                            let (payload, _) = match build_jwt_payload(&claims, &issuer, expected_audience)
-                            {
-                                Ok(value) => value,
-                                Err(payload_err) => {
-                                    return JwtVerifyResponse {
-                                        valid: false,
-                                        payload: None,
-                                        error: Some(payload_err),
-                                        replay: Some(ReplayDiagnostics {
-                                            jti: claims.jwt_id.clone(),
-                                            sub: claims.subject.clone(),
-                                            room_id,
-                                            purpose,
-                                            transport: request_transport,
-                                            reason: "payload-serialization-error".to_string(),
-                                        }),
-                                    };
-                                }
-                            };
+                            let (payload, _) =
+                                match build_jwt_payload(&claims, &issuer, expected_audience) {
+                                    Ok(value) => value,
+                                    Err(payload_err) => {
+                                        return JwtVerifyResponse {
+                                            valid: false,
+                                            payload: None,
+                                            error: Some(payload_err),
+                                            replay: Some(ReplayDiagnostics {
+                                                jti: claims.jwt_id.clone(),
+                                                sub: claims.subject,
+                                                room_id,
+                                                purpose,
+                                                transport: request_transport,
+                                                reason: "payload-serialization-error".to_string(),
+                                            }),
+                                        };
+                                    }
+                                };
 
                             let replay = ReplayDiagnostics {
                                 jti: claims.jwt_id.clone(),
-                                sub: claims.subject.clone(),
+                                sub: claims.subject,
                                 room_id,
                                 purpose,
                                 transport: request_transport,
@@ -2011,7 +2175,7 @@ async fn verify_token_for_audience(
 
                         let replay = ReplayDiagnostics {
                             jti: claims.jwt_id.clone(),
-                            sub: claims.subject.clone(),
+                            sub: claims.subject,
                             room_id,
                             purpose,
                             transport: request_transport,
@@ -2093,8 +2257,8 @@ fn build_jwt_payload(
     issuer: &str,
     expected_audience: &str,
 ) -> Result<(JwtPayload, Option<String>), String> {
-    let payload_value = serde_json::to_value(claims)
-        .map_err(|err| format!("Token payload error: {err}"))?;
+    let payload_value =
+        serde_json::to_value(claims).map_err(|err| format!("Token payload error: {err}"))?;
     let related_id = extract_related_id(&payload_value);
 
     let mut extras = serde_json::Map::new();
@@ -2134,7 +2298,11 @@ fn build_jwt_payload(
         not_before: claims.not_before.map(system_time_to_unix_seconds),
         related_id,
         jwt_id: claims.jwt_id.clone(),
-        extras: if extras.is_empty() { None } else { Some(extras) },
+        extras: if extras.is_empty() {
+            None
+        } else {
+            Some(extras)
+        },
     };
 
     Ok((payload, room_id))
@@ -2159,7 +2327,10 @@ fn resolve_token_purpose(request: &JwtVerifyRequest) -> Option<String> {
     }
 }
 
-fn resolved_purpose_from_claims(claims: &Claims, requested_purpose: Option<String>) -> Option<String> {
+fn resolved_purpose_from_claims(
+    claims: &Claims,
+    requested_purpose: Option<String>,
+) -> Option<String> {
     requested_purpose.or_else(|| {
         claims
             .extras
@@ -2180,18 +2351,14 @@ fn build_replay_namespace(
 }
 
 fn should_apply_quic_reconnect_grace(purpose: Option<&str>, transport: Option<&str>) -> bool {
-    let purpose_quic = purpose
-        .map(|value| {
-            let normalized = value.to_ascii_lowercase();
-            normalized == "quic-join" || normalized == "quic-replay-retry"
-        })
-        .unwrap_or(false);
-    let transport_quic = transport
-        .map(|value| {
-            let normalized = value.to_ascii_lowercase();
-            normalized.contains("quic") || normalized.contains("webtransport")
-        })
-        .unwrap_or(false);
+    let purpose_quic = purpose.is_some_and(|value| {
+        let normalized = value.to_ascii_lowercase();
+        normalized == "quic-join" || normalized == "quic-replay-retry"
+    });
+    let transport_quic = transport.is_some_and(|value| {
+        let normalized = value.to_ascii_lowercase();
+        normalized.contains("quic") || normalized.contains("webtransport")
+    });
     purpose_quic || transport_quic
 }
 
@@ -2381,11 +2548,11 @@ pub async fn generate_media_token(
 pub struct JweEncryptRequest {
     /// Şifrelenecek ham metin (UTF-8).
     pub payload: String,
-    /// Kalibrasyon üretimi için org_salt (base64url ya da düz ASCII ≥8 bayt).
+    /// Kalibrasyon üretimi için `org_salt` (base64url ya da düz ASCII ≥8 bayt).
     pub org_salt: String,
     /// Kalibrasyon notu (örn. "Aunsorm Prod 2025").
     pub calibration_note: String,
-    /// Opsiyonel salt seti.  Gönderilmezse org_salt'tan türetilir.
+    /// Opsiyonel salt seti.  Gönderilmezse `org_salt`'tan türetilir.
     #[serde(default)]
     pub salts: Option<JweSaltsInput>,
 }
@@ -3069,6 +3236,7 @@ pub struct OAuthTokenResponse {
     pub mfa_verified: bool,
 }
 
+#[allow(clippy::cognitive_complexity)]
 pub async fn exchange_token(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<OAuthTokenRequest>,
@@ -3248,8 +3416,7 @@ pub async fn exchange_token(
                 .as_ref()
                 .and_then(|e| e.get("role"))
                 .and_then(|v| v.as_str())
-                .map(|r| r.to_owned())
-                .unwrap_or_else(|| client.default_role().to_owned());
+                .map_or_else(|| client.default_role().to_owned(), str::to_owned);
             let policy = state
                 .role_policy(client_id, &role)
                 .ok_or_else(|| ApiError::invalid_grant("Rol politikası bulunamadı"))?;
@@ -3265,12 +3432,13 @@ pub async fn exchange_token(
                 }
             }
 
-            let session_ttl = if let Some(ttl) = requested_ttl {
-                let max = policy.session_ttl().as_secs();
-                Duration::from_secs(ttl.min(max))
-            } else {
-                policy.session_ttl()
-            };
+            let session_ttl = requested_ttl.map_or_else(
+                || policy.session_ttl(),
+                |ttl| {
+                    let max = policy.session_ttl().as_secs();
+                    Duration::from_secs(ttl.min(max))
+                },
+            );
             let refresh_ttl = policy.refresh_ttl();
 
             // Use subject from extras if provided, otherwise use client:<client_id>
@@ -3278,8 +3446,7 @@ pub async fn exchange_token(
                 .as_ref()
                 .and_then(|e| e.get("sub"))
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_owned())
-                .unwrap_or_else(|| format!("client:{client_id}"));
+                .map_or_else(|| format!("client:{client_id}"), str::to_owned);
 
             let mut claims = Claims::new();
             claims.subject = Some(subject.clone());
@@ -4399,8 +4566,12 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/security/jwt-verify", post(proxy_jwt_verify))
                 .route("/security/generate-media-token", post(proxy_media_token))
                 .route("/security/generate-secret", post(security_generate_secret))
+                .route("/security/hmac-sign", post(security_hmac_sign))
+                .route("/security/hmac-verify", post(security_hmac_verify))
                 .route("/security/password-hash", post(proxy_password_hash))
                 .route("/security/password-verify", post(proxy_password_verify))
+                .route("/sessions", post(create_session))
+                .route("/sessions/:session_id/keys", post(rotate_session_key))
                 // Proxy ID endpoints to id service
                 .route("/id/generate", post(proxy_id_generate))
                 .route("/id/generate", head(proxy_id_generate_head))
@@ -4422,12 +4593,16 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/security/jwt-verify", post(verify_media_token))
                 .route("/security/generate-media-token", post(generate_media_token))
                 .route("/security/generate-secret", post(security_generate_secret))
+                .route("/security/hmac-sign", post(security_hmac_sign))
+                .route("/security/hmac-verify", post(security_hmac_verify))
                 .route("/security/password-hash", post(security_password_hash))
                 .route("/security/password-verify", post(security_password_verify))
                 .route("/security/encrypt", post(security_encrypt))
                 .route("/security/decrypt", post(security_decrypt))
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
                 .route("/security/jwe/decrypt", post(security_jwe_decrypt))
+                .route("/sessions", post(create_session))
+                .route("/sessions/:session_id/keys", post(rotate_session_key))
                 // QUIC/TLS kalibrasyon parmak izi
                 .route("/security/quic-fingerprint", get(quic_fingerprint))
                 // HTTP/3 kapasite keşif endpoint'i (Zasian SFU QUIC bağlantısı için)
@@ -4541,15 +4716,20 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
                 .route("/oauth/transparency", get(oauth_transparency))
                 // JWT endpoints
                 .route("/cli/jwt/verify", post(verify_jwt_token))
-                .route("/security/jwt-verify", post(verify_jwt_token))
+                // /security/jwt-verify: Zasian media token'larını doğrular (aud: zasian-media)
+                .route("/security/jwt-verify", post(verify_media_token))
                 .route("/security/generate-media-token", post(generate_media_token))
                 .route("/security/generate-secret", post(security_generate_secret))
+                .route("/security/hmac-sign", post(security_hmac_sign))
+                .route("/security/hmac-verify", post(security_hmac_verify))
                 .route("/security/password-hash", post(security_password_hash))
                 .route("/security/password-verify", post(security_password_verify))
                 .route("/security/encrypt", post(security_encrypt))
                 .route("/security/decrypt", post(security_decrypt))
                 .route("/security/jwe/encrypt", post(security_jwe_encrypt))
                 .route("/security/jwe/decrypt", post(security_jwe_decrypt))
+                .route("/sessions", post(create_session))
+                .route("/sessions/:session_id/keys", post(rotate_session_key))
                 // MDM endpoints
                 .route("/mdm/register", post(register_device))
                 .route("/mdm/policy/:platform", get(fetch_policy))
@@ -5304,6 +5484,137 @@ mod password_endpoint_tests {
         let json: serde_json::Value = serde_json::from_slice(&body).expect("json parsed");
         assert_eq!(json["valid"], false);
         assert_eq!(json["algorithm"], "unknown");
+    }
+}
+
+#[cfg(test)]
+mod session_endpoint_tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn sessions_create_sign_verify_and_rotate_succeed() {
+        let state = build_test_state();
+        let router = build_router(&state);
+
+        let session_response = router
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/sessions")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "room": "user-sessions",
+                            "identity": "user-1",
+                            "metadata": {
+                                "email": "user@example.test",
+                                "role": "member"
+                            }
+                        })
+                        .to_string(),
+                    ))
+                    .expect("request is built"),
+            )
+            .await
+            .expect("session request succeeds");
+
+        assert_eq!(session_response.status(), StatusCode::CREATED);
+        let session_body = to_bytes(session_response.into_body(), usize::MAX)
+            .await
+            .expect("session body collected");
+        let session_json: serde_json::Value =
+            serde_json::from_slice(&session_body).expect("session json parsed");
+        let session_id = session_json["sessionId"]
+            .as_str()
+            .expect("sessionId present");
+        assert!(session_id.starts_with("sess_user-1_"));
+        let material = session_json["key"]["material"]
+            .as_str()
+            .expect("key material present");
+        assert!(!material.is_empty());
+        assert!(session_json["key"]["id"].as_u64().is_some());
+        assert!(session_json["key"]["expiresAt"].as_str().is_some());
+
+        let sign_response = router
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/security/hmac-sign")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "data": "payload-to-sign",
+                            "secret": material
+                        })
+                        .to_string(),
+                    ))
+                    .expect("sign request is built"),
+            )
+            .await
+            .expect("sign request succeeds");
+
+        assert_eq!(sign_response.status(), StatusCode::OK);
+        let sign_body = to_bytes(sign_response.into_body(), usize::MAX)
+            .await
+            .expect("sign body collected");
+        let sign_json: serde_json::Value =
+            serde_json::from_slice(&sign_body).expect("sign json parsed");
+        let signature = sign_json["signature"].as_str().expect("signature present");
+        assert_eq!(sign_json["algorithm"], "hmac-sha256");
+
+        let verify_response = router
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri("/security/hmac-verify")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({
+                            "data": "payload-to-sign",
+                            "signature": signature,
+                            "secret": material
+                        })
+                        .to_string(),
+                    ))
+                    .expect("verify request is built"),
+            )
+            .await
+            .expect("verify request succeeds");
+
+        assert_eq!(verify_response.status(), StatusCode::OK);
+        let verify_body = to_bytes(verify_response.into_body(), usize::MAX)
+            .await
+            .expect("verify body collected");
+        let verify_json: serde_json::Value =
+            serde_json::from_slice(&verify_body).expect("verify json parsed");
+        assert_eq!(verify_json["valid"], true);
+        assert_eq!(verify_json["algorithm"], "hmac-sha256");
+
+        let rotate_response = router
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("POST")
+                    .uri(format!("/sessions/{session_id}/keys"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from("{}"))
+                    .expect("rotate request is built"),
+            )
+            .await
+            .expect("rotate request succeeds");
+
+        assert_eq!(rotate_response.status(), StatusCode::OK);
+        let rotate_body = to_bytes(rotate_response.into_body(), usize::MAX)
+            .await
+            .expect("rotate body collected");
+        let rotate_json: serde_json::Value =
+            serde_json::from_slice(&rotate_body).expect("rotate json parsed");
+        assert!(rotate_json["key"]["material"].as_str().is_some());
+        assert!(rotate_json["key"]["expiresAt"].as_str().is_some());
     }
 }
 

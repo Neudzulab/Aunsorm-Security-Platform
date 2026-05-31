@@ -55,6 +55,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Role-based access control (RBAC) enforcement
 - [x] OAuth 2.0 refresh token rotation
 - [x] Revize: Add dedicated `/security/password-hash` + `/security/password-verify` endpoints for first-party account flows and document the Argon2id contract in auth service docs/OpenAPI
+- [x] Revize: Add first-party application session endpoints (`/sessions`, `/sessions/{sessionId}/keys`) and HMAC signing helpers for MyeOffice session-cookie integration
 - [ ] Token revocation webhook notifications
  - [ ] Implement signed webhook payloads with timestamped nonce validation
  - [ ] Add replay protection storage (Redis) with TTL tuned to webhook retry window

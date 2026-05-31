@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `aunsorm-server` now exposes first-party application session endpoints
+  (`POST /sessions`, `POST /sessions/{sessionId}/keys`) plus
+  `/security/hmac-sign` and `/security/hmac-verify` for session-cookie signing
+  integrations such as MyeOffice.
 - `aunsorm-server` OAuth flow enforces per-role session/refresh TTL'leri,
   MFA zorunlulukları ve kalıcı refresh token deposu; yanıtlar `role`,
   `mfaRequired`, `mfaVerified` ve `refreshExpiresIn` alanları içerir.
