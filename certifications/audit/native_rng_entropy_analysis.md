@@ -1,5 +1,11 @@
 # Native RNG Entropy Analysis Report
 
+> Historical measurements of the pre-hardening implementation. Superseded by
+> [ADR 0008](../../docs/architecture/adr/0008-native-rng-state-hardening.md).
+> Correction (2026-10-07): for χ²=126.07 with 100 degrees of freedom,
+> the upper-tail p-value is approximately 0.04005, not 0.32. Statistical
+> testing does not establish cryptographic security or NIST certification.
+
 **Analysis Date:** 2025-11-07  
 **Prepared By:** Interop Agent Team
 
@@ -14,9 +20,9 @@ Validate statistical quality of ChaCha20-based `AunsormNativeRng` implementation
 ## 3. Statistical Results
 | Interval | Samples | Mean (Observed) | Mean (Expected) | χ² Statistic | p-value |
 |----------|---------|-----------------|-----------------|--------------|---------|
-| [0, 100] | 100,000 | 49.996 | 50.0 | 126.07 | 0.32 |
+| [0, 100] | 100,000 | 49.996 | 50.0 | 126.07 | 0.04005 (corrected) |
 
-Chi-square test indicates uniform distribution (p > 0.05). Test execution: 3.33ms for 100,000 samples.
+The corrected single test rejects at α=0.05, but not at α=0.01. A single rejection is insufficient to diagnose generator quality. Test execution: 3.33ms for 100,000 samples.
 
 ## 4. Performance Metrics
 | Block Size | Throughput | next_u64() Latency |
@@ -28,5 +34,5 @@ Chi-square test indicates uniform distribution (p > 0.05). Test execution: 3.33m
 RSA-2048 key generation: 137.22 ms average (10 samples).
 
 ## 5. Conclusion
-ChaCha20-based RNG provides uniform distribution with p-value 0.32, indicating acceptable statistical quality for cryptographic use. Implementation located at crates/core/src/sealed/aunsorm_rng.rs.
+The original security conclusion is withdrawn: the corrected p-value is approximately 0.04005, and statistical uniformity alone cannot certify cryptographic security. Implementation located at crates/core/src/sealed/aunsorm_rng.rs.
 

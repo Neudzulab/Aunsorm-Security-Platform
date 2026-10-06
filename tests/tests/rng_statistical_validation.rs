@@ -1,41 +1,14 @@
 //! Statistical validation of AunsormNativeRng
 //!
 //! This test validates that the native RNG produces statistically uniform distributions
-//! matching the results documented in certifications/audit/native_rng_entropy_analysis.md
+//! using actual chi-square upper-tail probabilities, not a security certification.
 
 use aunsorm_core::AunsormNativeRng;
 use rand_core::RngCore;
 
-/// Chi-square goodness of fit test
-fn chi_square_test(observed: &[u64], expected: f64) -> (f64, f64) {
-    let df = observed.len() as f64 - 1.0;
-    let chi_square: f64 = observed
-        .iter()
-        .map(|&obs| {
-            let diff = obs as f64 - expected;
-            (diff * diff) / expected
-        })
-        .sum();
-
-    // Approximate p-value using chi-square distribution
-    // For large df, chi-square ~ N(df, 2*df)
-    let mean = df;
-    let std_dev = (2.0 * df).sqrt();
-    let z = (chi_square - mean) / std_dev;
-
-    // Two-tailed p-value approximation
-    let p_value = if z.abs() > 3.0 {
-        0.0027 // Very unlikely
-    } else if z.abs() > 2.0 {
-        0.0455
-    } else if z.abs() > 1.0 {
-        0.3173
-    } else {
-        0.6827
-    };
-
-    (chi_square, p_value)
-}
+#[path = "../support/rng_statistics.rs"]
+mod rng_statistics;
+use rng_statistics::chi_square_test;
 
 #[test]
 #[ignore = "Long-running statistical test - run with --ignored flag"]
@@ -81,13 +54,6 @@ fn test_interval_0_to_100_distribution() {
         "Mean deviation too large: observed={}, expected={}",
         mean_observed,
         mean_expected
-    );
-
-    // Chi-square should be reasonable (not too far from df=100)
-    assert!(
-        chi_square > 70.0 && chi_square < 130.0,
-        "Chi-square out of reasonable range: {}",
-        chi_square
     );
 
     // p-value should not reject null hypothesis at α=0.01
@@ -143,12 +109,6 @@ fn test_interval_1_to_10000_distribution() {
     );
 
     assert!(
-        chi_square > 70.0 && chi_square < 130.0,
-        "Chi-square out of reasonable range: {}",
-        chi_square
-    );
-
-    assert!(
         p_value > 0.01,
         "Distribution rejected at α=0.01: p-value={}",
         p_value
@@ -161,11 +121,10 @@ fn test_high_range_distribution() {
     let mut rng = AunsormNativeRng::new();
     let samples = 5_000_000_u64;
     let range_min = u64::MAX - 10;
-    let range_max = u64::MAX;
     let num_bins = 11; // [u64::MAX-10, u64::MAX] = 11 values
 
     let mut bins = vec![0_u64; num_bins];
-    let mut sum_f64 = 0.0_f64; // Use f64 for large numbers
+    let mut offset_sum = 0_u64; // Sum small offsets; f64 cannot distinguish these u64 values.
 
     println!(
         "\n=== Testing Interval [u64::MAX-10, u64::MAX] with {} samples ===",
@@ -180,18 +139,17 @@ fn test_high_range_distribution() {
         let bin_index = (value - range_min) as usize;
         bins[bin_index] += 1;
 
-        // Calculate mean using floating point to avoid overflow
-        sum_f64 += value as f64;
+        offset_sum += value - range_min;
     }
 
-    let mean_observed = sum_f64 / samples as f64;
-    let mean_expected = (range_min as f64 + range_max as f64) / 2.0;
+    let mean_observed = offset_sum as f64 / samples as f64;
+    let mean_expected = 5.0;
 
     let expected_per_bin = samples as f64 / num_bins as f64;
     let (chi_square, p_value) = chi_square_test(&bins, expected_per_bin);
 
-    println!("Mean (Observed):  {:.1}", mean_observed);
-    println!("Mean (Expected):  {:.1}", mean_expected);
+    println!("Mean offset (Observed):  {:.3}", mean_observed);
+    println!("Mean offset (Expected):  {:.3}", mean_expected);
     println!("χ² Statistic:     {:.2}", chi_square);
     println!("p-value:          {:.2}", p_value);
 
@@ -200,12 +158,6 @@ fn test_high_range_distribution() {
         "Mean deviation too large: observed={}, expected={}",
         mean_observed,
         mean_expected
-    );
-
-    assert!(
-        chi_square > 0.0 && chi_square < 30.0,
-        "Chi-square out of reasonable range: {}",
-        chi_square
     );
 
     assert!(
@@ -247,4 +199,29 @@ fn quick_statistical_smoke_test() {
         (mean - expected).abs() < 2.0,
         "Smoke test failed: mean deviation too large"
     );
+}
+
+#[cfg(test)]
+mod statistics_tests {
+    use super::chi_square_test;
+    use statrs::distribution::{ChiSquared, ContinuousCDF};
+
+    #[test]
+    fn historical_report_uses_actual_upper_tail() {
+        let distribution = ChiSquared::new(100.0).unwrap();
+        assert!((distribution.sf(126.07) - 0.040_048_906_314).abs() < 1e-10);
+    }
+
+    #[test]
+    fn rejects_constant_generator() {
+        let mut counts = [0; 100];
+        counts[0] = 100_000;
+        let (_, p) = chi_square_test(&counts, 1000.0);
+        assert!(p < 0.01);
+    }
+
+    #[test]
+    fn equal_counts_have_upper_tail_one() {
+        assert_eq!(chi_square_test(&[100; 100], 100.0), (0.0, 1.0));
+    }
 }

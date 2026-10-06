@@ -23,6 +23,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Document clock attestation server deployment procedures
 
 ### Native RNG Compliance
+- [ ] Revize: Harden native RNG state lifecycle (redacted Debug, fast key erasure, OS reseeding, PID changes and snapshot guidance); correct statistical p-values. Revises the completed implementation/audit tasks below.
 - [x] Aunsorm Native RNG implemented across all crates
 - [x] OsRng usage restricted to initial entropy seeding only
 - [x] Security audit of HKDF + NEUDZ-PCS + AACM mixing algorithm
