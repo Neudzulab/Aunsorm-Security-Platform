@@ -79,3 +79,58 @@ println!("{} uç kontrol edildi", report.results.len());
 İsteğe bağlı olarak `seed_paths` alanına eklenen yollar, keşif katmanından
 bağımsız şekilde test kuyruğuna eklenir ve `Allow` yanıtı alınamayan uçlarda bile
 istek denenmesine izin verir.
+
+## Keşif verisi ve HTTP origin sınırları
+
+XML okuyucu `roxmltree 0.21.1` kullanır (paketin ilan ettiği MSRV: 1.60).
+`quick-xml` bağımlılığı kaldırılmıştır. Bu, tüm çalışma alanının 1.76 ile
+artık derlendiği anlamına gelmez; mevcut bağımlılık MSRV görevleri sürüyor.
+
+- OpenAPI, HTML ve her sitemap HTTP yanıtı, gzip açıldıktan sonraki baytlar dahil
+  **1 MiB** ile sınırlıdır. UTF-8 dışı keşif metni hata döndürür.
+- XML ayrıştırmadan önce ham `<` / `=` sayıları 32.768 / 16.384 ile sınırlanır;
+  okuyucunun tahmini kapasite ayırmaları da bu kontrole dahildir.
+- Her XML etiketi en çok 4.096 bayt ve 32 öznitelik; iç içe derinlik en çok 32,
+  DOM düğümleri en çok 32.768 olabilir. DTD ve dış entity çözümleme kapalıdır.
+- `urlset` / `sitemapindex`, namespace olmadan veya standart sitemap 0.9
+  namespace'iyle okunur. Escaped karakterler ve CDATA korunur; yinelenen/nested
+  `loc`, boş konum ve 2.048 karakteri aşan URL hata döndürür.
+- İndeks taraması başlangıç adayları dahil en çok 16 belge, 4 indeks derinliği,
+  toplam 8 MiB ve 4.096 benzersiz URL kabul eder. Döngüler yeniden çağrılmaz.
+  Zorunlu alt belge başarısızsa kısmi keşif başarı gibi raporlanmaz.
+- İndeks ve sitemap URL'leri yapılandırılmış origin içinde olmalı ve URL içine
+  kullanıcı/parola koymamalıdır. Aynı-origin yönlendirmeler istek başına en çok
+  10 adımla izlenir; diğer origin veya URL credential yönlendirmeleri durdurulur.
+- Tohum/OpenAPI/HTML yolları OPTIONS ve doğrulama istekleri başlamadan kontrol
+  edilir. Baş slash'larının kaldırılmasıyla `/http://...` gibi bir yolun mutlak
+  URL'ye dönüşüp authentication/custom header'ları dışarı taşıması engellenir.
+  Geçerli göreli hedefler önceki base-path çözümlemesini korur.
+
+Normal endpoint yanıtları da açılmış veri üzerinden **1 MiB** ile sınırlıdır.
+Content-Length ön kontrolüne ek olarak chunked/gzip akışları parça parça okunur;
+sınır aşıldığında `ResponseTooLarge` başarısızlığı kaydedilir. Aktarım hatası veya
+isteğin toplam `timeout` süresinin dolması `Network` başarısızlığıdır; boş gövde
+olarak kabul edilmez. Hata raporu endpoint/method/status bilgisini korur.
+HEAD, 204 ve 205 yanıtlarında JSON gövdesi aranmaz.
+
+SSE doğrulaması tam akış doğrulaması değildir: en çok **1.024 bayt** tutulur.
+Sınıra ulaşan örnek JSON'da `body_sample: {bytes: 1024, limit: 1024}` ile,
+Markdown'da açık bir örnekleme satırıyla raporlanır. Sınırdan önce EOF olursa
+örnekleme alanı eklenmez. EOF veya örnek sınırına ulaşmadan takılan SSE isteği
+başarısızdır; kısmi örnek hatayı başarıya dönüştürmez. SSE olay semantiği ve
+sunucu/backpressure davranışı bu istemci gövde sınırıyla doğrulanmış sayılmaz.
+Tutulan buffer sınırlıdır; HTTP/decompression katmanının tek chunk için geçici
+ayırmaları bu buffer bütçesine dahil değildir.
+
+```powershell
+cargo test -p endpoint-validator --locked -j1
+cargo build -p endpoint-validator --example sitemap_fuzz_stdin --locked -j1
+python -B fuzz/sitemap_corpus.py
+cargo check --manifest-path fuzz/Cargo.toml --bin fuzz_sitemap --locked -j1
+```
+
+Fuzz hedefi `fuzz/fuzz_targets/fuzz_sitemap.rs`, kararlı stdin girişi
+`examples/sitemap_fuzz_stdin.rs` dosyasıdır. Deterministik korpus uzun süreli
+coverage-guided fuzzing yerine geçmez. HTTP regresyonları gerçek yerel
+sunucularda aynı-origin/çapraz-origin, namespace, query escape, indeks döngüsü,
+zorunlu belge hatası, Content-Length/chunked/gzip boyut ve yol kaçışını sınar.

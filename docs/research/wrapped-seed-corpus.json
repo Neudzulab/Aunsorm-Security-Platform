@@ -1,0 +1,19 @@
+{
+  "cases": 656,
+  "accepted": 1,
+  "rejected": 655,
+  "failures": 0,
+  "corpus_sha256": "d4395e07d42e72563d5e560211aeaafeb371ac7a5089d74c0ac130372cf2c85e",
+  "fixture_sha256": "556280b131411d934cb3b6f434a331166955d6f290429670e6b2b2efd6a9adb9",
+  "decoder_sha256": "b204531ccfa869242723cf9fd9b160deac18d63ef085b122ecf62efbcb9cf60e",
+  "executable_sha256": "67fa577098573abebba76524d559beeba563a6a4a406f99c5f1e4f6e7e32ab87",
+  "case_budget": 1024,
+  "input_byte_budget": 1104,
+  "coverage_guided": false,
+  "fixture": "known synthetic key/seed, actual AES-GCM with AunsormNativeRng nonce",
+  "scope": "every envelope bit, malformed base64, all truncations and AAD/length changes",
+  "limitations": [
+    "Not live HSM or a sustained coverage-guided engine run",
+    "Known fixture key/seed are test material, not production secrets"
+  ]
+}

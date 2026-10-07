@@ -1,0 +1,11 @@
+{
+  "rayon_version": "1.12.0",
+  "library_sha256": "f9408f23a501d460020c0daf357b81fc08a0df3485f10fac29282e0924e5486b",
+  "probe_sha256": "85e82e260fad58582d30d9e28bc8048f5210b35bf6ee82e9bbbc05d82cd28a0e",
+  "comparisons": 1536,
+  "failed": 0,
+  "reference": "Rust standard sequential char Range and RangeInclusive",
+  "known_bad_versions_executed": false,
+  "stdout": "1536 parallel/standard Unicode range comparisons passed",
+  "msrv_1_76_proven": false
+}

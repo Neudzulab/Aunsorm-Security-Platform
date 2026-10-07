@@ -138,7 +138,18 @@ impl JwtVerifier {
 
         if let Some(store) = &self.store {
             if let Some(jti_value) = jti {
-                let expires_at = claims.expiration;
+                // A token remains acceptable through exp + leeway. Retain its
+                // consumption beyond that inclusive boundary, including stores
+                // (SQLite) that round expiry down to whole seconds.
+                let expires_at = claims
+                    .expiration
+                    .map(|expiry| {
+                        expiry
+                            .checked_add(self.leeway)
+                            .and_then(|deadline| deadline.checked_add(Duration::from_secs(1)))
+                            .ok_or(JwtError::TimeConversion)
+                    })
+                    .transpose()?;
                 let replay_key = replay_store_key(jti_value, options.replay_namespace.as_deref());
                 if !store.check_and_insert(replay_key.as_ref(), expires_at)? {
                     return Err(JwtError::Replay);

@@ -3,8 +3,6 @@ use std::env;
 use std::io;
 use std::sync::Mutex;
 
-use aead::{Aead, Payload};
-use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine as _;
 use cryptoki::context::Pkcs11;
@@ -115,7 +113,12 @@ impl Pkcs11Backend {
             self.hardware.as_ref(),
             self.wrap_key.as_ref(),
         )?;
-        sign_with_source(&entry.active.source, message, self.hardware.as_ref())
+        sign_with_source(
+            &entry.active.source,
+            &entry.active.public,
+            message,
+            self.hardware.as_ref(),
+        )
     }
 
     pub fn public_ed25519(&self, key_id: &str) -> Result<Vec<u8>> {
@@ -227,6 +230,13 @@ fn build_key_entry(
             let seed_bytes = unwrap_seed(wrap_key, seed, key_id)?;
             let signing = SigningKey::from_bytes(&seed_bytes);
             let public = VerifyingKey::from(&signing).to_bytes();
+            if let Some(expected) = &config.public_key {
+                if decode_public(expected, key_id)? != public {
+                    return Err(KmsError::Config(format!(
+                        "pkcs11 public_key does not match wrapped seed for {key_id}"
+                    )));
+                }
+            }
             (SigningSource::Software(seed_bytes), public)
         }
         (None, Some(label), Some(hw)) => {
@@ -252,6 +262,8 @@ fn build_key_entry(
             )))
         }
     };
+    crate::pkcs11_identity::validate_public(&public)
+        .map_err(|message| KmsError::Config(format!("pkcs11 key {key_id}: {message}")))?;
     let kid = config.kid.clone().unwrap_or_else(|| compute_kid(&public));
     let active = KeyVersion {
         source,
@@ -347,6 +359,7 @@ fn rotate_entry(
 
 fn sign_with_source(
     source: &SigningSource,
+    public: &[u8; 32],
     message: &[u8],
     hardware: SharedHardware,
 ) -> Result<Vec<u8>> {
@@ -362,9 +375,14 @@ fn sign_with_source(
                 let io_err = io::Error::other(err.to_string());
                 KmsError::unavailable(BackendKind::Pkcs11, io_err)
             })?;
-            session
+            let signature = session
                 .sign(&Mechanism::Eddsa, *handle, message)
-                .map_err(|err| KmsError::Hsm(format!("pkcs11 sign failed: {err}")))
+                .map_err(|err| KmsError::Hsm(format!("pkcs11 sign failed: {err}")))?;
+            drop(session);
+            crate::pkcs11_identity::verify_response(public, message, &signature).map_err(
+                |message| KmsError::Hsm(format!("pkcs11 sign response rejected: {message}")),
+            )?;
+            Ok(signature)
         }
     }
 }
@@ -438,10 +456,22 @@ fn find_private_key(
     let objects = session
         .find_objects(&template)
         .map_err(|err| KmsError::Hsm(format!("pkcs11 find_objects failed: {err}")))?;
-    objects
-        .into_iter()
+    unique_private_key(objects, label)
+}
+
+// Keep cardinality validation independent of opaque provider handles. Even two
+// identical handles are an ambiguous provider response and must fail closed.
+fn unique_private_key<T>(objects: Vec<T>, label: &str) -> Result<T> {
+    let mut objects = objects.into_iter();
+    let first = objects
         .next()
-        .ok_or_else(|| KmsError::Hsm(format!("pkcs11 key with label {label} not found")))
+        .ok_or_else(|| KmsError::Hsm(format!("pkcs11 key with label {label} not found")))?;
+    if objects.next().is_some() {
+        return Err(KmsError::Hsm(format!(
+            "pkcs11 key with label {label} is ambiguous; expected exactly one private key"
+        )));
+    }
+    Ok(first)
 }
 
 fn read_public_key(
@@ -455,84 +485,50 @@ fn read_public_key(
     let attributes = session
         .get_attributes(handle, &[AttributeType::EcPoint])
         .map_err(|err| KmsError::Hsm(format!("pkcs11 get_attributes failed: {err}")))?;
-    let Attribute::EcPoint(point) = &attributes[0] else {
-        return Err(KmsError::Hsm("pkcs11 ec point missing".into()));
-    };
-    extract_ed25519_public(point, |msg| KmsError::Hsm(msg.into()))
+    extract_public_attributes(&attributes)
 }
 
-fn extract_ed25519_public<F>(data: &[u8], err: F) -> Result<[u8; 32]>
-where
-    F: Fn(String) -> KmsError,
-{
-    fn decode_length(bytes: &[u8]) -> Option<(usize, usize)> {
-        let first = *bytes.first()?;
-        if first & 0x80 == 0 {
-            Some((first as usize, 1))
-        } else {
-            let count = (first & 0x7F) as usize;
-            if count == 0 || bytes.len() < 1 + count {
-                return None;
-            }
-            let mut length = 0usize;
-            for &byte in &bytes[1..=count] {
-                length = (length << 8) | usize::from(byte);
-            }
-            Some((length, 1 + count))
-        }
-    }
-
-    fn parse_octet<'a, F>(input: &'a [u8], err: &F) -> Result<&'a [u8]>
-    where
-        F: Fn(String) -> KmsError,
-    {
-        if input.is_empty() {
-            return Err(err("ec point encoding missing tag".into()));
-        }
-        if input[0] != 0x04 {
-            return Err(err("ec point must be DER OCTET STRING".into()));
-        }
-        let (len, header) =
-            decode_length(&input[1..]).ok_or_else(|| err("invalid ec point length".into()))?;
-        let start = 1 + header;
-        let end = start + len;
-        if end > input.len() {
-            return Err(err("ec point length exceeds buffer".into()));
-        }
-        Ok(&input[start..end])
-    }
-
-    let mut current = parse_octet(data, &err)?;
-    if current.len() != 32 && current.first() == Some(&0x04) {
-        current = parse_octet(current, &err)?;
-    }
-    current
-        .try_into()
-        .map_err(|_| err("ed25519 public key must be 32 bytes".into()))
+fn extract_public_attributes(attributes: &[Attribute]) -> Result<[u8; 32]> {
+    let [Attribute::EcPoint(point)] = attributes else {
+        return Err(KmsError::Hsm(
+            "pkcs11 requires exactly one ec point attribute".into(),
+        ));
+    };
+    crate::pkcs11_point::parse_ed25519_point(point).map_err(|message| KmsError::Hsm(message.into()))
 }
 
 fn load_wrap_key() -> Result<Zeroizing<[u8; 32]>> {
-    let raw = env::var(PKCS11_WRAP_KEY_ENV).map_err(|_| {
+    let raw = Zeroizing::new(env::var(PKCS11_WRAP_KEY_ENV).map_err(|_| {
         KmsError::Config(format!(
             "{PKCS11_WRAP_KEY_ENV} must be set for pkcs11 wrapped seeds"
         ))
-    })?;
+    })?);
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(KmsError::Config(format!(
             "{PKCS11_WRAP_KEY_ENV} cannot be empty"
         )));
     }
-    let decoded = STANDARD.decode(trimmed.as_bytes()).map_err(|err| {
-        KmsError::Config(format!("failed to decode {PKCS11_WRAP_KEY_ENV}: {err}"))
-    })?;
-    if decoded.len() != 32 {
+    if trimmed.len() != 44 {
+        return Err(KmsError::Config(format!(
+            "{PKCS11_WRAP_KEY_ENV} must encode exactly 32 bytes as padded base64"
+        )));
+    }
+    // 44 base64 bytes can decode to at most 33 bytes. Own the output buffer
+    // before decoding so partially decoded key material is wiped on errors too.
+    let mut decoded = Zeroizing::new([0u8; 33]);
+    let decoded_length = STANDARD
+        .decode_slice(trimmed.as_bytes(), &mut decoded[..])
+        .map_err(|err| {
+            KmsError::Config(format!("failed to decode {PKCS11_WRAP_KEY_ENV}: {err}"))
+        })?;
+    if decoded_length != 32 {
         return Err(KmsError::Config(format!(
             "{PKCS11_WRAP_KEY_ENV} must decode to 32 bytes"
         )));
     }
     let mut key = Zeroizing::new([0u8; 32]);
-    key.copy_from_slice(&decoded);
+    key.copy_from_slice(&decoded[..32]);
     Ok(key)
 }
 
@@ -541,47 +537,105 @@ fn unwrap_seed(
     wrapped: &str,
     key_id: &str,
 ) -> Result<Zeroizing<[u8; 32]>> {
-    let bytes = STANDARD.decode(wrapped.as_bytes()).map_err(|err| {
-        KmsError::Config(format!("failed to decode wrapped seed for {key_id}: {err}"))
-    })?;
-    if bytes.len() < 12 {
-        return Err(KmsError::Config(format!(
-            "wrapped seed for {key_id} must include 12-byte nonce"
-        )));
-    }
-    let (nonce_bytes, ciphertext) = bytes.split_at(12);
-    let cipher = Aes256Gcm::new_from_slice(wrap_key.as_ref())
-        .map_err(|err| KmsError::Config(format!("invalid pkcs11 wrap key: {err}")))?;
-    let mut nonce_array = [0u8; 12];
-    nonce_array.copy_from_slice(&nonce_bytes[..12]);
-    let nonce = Nonce::from(nonce_array);
-    let plaintext = cipher
-        .decrypt(
-            &nonce,
-            Payload {
-                msg: ciphertext,
-                aad: key_id.as_bytes(),
-            },
-        )
-        .map_err(|err| KmsError::Config(format!("failed to unwrap seed for {key_id}: {err}")))?;
-    if plaintext.len() != 32 {
-        return Err(KmsError::Config(format!(
-            "unwrapped seed for {key_id} must be 32 bytes"
-        )));
-    }
-    let mut seed = Zeroizing::new([0u8; 32]);
-    seed.copy_from_slice(&plaintext);
-    Ok(seed)
+    use crate::wrapped_seed::SeedDecodeError;
+
+    crate::wrapped_seed::unwrap(wrap_key, wrapped.as_bytes(), key_id.as_bytes()).map_err(|error| {
+        let message = match error {
+            SeedDecodeError::EncodedLength => {
+                format!("wrapped seed for {key_id} must encode a 60-byte nonce/seed/tag envelope")
+            }
+            SeedDecodeError::Base64 => format!("failed to decode wrapped seed for {key_id}"),
+            SeedDecodeError::EnvelopeLength => {
+                format!("wrapped seed for {key_id} must contain a 60-byte nonce/seed/tag envelope")
+            }
+            SeedDecodeError::Key => "invalid pkcs11 wrap key".into(),
+            SeedDecodeError::Authentication => format!("failed to unwrap seed for {key_id}"),
+        };
+        KmsError::Config(message)
+    })
 }
 
 fn decode_public(value: &str, key_id: &str) -> Result<[u8; 32]> {
-    let bytes = STANDARD.decode(value.as_bytes()).map_err(|err| {
-        KmsError::Config(format!(
-            "failed to decode pkcs11 public key for {key_id}: {err}"
-        ))
-    })?;
-    bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| KmsError::Config(format!("pkcs11 public key for {key_id} must be 32 bytes")))
+    if value.len() != 44 {
+        return Err(KmsError::Config(format!(
+            "pkcs11 public key for {key_id} must encode 32 bytes"
+        )));
+    }
+    let mut decoded = [0u8; 33];
+    let length = STANDARD
+        .decode_slice(value.as_bytes(), &mut decoded)
+        .map_err(|err| {
+            KmsError::Config(format!(
+                "failed to decode pkcs11 public key for {key_id}: {err}"
+            ))
+        })?;
+    if length != 32 {
+        return Err(KmsError::Config(format!(
+            "pkcs11 public key for {key_id} must be 32 bytes"
+        )));
+    }
+    let mut public = [0u8; 32];
+    public.copy_from_slice(&decoded[..32]);
+    crate::pkcs11_identity::validate_public(&public)
+        .map_err(|message| KmsError::Config(format!("pkcs11 key {key_id}: {message}")))?;
+    Ok(public)
+}
+
+#[cfg(test)]
+mod point_attribute_tests {
+    use super::extract_public_attributes;
+    use cryptoki::object::Attribute;
+
+    #[test]
+    fn empty_wrong_and_ambiguous_attribute_lists_fail_without_panicking() {
+        for attributes in [
+            vec![],
+            vec![Attribute::Label(vec![])],
+            vec![Attribute::EcPoint(vec![]), Attribute::EcPoint(vec![])],
+        ] {
+            assert!(extract_public_attributes(&attributes).is_err());
+        }
+    }
+
+    #[test]
+    fn canonical_attribute_is_decoded_and_trailing_der_is_rejected() {
+        let key = [23u8; 32];
+        let mut encoded = vec![4, 32];
+        encoded.extend_from_slice(&key);
+        assert_eq!(
+            extract_public_attributes(&[Attribute::EcPoint(encoded.clone())])
+                .expect("canonical public key"),
+            key
+        );
+        encoded.push(0);
+        assert!(extract_public_attributes(&[Attribute::EcPoint(encoded)]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod private_key_selection_tests {
+    use super::unique_private_key;
+    use crate::error::KmsError;
+
+    // These exercise the selection policy, not a mock PKCS#11 session.
+    #[test]
+    fn missing_key_retains_label_and_hardware_error_context() {
+        let error = unique_private_key::<u32>(vec![], "signing-label").unwrap_err();
+        assert!(matches!(error, KmsError::Hsm(ref message)
+            if message.contains("signing-label") && message.contains("not found")));
+    }
+
+    #[test]
+    fn only_one_candidate_can_be_selected() {
+        assert_eq!(unique_private_key(vec![42], "signing-label").unwrap(), 42);
+    }
+
+    #[test]
+    fn ambiguity_rejected_regardless_of_order_or_duplicate_values() {
+        for candidates in [vec![42, 43], vec![43, 42], vec![42, 42], vec![42, 43, 44]] {
+            let error = unique_private_key(candidates, "signing-label").unwrap_err();
+            assert!(matches!(error, KmsError::Hsm(ref message)
+                if message.contains("signing-label") && message.contains("ambiguous")));
+        }
+    }
 }

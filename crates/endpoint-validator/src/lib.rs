@@ -2,7 +2,7 @@
 #![deny(warnings)]
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -11,7 +11,6 @@ use anyhow::{anyhow, Context as _};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use futures::stream::{FuturesUnordered, StreamExt as FuturesStreamExt};
 use openapiv3::{OpenAPI, Operation, ReferenceOr, RequestBody};
-use quick_xml::de::from_str as parse_xml;
 use regex::Regex;
 use reqwest::header::{
     HeaderMap, HeaderName, HeaderValue, InvalidHeaderValue, ALLOW, AUTHORIZATION, CONTENT_TYPE,
@@ -25,12 +24,17 @@ use serde_json::{json, Value};
 use thiserror::Error;
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time::{interval, Interval, MissedTickBehavior};
-use tokio_stream::StreamExt as TokioStreamExt;
 use url::Url;
+
+pub mod sitemap;
 
 const USER_AGENT_VALUE: &str = "aunsorm-endpoint-validator/0.1";
 const STREAM_SAMPLE_LIMIT: usize = 1024;
+const MAX_VALIDATION_BODY_BYTES: usize = 1024 * 1024;
 const RESPONSE_EXCERPT_LIMIT: usize = 200;
+const MAX_SITEMAP_DOCUMENTS: usize = 16;
+const MAX_SITEMAP_DEPTH: usize = 4;
+const MAX_SITEMAP_TOTAL_BYTES: usize = 8 * sitemap::MAX_DOCUMENT_BYTES;
 
 /// Authentication strategy applied to outbound requests.
 #[derive(Clone, Debug)]
@@ -170,8 +174,16 @@ pub enum FailureKind {
     MethodNotAllowed,
     ServerError,
     InvalidJson,
+    ResponseTooLarge,
     Network,
     UnexpectedStatus,
+}
+
+/// Explicit evidence that only a prefix of a streaming response was checked.
+#[derive(Clone, Debug, Serialize)]
+pub struct BodySample {
+    pub bytes: usize,
+    pub limit: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -182,6 +194,8 @@ pub struct ValidationResult {
     pub latency_ms: Option<u128>,
     pub outcome: ValidationOutcome,
     pub response_excerpt: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body_sample: Option<BodySample>,
     pub likely_cause: Option<String>,
     pub suggested_fix: Option<String>,
     pub allowed: bool,
@@ -261,6 +275,17 @@ impl ValidationReport {
         .expect("write should succeed");
         writeln!(output).expect("write should succeed");
 
+        for result in &self.results {
+            if let Some(sample) = &result.body_sample {
+                writeln!(
+                    output,
+                    "SSE prefix sampled: {} {} ({} / {} bytes); full stream not validated.",
+                    result.method, result.path, sample.bytes, sample.limit
+                )
+                .expect("write should succeed");
+            }
+        }
+
         let failures = self.failures();
         if failures.is_empty() {
             writeln!(output, "No failing endpoints detected.").expect("write should succeed");
@@ -281,6 +306,15 @@ impl ValidationReport {
                 .as_deref()
                 .map(|value| value.replace('|', "\u{2758}"))
                 .unwrap_or_default();
+            let excerpt = failure.body_sample.as_ref().map_or_else(
+                || excerpt.clone(),
+                |sample| {
+                    format!(
+                        "{excerpt} [SSE prefix sample: {} / {} bytes]",
+                        sample.bytes, sample.limit
+                    )
+                },
+            );
             writeln!(
                 output,
                 "| {} | {} | {} | {} | {} | {} | {} |",
@@ -358,7 +392,20 @@ pub async fn validate(config: ValidatorConfig) -> Result<ValidationReport, Valid
         default_headers.insert(name.clone(), value.clone());
     }
 
+    let allowed_origin = config.base_url.origin();
     let client = Client::builder()
+        .redirect(reqwest::redirect::Policy::custom(move |attempt| {
+            if attempt.previous().len() >= 10 {
+                attempt.error("redirect limit reached")
+            } else if attempt.url().origin() == allowed_origin
+                && attempt.url().username().is_empty()
+                && attempt.url().password().is_none()
+            {
+                attempt.follow()
+            } else {
+                attempt.stop()
+            }
+        }))
         .no_proxy()
         .timeout(config.timeout)
         .default_headers(default_headers)
@@ -396,6 +443,10 @@ pub async fn validate(config: ValidatorConfig) -> Result<ValidationReport, Valid
             });
     }
 
+    for path in endpoint_map.keys() {
+        validation_url(&config, path)?;
+    }
+
     let semaphore = Arc::new(Semaphore::new(config.concurrency.max(1)));
     let rate_limiter = RateLimiter::new(config.rate_limit_per_second);
 
@@ -427,6 +478,7 @@ pub async fn validate(config: ValidatorConfig) -> Result<ValidationReport, Valid
                         reason: "Destructive methods disabled".to_string(),
                     },
                     response_excerpt: None,
+                    body_sample: None,
                     likely_cause: None,
                     suggested_fix: None,
                     allowed: true,
@@ -464,6 +516,7 @@ pub async fn validate(config: ValidatorConfig) -> Result<ValidationReport, Valid
                     latency_ms: None,
                     outcome: ValidationOutcome::Failure(FailureKind::Network),
                     response_excerpt: Some(error.to_string()),
+                    body_sample: None,
                     likely_cause: Some("Network or runtime error".to_string()),
                     suggested_fix: Some("Inspect validator logs".to_string()),
                     allowed: false,
@@ -477,6 +530,7 @@ pub async fn validate(config: ValidatorConfig) -> Result<ValidationReport, Valid
                     latency_ms: None,
                     outcome: ValidationOutcome::Failure(FailureKind::Network),
                     response_excerpt: Some(join_error.to_string()),
+                    body_sample: None,
                     likely_cause: Some("Task join error".to_string()),
                     suggested_fix: Some("Inspect spawned task".to_string()),
                     allowed: false,
@@ -603,7 +657,7 @@ async fn discover_from_openapi(
         if !response.status().is_success() {
             continue;
         }
-        let text = response.text().await.map_err(ValidatorError::Discovery)?;
+        let text = discovery_text(response).await?;
         let spec: OpenAPI = match serde_json::from_str(&text) {
             Ok(value) => value,
             Err(_) => match serde_yaml::from_str(&text) {
@@ -754,38 +808,118 @@ async fn discover_from_sitemaps(
     client: &Client,
     config: &ValidatorConfig,
 ) -> Result<Vec<String>, ValidatorError> {
-    #[derive(Debug, Deserialize, Default)]
-    struct UrlSet {
-        #[serde(rename = "url", default)]
-        urls: Vec<SiteUrl>,
-    }
-
-    #[derive(Debug, Deserialize, Default)]
-    struct SiteUrl {
-        #[serde(rename = "loc", default)]
-        loc: String,
-    }
-
-    let mut paths = Vec::new();
-    let candidates = ["sitemap.xml", "sitemap_index.xml"];
-    for candidate in candidates {
+    let mut pending = VecDeque::new();
+    let mut queued = HashSet::new();
+    let mut required = HashSet::new();
+    let mut unavailable = HashSet::new();
+    for candidate in ["sitemap.xml", "sitemap_index.xml"] {
         let url = config.base_url.join(candidate)?;
-        let Ok(response) = client.get(url.clone()).send().await else {
-            continue;
+        queued.insert(url.clone());
+        pending.push_back((url, 0));
+    }
+    let mut paths = Vec::new();
+    let mut seen_urls = HashSet::new();
+    let mut total_bytes = 0;
+    while let Some((url, depth)) = pending.pop_front() {
+        let response = match client.get(url.clone()).send().await {
+            Ok(response) => response,
+            Err(error) if required.contains(&url) || error.is_redirect() => {
+                return Err(ValidatorError::Discovery(error));
+            }
+            Err(_) => {
+                unavailable.insert(url);
+                continue;
+            }
         };
         if !response.status().is_success() {
+            if required.contains(&url) || response.status().is_redirection() {
+                return Err(ValidatorError::Other(
+                    "sitemap index target is unavailable or a redirect was refused".to_owned(),
+                ));
+            }
+            unavailable.insert(url);
             continue;
         }
-        let text = response.text().await.map_err(ValidatorError::Discovery)?;
-        if let Ok(parsed) = parse_xml::<UrlSet>(&text) {
-            for entry in parsed.urls {
-                if !entry.loc.is_empty() {
-                    paths.push(entry.loc);
+        let document_url = response.url().clone();
+        let body = discovery_bytes(response).await?;
+        if body.len() > MAX_SITEMAP_TOTAL_BYTES - total_bytes {
+            return Err(ValidatorError::Other(
+                "sitemap aggregate byte budget exceeded".to_owned(),
+            ));
+        }
+        total_bytes += body.len();
+        let parsed =
+            sitemap::parse(&body).map_err(|error| ValidatorError::Other(error.to_string()))?;
+        let (locations, index) = match parsed {
+            sitemap::SitemapDocument::UrlSet(urls) => (urls, false),
+            sitemap::SitemapDocument::Index(urls) => (urls, true),
+        };
+        for location in locations {
+            let mut target = document_url.join(&location)?;
+            if target.origin() != config.base_url.origin()
+                || !matches!(target.scheme(), "http" | "https")
+                || !target.username().is_empty()
+                || target.password().is_some()
+            {
+                return Err(ValidatorError::Other(
+                    "sitemap location must stay on the configured origin without URL credentials"
+                        .to_owned(),
+                ));
+            }
+            target.set_fragment(None);
+            if index {
+                if unavailable.contains(&target) {
+                    return Err(ValidatorError::Other(
+                        "sitemap index refers to an unavailable document".to_owned(),
+                    ));
                 }
+                required.insert(target.clone());
+                if queued.insert(target.clone()) {
+                    if queued.len() > MAX_SITEMAP_DOCUMENTS || depth == MAX_SITEMAP_DEPTH {
+                        return Err(ValidatorError::Other(
+                            "sitemap traversal budget exceeded".to_owned(),
+                        ));
+                    }
+                    pending.push_back((target, depth + 1));
+                }
+            } else if seen_urls.insert(target.clone()) {
+                if paths.len() == sitemap::MAX_URLS {
+                    return Err(ValidatorError::Other(
+                        "sitemap aggregate URL budget exceeded".to_owned(),
+                    ));
+                }
+                paths.push(target.to_string());
             }
         }
     }
     Ok(paths)
+}
+
+async fn discovery_bytes(mut response: Response) -> Result<Vec<u8>, ValidatorError> {
+    let maximum = u64::try_from(sitemap::MAX_DOCUMENT_BYTES).expect("constant fits u64");
+    if response
+        .content_length()
+        .is_some_and(|length| length > maximum)
+    {
+        return Err(ValidatorError::Other(
+            "discovery document byte budget exceeded".to_owned(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(ValidatorError::Discovery)? {
+        if chunk.len() > sitemap::MAX_DOCUMENT_BYTES - bytes.len() {
+            return Err(ValidatorError::Other(
+                "discovery document byte budget exceeded".to_owned(),
+            ));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+async fn discovery_text(response: Response) -> Result<String, ValidatorError> {
+    String::from_utf8(discovery_bytes(response).await?)
+        .map_err(|_| ValidatorError::Other("discovery document must be UTF-8".to_owned()))
 }
 
 async fn discover_from_html(
@@ -800,7 +934,7 @@ async fn discover_from_html(
     if !response.status().is_success() {
         return Ok(Vec::new());
     }
-    let body = response.text().await.map_err(ValidatorError::Discovery)?;
+    let body = discovery_text(response).await?;
     let document = Html::parse_document(&body);
     let selector = Selector::parse("a[href]").expect("valid selector");
     let mut paths = Vec::new();
@@ -844,7 +978,7 @@ async fn fetch_allowed_methods(
     config: &ValidatorConfig,
     path: &str,
 ) -> Result<Vec<Method>, ValidatorError> {
-    let url = config.base_url.join(path.trim_start_matches('/'))?;
+    let url = validation_url(config, path)?;
     let response = match client.request(Method::OPTIONS, url).send().await {
         Ok(response) => response,
         Err(error) => {
@@ -879,10 +1013,7 @@ async fn run_check(
 ) -> Result<ValidationResult, anyhow::Error> {
     let mut attempt = 0usize;
     loop {
-        let url = config
-            .base_url
-            .join(path.trim_start_matches('/'))
-            .with_context(|| format!("building URL for path {path}"))?;
+        let url = validation_url(config, path).context("building scoped validation URL")?;
         let mut request = client.request(method.clone(), url);
         let mut body = template.body.clone();
         let mut content_type = template.content_type.clone();
@@ -917,6 +1048,92 @@ async fn run_check(
     }
 }
 
+fn validation_url(config: &ValidatorConfig, path: &str) -> Result<Url, ValidatorError> {
+    let target = config.base_url.join(path.trim_start_matches('/'))?;
+    if target.origin() != config.base_url.origin()
+        || !matches!(target.scheme(), "http" | "https")
+        || target.username() != config.base_url.username()
+        || target.password() != config.base_url.password()
+    {
+        return Err(ValidatorError::Other(
+            "validation target must stay on the configured origin and credentials".to_owned(),
+        ));
+    }
+    Ok(target)
+}
+
+enum BodyReadError {
+    TooLarge,
+    Network(reqwest::Error),
+}
+
+/// Consume one chunk at a time, without extending the retained buffer past its
+/// decoded-byte budget. SSE is a deliberately labelled prefix sample; ordinary
+/// bodies must reach EOF within the request deadline and are never truncated.
+async fn read_validation_body(
+    mut response: Response,
+    is_event_stream: bool,
+) -> Result<(Vec<u8>, bool), BodyReadError> {
+    if !is_event_stream
+        && response
+            .content_length()
+            .is_some_and(|size| size > MAX_VALIDATION_BODY_BYTES as u64)
+    {
+        return Err(BodyReadError::TooLarge);
+    }
+    let limit = if is_event_stream {
+        STREAM_SAMPLE_LIMIT
+    } else {
+        MAX_VALIDATION_BODY_BYTES
+    };
+    let mut collected = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(BodyReadError::Network)? {
+        let remaining = limit - collected.len();
+        if is_event_stream && chunk.len() >= remaining {
+            collected.extend_from_slice(&chunk[..remaining]);
+            return Ok((collected, true));
+        }
+        if chunk.len() > remaining {
+            return Err(BodyReadError::TooLarge);
+        }
+        collected.extend_from_slice(&chunk);
+    }
+    Ok((collected, false))
+}
+
+fn body_read_failure(
+    path: &str,
+    method: &Method,
+    status: reqwest::StatusCode,
+    latency_ms: u128,
+    error: BodyReadError,
+) -> ValidationResult {
+    let (kind, cause, fix) = match error {
+        BodyReadError::TooLarge => (
+            FailureKind::ResponseTooLarge,
+            "Decoded response exceeds the 1 MiB validation budget".to_owned(),
+            "Reduce the payload or validate large downloads separately",
+        ),
+        BodyReadError::Network(error) => (
+            FailureKind::Network,
+            format!("Response body transfer failed: {error}"),
+            "Inspect transport errors and the configured request timeout",
+        ),
+    };
+    ValidationResult {
+        method: method.to_string(),
+        path: path.to_string(),
+        status: Some(status.as_u16()),
+        latency_ms: Some(latency_ms),
+        outcome: ValidationOutcome::Failure(kind),
+        response_excerpt: None,
+        body_sample: None,
+        likely_cause: Some(cause),
+        suggested_fix: Some(fix.to_owned()),
+        allowed: false,
+    }
+}
+
 async fn evaluate_response(
     path: &str,
     method: &Method,
@@ -929,29 +1146,21 @@ async fn evaluate_response(
         .get(CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
         .map(std::string::ToString::to_string);
-    let is_event_stream = content_type_header
-        .as_deref()
-        .is_some_and(|value| value.contains("text/event-stream"));
+    let is_event_stream = content_type_header.as_deref().is_some_and(|value| {
+        value
+            .split(';')
+            .next()
+            .is_some_and(|media_type| media_type.trim().eq_ignore_ascii_case("text/event-stream"))
+    });
 
-    let body_bytes = if is_event_stream {
-        let mut stream = response.bytes_stream();
-        let mut collected: Vec<u8> = Vec::new();
-        while let Some(item) = TokioStreamExt::next(&mut stream).await {
-            if let Ok(chunk) = item {
-                collected.extend_from_slice(&chunk);
-                if collected.len() >= STREAM_SAMPLE_LIMIT {
-                    break;
-                }
-            } else {
-                break;
-            }
-        }
-        collected
+    let body_read = if *method == Method::HEAD {
+        Ok((Vec::new(), false))
     } else {
-        response
-            .bytes()
-            .await
-            .map_or_else(|_| Vec::new(), |bytes| bytes.to_vec())
+        read_validation_body(response, is_event_stream).await
+    };
+    let (body_bytes, sampled) = match body_read {
+        Ok(body) => body,
+        Err(error) => return body_read_failure(path, method, status, latency_ms, error),
     };
 
     let excerpt = if body_bytes.is_empty() {
@@ -968,6 +1177,10 @@ async fn evaluate_response(
         latency_ms: Some(latency_ms),
         outcome: ValidationOutcome::Success,
         response_excerpt: excerpt,
+        body_sample: sampled.then_some(BodySample {
+            bytes: body_bytes.len(),
+            limit: STREAM_SAMPLE_LIMIT,
+        }),
         likely_cause: None,
         suggested_fix: None,
         allowed: false,
@@ -1005,7 +1218,12 @@ async fn evaluate_response(
         let expects_json = content_type_header
             .as_deref()
             .is_some_and(|value| value.contains("json"));
-        if expects_json {
+        if expects_json
+            && *method != Method::HEAD
+            && status != reqwest::StatusCode::NO_CONTENT
+            && status != reqwest::StatusCode::RESET_CONTENT
+            && !is_event_stream
+        {
             if body_bytes.is_empty() {
                 result.outcome = ValidationOutcome::Failure(FailureKind::InvalidJson);
                 result.likely_cause = Some("Empty body where JSON expected".to_string());
@@ -1060,6 +1278,50 @@ mod tests {
     use tokio::time::{timeout, Duration};
 
     #[test]
+    fn validation_targets_preserve_base_paths_and_reject_scheme_or_backslash_escapes() {
+        let config = super::ValidatorConfig::with_base_url(
+            url::Url::parse("https://validator.test/v1/").unwrap(),
+        );
+        assert_eq!(
+            super::validation_url(&config, "/health?x=1")
+                .unwrap()
+                .as_str(),
+            "https://validator.test/v1/health?x=1"
+        );
+        for path in [
+            "/https://outside.test/escape",
+            "/ http://outside.test/escape",
+            "/\\\\outside.test\\escape",
+        ] {
+            assert!(super::validation_url(&config, path).is_err());
+        }
+    }
+
+    #[test]
+    fn auth_openapi_includes_public_http3_profiles() {
+        let spec: openapiv3::OpenAPI =
+            serde_yaml::from_str(include_str!("../../../openapi/auth-service.yaml"))
+                .expect("auth OpenAPI must deserialize with the production parser");
+        let path = spec.paths.paths["/http3/capabilities"]
+            .as_item()
+            .expect("capability path must be inline");
+        let operation = path.get.as_ref().expect("capability GET must exist");
+        assert_eq!(operation.security.as_deref(), Some([].as_slice()));
+        for status in [200, 304, 501] {
+            assert!(operation
+                .responses
+                .responses
+                .contains_key(&openapiv3::StatusCode::Code(status)));
+        }
+        assert!(spec
+            .components
+            .as_ref()
+            .expect("schemas must exist")
+            .schemas
+            .contains_key("Http3Capabilities"));
+    }
+
+    #[test]
     fn allowlisted_failure_matches_expected_cases() {
         let allowlisted = AllowlistedFailure {
             method: "GET".to_string(),
@@ -1109,6 +1371,7 @@ mod tests {
                     latency_ms: Some(12),
                     outcome: ValidationOutcome::Success,
                     response_excerpt: None,
+                    body_sample: None,
                     likely_cause: None,
                     suggested_fix: None,
                     allowed: false,
@@ -1120,6 +1383,7 @@ mod tests {
                     latency_ms: Some(34),
                     outcome: ValidationOutcome::Failure(FailureKind::ServerError),
                     response_excerpt: Some("pipe | content".to_string()),
+                    body_sample: None,
                     likely_cause: Some("backend".to_string()),
                     suggested_fix: Some("restart".to_string()),
                     allowed: false,
@@ -1147,6 +1411,7 @@ mod tests {
                 latency_ms: Some(10),
                 outcome: ValidationOutcome::Success,
                 response_excerpt: None,
+                body_sample: None,
                 likely_cause: None,
                 suggested_fix: None,
                 allowed: false,
@@ -1172,6 +1437,7 @@ mod tests {
                     latency_ms: Some(10),
                     outcome: ValidationOutcome::Success,
                     response_excerpt: None,
+                    body_sample: None,
                     likely_cause: None,
                     suggested_fix: None,
                     allowed: false,
@@ -1183,6 +1449,7 @@ mod tests {
                     latency_ms: Some(30),
                     outcome: ValidationOutcome::Failure(FailureKind::ServerError),
                     response_excerpt: None,
+                    body_sample: None,
                     likely_cause: None,
                     suggested_fix: None,
                     allowed: true,
@@ -1194,6 +1461,7 @@ mod tests {
                     latency_ms: Some(15),
                     outcome: ValidationOutcome::Failure(FailureKind::Missing),
                     response_excerpt: None,
+                    body_sample: None,
                     likely_cause: None,
                     suggested_fix: None,
                     allowed: false,
@@ -1207,6 +1475,7 @@ mod tests {
                         reason: "dangerous".to_string(),
                     },
                     response_excerpt: None,
+                    body_sample: None,
                     likely_cause: None,
                     suggested_fix: None,
                     allowed: true,
@@ -1239,6 +1508,7 @@ mod tests {
                     latency_ms: Some(10),
                     outcome: ValidationOutcome::Success,
                     response_excerpt: None,
+                    body_sample: None,
                     likely_cause: None,
                     suggested_fix: None,
                     allowed: false,
@@ -1250,6 +1520,7 @@ mod tests {
                     latency_ms: Some(25),
                     outcome: ValidationOutcome::Failure(FailureKind::ServerError),
                     response_excerpt: None,
+                    body_sample: None,
                     likely_cause: None,
                     suggested_fix: None,
                     allowed: true,
@@ -1261,6 +1532,7 @@ mod tests {
                     latency_ms: Some(40),
                     outcome: ValidationOutcome::Failure(FailureKind::Missing),
                     response_excerpt: Some("missing".to_string()),
+                    body_sample: None,
                     likely_cause: Some("routing".to_string()),
                     suggested_fix: Some("restore route".to_string()),
                     allowed: false,

@@ -565,70 +565,245 @@ fn gcp_resource_validation_rejected() {
 }
 
 #[cfg(feature = "kms-pkcs11")]
-#[test]
-#[ignore = "PKCS11 test requires HSM hardware or proper seed wrapping"]
-fn pkcs11_sign_and_public_roundtrip() {
-    let signing = SigningKey::from_bytes(&[21u8; 32]);
-    let verifying = VerifyingKey::from(&signing);
-    let public_b64 = STANDARD.encode(verifying.to_bytes());
+static PKCS11_WRAP_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    let pkcs11_config = Pkcs11BackendConfig {
-        module: None,
-        slot: None,
-        token_label: None,
-        user_pin_env: None,
-        keys: vec![Pkcs11KeyConfig {
-            key_id: "pkcs-key".into(),
-            label: None,        // No label = software key
-            wrapped_seed: None, // No wrapped seed
-            public_key: Some(public_b64),
-            kid: None,
-            rotation: None,
-            approvals: None,
-        }],
-    };
-
-    let mut config = empty_config();
-    config.pkcs11 = Some(pkcs11_config);
-    let client = KmsClient::from_config(config).expect("client");
-    let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Pkcs11, "pkcs-key"));
-
-    let signature = client.sign_ed25519(&descriptor, b"payload").expect("sign");
-    assert_eq!(signature.len(), 64);
-
-    let public = client.public_ed25519(&descriptor).expect("public");
-    assert_eq!(public, verifying.to_bytes().to_vec());
-
-    let kid_value = client.key_kid(&descriptor).expect("kid");
-    let expected_kid = compute_kid(verifying.as_bytes());
-    assert_eq!(kid_value, expected_kid);
+#[cfg(feature = "kms-pkcs11")]
+struct Pkcs11WrapEnv {
+    _lock: std::sync::MutexGuard<'static, ()>,
+    previous: Option<std::ffi::OsString>,
 }
 
 #[cfg(feature = "kms-pkcs11")]
-#[test]
-fn pkcs11_requires_public_in_strict_mode() {
-    let wrapped_b64 = STANDARD.encode([31u8; 32]);
-    let pkcs11_config = Pkcs11BackendConfig {
+impl Pkcs11WrapEnv {
+    fn install(value: &str) -> Self {
+        let lock = PKCS11_WRAP_ENV_LOCK
+            .lock()
+            .expect("PKCS11 environment lock");
+        let previous = std::env::var_os("AUNSORM_KMS_PKCS11_WRAP_KEY");
+        std::env::set_var("AUNSORM_KMS_PKCS11_WRAP_KEY", value);
+        Self {
+            _lock: lock,
+            previous,
+        }
+    }
+}
+
+#[cfg(feature = "kms-pkcs11")]
+impl Drop for Pkcs11WrapEnv {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous.take() {
+            std::env::set_var("AUNSORM_KMS_PKCS11_WRAP_KEY", previous);
+        } else {
+            std::env::remove_var("AUNSORM_KMS_PKCS11_WRAP_KEY");
+        }
+    }
+}
+
+#[cfg(feature = "kms-pkcs11")]
+fn wrapped_pkcs11_seed(key: &[u8; 32], seed: &[u8], key_id: &str) -> String {
+    use aead::{Aead, Payload};
+    use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
+    use rand_core::RngCore;
+
+    let mut rng = crate::AunsormNativeRng::new();
+    let mut nonce_bytes = [0u8; 12];
+    rng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
+    let cipher = Aes256Gcm::new_from_slice(key).expect("AES key");
+    let ciphertext = cipher
+        .encrypt(
+            &nonce,
+            Payload {
+                msg: seed,
+                aad: key_id.as_bytes(),
+            },
+        )
+        .expect("actual seed encryption");
+    let mut envelope = nonce_bytes.to_vec();
+    envelope.extend_from_slice(&ciphertext);
+    STANDARD.encode(envelope)
+}
+
+#[cfg(feature = "kms-pkcs11")]
+fn software_pkcs11_config(key_id: &str, wrapped_seed: String) -> KmsConfig {
+    let mut config = empty_config();
+    config.pkcs11 = Some(Pkcs11BackendConfig {
         module: None,
         slot: None,
         token_label: None,
         user_pin_env: None,
         keys: vec![Pkcs11KeyConfig {
-            key_id: "pkcs-strict".into(),
+            key_id: key_id.into(),
             label: None,
-            wrapped_seed: Some(wrapped_b64),
+            wrapped_seed: Some(wrapped_seed),
             public_key: None,
             kid: None,
             rotation: None,
             approvals: None,
         }],
-    };
+    });
+    config
+}
 
-    let mut config = empty_config();
-    config.strict = true;
-    config.pkcs11 = Some(pkcs11_config);
-    let err = KmsClient::from_config(config)
-        .err()
-        .expect("config should fail");
-    assert!(matches!(err, crate::KmsError::Config(_)));
+#[cfg(feature = "kms-pkcs11")]
+#[test]
+fn pkcs11_wrapped_software_seed_sign_and_public_roundtrip() {
+    let wrap_key = [7u8; 32];
+    let _env = Pkcs11WrapEnv::install(&STANDARD.encode(wrap_key));
+    let signing_seed = [21u8; 32];
+    let signing = SigningKey::from_bytes(&signing_seed);
+    let verifying = VerifyingKey::from(&signing);
+    let wrapped = wrapped_pkcs11_seed(&wrap_key, &signing_seed, "pkcs-key");
+    assert_eq!(STANDARD.decode(&wrapped).expect("envelope").len(), 60);
+    for strict in [false, true] {
+        let mut config = software_pkcs11_config("pkcs-key", wrapped.clone());
+        config.strict = strict;
+        let client = KmsClient::from_config(config).expect("real wrapped software client");
+        let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Pkcs11, "pkcs-key"));
+        let signature = client.sign_ed25519(&descriptor, b"payload").expect("sign");
+        let signature = Signature::from_slice(&signature).expect("signature bytes");
+        verifying
+            .verify_strict(b"payload", &signature)
+            .expect("actual signature verification");
+        assert!(verifying
+            .verify_strict(b"different payload", &signature)
+            .is_err());
+        assert_eq!(
+            client.public_ed25519(&descriptor).expect("public"),
+            verifying.to_bytes()
+        );
+        assert_eq!(
+            client.key_kid(&descriptor).expect("kid"),
+            compute_kid(verifying.as_bytes())
+        );
+    }
+}
+
+#[cfg(feature = "kms-pkcs11")]
+#[test]
+fn pkcs11_wrapped_seed_rejects_nonce_ciphertext_tag_and_identity_changes() {
+    let wrap_key = [7u8; 32];
+    let _env = Pkcs11WrapEnv::install(&STANDARD.encode(wrap_key));
+    let wrapped = wrapped_pkcs11_seed(&wrap_key, &[21u8; 32], "pkcs-key");
+    for index in [0, 11, 12, 43, 44, 59] {
+        let mut bytes = STANDARD.decode(&wrapped).expect("envelope");
+        bytes[index] ^= 1;
+        let config = software_pkcs11_config("pkcs-key", STANDARD.encode(bytes));
+        let error = KmsClient::from_config(config)
+            .err()
+            .expect("tamper must fail");
+        assert!(
+            matches!(error, crate::KmsError::Config(message) if message.contains("failed to unwrap seed"))
+        );
+    }
+    let config = software_pkcs11_config("other-key", wrapped.clone());
+    assert!(KmsClient::from_config(config).is_err());
+    std::env::set_var("AUNSORM_KMS_PKCS11_WRAP_KEY", STANDARD.encode([8u8; 32]));
+    assert!(KmsClient::from_config(software_pkcs11_config("pkcs-key", wrapped)).is_err());
+}
+
+#[cfg(feature = "kms-pkcs11")]
+#[test]
+fn pkcs11_rejects_raw_truncated_oversized_and_wrong_length_seed_envelopes() {
+    let key = [7u8; 32];
+    let _env = Pkcs11WrapEnv::install(&STANDARD.encode(key));
+    let wrapped = wrapped_pkcs11_seed(&key, &[21u8; 32], "pkcs-key");
+    for material in [
+        STANDARD.encode([31u8; 32]),
+        wrapped[..79].into(),
+        "A".repeat(1_000_000),
+        wrapped_pkcs11_seed(&key, &[21u8; 31], "pkcs-key"),
+        wrapped_pkcs11_seed(&key, &[21u8; 33], "pkcs-key"),
+    ] {
+        let mut config = software_pkcs11_config("pkcs-key", material);
+        config.strict = true;
+        let error = KmsClient::from_config(config)
+            .err()
+            .expect("invalid envelope must fail");
+        assert!(matches!(error, crate::KmsError::Config(message) if message.contains("60-byte")));
+    }
+}
+
+#[cfg(feature = "kms-pkcs11")]
+#[test]
+fn pkcs11_wrap_environment_bounds_and_encoding_reject_before_decryption() {
+    let key = [7u8; 32];
+    let _env = Pkcs11WrapEnv::install(&STANDARD.encode(key));
+    let wrapped = wrapped_pkcs11_seed(&key, &[21u8; 32], "pkcs-key");
+    for value in [
+        String::new(),
+        "A".repeat(1_000_000),
+        "!".repeat(44),
+        STANDARD.encode([7u8; 31]),
+    ] {
+        std::env::set_var("AUNSORM_KMS_PKCS11_WRAP_KEY", value);
+        assert!(
+            KmsClient::from_config(software_pkcs11_config("pkcs-key", wrapped.clone())).is_err()
+        );
+    }
+    std::env::remove_var("AUNSORM_KMS_PKCS11_WRAP_KEY");
+    assert!(KmsClient::from_config(software_pkcs11_config("pkcs-key", wrapped)).is_err());
+}
+
+#[test]
+fn signing_keys_enable_zeroize_on_drop_without_feature_unification() {
+    fn requires_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>() {}
+    requires_zeroize_on_drop::<SigningKey>();
+}
+
+#[cfg(feature = "kms-pkcs11")]
+#[test]
+fn pkcs11_wrapped_public_metadata_matches_actual_software_key_in_both_modes() {
+    let key = [7u8; 32];
+    let _env = Pkcs11WrapEnv::install(&STANDARD.encode(key));
+    let signing = SigningKey::from_bytes(&[21u8; 32]);
+    let public = signing.verifying_key();
+    let wrapped = wrapped_pkcs11_seed(&key, &[21u8; 32], "pkcs-key");
+    for strict in [false, true] {
+        let mut config = software_pkcs11_config("pkcs-key", wrapped.clone());
+        config.strict = strict;
+        config.pkcs11.as_mut().expect("configured").keys[0].public_key =
+            Some(STANDARD.encode(public.as_bytes()));
+        let client = KmsClient::from_config(config).expect("matching public metadata");
+        let descriptor = KeyDescriptor::new(BackendLocator::new(BackendKind::Pkcs11, "pkcs-key"));
+        let bytes = client
+            .sign_ed25519(&descriptor, b"public metadata binding")
+            .expect("signature");
+        let signature = Signature::from_slice(&bytes).expect("signature bytes");
+        public
+            .verify_strict(b"public metadata binding", &signature)
+            .expect("actual verification");
+    }
+}
+
+#[cfg(feature = "kms-pkcs11")]
+#[test]
+fn pkcs11_wrapped_public_metadata_mismatch_and_malformed_values_fail_closed() {
+    let key = [7u8; 32];
+    let _env = Pkcs11WrapEnv::install(&STANDARD.encode(key));
+    let wrapped = wrapped_pkcs11_seed(&key, &[21u8; 32], "pkcs-key");
+    let other = SigningKey::from_bytes(&[22u8; 32]).verifying_key();
+    for strict in [false, true] {
+        for (value, expected_error) in [
+            (
+                STANDARD.encode(other.as_bytes()),
+                "does not match wrapped seed",
+            ),
+            ("!".repeat(44), "failed to decode pkcs11 public key"),
+            ("A".repeat(1_000_000), "must encode 32 bytes"),
+            (STANDARD.encode([0u8; 31]), "must be 32 bytes"),
+            (STANDARD.encode([0u8; 33]), "must be 32 bytes"),
+            (STANDARD.encode([0u8; 32]), "weak Ed25519 public key"),
+        ] {
+            let mut config = software_pkcs11_config("pkcs-key", wrapped.clone());
+            config.strict = strict;
+            config.pkcs11.as_mut().expect("configured").keys[0].public_key = Some(value);
+            let error = KmsClient::from_config(config)
+                .err()
+                .expect("invalid public metadata must fail");
+            assert!(
+                matches!(error, crate::KmsError::Config(message) if message.contains(expected_error))
+            );
+        }
+    }
 }

@@ -1,0 +1,15 @@
+{
+  "cases": 669,
+  "accepted_gauge_inputs": 39,
+  "failures": 0,
+  "corpus_sha256": "6ee341bd7d839c596aa381ea2fad65afc8db520d96b9b155fdd1756d73810551",
+  "planned_sample_scaled_matrix_work_upper_bound": 20894208,
+  "aggregate_matrix_work_limit": 32000000,
+  "harness_sha256": "b07223e7e88f8a84c1acec75a143610b3b86a15268d336ca7a43b25b5c043e50",
+  "coverage_guided": false,
+  "scope": "three synthetic 32-position controls, valid timing/sequence/gauge mutations, high-bit changes and truncations",
+  "limitations": [
+    "Expected parser rejection only; post-parse failures propagate",
+    "No live capture, sustained fuzz coverage or authenticated recovery claim"
+  ]
+}

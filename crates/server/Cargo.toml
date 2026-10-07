@@ -21,7 +21,6 @@ http3-experimental = [
     "dep:h3",
     "dep:h3-quinn",
     "dep:quinn",
-    "dep:rustls",
 ]
 
 [dependencies]
@@ -71,7 +70,6 @@ h3-quinn = { version = "0.0.10", optional = true }
 postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 quinn = { version = "0.11.7", default-features = false, features = ["runtime-tokio", "rustls"], optional = true }
 rcgen = { version = "0.14", features = ["pem", "x509-parser"] }
-rustls = { version = "0.22", optional = true }
 x509-parser = { version = "0.18", features = ["verify"] }
 pem = "3"
 rustls-pki-types = "1"

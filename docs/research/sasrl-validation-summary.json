@@ -1,0 +1,430 @@
+{
+  "date": "2026-10-07",
+  "branch": "agent/interop/sasrl-spectral-validation",
+  "rust_toolchain": "1.90.0",
+  "checks": {
+    "cargo_fmt": "passed",
+    "git_diff_check": "passed",
+    "cargo_clippy_all_targets_all_features_deny_warnings": "passed without warnings after bounded PKCS11 public metadata and strict hardware-signature response binding",
+    "cargo_test_all_features_locked_single_job": {
+      "passed": 643,
+      "failed": 0,
+      "existing_ignored": 17,
+      "suite_count": 63
+    },
+    "python_regressions": {
+      "passed": 111,
+      "failed": 0,
+      "recovery_loader": 18,
+      "conditioning": 6,
+      "pcm": 14,
+      "telemetry": 11,
+      "euler_reference": 9,
+      "streaming_pcm": 13,
+      "streaming_timing_and_queue": 5,
+      "conditioning_perturbation": 5,
+      "small_cluster_conditioning": 10,
+      "observed_time_conditioning": 12,
+      "zeta_model_contract": 8
+    },
+    "cargo_audit": "failed",
+    "cargo_deny": "failed",
+    "quic_datagram_targeted_tests": {
+      "passed": 14,
+      "failed": 0
+    },
+    "auth_openapi_production_parser": "passed",
+    "quic_deterministic_corpus": {
+      "cases": 338,
+      "failures": 0,
+      "corpus_sha256": "ba4423f327e5929ca8342c9a183f8213392f0973ac15ab0690ecb03d7e96b088",
+      "coverage_guided": false
+    },
+    "quic_fuzz_target_build": "previous separate-graph compiler check; plain Windows cargo build now failed libFuzzer link LNK1561; supported cargo-fuzz build/run remains unverified",
+    "signal_parser_mutation_corpus": {
+      "cases": 2086,
+      "failed": 0,
+      "coverage_guided": false
+    },
+    "public_signal_reproduction": {
+      "baseline_report": "docs/research/sasrl-signal-reproduction.json",
+      "refined_report": "docs/research/sasrl-signal-refined-reproduction.json",
+      "baseline_evaluations": 12748275,
+      "refined_evaluations": 48851208,
+      "controls": "18 quantized synthetic tones plus exact/jitter/loss/drift decoded-frame fixtures"
+    },
+    "public_signal_cli_capture_hashes": "passed; uniform eligible, 2ms jitter ineligible despite 5ms tolerance",
+    "public_signal_tone_clipping": "0 in both 18-tone profile runs",
+    "sitemap_stable_corpus": {
+      "cases": 257,
+      "failures": 0,
+      "corpus_sha256": "edd03bee349029fcead9e95bc7b6241ac3c9788ad76ef45a0d4b97cdea71665c",
+      "coverage_guided": false
+    },
+    "sitemap_fuzz_target_build": "previous separate-graph compiler check; supported coverage-guided build/run remains unverified",
+    "endpoint_validator_tests": {
+      "unit": 16,
+      "existing_http": 4,
+      "new_security_http": 10,
+      "failed": 0,
+      "new_response_http": 8
+    },
+    "elliptic_public_reference": {
+      "paper_exact_rows": 8,
+      "matched": 8,
+      "spectral_estimates_reproduced": false,
+      "small_fields_independent_exhaustive_equation_check": "passed",
+      "prime_power_independent_Newton_identity_check": "passed"
+    },
+    "replay_security_regressions": {
+      "typed_grace_identity_and_actual_signed_token_flow": 13,
+      "jti_leeway_in_memory_sqlite_reopen_and_time_overflow": 3,
+      "final_jwt_unit_tests": 28,
+      "failed": 0,
+      "fuzz_dependency_graph": "quic/sitemap targets build without warnings",
+      "actual_signed_token_ledger_flows": 2
+    },
+    "sealed_jwt_payload_fields": "identical to HEAD",
+    "grace_tracker_capacity_and_deadlines": {
+      "maximum_retained_entries": 4096,
+      "variable_size_claim_text_retained": false,
+      "extends_deadline_on_retry": false,
+      "evicts_live_entries_for_admission": false,
+      "identity_model": "SHA-256 domain/presence/length separated; text hash outside global mutex",
+      "actual_scope_isolated": true
+    },
+    "msrv_metadata_audit": {
+      "baseline": "1.76",
+      "target": "x86_64-pc-windows-msvc",
+      "above_baseline_packages": 29,
+      "missing_metadata_packages": 136,
+      "actual_1_76_build": false,
+      "report": "docs/research/msrv-dependency-audit.json",
+      "actual_1_76_core_check_attempted": true,
+      "actual_1_76_core_check_result": "failed before compilation: rayon 1.12.0 requires 1.80; core/sysinfo normal dependency path and dev criterion path both activate it"
+    },
+    "streaming_pcm_reproduction": {
+      "report": "docs/research/sasrl-stream-reproduction.json",
+      "float_partition_comparisons": 6,
+      "wav_partition_comparisons": 6,
+      "failed": 0,
+      "live_authenticated_media": false,
+      "filter_evaluations": 13569790,
+      "preflight_filter_evaluations": 13848000
+    },
+    "streaming_pcm_mutation_corpus": {
+      "cases": 2768,
+      "failed": 0,
+      "corpus_sha256": "75019e74e970db73cf6b66fe49971b278cb7a2f162c8504604af81ab4a99c625",
+      "coverage_guided": false,
+      "controls": "Eight allowed rates; valid 64-sample WAVs, every truncation and single high-bit byte flip; accepted PCM prefixes compare streaming/offline floats exactly",
+      "max_stream_prefix_samples": 64,
+      "source_authentication_verified": false
+    },
+    "base64ct_compatible_pin": {
+      "root_previous_version": "1.8.3",
+      "fuzz_previous_version": "1.8.0",
+      "locked_version": "1.6.0",
+      "declared_rust_version": "1.60",
+      "actual_1_76_core_check": "failed before compilation on rayon-core 1.13.0",
+      "new_security_advisories": 0,
+      "whole_workspace_msrv_proven": false
+    },
+    "fuzz_separate_graph_compiler_check": "both targets passed without warnings after extended envelope-budget fragmentation control",
+    "stable_parser_harnesses_after_base64ct_pin": {
+      "binary_build": "passed without warnings",
+      "quic_cases": 338,
+      "sitemap_cases": 257,
+      "failures": 0,
+      "coverage_guided": false
+    },
+    "rayon_surrogate_boundary": {
+      "rayon_version": "1.12.0",
+      "library_sha256": "f9408f23a501d460020c0daf357b81fc08a0df3485f10fac29282e0924e5486b",
+      "probe_sha256": "85e82e260fad58582d30d9e28bc8048f5210b35bf6ee82e9bbbc05d82cd28a0e",
+      "comparisons": 1536,
+      "failed": 0,
+      "reference": "Rust standard sequential char Range and RangeInclusive",
+      "known_bad_versions_executed": false,
+      "stdout": "1536 parallel/standard Unicode range comparisons passed",
+      "msrv_1_76_proven": false
+    },
+    "streaming_pcm_host_benchmark": {
+      "baseline_report": "docs/research/sasrl-stream-benchmark.json",
+      "optimized_report": "docs/research/sasrl-stream-benchmark-optimized.json",
+      "profiles": 2,
+      "rates": 3,
+      "trials_per_case": 3,
+      "steady_observations_per_case": 42,
+      "planned_filter_evaluations": 39542976,
+      "actual_filter_evaluations": 38587680,
+      "output_hash_matches": 6,
+      "real_time_proven": false,
+      "queue_model_is_live_backpressure": false,
+      "refined_10ms_processing_cadence": "not met on measured host"
+    },
+    "two_mode_noise_reproduction": {
+      "report": "docs/research/sasrl-conditioning-noise-reproduction.json",
+      "rows": 7,
+      "alias_cases_rejected": 3,
+      "qr_vs_gram_determinant": "passed",
+      "measured_vs_predicted_gain": "passed to 7 decimal places in ratio controls",
+      "missing_samples_reconstructed": 0
+    },
+    "pcm_envelope_integration": {
+      "tests_passed": 3,
+      "failed": 0,
+      "key_rng": "AunsormNativeRng",
+      "cipher": "real AES-256-GCM",
+      "default_plaintext_fragments": 2,
+      "reserved_932_byte_plaintext_fragments": 3,
+      "overhead_per_fragment_bytes": 28,
+      "valid_metadata_ciphertext_nonce_tag_key_context_mutations_rejected": true,
+      "adopted_production_aad_protocol": false,
+      "live_quic_verified": false,
+      "frame_replay_ledger_implemented": false
+    },
+    "replay_schema_fence": {
+      "scope": "research fixtures on temporary WAL SQLite databases; actual current SqliteJtiStore",
+      "passed": 6,
+      "failed": 0,
+      "production_activation": false,
+      "persistent_key_encoding_changed": false,
+      "canonical_atomic_consume_api_implemented": false,
+      "reopened_old_store_result": "explicit startup error: views may not be indexed",
+      "already_open_insert_result": "trigger abort: legacy insert rejected",
+      "expired_cleanup_result": "trigger abort: legacy delete rejected",
+      "version_marker_only": "does not fence actual old store",
+      "rollback_retention": "maximum finite expiry; NULL is permanent; canonical fixture records retained",
+      "process_crash_tested": false,
+      "hashes": {
+        "crates/jwt/tests/replay_schema_fence.rs": "0e21a6341b3dbe31a5acadf1cd6b2bb9647149c17074f5e889c91b9c380b6cbc",
+        "crates/jwt/tests/data/replay_fence.sql": "a9cd6c3040349e47d50a0eaecb2467ae3612f31ea4c0fb1e86165e9193e5ceed",
+        "crates/jwt/tests/data/replay_rollback.sql": "2fd38f623d7352763ea1ee7fd9990f6dd9cf26fda991bc16ae3047c250356fb6"
+      }
+    },
+    "small_cluster_conditioning": {
+      "rows": 10,
+      "numpy_crosscheck_rows": 10,
+      "numpy_version": "2.3.5",
+      "aggregate_sample_scaled_work_preflight": 2442496,
+      "maximum_modes": 8,
+      "maximum_samples": 512,
+      "maximum_sweeps": 40,
+      "alias_and_precision_unresolved_rows": 2,
+      "explicit_nonconvergence_control": true,
+      "certified_rank_or_recovery": false,
+      "report": "docs/research/sasrl-cluster-conditioning-reproduction.json"
+    },
+    "observed_time_conditioning": {
+      "report": "docs/research/sasrl-observed-conditioning-reproduction.json",
+      "fixed_controls": 4,
+      "planned_sample_scaled_work_upper_bound": 62464,
+      "independent_numpy_svd": "passed, absolute sigma differences below 1e-12",
+      "missing_slots_reconstructed": 0,
+      "live_capture": false
+    },
+    "observed_time_mutation_corpus": {
+      "cases": 669,
+      "accepted_gauge_inputs": 39,
+      "failures": 0,
+      "corpus_sha256": "6ee341bd7d839c596aa381ea2fad65afc8db520d96b9b155fdd1756d73810551",
+      "planned_sample_scaled_matrix_work_upper_bound": 20894208,
+      "aggregate_matrix_work_limit": 32000000,
+      "harness_sha256": "b07223e7e88f8a84c1acec75a143610b3b86a15268d336ca7a43b25b5c043e50",
+      "coverage_guided": false,
+      "scope": "three synthetic 32-position controls, valid timing/sequence/gauge mutations, high-bit changes and truncations",
+      "limitations": [
+        "Expected parser rejection only; post-parse failures propagate",
+        "No live capture, sustained fuzz coverage or authenticated recovery claim"
+      ]
+    },
+    "zeta_model_contract": {
+      "report": "docs/research/sasrl-model-contract-reproduction.json",
+      "real_prefix_exact_comparisons": 6,
+      "rejected_analytic_contradictions": 9,
+      "model_aware_loader_mutations": 93,
+      "failures": 0,
+      "coverage_guided": false
+    },
+    "pkcs11_point_decoding": {
+      "cases": 1765,
+      "failures": 0,
+      "corpus_sha256": "5092bbebc19c2ce4909db77cc54536c22bf72a686e038365d2e297e4ae9fa81f",
+      "executable_sha256": "428b65777729db7213b5b18db7c2b79defcd39ba1e441f42529eea2ab75e7689",
+      "parser_sha256": "76bfe6cf3301b46c3c5ff790befcd02b850f6ea2dccd29795ed9a09e229804b3",
+      "coverage_guided": false,
+      "case_budget": 4096,
+      "input_byte_budget": 4097,
+      "scope": "single/double DER, every truncation, full header byte mutations, overflow and trailing data",
+      "limitations": [
+        "Pure shared-source parser controls, no live HSM invocation",
+        "Cryptoki dependency advisory is not remediated by caller parser changes"
+      ],
+      "compiled_with": "rustc 1.76.0, edition 2021, -D warnings; shared parser/stdin source only",
+      "full_workspace_msrv_verified": false,
+      "date": "2026-10-07",
+      "kms_tests": {
+        "passed": 17,
+        "failed": 0,
+        "existing_ignored": 1,
+        "new_decoder_and_attribute_tests": 6,
+        "actual_ed25519_signature": true,
+        "live_hsm": false
+      },
+      "workspace_tests": {
+        "passed": 634,
+        "failed": 0,
+        "existing_ignored": 18,
+        "suite_count": 63
+      },
+      "workspace_clippy_all_targets_all_features_deny_warnings": "passed",
+      "fuzz_target_separate_graph_check": "passed; coverage-guided engine execution remains unverified",
+      "audit_exit_code": 1,
+      "audit_remaining_advisories": [
+        "RUSTSEC-2026-0286",
+        "RUSTSEC-2023-0071"
+      ],
+      "deny_advisory_errors": 4,
+      "patched_cryptoki_msrv": {
+        "package_version": "0.10.1",
+        "declared_rust_version": "1.77.0",
+        "cached_official_manifest_sha256": "9881b38ca2183998833945fda640bdb362e8077fbe6e83e80be5aded8c89a313",
+        "upgrade_performed": false
+      }
+    },
+    "pkcs11_wrapped_seed": {
+      "report": "docs/research/shared-wrapped-seed-validation.json",
+      "kms_passed": 21,
+      "kms_ignored": 0,
+      "standalone_zeroize_feature_check": "passed",
+      "live_hsm_verified": false
+    },
+    "shared_wrapped_seed_fuzz": {
+      "report": "docs/research/shared-wrapped-seed-validation.json",
+      "cases": 656,
+      "accepted": 1,
+      "rejected": 655,
+      "failures": 0,
+      "cryptoki_in_fuzz_lock": false,
+      "coverage_guided": false
+    },
+    "pkcs11_identity_binding": {
+      "report": "docs/research/pkcs11-identity-validation.json",
+      "kms_passed": 26,
+      "kms_failed": 0,
+      "kms_ignored": 0,
+      "corpus_cases": 987,
+      "accepted": 1,
+      "rejected": 986,
+      "live_hsm_verified": false
+    }
+  },
+  "initial_vulnerability_entries": 17,
+  "remaining_vulnerability_entries": 2,
+  "remaining_vulnerabilities": [
+    {
+      "id": "RUSTSEC-2026-0286",
+      "package": "cryptoki",
+      "version": "0.6.2",
+      "url": "https://github.com/parallaxsecond/rust-cryptoki/pull/368"
+    },
+    {
+      "id": "RUSTSEC-2023-0071",
+      "package": "rsa",
+      "version": "0.9.10",
+      "url": "https://github.com/RustCrypto/RSA/issues/626"
+    }
+  ],
+  "unmaintained_dependencies": [
+    {
+      "id": "RUSTSEC-2024-0436",
+      "package": "paste",
+      "version": "1.0.15"
+    },
+    {
+      "id": "RUSTSEC-2026-0165",
+      "package": "pqcrypto-falcon",
+      "version": "0.4.1"
+    },
+    {
+      "id": "RUSTSEC-2026-0163",
+      "package": "pqcrypto-internals",
+      "version": "0.2.11"
+    },
+    {
+      "id": "RUSTSEC-2026-0166",
+      "package": "pqcrypto-mldsa",
+      "version": "0.1.2"
+    },
+    {
+      "id": "RUSTSEC-2026-0161",
+      "package": "pqcrypto-mlkem",
+      "version": "0.1.1"
+    },
+    {
+      "id": "RUSTSEC-2026-0160",
+      "package": "pqcrypto-sphincsplus",
+      "version": "0.7.2"
+    },
+    {
+      "id": "RUSTSEC-2026-0162",
+      "package": "pqcrypto-traits",
+      "version": "0.3.5"
+    }
+  ],
+  "deny_errors": [
+    {
+      "code": "unmaintained",
+      "message": "`pqcrypto-internals` is unmaintained: upstream PQClean project being archived"
+    },
+    {
+      "code": "unmaintained",
+      "message": "`pqcrypto-mldsa` is unmaintained: upstream PQClean project being archived"
+    },
+    {
+      "code": "unmaintained",
+      "message": "`pqcrypto-mlkem` is unmaintained: upstream PQClean project being archived"
+    },
+    {
+      "code": "unmaintained",
+      "message": "`pqcrypto-traits` is unmaintained: upstream PQClean project being archived"
+    }
+  ],
+  "new_advisory_suppressions": [],
+  "sealed_crypto_modified": false,
+  "all_production_quality_gates_passed": false,
+  "commit_created": false,
+  "release_or_deployment_performed": false,
+  "limitations": [
+    "MSRV 1.76 is contradicted by 29 higher-version dependency declarations after base64ct pin and Rayon safety update; actual Cargo 1.76 core-library check fails before compilation on Rayon 1.12.0; 136 packages have no declared MSRV",
+    "HSM/live-soak/unfinished legacy tests remain ignored as before",
+    "Spectral recovery is conditional/conjectural research, not cryptographic primality or entropy certification",
+    "Fuzz workspace dependencies have a separate lockfile; their MSRV is unverified and a sustained coverage-guided campaign remains required",
+    "PCM and telemetry controls are synthetic measurements; bounded streaming history/lookahead and continuity are implemented experimentally, while live captures, source authentication, throughput/backpressure and sustained fuzzing remain production prerequisites",
+    "New JTI records retain through exp+leeway+1s; pre-existing raw-exp rows/already-purged history and mixed retention policies still need reviewed drain/migration",
+    "Native Windows plain cargo build of no_main libFuzzer target failed LNK1561; separate-graph cargo check and stable stdin corpus do not prove a working coverage-guided engine"
+  ],
+  "fuzz_workspace_security": {
+    "initial_vulnerability_entries": 2,
+    "remaining_vulnerability_entries": 1,
+    "remaining_advisories": [
+      "RUSTSEC-2023-0071"
+    ],
+    "unmaintained_warnings": 5,
+    "compatible_patch": "crossbeam-epoch 0.9.18 -> 0.9.21",
+    "new_suppressions": []
+  },
+  "resolved_xml_advisories": [
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195"
+  ],
+  "new_xml_dependency": {
+    "name": "roxmltree",
+    "version": "0.21.1",
+    "declared_rust_version": "1.60",
+    "replaced": "quick-xml 0.31.0"
+  },
+  "persistent_replay_key_encoding_modified": false,
+  "legacy_jti_retention_rows_migrated": false
+}

@@ -2,9 +2,8 @@
 
 use aunsorm_core::{calib_from_text, KdfPreset, KdfProfile, Salts, SessionRatchet};
 use aunsorm_packet::{
-    decrypt_one_shot, decrypt_session, encrypt_one_shot, encrypt_session, AeadAlgorithm,
-    DecryptParams, DecryptOk, EncryptParams, SessionDecryptParams, SessionEncryptParams,
-    SessionStore,
+    decrypt_one_shot, decrypt_session, encrypt_one_shot, encrypt_session, AeadAlgorithm, DecryptOk,
+    DecryptParams, EncryptParams, SessionDecryptParams, SessionEncryptParams, SessionStore,
 };
 use libfuzzer_sys::fuzz_target;
 
@@ -83,7 +82,10 @@ fuzz_target!(|data: &[u8]| {
         }) {
             Ok((decrypted, received)) => {
                 if decrypted.plaintext != plaintext {
-                    panic!("plaintext mismatch: expected {:?} got {:?}", plaintext, decrypted.plaintext);
+                    panic!(
+                        "plaintext mismatch: expected {:?} got {:?}",
+                        plaintext, decrypted.plaintext
+                    );
                 }
                 if outcome.message_no != received.message_no {
                     panic!(

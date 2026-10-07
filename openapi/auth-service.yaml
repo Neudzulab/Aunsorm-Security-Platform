@@ -37,10 +37,88 @@ tags:
     description: Session key material and HMAC helpers for first-party applications
   - name: OAuth 2.0
     description: OAuth 2.0 authorization flows with PKCE
+  - name: HTTP3
+    description: Experimental HTTP/3 capability discovery
   - name: Health
     description: Service health and monitoring
 
 paths:
+  /http3/capabilities:
+    get:
+      tags: [HTTP3]
+      summary: Discover experimental HTTP/3 and datagram capabilities
+      operationId: http3Capabilities
+      security: []
+      description: |
+        Available without authentication. Enabled builds return 200; builds without
+        http3-experimental return 501. An exact match of If-None-Match to the current
+        weak ETag returns 304 for either profile. Cache-Control is no-cache.
+        Audio is channel 3, mono pcm_s16le at 96000 Hz with 960 samples per 10 ms
+        frame. Each full plaintext frame is 1920 bytes. Fragments contain at most
+        960 opaque bytes; encrypted envelopes must be authenticated/decrypted before
+        PCM reassembly. Complete-frame helpers reject loss, duplicates and mixed
+        stream, timestamp or sequence base. Callers isolate sessions/connections
+        and authenticate fragment metadata with the envelope.
+      parameters:
+        - in: header
+          name: If-None-Match
+          schema: {type: string}
+          description: Exact ETag received from the preceding response
+      responses:
+        '200':
+          description: Experimental HTTP/3 capability profile
+          headers:
+            ETag: {schema: {type: string}}
+            Cache-Control: {schema: {type: string, enum: [no-cache]}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Http3Capabilities'}
+              example:
+                enabled: true
+                status: active
+                alt_svc_port: 50011
+                alt_svc_max_age: 3600
+                datagrams:
+                  supported: true
+                  max_payload_bytes: 1150
+                  channels:
+                    - {channel: 0, label: telemetry, purpose: OpenTelemetry metrics}
+                    - {channel: 1, label: audit, purpose: Authorization audit events}
+                    - {channel: 2, label: ratchet, purpose: Session ratchet observations}
+                    - {channel: 3, label: audio, purpose: 96kHz mono PCM shards}
+                  audio_profile:
+                    channel: 3
+                    sample_rate_hz: 96000
+                    channels: 1
+                    sample_format: pcm_s16le
+                    frame_samples: 960
+                    frame_duration_ms: 10
+                    fragmentation: Multiple datagram shards per complete 10ms frame
+                  notes: Experimental postcard datagrams; encrypted shard bodies are opaque
+        '501':
+          description: Feature disabled in this build; supported is false and optional profiles are null
+          headers:
+            ETag: {schema: {type: string}}
+            Cache-Control: {schema: {type: string, enum: [no-cache]}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Http3Capabilities'}
+              example:
+                enabled: false
+                status: feature_disabled
+                alt_svc_port: null
+                alt_svc_max_age: null
+                datagrams:
+                  supported: false
+                  max_payload_bytes: null
+                  channels: []
+                  audio_profile: null
+                  notes: HTTP/3 experimental feature is disabled
+        '304':
+          description: Profile unchanged; no response body
+          headers:
+            ETag: {schema: {type: string}}
+            Cache-Control: {schema: {type: string, enum: [no-cache]}}
   /health:
     get:
       tags:
@@ -1071,6 +1149,43 @@ components:
           nullable: true
           description: Whether MFA was verified when the token was issued
           example: false
+
+    Http3Capabilities:
+      type: object
+      required: [enabled, status, alt_svc_port, alt_svc_max_age, datagrams]
+      properties:
+        enabled: {type: boolean}
+        status: {type: string, enum: [active, feature_disabled]}
+        alt_svc_port: {type: integer, nullable: true, minimum: 0, maximum: 65535}
+        alt_svc_max_age: {type: integer, nullable: true, minimum: 0}
+        datagrams:
+          type: object
+          required: [supported, max_payload_bytes, channels, audio_profile, notes]
+          properties:
+            supported: {type: boolean}
+            max_payload_bytes: {type: integer, nullable: true, example: 1150}
+            channels:
+              type: array
+              items:
+                type: object
+                required: [channel, label, purpose]
+                properties:
+                  channel: {type: integer, minimum: 0, maximum: 3}
+                  label: {type: string}
+                  purpose: {type: string}
+            audio_profile:
+              type: object
+              nullable: true
+              required: [channel, sample_rate_hz, channels, sample_format, frame_samples, frame_duration_ms, fragmentation]
+              properties:
+                channel: {type: integer, enum: [3]}
+                sample_rate_hz: {type: integer, enum: [96000]}
+                channels: {type: integer, enum: [1]}
+                sample_format: {type: string, enum: [pcm_s16le]}
+                frame_samples: {type: integer, enum: [960]}
+                frame_duration_ms: {type: integer, enum: [10]}
+                fragmentation: {type: string}
+            notes: {type: string, nullable: true}
 
   securitySchemes:
     BearerAuth:

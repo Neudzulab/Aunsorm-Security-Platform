@@ -10,6 +10,50 @@ Aunsorm is a zero-trust cryptographic security platform that unifies gateway, au
 - Clock attestation and calibration workflow to mitigate replay and skew-based attacks.
 - Hardened deployment defaults with port isolation and containerized runtime profiles.
 
+Offline research and diagnostics: [SASRL integration evidence](docs/sasrl-aunsorm-integration.md)
+documents the bounded cardinal-Mellin experiment tool and Native RNG spectral
+regressions, including their conditional/experimental status and verification commands.
+The zeta laboratory validates an optional complete analytic-model declaration
+and rejects contradictory or unknown metadata before estimating. Legacy input
+is labelled implicit zeta; metadata assertions do not verify the supplied zeros.
+The same report covers bounded PCM sinc-Gaussian conversion experiments and decoded
+telemetry cadence checks that reject gaps/jitter before an exact-grid FFT.
+The experimental streaming PCM tool preserves a global integer sample clock,
+bounds history/cache/work, rejects discontinuous offsets and requires an explicit
+EOF sample count. Synthetic chunk controls match offline samples and WAV bytes;
+authenticated live QUIC, throughput and backpressure validation remain open.
+Bounded host benchmarks now measure the PCM laboratory and a modelled worker
+queue. Interior-buffer optimization preserves exact output hashes, but the
+refined Python profile still exceeds a 10 ms processing cadence on this host.
+Independent two-mode QR and bounded 2..8-mode matrix diagnostics measure how
+clustered frequencies amplify small perturbations, with explicit unresolved and
+nonconverged statuses. They support the conditioning caution without recovering
+missing telemetry or treating spectral estimates as security evidence.
+Optional decoded-gauge conditioning now uses actual observed millisecond
+positions, with integer epoch subtraction and explicit 512-position limits.
+Synthetic thinning/jitter controls expose aliasing that a nominal grid hides;
+the diagnostic leaves gaps unfilled and preserves FFT eligibility checks.
+An independent public elliptic-curve point-count oracle verifies local Euler
+reference values and normalization before any curve-specific spectral experiment.
+
+HTTP/3 capability discovery: `GET /http3/capabilities` — 🚧 experimental feature;
+96 kHz PCM datagram validation and exact complete-frame helpers are documented in
+[server instructions](crates/server/README.md) and [auth OpenAPI](openapi/auth-service.yaml).
+The PCM split API can reserve caller-owned envelope overhead; real AES-GCM tests
+verify wire budgets and metadata/session binding without adopting a new E2EE protocol.
+
+KMS now rejects malformed PKCS#11 Ed25519 EC point attributes and DER
+encodings using a bounded shared-source decoder. See [KMS security notes](crates/kms/README.md);
+Cryptoki dependency remediation and live HSM verification remain open.
+
+Build compatibility: the declared MSRV target remains Rust 1.76, but the current
+locked Windows/all-feature graph has 29 dependencies declaring higher versions.
+The SASRL tests use Rust 1.90; an actual Cargo 1.76 core-library check fails
+before compilation on rayon 1.12.0 (requires 1.80), also activated through
+the normal core/sysinfo dependency path. See the
+[exact dependency paths](docs/research/msrv-dependency-audit.json) and open
+compatibility tasks in `PROD_PLAN.md` before claiming MSRV compliance.
+=======
 ### Entropy Extraction Research
 
 The offline [Toeplitz reference](research/toeplitz/README.md) implements universal

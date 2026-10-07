@@ -1,0 +1,607 @@
+{
+  "fixture": "synthetic complex complete-grid known-frequency matrices",
+  "rows": [
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        1.0
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        1.0,
+        1.0
+      ],
+      "converged": true,
+      "sweeps_completed": 1,
+      "sweep_limit": 40,
+      "rotations": 0,
+      "maximum_resolved_column_correlation": 4.907274381603319e-17,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 2.273736754432321e-13,
+      "exact_binary64_alias_detected": false,
+      "numerically_unresolved": false,
+      "condition_estimate": 1.0,
+      "noise_gain_estimate": 1.0,
+      "frobenius_squared_error": 0.0,
+      "sample_scaled_work_upper_bound": 31232,
+      "status": "converged estimate",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    },
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        0.01
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        0.012823616359386482,
+        1.4141554210423504
+      ],
+      "converged": true,
+      "sweeps_completed": 1,
+      "sweep_limit": 40,
+      "rotations": 1,
+      "maximum_resolved_column_correlation": 3.740818504179668e-15,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 2.273736754432321e-13,
+      "exact_binary64_alias_detected": false,
+      "numerically_unresolved": false,
+      "condition_estimate": 110.27742731926266,
+      "noise_gain_estimate": 77.98112263924924,
+      "frobenius_squared_error": 0.0,
+      "sample_scaled_work_upper_bound": 31232,
+      "status": "converged estimate",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    },
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        0.1,
+        0.2
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        0.012051825400589725,
+        0.25396001362610765,
+        1.713288961320752
+      ],
+      "converged": true,
+      "sweeps_completed": 3,
+      "sweep_limit": 40,
+      "rotations": 9,
+      "maximum_resolved_column_correlation": 3.7921257003744106e-17,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 3.4106051316484804e-13,
+      "exact_binary64_alias_detected": false,
+      "numerically_unresolved": false,
+      "condition_estimate": 142.16012134036697,
+      "noise_gain_estimate": 82.97498235836271,
+      "frobenius_squared_error": 4.440892098500626e-16,
+      "sample_scaled_work_upper_bound": 92928,
+      "status": "converged estimate",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    },
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        0.01,
+        0.02
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        0.00012006037713915389,
+        0.025645335398916936,
+        1.7318609362064217
+      ],
+      "converged": true,
+      "sweeps_completed": 3,
+      "sweep_limit": 40,
+      "rotations": 8,
+      "maximum_resolved_column_correlation": 1.7424741764806776e-17,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 3.4106051316484804e-13,
+      "exact_binary64_alias_detected": false,
+      "numerically_unresolved": false,
+      "condition_estimate": 14424.916675042079,
+      "noise_gain_estimate": 8329.14258499261,
+      "frobenius_squared_error": 4.440892098500626e-16,
+      "sample_scaled_work_upper_bound": 92928,
+      "status": "converged estimate",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    },
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        0.001,
+        0.002
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        1.200557172971361e-06,
+        0.0025647839887930892,
+        1.732048908628636
+      ],
+      "converged": true,
+      "sweeps_completed": 3,
+      "sweep_limit": 40,
+      "rotations": 7,
+      "maximum_resolved_column_correlation": 1.128165801006769e-13,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 3.4106051316484804e-13,
+      "exact_binary64_alias_detected": false,
+      "numerically_unresolved": false,
+      "condition_estimate": 1442704.2273562374,
+      "noise_gain_estimate": 832946.5872291739,
+      "frobenius_squared_error": 8.881784197001252e-16,
+      "sample_scaled_work_upper_bound": 92928,
+      "status": "converged estimate",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    },
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        0.01,
+        0.02,
+        0.03
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        1.0464805049700967e-06,
+        0.00029408380187784776,
+        0.040544636172058765,
+        1.9995889692612574
+      ],
+      "converged": true,
+      "sweeps_completed": 4,
+      "sweep_limit": 40,
+      "rotations": 19,
+      "maximum_resolved_column_correlation": 9.085834036582599e-13,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 4.547473508864641e-13,
+      "exact_binary64_alias_detected": false,
+      "numerically_unresolved": false,
+      "condition_estimate": 1910775.1742765584,
+      "noise_gain_estimate": 955583.9743317292,
+      "frobenius_squared_error": 0.0,
+      "sample_scaled_work_upper_bound": 185344,
+      "status": "converged estimate",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    },
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "converged": true,
+      "sweeps_completed": 1,
+      "sweep_limit": 40,
+      "rotations": 0,
+      "maximum_resolved_column_correlation": 2.0958212910379907e-16,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 9.094947017729284e-13,
+      "exact_binary64_alias_detected": false,
+      "numerically_unresolved": false,
+      "condition_estimate": 1.0,
+      "noise_gain_estimate": 1.0,
+      "frobenius_squared_error": 0.0,
+      "sample_scaled_work_upper_bound": 862208,
+      "status": "converged estimate",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    },
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        0.1,
+        0.2,
+        0.30000000000000004,
+        0.4,
+        0.5,
+        0.6000000000000001,
+        0.7000000000000001
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        4.9553874833113265e-08,
+        2.2777302136934443e-06,
+        6.544452033321034e-05,
+        0.0013213227467142512,
+        0.01908083161738354,
+        0.18880522734262611,
+        1.0737488071404762,
+        2.6097988920557293
+      ],
+      "converged": true,
+      "sweeps_completed": 7,
+      "sweep_limit": 40,
+      "rotations": 150,
+      "maximum_resolved_column_correlation": 4.319663506267617e-13,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 9.094947017729284e-13,
+      "exact_binary64_alias_detected": false,
+      "numerically_unresolved": false,
+      "condition_estimate": 52665889.41520654,
+      "noise_gain_estimate": 20180056.62257056,
+      "frobenius_squared_error": 3.552713678800501e-15,
+      "sample_scaled_work_upper_bound": 862208,
+      "status": "converged estimate",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    },
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        64.0,
+        1.0
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        0.0,
+        1.0,
+        1.414213562373095
+      ],
+      "converged": true,
+      "sweeps_completed": 1,
+      "sweep_limit": 40,
+      "rotations": 1,
+      "maximum_resolved_column_correlation": 5.3417496436302675e-17,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 3.4106051316484804e-13,
+      "exact_binary64_alias_detected": true,
+      "numerically_unresolved": true,
+      "condition_estimate": null,
+      "noise_gain_estimate": null,
+      "frobenius_squared_error": 4.440892098500626e-16,
+      "sample_scaled_work_upper_bound": 92928,
+      "status": "unresolved",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    },
+    {
+      "model": "small complete uniform complex Fourier matrix, known frequencies",
+      "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+      "samples": 64,
+      "frequencies_hz": [
+        0.0,
+        1e-10,
+        2e-10
+      ],
+      "sample_rate_hz": 64.0,
+      "singular_value_estimates": [
+        5.041509280847966e-17,
+        2.5647865186928054e-10,
+        1.7320508075688767
+      ],
+      "converged": true,
+      "sweeps_completed": 2,
+      "sweep_limit": 40,
+      "rotations": 6,
+      "maximum_resolved_column_correlation": 2.8582916947142605e-17,
+      "correlation_tolerance": 1e-12,
+      "heuristic_resolution_floor": 3.4106051316484804e-13,
+      "exact_binary64_alias_detected": false,
+      "numerically_unresolved": true,
+      "condition_estimate": null,
+      "noise_gain_estimate": null,
+      "frobenius_squared_error": 1.7763568394002505e-15,
+      "sample_scaled_work_upper_bound": 92928,
+      "status": "unresolved",
+      "limitations": [
+        "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+        "Resolution floor is heuristic; sub-floor column correlations are excluded",
+        "Known 2..8 modes only; matrix positions do not authenticate data",
+        "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+      ]
+    }
+  ],
+  "nonconvergence_control": {
+    "model": "small complete uniform complex Fourier matrix, known frequencies",
+    "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+    "samples": 64,
+    "frequencies_hz": [
+      0.0,
+      0.03,
+      0.09,
+      0.11
+    ],
+    "sample_rate_hz": 64.0,
+    "singular_value_estimates": [
+      0.003048976251971928,
+      0.03808489405517571,
+      0.1560333599968432,
+      1.9935380194911547
+    ],
+    "converged": false,
+    "sweeps_completed": 1,
+    "sweep_limit": 1,
+    "rotations": 6,
+    "maximum_resolved_column_correlation": 0.9913826221947675,
+    "correlation_tolerance": 1e-12,
+    "heuristic_resolution_floor": 4.547473508864641e-13,
+    "exact_binary64_alias_detected": false,
+    "numerically_unresolved": false,
+    "condition_estimate": null,
+    "noise_gain_estimate": null,
+    "frobenius_squared_error": 8.881784197001252e-16,
+    "sample_scaled_work_upper_bound": 5632,
+    "status": "nonconverged",
+    "limitations": [
+      "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+      "Resolution floor is heuristic; sub-floor column correlations are excluded",
+      "Known 2..8 modes only; matrix positions do not authenticate data",
+      "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+    ]
+  },
+  "planned_sample_scaled_work_upper_bound": 2442496,
+  "aggregate_work_limit": 2500000,
+  "implementation_sha256": "093cae7128680bac90cd2ea02f4ddda14e1c5c5716a01e88a6b1be7f835b28fa",
+  "method_reference": "https://www.netlib.org/lapack/explore-html/d1/d5e/dgesvj_8f_source.html",
+  "reference_scope": "one-sided Jacobi concept only; this routine is not LAPACK or its accuracy guarantee",
+  "limitations": [
+    "No inverse or authenticated missing-event reconstruction",
+    "Known synthetic modes; unresolved/nonconverged rows are retained explicitly",
+    "Independent DFT/two-mode/three-mode controls do not prove arbitrary-matrix accuracy"
+  ],
+  "independent_numpy_validation": {
+    "version": "2.3.5",
+    "api": "numpy.linalg.svd(compute_uv=False), complex128",
+    "api_source": "https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html",
+    "scope": "explicit host validation only; runtime diagnostic remains standard-library-only",
+    "rows": [
+      {
+        "frequencies_hz": [
+          0.0,
+          1.0
+        ],
+        "numpy_singular_values": [
+          1.0,
+          1.0000000000000002
+        ],
+        "maximum_absolute_sigma_difference": 2.220446049250313e-16,
+        "relative_min_sigma_error_if_resolved": 0.0,
+        "status": "converged estimate"
+      },
+      {
+        "frequencies_hz": [
+          0.0,
+          0.01
+        ],
+        "numpy_singular_values": [
+          0.012823616359386487,
+          1.4141554210423506
+        ],
+        "maximum_absolute_sigma_difference": 2.220446049250313e-16,
+        "relative_min_sigma_error_if_resolved": 4.440892098500626e-16,
+        "status": "converged estimate"
+      },
+      {
+        "frequencies_hz": [
+          0.0,
+          0.1,
+          0.2
+        ],
+        "numpy_singular_values": [
+          0.012051825400589685,
+          0.2539600136261077,
+          1.713288961320752
+        ],
+        "maximum_absolute_sigma_difference": 5.551115123125783e-17,
+        "relative_min_sigma_error_if_resolved": 3.3306690738754696e-15,
+        "status": "converged estimate"
+      },
+      {
+        "frequencies_hz": [
+          0.0,
+          0.01,
+          0.02
+        ],
+        "numpy_singular_values": [
+          0.00012006037713916508,
+          0.025645335398916953,
+          1.7318609362064217
+        ],
+        "maximum_absolute_sigma_difference": 1.734723475976807e-17,
+        "relative_min_sigma_error_if_resolved": 9.325873406851315e-14,
+        "status": "converged estimate"
+      },
+      {
+        "frequencies_hz": [
+          0.0,
+          0.001,
+          0.002
+        ],
+        "numpy_singular_values": [
+          1.2005571729102096e-06,
+          0.0025647839887930897,
+          1.732048908628636
+        ],
+        "maximum_absolute_sigma_difference": 6.11513318687874e-17,
+        "relative_min_sigma_error_if_resolved": 5.093570010217263e-11,
+        "status": "converged estimate"
+      },
+      {
+        "frequencies_hz": [
+          0.0,
+          0.01,
+          0.02,
+          0.03
+        ],
+        "numpy_singular_values": [
+          1.0464805049708826e-06,
+          0.000294083801877897,
+          0.040544636172058786,
+          1.999588969261257
+        ],
+        "maximum_absolute_sigma_difference": 4.440892098500626e-16,
+        "relative_min_sigma_error_if_resolved": 7.509548538564559e-13,
+        "status": "converged estimate"
+      },
+      {
+        "frequencies_hz": [
+          0.0,
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          6.0,
+          7.0
+        ],
+        "numpy_singular_values": [
+          0.9999999999999998,
+          0.9999999999999998,
+          0.9999999999999999,
+          0.9999999999999999,
+          0.9999999999999999,
+          1.0,
+          1.0,
+          1.0000000000000002
+        ],
+        "maximum_absolute_sigma_difference": 2.220446049250313e-16,
+        "relative_min_sigma_error_if_resolved": 2.220446049250313e-16,
+        "status": "converged estimate"
+      },
+      {
+        "frequencies_hz": [
+          0.0,
+          0.1,
+          0.2,
+          0.30000000000000004,
+          0.4,
+          0.5,
+          0.6000000000000001,
+          0.7000000000000001
+        ],
+        "numpy_singular_values": [
+          4.955387483168021e-08,
+          2.2777302136505857e-06,
+          6.544452033324259e-05,
+          0.0013213227467142406,
+          0.019080831617383477,
+          0.1888052273426261,
+          1.073748807140476,
+          2.60979889205573
+        ],
+        "maximum_absolute_sigma_difference": 4.440892098500626e-16,
+        "relative_min_sigma_error_if_resolved": 2.8919089345436078e-11,
+        "status": "converged estimate"
+      },
+      {
+        "frequencies_hz": [
+          0.0,
+          64.0,
+          1.0
+        ],
+        "numpy_singular_values": [
+          1.2556091013580778e-16,
+          0.9999999999999999,
+          1.4142135623730951
+        ],
+        "maximum_absolute_sigma_difference": 2.220446049250313e-16,
+        "relative_min_sigma_error_if_resolved": null,
+        "status": "unresolved"
+      },
+      {
+        "frequencies_hz": [
+          0.0,
+          1e-10,
+          2e-10
+        ],
+        "numpy_singular_values": [
+          7.136864051668643e-17,
+          2.5647865186931006e-10,
+          1.7320508075688772
+        ],
+        "maximum_absolute_sigma_difference": 4.440892098500626e-16,
+        "relative_min_sigma_error_if_resolved": null,
+        "status": "unresolved"
+      }
+    ]
+  }
+}

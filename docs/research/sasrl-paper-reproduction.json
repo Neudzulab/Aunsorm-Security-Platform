@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "method": "conjectural_hard_cutoff",
+  "cryptographic_use": false,
+  "coverage_verified": false,
+  "source": "Andrew Odlyzko zeros1: https://www-users.cse.umn.edu/~odlyzko/zeta_tables/zeros1",
+  "raw_table_sha256": "3436c916a7878261ac183fd7b9448c9a4736b8bbccf1356874a6ce1788541632",
+  "table_ordinate_count": 100000,
+  "declared_complete_through": 74920.0,
+  "declared_ordinate_error_bound": 3e-09,
+  "evaluations": 55881170,
+  "evaluation_budget": 100000000,
+  "summary": {
+    "count": 3100,
+    "TP": 394,
+    "TN": 2706,
+    "FP": 0,
+    "FN": 0,
+    "rmse": 0.11240398760271354
+  },
+  "blocks": [
+    {
+      "start": 400,
+      "stop": 799,
+      "summary": {
+        "count": 400,
+        "TP": 61,
+        "TN": 339,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.13748850488933972
+      },
+      "composite_summary": {
+        "count": 339,
+        "TP": 0,
+        "TN": 339,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.13574610707132123
+      },
+      "max_absolute_error": 0.3746864155014341,
+      "min_correct_threshold_margin": 1.2493100490671578,
+      "misclassifications": []
+    },
+    {
+      "start": 800,
+      "stop": 1199,
+      "summary": {
+        "count": 400,
+        "TP": 57,
+        "TN": 343,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.12626381934455702
+      },
+      "composite_summary": {
+        "count": 343,
+        "TP": 0,
+        "TN": 343,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.1269487910161553
+      },
+      "max_absolute_error": 0.3189947418212875,
+      "min_correct_threshold_margin": 1.4686876971956044,
+      "misclassifications": []
+    },
+    {
+      "start": 1600,
+      "stop": 2099,
+      "summary": {
+        "count": 500,
+        "TP": 66,
+        "TN": 434,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.1315467263392406
+      },
+      "composite_summary": {
+        "count": 434,
+        "TP": 0,
+        "TN": 434,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.1330297578872672
+      },
+      "max_absolute_error": 0.34953235797705695,
+      "min_correct_threshold_margin": 1.6242296970825443,
+      "misclassifications": []
+    },
+    {
+      "start": 2500,
+      "stop": 2999,
+      "summary": {
+        "count": 500,
+        "TP": 63,
+        "TN": 437,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.12099448663390856
+      },
+      "composite_summary": {
+        "count": 437,
+        "TP": 0,
+        "TN": 437,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.1197480201703932
+      },
+      "max_absolute_error": 0.34108548983917153,
+      "min_correct_threshold_margin": 1.6278843000349061,
+      "misclassifications": []
+    },
+    {
+      "start": 4800,
+      "stop": 5299,
+      "summary": {
+        "count": 500,
+        "TP": 56,
+        "TN": 444,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.10798966657276135
+      },
+      "composite_summary": {
+        "count": 444,
+        "TP": 0,
+        "TN": 444,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.10805948243869065
+      },
+      "max_absolute_error": 0.3680702008466825,
+      "min_correct_threshold_margin": 1.8251134347007083,
+      "misclassifications": []
+    },
+    {
+      "start": 8800,
+      "stop": 9299,
+      "summary": {
+        "count": 500,
+        "TP": 56,
+        "TN": 444,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.06981291366785392
+      },
+      "composite_summary": {
+        "count": 444,
+        "TP": 0,
+        "TN": 444,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.06976311664330799
+      },
+      "max_absolute_error": 0.1886724644900415,
+      "min_correct_threshold_margin": 2.0876002758242294,
+      "misclassifications": []
+    },
+    {
+      "start": 17850,
+      "stop": 18149,
+      "summary": {
+        "count": 300,
+        "TP": 35,
+        "TN": 265,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.0574244287496446
+      },
+      "composite_summary": {
+        "count": 265,
+        "TP": 0,
+        "TN": 265,
+        "FP": 0,
+        "FN": 0,
+        "rmse": 0.056764074311130744
+      },
+      "max_absolute_error": 0.1590897741470645,
+      "min_correct_threshold_margin": 2.2921996804686646,
+      "misclassifications": []
+    }
+  ],
+  "limitations": [
+    "Reproduces empirical hard-cutoff evidence, not weighted theorem",
+    "Completeness and precision are supplier assertions",
+    "Finite classification success is not a security or asymptotic proof"
+  ]
+}

@@ -12,6 +12,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Enforce the offline zeta zero-table analytic-model contract. Reject unknown
+  fields and contradictory conductor/pole/gamma/normalization/self-duality
+  declarations before numerical estimates or output, while labelling legacy
+  implicit zeta input and retaining unverified-model status.
+- Add optional bounded observed-time Fourier conditioning to offline decoded
+  gauge diagnostics. Preserve integer millisecond differences near the u64
+  limit, expose thinning-induced aliasing, and retain blocked FFT/no-fill rules.
+  Four synthetic matrices pass independent NumPy SVD controls; no live transport
+  or security decision is implied.
+  Extend accepted-input parser controls through bounded observed geometry, with
+  a reproducible 669-case corpus and explicit post-parse failure propagation.
+
+### Security
+- Reject ambiguous PKCS#11 private-key label matches, including duplicate
+  returned handles, instead of silently selecting the first object. Provider
+  enumeration remains subject to the existing Cryptoki API and MSRV migration.
+- Bind PKCS#11 software public-key metadata to the actual unwrapped seed;
+  reject invalid/weak keys with bounded decoding. Strictly verify each hardware
+  signature response against the selected public key/message before returning
+  it. Real Ed25519/software-backend and 987 seeded response controls share the
+  production verifier; live HSM compatibility remains unverified.
+- Share the actual fixed-buffer wrapped-seed AES-GCM decoder with dedicated
+  fuzz/stdin drivers. Decrypt in a zeroizing 32-byte buffer without a plaintext
+  allocation; preserve KMS key-id error context. A saved Native RNG fixture
+  passes 656 expected authentication outcomes, and the fuzz graph gains no
+  Cryptoki dependency.
+- Bound PKCS#11 software seed envelopes and wrapping-key encodings before
+  decode/decryption. Zeroize partial decode/decrypted secret buffers and
+  explicitly enable Ed25519 key zeroization for standalone KMS builds. Replace
+  the invalid ignored fixture with actual AES-GCM/Native RNG/Ed25519 controls;
+  live HSM and strict hardware-public-key validation remain separate work.
+- Reject empty/unexpected PKCS#11 Ed25519 point attributes and malformed,
+  overflowing, noncanonical or trailing DER data with allocation-free fixed
+  encoding checks. Preserve canonical single/double wrapping and add real
+  signature regressions plus shared-source parser fuzz controls. Cryptoki
+  RUSTSEC-2026-0286 remains open pending a compatible dependency migration.
+- Update locked Rayon to 1.12.0 in root/fuzz graphs for the upstream Unicode
+  surrogate-boundary invalid-character correction. Independently compare
+  parallel/standard ranges at that boundary; its Rust 1.80 requirement and
+  core/sysinfo activation remain open MSRV 1.76 compatibility work.
+- Bound the volatile QUIC grace cache to 4096 fixed-size identity records;
+  preserve first-acceptance deadlines, bind actual verification scope separately
+  from claim-resolved purpose, and refuse capacity/zero-grace/rollback/overflow
+  admission without evicting live records or extending grace on retries.
+- Retain newly consumed JTI records through the inclusive expiration/leeway
+  boundary, with a one-second precision guard for SQLite and checked overflow.
+  Real in-memory and reopened WAL SQLite regressions cover premature cleanup;
+  existing raw-exp rows and already-purged history still require migration policy.
+- Replace volatile QUIC reconnect-grace delimiter/sentinel keys with typed
+  identities bound to issuer, verified audience and the exact signed-token digest.
+  Preserve exact nonblank JTI bytes; a different signed token with a consumed JTI
+  cannot inherit grace. Recheck active ledger state before grace acceptance and
+  fix the store-less signature recheck. Persistent consumed-token key encoding
+  stays unchanged.
+- Bound decoded endpoint-validation responses to 1 MiB; report oversized bodies
+  and failed/stalled transfers explicitly. Label 1 KiB SSE prefix samples in
+  JSON/Markdown reports rather than treating them as full-stream validation.
+- Remove vulnerable quick-xml sitemap parsing; use MSRV-compatible roxmltree
+  with pre-allocation/attribute/depth/node/URL bounds and no DTD resolution.
+  Limit decoded discovery bodies and same-origin index traversal; reject URI
+  path escapes and cross-origin redirects before forwarding credentials.
+- Update compatible locked dependencies for RustSec findings in HTTP/2, QUIC,
+  TLS, random-number support, error handling and crossbeam; remove the unused
+  server `rustls 0.22` dependency and its vulnerable WebPKI dependency. Remaining
+  cryptoki and RSA findings and unmaintained PQC providers are tracked in
+  the SASRL verification report; this is not a clean-audit release.
+
+### Fixed
+- Pin shared base64ct to 1.6.0 in root/fuzz lockfiles after upstream review,
+  restoring its declared Rust 1.60/edition 2021 compatibility. The wider
+  workspace MSRV contract and security/provider gates remain unresolved.
+- Enforce QUIC datagram profile/channel/fragment consistency during encode and
+  decode, reject trailing bytes and nonfinite metrics, and preserve opaque
+  encrypted shards. Replace deprecated AES-GCM nonce slice constructors with
+  fixed-size arrays without changing nonce entropy or wire format.
+- Serialize PQC strict-mode environment mutations in tests and restore the
+  original value, removing a pre-existing parallel test race.
+
+### Added
+- Bounded 2..8-mode uniform Fourier conditioning diagnostic using direct
+  one-sided Jacobi rotations, sweep/work caps and explicit unresolved/nonconverged
+  output. Add independent DFT, two-mode, Vandermonde/Cauchy-Binet and optional
+  host NumPy SVD controls; no inverse or authenticated missing-data recovery.
+- Real SQLite replay-schema research controls for old writer fencing, marker-only
+  failure, atomic cutover abort and conservative rollback retaining consumption
+  and maximum/permanent expiry. Test fixtures do not alter production key encoding
+  or activate a migration; the atomic canonical-consume API remains open.
+- PCM frame splitting with a caller-selected even plaintext shard budget to
+  reserve nonce/tag/envelope space, preserving default splits and wire fields.
+  Add real AES-GCM/Native RNG round-trip, metadata/context tampering and bounded
+  fragment controls; test AAD conventions are not a production E2EE protocol.
+- Bounded two-mode Fourier perturbation reproduction using cancellation-aware
+  complex QR and independent Gram checks. Measure weakest-direction noise gain,
+  report finite-precision residuals and reject aliased/unresolved modes; retain
+  the complete-grid, known-frequency research scope.
+- Fixed-budget synthetic streaming PCM host benchmark with cold/steady/EOF
+  measurements, provenance hashes and explicitly modelled periodic-worker
+  backlog. Optimize verified interior history access while preserving exact
+  outputs; record remaining refined-profile processing-cadence failures.
+- Experimental streaming sinc-Gaussian PCM engine with integer sample-clock
+  phases, bounded history/cache/per-call work, continuity rejection and explicit
+  EOF sample count. Add offline WAV CLI, partition-equivalence controls and
+  synthetic seam/count-drift reproduction; live authenticated media remains open.
+- Bounded public elliptic-curve point-count/Frobenius reference for local Euler
+  and prime-power logarithmic coefficients, explicit Cremona/LMFDB mappings,
+  provenance and independent exhaustive/Newton-identity controls. Reproduce
+  the paper's eight exact coefficients without claiming spectral recovery.
+- Bounded offline sinc-Gaussian PCM WAV conversion with exact aligned samples,
+  anti-alias filtering, gain/work limits, clipping/provenance reports and measured
+  baseline/refined tone comparisons. Keep streaming integration experimental.
+- Decoded QUIC gauge capture cadence diagnostics and a full-band FFT that refuses
+  missing, duplicated, reordered or irregular samples; no event reconstruction.
+- PCM/capture parser fuzz entry point and independent WAV/DFT regressions.
+- Exact complete 96 kHz PCM frame split/reassembly with loss, duplicate and
+  identity checks; QUIC parser fuzz target and bounded stable-toolchain corpus.
+- Auth OpenAPI contract for existing public HTTP/3 capability discovery,
+  feature-disabled responses and conditional ETag caching.
+- Offline SASRL cardinal-Mellin and hard-cutoff research tool with explicit
+  zero-table coverage/provenance, bounded computation, prime-power reference
+  checks, cutoff sweeps, uncertainty diagnostics and a JSON fuzz entry point.
+- Test-only full-band Native RNG spectral regressions with deterministic
+  periodic controls, DC/Nyquist coverage and independent transform checks.
+=======
 ### Security
 - Harden `AunsormNativeRng`: redact Debug state, erase consumed output, replace
   the key on each 1 KiB refill, and reseed from the OS after 64 KiB or a PID
@@ -27,6 +151,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add offline SASRL arithmetic reconstruction and cutoff-scan research tools,
   with exact sieve ground truth, per-integer output, source/code hashes,
   numerical sensitivity bounds, and reproduced 5,499-integer results.
+
 - `aunsorm-server` now exposes first-party application session endpoints
   (`POST /sessions`, `POST /sessions/{sessionId}/keys`) plus
   `/security/hmac-sign` and `/security/hmac-verify` for session-cookie signing

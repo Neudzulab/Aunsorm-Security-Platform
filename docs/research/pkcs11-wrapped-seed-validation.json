@@ -1,0 +1,65 @@
+{
+  "date": "2026-10-07",
+  "implementation": "actual PKCS11 software wrapped-seed path; not live HSM",
+  "source_sha256": {
+    "crates/kms/src/pkcs11.rs": "fb70af4ef0de82a6c0f05361a8918cc37c531f0c64290ce3637871937be764d8",
+    "crates/kms/src/tests.rs": "dd12883aec03fa8b4a9804f454e10dd5dea7a4d12f71a0e95082ed368798439f",
+    "crates/kms/Cargo.toml": "a549d413fa2696e09d217fd14f72490e447121091571ef14a33ddd87b1d7a6cc"
+  },
+  "envelope": {
+    "nonce_bytes": 12,
+    "seed_bytes": 32,
+    "gcm_tag_bytes": 16,
+    "binary_bytes": 60,
+    "base64_bytes": 80
+  },
+  "wrap_key": {
+    "decoded_bytes": 32,
+    "base64_bytes_after_trim": 44,
+    "zeroizing_decode_buffer_bytes": 33
+  },
+  "zeroizing_transients": [
+    "environment key text",
+    "fixed decoded/partially-decoded key buffer",
+    "decrypted seed buffer",
+    "returned software signing seed"
+  ],
+  "ed25519_zeroize_explicit_kms_feature": true,
+  "standalone_no_default_features_zeroize_on_drop_trait_check": "passed",
+  "actual_crypto": "AES-256-GCM wrapped seeds with AunsormNativeRng nonce generation, actual Ed25519 verify_strict",
+  "software_modes_tested": [
+    "normal",
+    "strict"
+  ],
+  "negative_controls": [
+    "six nonce/ciphertext/tag byte mutations",
+    "wrong AAD/key-id",
+    "wrong wrapping key",
+    "raw seed",
+    "truncation",
+    "oversized encoded seed",
+    "encrypted 31/33-byte material",
+    "missing/empty/oversized/malformed/31-byte wrapping-key configuration"
+  ],
+  "test_environment": "mutex-protected previous OsString restored on scope exit",
+  "kms_tests": {
+    "passed": 21,
+    "failed": 0,
+    "ignored": 0
+  },
+  "workspace_tests": {
+    "passed": 638,
+    "failed": 0,
+    "existing_ignored": 17,
+    "suite_count": 63
+  },
+  "workspace_clippy_all_targets_all_features_deny_warnings": "passed",
+  "retired_invalid_fixture": "ignored module=None/wrapped_seed=None fixture replaced with genuine software wrapping; no HSM proof inferred",
+  "retired_misnamed_strict_test": "the old test failed before hardware strict public-key validation; malformed software seed rejection is now tested accurately",
+  "limitations": [
+    "No live HSM/strict hardware-public-key test",
+    "No inspection of freed memory or all OS/AES internal copies",
+    "Dedicated wrapped-seed coverage-guided fuzz target still pending",
+    "Full MSRV 1.76 and dependency audit/deny gates remain open"
+  ]
+}

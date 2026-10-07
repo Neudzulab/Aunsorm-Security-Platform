@@ -14,8 +14,14 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 aunsorm-packet = { path = "../crates/packet" }
 aunsorm-core = { path = "../crates/core" }
+aunsorm-server = { path = "../crates/server", default-features = false }
+endpoint-validator = { path = "../crates/endpoint-validator" }
 base64 = { version = "0.22", default-features = false, features = ["std"] }
 once_cell = "1.19"
+aead = "0.5"
+aes-gcm = { version = "0.10", default-features = false, features = ["aes"] }
+zeroize = { version = "1.7", features = ["zeroize_derive"] }
+ed25519-dalek = { version = "~2.1", default-features = false, features = ["std", "zeroize"] }
 
 [profile.release]
 debug = true
@@ -37,6 +43,41 @@ bench = false
 [[bin]]
 name = "session_store_roundtrip"
 path = "fuzz_targets/session_store_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_quic_datagram"
+path = "fuzz_targets/fuzz_quic_datagram.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_sitemap"
+path = "fuzz_targets/fuzz_sitemap.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_pkcs11_point"
+path = "fuzz_targets/fuzz_pkcs11_point.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_wrapped_seed"
+path = "fuzz_targets/fuzz_wrapped_seed.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_pkcs11_identity"
+path = "fuzz_targets/fuzz_pkcs11_identity.rs"
 test = false
 doc = false
 bench = false

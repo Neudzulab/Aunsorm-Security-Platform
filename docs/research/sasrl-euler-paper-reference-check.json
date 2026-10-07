@@ -1,0 +1,79 @@
+{
+  "paper_sha256": "b66b89535f5e2285db77f3de05b83dccfa0fe1d15a9bf5fba84f656c00f38e51",
+  "comparison_kind": "independent exact reference only; reported spectral estimates transcribed, not reproduced",
+  "matches": 8,
+  "rows": [
+    {
+      "curve": "11a1",
+      "p": 2,
+      "paper_exact_a_p": -2,
+      "computed_a_p": -2,
+      "matches": true,
+      "paper_reported_spectral_estimate": -2.0212,
+      "reported_estimate_error": -0.021199999999999886
+    },
+    {
+      "curve": "11a1",
+      "p": 3,
+      "paper_exact_a_p": -1,
+      "computed_a_p": -1,
+      "matches": true,
+      "paper_reported_spectral_estimate": -1.0323,
+      "reported_estimate_error": -0.032299999999999995
+    },
+    {
+      "curve": "11a1",
+      "p": 5,
+      "paper_exact_a_p": 1,
+      "computed_a_p": 1,
+      "matches": true,
+      "paper_reported_spectral_estimate": 1.0331,
+      "reported_estimate_error": 0.03309999999999991
+    },
+    {
+      "curve": "11a1",
+      "p": 7,
+      "paper_exact_a_p": -2,
+      "computed_a_p": -2,
+      "matches": true,
+      "paper_reported_spectral_estimate": -2.0333,
+      "reported_estimate_error": -0.03330000000000011
+    },
+    {
+      "curve": "37a1",
+      "p": 2,
+      "paper_exact_a_p": -2,
+      "computed_a_p": -2,
+      "matches": true,
+      "paper_reported_spectral_estimate": -1.9794,
+      "reported_estimate_error": 0.02059999999999995
+    },
+    {
+      "curve": "37a1",
+      "p": 3,
+      "paper_exact_a_p": -3,
+      "computed_a_p": -3,
+      "matches": true,
+      "paper_reported_spectral_estimate": -3.0301,
+      "reported_estimate_error": -0.030100000000000016
+    },
+    {
+      "curve": "37a1",
+      "p": 5,
+      "paper_exact_a_p": -2,
+      "computed_a_p": -2,
+      "matches": true,
+      "paper_reported_spectral_estimate": -1.9451,
+      "reported_estimate_error": 0.05489999999999995
+    },
+    {
+      "curve": "37a1",
+      "p": 7,
+      "paper_exact_a_p": -1,
+      "computed_a_p": -1,
+      "matches": true,
+      "paper_reported_spectral_estimate": -1.105,
+      "reported_estimate_error": -0.10499999999999998
+    }
+  ]
+}

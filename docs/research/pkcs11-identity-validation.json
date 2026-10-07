@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-07",
+  "implementation": "bounded PKCS11 public metadata and strict hardware response verification",
+  "source_sha256": {
+    "crates/kms/src/pkcs11.rs": "26358d5d4393b53d2ed8a3477f46845b264b0c0c995ea860514da4d36e3f6cbd",
+    "crates/kms/src/pkcs11_identity.rs": "0d66a4fe258da2f28603ce84332d38784af745adb1c3385acabfdef911c5a739",
+    "crates/kms/src/tests.rs": "9d591d2fd0b480b7c9aba72fe07d453ce542671be4e8160266f57fb9171e2b32",
+    "fuzz/fuzz_targets/fuzz_pkcs11_identity.rs": "72a5e3460620bc97fd096058b1fd722e3abc2d2d5fceef174d2936684e0a3e87",
+    "fuzz/Cargo.lock": "16df56715e29b9815e6cba1173d2345259979568d91e0b4d6e94d5cebc537186"
+  },
+  "software_modes_tested": [
+    "normal",
+    "strict"
+  ],
+  "software_public_metadata": "provided key must equal actual unwrapped-seed public key; absent key remains derived",
+  "public_decode": {
+    "encoded_bytes": 44,
+    "fixed_decode_buffer_bytes": 33,
+    "public_bytes": 32,
+    "invalid_and_weak_points_rejected": true
+  },
+  "hardware_response_rule": "verify_strict against stored selected public key/message before returning signature; session lock released first",
+  "kms_tests": {
+    "passed": 26,
+    "failed": 0,
+    "ignored": 0,
+    "new_identity_tests": 5
+  },
+  "workspace_tests": {
+    "passed": 643,
+    "failed": 0,
+    "existing_ignored": 17,
+    "suite_count": 63
+  },
+  "workspace_clippy_all_targets_all_features_deny_warnings": "passed",
+  "fuzz_clippy_locked_target_deny_warnings": "passed",
+  "fuzz_compiler_check": "passed",
+  "corpus": {
+    "cases": 987,
+    "accepted": 1,
+    "rejected": 986,
+    "failures": 0,
+    "corpus_sha256": "304ab25bee3f5b36a93b1723db676f38033e110fc1d91d05ba57e457b4a7d22a",
+    "fixture_sha256": "94b1c9a35dfe7974ff52870440b18cce0614a22ad03c08cc25caa511d45d5aa1",
+    "verifier_sha256": "0d66a4fe258da2f28603ce84332d38784af745adb1c3385acabfdef911c5a739",
+    "executable_sha256": "41299cf63b5a39a10022d04968109cbf3553075550b45b91319b3fc6517c0771",
+    "case_budget": 1024,
+    "input_byte_budget": 1120,
+    "coverage_guided": false,
+    "fixture": "actual deterministic Ed25519 signature using a known synthetic seed",
+    "limitations": [
+      "Verifies response math; no hardware session or live HSM claim",
+      "Compiled/seeded controls do not establish sustained fuzz coverage"
+    ]
+  },
+  "cryptoki_in_fuzz_graph": false,
+  "fuzz_remaining_advisories": [
+    "RUSTSEC-2023-0071"
+  ],
+  "fuzz_unmaintained_warnings": 5,
+  "limitations": [
+    "Actual Ed25519 math and software backend controls, not a live HSM session",
+    "Startup public metadata alone does not attest hardware identity/custody; response binding is checked on signing",
+    "Live vendor compatibility, response latency and hardware strict mode still require review",
+    "Compiled/seeded fuzz controls do not prove sustained coverage-guided execution",
+    "Root audit/deny and full MSRV gates remain open"
+  ]
+}

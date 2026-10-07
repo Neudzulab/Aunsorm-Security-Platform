@@ -1,0 +1,680 @@
+{
+  "source": "Synthetic decoded QUIC gauge fixture, not a live capture",
+  "connection_id": "research-fixture",
+  "metric": "sfu_contexts",
+  "expected_interval_ms": 5000,
+  "records": [
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 1,
+        "timestamp_ms": 100000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 23.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 2,
+        "timestamp_ms": 105000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 22.121320343559642
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 3,
+        "timestamp_ms": 110000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 20.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 4,
+        "timestamp_ms": 115000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.878679656440358
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 5,
+        "timestamp_ms": 120000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 6,
+        "timestamp_ms": 125000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.878679656440358
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 7,
+        "timestamp_ms": 130000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 20.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 8,
+        "timestamp_ms": 135000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 22.121320343559642
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 9,
+        "timestamp_ms": 140000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 23.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 10,
+        "timestamp_ms": 145000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 22.121320343559642
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 11,
+        "timestamp_ms": 150000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 20.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 12,
+        "timestamp_ms": 155000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.87867965644036
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 13,
+        "timestamp_ms": 160000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 14,
+        "timestamp_ms": 165000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.878679656440358
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 15,
+        "timestamp_ms": 170000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 20.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 16,
+        "timestamp_ms": 175000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 22.12132034355964
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 17,
+        "timestamp_ms": 180000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 23.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 18,
+        "timestamp_ms": 185000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 22.121320343559642
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 19,
+        "timestamp_ms": 190000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 20.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 20,
+        "timestamp_ms": 195000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.87867965644036
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 21,
+        "timestamp_ms": 200000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 22,
+        "timestamp_ms": 205000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.878679656440358
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 23,
+        "timestamp_ms": 210000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 19.999999999999993
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 24,
+        "timestamp_ms": 215000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 22.12132034355964
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 25,
+        "timestamp_ms": 220000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 23.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 26,
+        "timestamp_ms": 225000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 22.121320343559642
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 27,
+        "timestamp_ms": 230000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 19.999999999999996
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 28,
+        "timestamp_ms": 235000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.87867965644036
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 29,
+        "timestamp_ms": 240000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.0
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 30,
+        "timestamp_ms": 245000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 17.878679656440358
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 31,
+        "timestamp_ms": 250000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 19.999999999999993
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "connection_id": "research-fixture",
+      "frame": {
+        "version": 1,
+        "channel": 0,
+        "sequence": 32,
+        "timestamp_ms": 255000,
+        "payload": {
+          "otel": {
+            "counters": [],
+            "histograms": [],
+            "gauges": [
+              {
+                "name": "sfu_contexts",
+                "value": 22.12132034355964
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

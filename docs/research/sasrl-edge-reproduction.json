@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "method": "conjectural_hard_cutoff_edge_sweep",
+  "cryptographic_use": false,
+  "coverage_verified": false,
+  "source": "Andrew Odlyzko zeros1: https://www-users.cse.umn.edu/~odlyzko/zeta_tables/zeros1",
+  "raw_table_sha256": "3436c916a7878261ac183fd7b9448c9a4736b8bbccf1356874a6ce1788541632",
+  "evaluations": 152554909,
+  "evaluation_budget": 200000000,
+  "blocks": [
+    {
+      "start": 4800,
+      "stop": 5299,
+      "scans": [
+        {
+          "offset_from_pi": -0.02,
+          "summary": {
+            "count": 500,
+            "TP": 56,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.5088694965563448
+          },
+          "composite_summary": {
+            "count": 444,
+            "TP": 0,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.5064190470848549
+          }
+        },
+        {
+          "offset_from_pi": -0.005,
+          "summary": {
+            "count": 500,
+            "TP": 56,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.1543844159858707
+          },
+          "composite_summary": {
+            "count": 444,
+            "TP": 0,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.1536948070358582
+          }
+        },
+        {
+          "offset_from_pi": 0.0,
+          "summary": {
+            "count": 500,
+            "TP": 56,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.10798966657276135
+          },
+          "composite_summary": {
+            "count": 444,
+            "TP": 0,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.10805948243869065
+          }
+        },
+        {
+          "offset_from_pi": 0.005,
+          "summary": {
+            "count": 500,
+            "TP": 56,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.157907277638302
+          },
+          "composite_summary": {
+            "count": 444,
+            "TP": 0,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.15876214079727174
+          }
+        },
+        {
+          "offset_from_pi": 0.02,
+          "summary": {
+            "count": 500,
+            "TP": 56,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.5064726508910106
+          },
+          "composite_summary": {
+            "count": 444,
+            "TP": 0,
+            "TN": 444,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.5037424749790628
+          }
+        }
+      ]
+    },
+    {
+      "start": 17850,
+      "stop": 18149,
+      "scans": [
+        {
+          "offset_from_pi": -0.02,
+          "summary": {
+            "count": 300,
+            "TP": 35,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 1.1276553764214354
+          },
+          "composite_summary": {
+            "count": 265,
+            "TP": 0,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 1.1266388492076511
+          }
+        },
+        {
+          "offset_from_pi": -0.005,
+          "summary": {
+            "count": 300,
+            "TP": 35,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.25751219100365536
+          },
+          "composite_summary": {
+            "count": 265,
+            "TP": 0,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.2573926634184769
+          }
+        },
+        {
+          "offset_from_pi": 0.0,
+          "summary": {
+            "count": 300,
+            "TP": 35,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.0574244287496446
+          },
+          "composite_summary": {
+            "count": 265,
+            "TP": 0,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.056764074311130744
+          }
+        },
+        {
+          "offset_from_pi": 0.005,
+          "summary": {
+            "count": 300,
+            "TP": 35,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.2252554075607104
+          },
+          "composite_summary": {
+            "count": 265,
+            "TP": 0,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 0.22511355206184894
+          }
+        },
+        {
+          "offset_from_pi": 0.02,
+          "summary": {
+            "count": 300,
+            "TP": 35,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 1.140624474638406
+          },
+          "composite_summary": {
+            "count": 265,
+            "TP": 0,
+            "TN": 265,
+            "FP": 0,
+            "FN": 0,
+            "rmse": 1.1395309941743055
+          }
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Parameter scan reproduces finite empirical evidence only",
+    "Composite-only scores include higher prime powers"
+  ]
+}
