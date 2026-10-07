@@ -10,6 +10,14 @@ Aunsorm is a zero-trust cryptographic security platform that unifies gateway, au
 - Clock attestation and calibration workflow to mitigate replay and skew-based attacks.
 - Hardened deployment defaults with port isolation and containerized runtime profiles.
 
+### Entropy Extraction Research
+
+The offline [Toeplitz reference](research/toeplitz/README.md) implements universal
+hashing with an explicit min-entropy output budget, exact finite tests and a
+reproducible synthetic experiment. Physical-source certification and independent
+seed design are required before production integration; no RNG strength increase
+is claimed by the synthetic experiment.
+
 ### Arithmetic Research
 
 The offline [SASRL research tool](research/sasrl/README.md) reproduces spectral
