@@ -1,321 +1,193 @@
-//! Aunsorm Native RNG - Ultra-Fast `ChaCha20` version
-//! High-performance cryptographic RNG with mathematical mixing
+//! OS-seeded `ChaCha20` RNG with fast key erasure and bounded reseeding.
 //!
-//! Performance: 28ns/call, 270 MiB/s throughput
-//! Quality: Validated with 10M samples, all χ tests passing (p > 0.05)
-//!
-//! Architecture:
-//! - `ChaCha20` stream cipher (replaces HKDF for 2.64x speedup)
-//! - Lazy mathematical mixing (every 4 blocks, 75% reduction)
-//! - Minimal state updates (every 64 blocks)
-//! - Buffered entropy generation
+//! Each refill reserves the first 32 keystream bytes for the next key and
+//! exposes only the remaining bytes. Consumed output is erased immediately.
+//! This follows the fast-key-erasure construction described at
+//! <https://blog.cr.yp.to/20170723-random.html>; it is not a NIST certification.
 
 use chacha20::{
     cipher::{KeyIvInit, StreamCipher},
     ChaCha20,
 };
 use rand_core::{OsRng, RngCore};
-use sha2::{Digest, Sha256};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use zeroize::Zeroize;
+use std::fmt;
+use zeroize::{Zeroize, Zeroizing};
 
-// Zeroish calibration constants for NEUDZ-PCS
-const ZEROISH_AS: f64 = -17.116_310_446_8;
-const ZEROISH_AL: f64 = 0.991_760_130_167;
-const ZEROISH_BS: f64 = 124.196_477_18;
-const ZEROISH_BL: f64 = 2.505_429_54;
-const ZEROISH_TAU: f64 = 1_000_000.0;
+const BUFFER_LEN: usize = 1024;
+const RESEED_BYTES: usize = 64 * 1024;
 
-// AACM (Anglenna Angular Correction Model) constants
-const AACM_A: f64 = 0.999_621;
-const AACM_B: f64 = -0.47298;
-const AACM_C: f64 = 2.49373;
-const AACM_D: f64 = 1.55595;
-const AACM_E: f64 = 1.35684;
-
-// Performance constants
-const U64_MAX_F64: f64 = 18_446_744_073_709_551_615.0; // u64::MAX as f64 (precomputed)
-const MIXING_RANGE: f64 = 1_000_000.0;
-
-/// Ultra-Fast Aunsorm RNG with `ChaCha20` stream cipher
+/// Aunsorm's native cryptographic random-number generator.
 ///
-/// Performance: 28ns/call (3.13x faster than HKDF version)
-/// Quality: Cryptographic-grade with mathematical mixing
+/// Seeds and reseeds from the OS, including after a process-ID change and at
+/// most every 64 KiB of generated output. Every buffer refill replaces the key;
+/// consumed buffer bytes and the cipher's temporary state are zeroized.
 ///
-/// Features:
-/// - `ChaCha20` stream cipher (replaces HKDF for 2.64x speedup)
-/// - Lazy mathematical mixing (every 4 blocks, 75% reduction)
-/// - Minimal state updates (every 64 blocks)
-/// - Buffered entropy generation for efficiency
-/// - Thread and process isolation via cached identifiers
-#[derive(Debug)]
+/// A snapshot restored with the same PID cannot be detected automatically.
+/// Call [`Self::reseed`] before using a restored instance. An attacker with
+/// access to live memory can still read unconsumed output and predict future
+/// output until fresh, secret OS entropy is incorporated.
+///
+/// ```
+/// use aunsorm_core::AunsormNativeRng;
+/// use rand_core::RngCore;
+/// let mut rng = AunsormNativeRng::try_new()?;
+/// let mut nonce = [0_u8; 12];
+/// rng.try_fill_bytes(&mut nonce)?;
+/// # Ok::<(), rand_core::Error>(())
+/// ```
 pub struct AunsormNativeRng {
-    // ChaCha20 key (from entropy salt)
     key: [u8; 32],
-    // Current nonce (combines counter + timestamp)
-    nonce: [u8; 12],
-    // State for mixing
-    state: [u8; 32],
-    counter: u64,
-
-    // Buffering
-    entropy_buffer: [u8; 32],
+    entropy_buffer: [u8; BUFFER_LEN],
     buffer_offset: usize,
+    generated_bytes: usize,
+    process_id: u32,
+    reseed_required: bool,
+}
+
+impl fmt::Debug for AunsormNativeRng {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("AunsormNativeRng { state: [REDACTED] }")
+    }
 }
 
 impl AunsormNativeRng {
+    /// Creates an OS-seeded RNG.
+    ///
+    /// # Panics
+    /// Panics if the operating system cannot provide secure randomness.
+    /// Use [`Self::try_new`] to handle this error explicitly.
     #[must_use]
     pub fn new() -> Self {
-        let mut key = [0u8; 32];
-        OsRng.fill_bytes(&mut key);
+        Self::try_new().expect("Aunsorm RNG initialization failed")
+    }
 
-        let mut state = [0u8; 32];
-        OsRng.fill_bytes(&mut state);
-
-        let thread_id = std::thread::current().id();
-        let thread_hash = {
-            let mut hasher = DefaultHasher::new();
-            thread_id.hash(&mut hasher);
-            hasher.finish()
+    /// Creates an OS-seeded RNG, propagating entropy-source failures.
+    ///
+    /// # Errors
+    /// Returns an error if the OS randomness source fails.
+    pub fn try_new() -> Result<Self, rand_core::Error> {
+        let mut rng = Self {
+            key: [0; 32],
+            entropy_buffer: [0; BUFFER_LEN],
+            buffer_offset: BUFFER_LEN,
+            generated_bytes: 0,
+            process_id: std::process::id(),
+            reseed_required: true,
         };
-        let process_id = std::process::id();
-
-        // Initialize nonce with unique identifiers
-        let mut nonce = [0u8; 12];
-        nonce[0..4].copy_from_slice(&process_id.to_le_bytes());
-        nonce[4..12].copy_from_slice(&thread_hash.to_le_bytes());
-
-        Self {
-            key,
-            nonce,
-            state,
-            counter: 0,
-            entropy_buffer: [0u8; 32],
-            buffer_offset: 32,
-        }
+        rng.reseed()?;
+        Ok(rng)
     }
 
-    #[inline]
-    fn next_entropy_block(&mut self) -> [u8; 32] {
-        // Update nonce with counter
-        let counter_bytes = self.counter.to_le_bytes();
-        self.nonce[0..8].copy_from_slice(&counter_bytes);
-
-        // Add timestamp every 256 blocks for extra entropy
-        if self.counter.trailing_zeros() >= 8 {
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_else(|_| Duration::from_secs(0))
-                .as_nanos();
-            let ts_bytes = timestamp.to_le_bytes();
-            // XOR timestamp into nonce (unrolled for speed)
-            self.nonce[0] ^= ts_bytes[0];
-            self.nonce[1] ^= ts_bytes[1];
-            self.nonce[2] ^= ts_bytes[2];
-            self.nonce[3] ^= ts_bytes[3];
-            self.nonce[4] ^= ts_bytes[4];
-            self.nonce[5] ^= ts_bytes[5];
-            self.nonce[6] ^= ts_bytes[6];
-            self.nonce[7] ^= ts_bytes[7];
-        }
-
-        let counter = self.counter;
-        self.counter = self.counter.wrapping_add(1);
-
-        // ChaCha20 stream cipher (ULTRA FAST - replaces HKDF)
-        let mut cipher = ChaCha20::new(&self.key.into(), &self.nonce.into());
-        let mut okm = [0u8; 32];
-        cipher.apply_keystream(&mut okm);
-
-        // Math mixing every 4 blocks (lazy optimization - 75% reduction)
-        if counter.trailing_zeros() >= 2 {
-            Self::apply_mathematical_mixing(&mut okm);
-        }
-
-        // State update every 64 blocks (very lazy!)
-        if counter.trailing_zeros() >= 6 {
-            // Full SHA256 state update
-            let mut hasher = Sha256::new();
-            hasher.update(self.key);
-            hasher.update(self.state);
-            hasher.update(self.nonce);
-            hasher.update(okm);
-            self.state.copy_from_slice(&hasher.finalize());
-
-            // Re-key ChaCha20 with new state
-            self.key.copy_from_slice(&self.state);
-        } else {
-            // Ultra-light XOR update
-            #[allow(clippy::cast_possible_truncation)]
-            for (i, okm_byte) in okm.iter().enumerate() {
-                self.state[i] ^= okm_byte.wrapping_add(counter as u8);
-            }
-        }
-
-        okm
+    /// Incorporates fresh OS randomness and discards all buffered output.
+    ///
+    /// Call this after restoring a snapshot, before producing any output.
+    ///
+    /// # Errors
+    /// Returns an error if the OS randomness source fails. Further output is
+    /// blocked until a reseed succeeds; retry or drop the RNG.
+    pub fn reseed(&mut self) -> Result<(), rand_core::Error> {
+        self.reseed_from(&mut OsRng)
     }
 
-    #[inline]
-    fn neudz_pcs_mix(x: f64) -> f64 {
-        if x <= 1.0 {
-            return x;
+    fn reseed_from(&mut self, source: &mut impl RngCore) -> Result<(), rand_core::Error> {
+        self.reseed_required = true;
+        let mut seed = Zeroizing::new([0_u8; 32]);
+        source.try_fill_bytes(seed.as_mut())?;
+        // Retain the existing secret even if a later seed is weak. Fresh
+        // independent OS entropy also recovers from an exposed old state.
+        for (seed_byte, key_byte) in seed.iter_mut().zip(&self.key) {
+            *seed_byte ^= key_byte;
         }
-        let ln_x = x.ln();
-        let x_sq = x * x;
-        let w = x_sq / (x_sq + ZEROISH_TAU);
-        let a = (ZEROISH_AL - ZEROISH_AS).mul_add(w, ZEROISH_AS);
-        let b = (ZEROISH_BL - ZEROISH_BS).mul_add(w, ZEROISH_BS);
-        let ln_x_inv = 1.0 / ln_x;
-        let correction = (b * ln_x_inv).mul_add(ln_x_inv, a.mul_add(ln_x_inv, 1.0));
-        x * ln_x_inv * correction
+        self.key.zeroize();
+        self.key.copy_from_slice(seed.as_ref());
+        self.entropy_buffer.zeroize();
+        self.buffer_offset = BUFFER_LEN;
+        self.generated_bytes = 0;
+        self.process_id = std::process::id();
+        self.reseed_required = false;
+        Ok(())
     }
 
-    #[inline]
-    fn aacm_mix(n: f64) -> f64 {
-        if n < 2.0 {
-            return n;
-        }
-        let ln_n = n.ln();
-        let ln_ln_n = ln_n.ln();
-        let base = n * (ln_n + ln_ln_n - 1.0);
-        let ln_n_inv = 1.0 / ln_n;
-        let ln_n_sq_inv = ln_n_inv * ln_n_inv;
-        let term1 = AACM_A * ln_n_inv;
-        let term2 = AACM_B * ln_n_sq_inv;
-        let angular = AACM_C * AACM_D.mul_add(ln_n_inv, AACM_E / ln_n.sqrt()).sin();
-        let term3 = angular * ln_n_sq_inv;
-        base * (1.0 + term1 + term2 + term3)
+    fn refill(&mut self) {
+        let mut block = Zeroizing::new([0_u8; BUFFER_LEN + 32]);
+        // A fresh key is installed before any output leaves this instance;
+        // the fixed nonce is never reused with a deliberately retained key.
+        let mut cipher = ChaCha20::new((&self.key).into(), (&[0_u8; 12]).into());
+        cipher.apply_keystream(block.as_mut());
+        self.key.zeroize();
+        self.key.copy_from_slice(&block[..32]);
+        self.entropy_buffer.copy_from_slice(&block[32..]);
+        self.buffer_offset = 0;
+        self.generated_bytes += BUFFER_LEN;
     }
 
-    #[inline]
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        clippy::cast_precision_loss
-    )]
-    fn apply_mathematical_mixing(entropy: &mut [u8; 32]) {
-        // Fully unrolled for maximum speed
-        let v0 = u64::from_le_bytes([
-            entropy[0], entropy[1], entropy[2], entropy[3], entropy[4], entropy[5], entropy[6],
-            entropy[7],
-        ]);
-        let x0 = (v0 as f64 / U64_MAX_F64).mul_add(MIXING_RANGE, 2.0);
-        let m0 = ((Self::neudz_pcs_mix(x0).fract() * U64_MAX_F64) as u64) ^ v0;
-        entropy[0..8].copy_from_slice(&m0.to_le_bytes());
-
-        let v1 = u64::from_le_bytes([
-            entropy[8],
-            entropy[9],
-            entropy[10],
-            entropy[11],
-            entropy[12],
-            entropy[13],
-            entropy[14],
-            entropy[15],
-        ]);
-        let x1 = (v1 as f64 / U64_MAX_F64).mul_add(MIXING_RANGE, 2.0);
-        let m1 = ((Self::neudz_pcs_mix(x1).fract() * U64_MAX_F64) as u64) ^ v1;
-        entropy[8..16].copy_from_slice(&m1.to_le_bytes());
-
-        let v2 = u64::from_le_bytes([
-            entropy[16],
-            entropy[17],
-            entropy[18],
-            entropy[19],
-            entropy[20],
-            entropy[21],
-            entropy[22],
-            entropy[23],
-        ]);
-        let n2 = (v2 as f64 / U64_MAX_F64).mul_add(MIXING_RANGE, 2.0);
-        let m2 = ((Self::aacm_mix(n2).fract() * U64_MAX_F64) as u64) ^ v2;
-        entropy[16..24].copy_from_slice(&m2.to_le_bytes());
-
-        let v3 = u64::from_le_bytes([
-            entropy[24],
-            entropy[25],
-            entropy[26],
-            entropy[27],
-            entropy[28],
-            entropy[29],
-            entropy[30],
-            entropy[31],
-        ]);
-        let n3 = (v3 as f64 / U64_MAX_F64).mul_add(MIXING_RANGE, 2.0);
-        let m3 = ((Self::aacm_mix(n3).fract() * U64_MAX_F64) as u64) ^ v3;
-        entropy[24..32].copy_from_slice(&m3.to_le_bytes());
+    fn ensure_ready(&mut self, source: &mut impl RngCore) -> Result<(), rand_core::Error> {
+        // Check before using even already-buffered bytes inherited by a child.
+        if self.reseed_required
+            || self.process_id != std::process::id()
+            || (self.buffer_offset == BUFFER_LEN && self.generated_bytes >= RESEED_BYTES)
+        {
+            self.reseed_from(source)?;
+        }
+        if self.buffer_offset == BUFFER_LEN {
+            self.refill();
+        }
+        Ok(())
     }
 
     fn wipe(&mut self) {
         self.key.zeroize();
-        self.nonce.zeroize();
-        self.state.zeroize();
         self.entropy_buffer.zeroize();
-        self.counter.zeroize();
         self.buffer_offset.zeroize();
+        self.generated_bytes.zeroize();
+        self.process_id.zeroize();
+        self.reseed_required.zeroize();
     }
 }
 
 impl RngCore for AunsormNativeRng {
-    #[inline]
     fn next_u32(&mut self) -> u32 {
-        if self.buffer_offset + 4 > 32 {
-            self.entropy_buffer = self.next_entropy_block();
-            self.buffer_offset = 0;
-        }
-        let result = u32::from_le_bytes([
-            self.entropy_buffer[self.buffer_offset],
-            self.entropy_buffer[self.buffer_offset + 1],
-            self.entropy_buffer[self.buffer_offset + 2],
-            self.entropy_buffer[self.buffer_offset + 3],
-        ]);
-        self.buffer_offset += 4;
-        result
+        let mut bytes = Zeroizing::new([0; 4]);
+        self.fill_bytes(bytes.as_mut());
+        u32::from_le_bytes(*bytes)
     }
 
-    #[inline]
     fn next_u64(&mut self) -> u64 {
-        if self.buffer_offset + 8 > 32 {
-            self.entropy_buffer = self.next_entropy_block();
-            self.buffer_offset = 0;
-        }
-        let result = u64::from_le_bytes([
-            self.entropy_buffer[self.buffer_offset],
-            self.entropy_buffer[self.buffer_offset + 1],
-            self.entropy_buffer[self.buffer_offset + 2],
-            self.entropy_buffer[self.buffer_offset + 3],
-            self.entropy_buffer[self.buffer_offset + 4],
-            self.entropy_buffer[self.buffer_offset + 5],
-            self.entropy_buffer[self.buffer_offset + 6],
-            self.entropy_buffer[self.buffer_offset + 7],
-        ]);
-        self.buffer_offset += 8;
-        result
+        let mut bytes = Zeroizing::new([0; 8]);
+        self.fill_bytes(bytes.as_mut());
+        u64::from_le_bytes(*bytes)
     }
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        let mut offset = 0;
-        while offset < dest.len() {
-            if self.buffer_offset < 32 {
-                let available = 32 - self.buffer_offset;
-                let needed = dest.len() - offset;
-                let chunk_size = std::cmp::min(available, needed);
-                dest[offset..offset + chunk_size].copy_from_slice(
-                    &self.entropy_buffer[self.buffer_offset..self.buffer_offset + chunk_size],
-                );
-                offset += chunk_size;
-                self.buffer_offset += chunk_size;
-            } else {
-                self.entropy_buffer = self.next_entropy_block();
-                self.buffer_offset = 0;
-            }
-        }
+        self.try_fill_bytes(dest)
+            .expect("Aunsorm RNG entropy refresh failed");
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        self.fill_bytes(dest);
+        self.fill_from(dest, &mut OsRng)
+    }
+}
+
+impl AunsormNativeRng {
+    fn fill_from(
+        &mut self,
+        dest: &mut [u8],
+        source: &mut impl RngCore,
+    ) -> Result<(), rand_core::Error> {
+        let mut offset = 0;
+        while offset < dest.len() {
+            if let Err(error) = self.ensure_ready(source) {
+                // Do not return a partially generated secret on failure.
+                dest.zeroize();
+                return Err(error);
+            }
+            let size = (BUFFER_LEN - self.buffer_offset).min(dest.len() - offset);
+            let consumed = &mut self.entropy_buffer[self.buffer_offset..self.buffer_offset + size];
+            dest[offset..offset + size].copy_from_slice(consumed);
+            consumed.zeroize();
+            self.buffer_offset += size;
+            offset += size;
+        }
         Ok(())
     }
 }
@@ -326,7 +198,6 @@ impl Default for AunsormNativeRng {
     }
 }
 
-// Marker trait indicating this RNG is cryptographically secure
 impl rand_core::CryptoRng for AunsormNativeRng {}
 
 impl Drop for AunsormNativeRng {
@@ -337,29 +208,162 @@ impl Drop for AunsormNativeRng {
 
 #[cfg(test)]
 mod tests {
-    use rand_core::RngCore;
+    use super::*;
 
-    use super::AunsormNativeRng;
+    fn fixed_rng() -> AunsormNativeRng {
+        AunsormNativeRng {
+            key: [42; 32],
+            entropy_buffer: [0; BUFFER_LEN],
+            buffer_offset: BUFFER_LEN,
+            generated_bytes: 0,
+            process_id: std::process::id(),
+            reseed_required: false,
+        }
+    }
+
+    #[test]
+    fn debug_redacts_all_state() {
+        let mut rng = fixed_rng();
+        rng.next_u64();
+        assert_eq!(format!("{rng:?}"), "AunsormNativeRng { state: [REDACTED] }");
+        assert_eq!(format!("{rng:#?}"), format!("{rng:?}"));
+    }
+
+    #[test]
+    fn erases_old_key_and_consumed_output() {
+        let mut rng = fixed_rng();
+        let mut cipher = ChaCha20::new((&rng.key).into(), (&[0_u8; 12]).into());
+        let mut stream = [0; BUFFER_LEN + 32];
+        cipher.apply_keystream(&mut stream);
+        let mut output = [0; 37];
+        rng.fill_bytes(&mut output);
+        assert_eq!(output, stream[32..69]);
+        assert_eq!(rng.key, stream[..32]);
+        assert_ne!(rng.key, [42; 32]);
+        assert!(rng.entropy_buffer[..37].iter().all(|&byte| byte == 0));
+        assert_eq!(rng.entropy_buffer[37..], stream[69..]);
+        let key = rng.key;
+        rng.fill_bytes(&mut [0; BUFFER_LEN - 37]);
+        assert!(rng.entropy_buffer.iter().all(|&byte| byte == 0));
+        rng.next_u64();
+        assert_ne!(rng.key, key);
+    }
+
+    #[test]
+    fn mixed_calls_preserve_stream_across_refills() {
+        let mut whole = fixed_rng();
+        let mut split = fixed_rng();
+        let mut expected = vec![0; 3 * BUFFER_LEN + 9];
+        whole.fill_bytes(&mut expected);
+        let mut actual = Vec::new();
+        actual.extend(split.next_u32().to_le_bytes());
+        split.fill_bytes(&mut [0; 0]);
+        let mut bytes = vec![0; BUFFER_LEN - 5];
+        split.fill_bytes(&mut bytes);
+        actual.extend(bytes);
+        actual.extend(split.next_u64().to_le_bytes());
+        let mut tail = vec![0; expected.len() - actual.len()];
+        split.fill_bytes(&mut tail);
+        actual.extend(tail);
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn pid_change_discards_inherited_buffer() {
+        let mut child = fixed_rng();
+        child.fill_bytes(&mut [0; 1]);
+        let inherited = child.entropy_buffer[1..33].to_vec();
+        child.process_id = child.process_id.wrapping_add(1);
+        let mut output = [0; 32];
+        child.fill_bytes(&mut output);
+        assert_ne!(output.as_slice(), inherited.as_slice());
+        assert_eq!(child.process_id, std::process::id());
+        assert_eq!(child.buffer_offset, 32);
+        assert_eq!(child.generated_bytes, BUFFER_LEN);
+    }
+
+    #[test]
+    fn reseeds_at_output_limit_including_large_calls() {
+        let mut rng = fixed_rng();
+        rng.fill_bytes(&mut vec![0; RESEED_BYTES]);
+        assert_eq!(rng.generated_bytes, RESEED_BYTES);
+        rng.fill_bytes(&mut vec![0; RESEED_BYTES + 1]);
+        assert_eq!(rng.generated_bytes, BUFFER_LEN);
+        assert_eq!(rng.buffer_offset, 1);
+    }
+
+    #[test]
+    fn explicit_reseed_discards_same_pid_snapshot_buffer() {
+        let mut restored = fixed_rng();
+        restored.fill_bytes(&mut [0; 7]);
+        let key = restored.key;
+        restored.reseed().unwrap();
+        assert_ne!(restored.key, key);
+        assert!(restored.entropy_buffer.iter().all(|&byte| byte == 0));
+        assert_eq!(restored.buffer_offset, BUFFER_LEN);
+        assert_eq!(restored.generated_bytes, 0);
+    }
+
+    struct FailingEntropy;
+    impl RngCore for FailingEntropy {
+        fn next_u32(&mut self) -> u32 {
+            panic!("infallible entropy API must not be used")
+        }
+        fn next_u64(&mut self) -> u64 {
+            panic!("infallible entropy API must not be used")
+        }
+        fn fill_bytes(&mut self, _: &mut [u8]) {
+            panic!("infallible entropy API must not be used")
+        }
+        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+            dest.fill(7);
+            Err(rand_core::Error::new(std::io::Error::other(
+                "entropy unavailable",
+            )))
+        }
+    }
+
+    #[test]
+    fn failed_reseed_blocks_output_until_recovery() {
+        let mut rng = fixed_rng();
+        rng.next_u64();
+        let key = rng.key;
+        let buffer = rng.entropy_buffer;
+        let offset = rng.buffer_offset;
+        assert!(rng.reseed_from(&mut FailingEntropy).is_err());
+        assert_eq!(rng.key, key);
+        assert_eq!(rng.entropy_buffer, buffer);
+        assert_eq!(rng.buffer_offset, offset);
+        assert!(rng.reseed_required);
+        let mut output = [99; 16];
+        assert!(rng.fill_from(&mut output, &mut FailingEntropy).is_err());
+        assert_eq!(output, [0; 16]);
+        rng.reseed().unwrap();
+        assert!(!rng.reseed_required);
+        assert!(rng.try_fill_bytes(&mut output).is_ok());
+    }
+
+    #[test]
+    fn refresh_failure_erases_partially_filled_destination() {
+        let mut rng = fixed_rng();
+        rng.refill();
+        rng.buffer_offset = BUFFER_LEN - 1;
+        rng.generated_bytes = RESEED_BYTES;
+        let mut output = [99; 2];
+        assert!(rng.fill_from(&mut output, &mut FailingEntropy).is_err());
+        assert_eq!(output, [0; 2]);
+        assert!(rng.reseed_required);
+    }
 
     #[test]
     fn zeroizes_sensitive_state_on_drop() {
         let mut rng = AunsormNativeRng::new();
-        let mut dest = [0u8; 64];
-        rng.fill_bytes(&mut dest);
-
-        assert!(rng.key.iter().any(|&byte| byte != 0));
-        assert!(rng.state.iter().any(|&byte| byte != 0));
-        assert!(rng.entropy_buffer.iter().any(|&byte| byte != 0));
-        assert!(rng.nonce.iter().any(|&byte| byte != 0));
-        assert_ne!(rng.counter, 0);
-
+        rng.fill_bytes(&mut [0; 64]);
         rng.wipe();
-
         assert!(rng.key.iter().all(|&byte| byte == 0));
-        assert!(rng.state.iter().all(|&byte| byte == 0));
         assert!(rng.entropy_buffer.iter().all(|&byte| byte == 0));
-        assert!(rng.nonce.iter().all(|&byte| byte == 0));
-        assert_eq!(rng.counter, 0);
         assert_eq!(rng.buffer_offset, 0);
+        assert_eq!(rng.generated_bytes, 0);
+        assert_eq!(rng.process_id, 0);
     }
 }

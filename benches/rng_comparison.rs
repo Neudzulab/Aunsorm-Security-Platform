@@ -1,41 +1,20 @@
 //! RNG Performance and Quality Comparison
 //!
-//! Compares old HKDF-based RNG (removed, kept for historical benchmark reference)
-//! vs new ChaCha20-based sealed RNG.
+//! Compares native fast-key-erasure RNG with standard ChaCha20Rng.
+//! The external generator is used only as a benchmark reference.
 //!
-//! **Result:** ChaCha20 RNG is 5.5-6.3x faster with same cryptographic quality.
+//! Results are hardware-dependent measurements, not security certifications.
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use rand_core::RngCore;
+use rand_chacha::ChaCha20Rng;
+use rand_core::{RngCore, SeedableRng};
 
 // Only the new sealed RNG is used in production
 use aunsorm_core::AunsormNativeRng;
 
-/// Chi-square test for uniformity
-fn chi_square_test(samples: &[u64], bins: usize, range: u64) -> (f64, f64) {
-    let mut counts = vec![0u64; bins];
-    let bin_size = range / bins as u64;
-
-    for &sample in samples {
-        let bin = ((sample % range) / bin_size).min((bins - 1) as u64) as usize;
-        counts[bin] += 1;
-    }
-
-    let expected = samples.len() as f64 / bins as f64;
-    let chi_square: f64 = counts
-        .iter()
-        .map(|&observed| {
-            let diff = observed as f64 - expected;
-            (diff * diff) / expected
-        })
-        .sum();
-
-    // Approximate p-value (simplified)
-    let df = bins - 1;
-    let p_value = if chi_square < df as f64 { 0.5 } else { 0.1 };
-
-    (chi_square, p_value)
-}
+#[path = "../tests/support/rng_statistics.rs"]
+mod rng_statistics;
+use rng_statistics::chi_square_test;
 
 fn bench_rng_throughput(c: &mut Criterion) {
     let mut group = c.benchmark_group("rng_throughput");
@@ -49,6 +28,18 @@ fn bench_rng_throughput(c: &mut Criterion) {
             |b, &size| {
                 let mut rng = AunsormNativeRng::new();
                 let mut buffer = vec![0u8; size];
+                b.iter(|| {
+                    rng.fill_bytes(black_box(&mut buffer));
+                    black_box(&buffer);
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("standard_chacha20", size),
+            size,
+            |b, &size| {
+                let mut rng = ChaCha20Rng::from_entropy();
+                let mut buffer = vec![0_u8; size];
                 b.iter(|| {
                     rng.fill_bytes(black_box(&mut buffer));
                     black_box(&buffer);
@@ -70,6 +61,10 @@ fn bench_rng_next_u64(c: &mut Criterion) {
         });
     });
 
+    group.bench_function("standard_chacha20", |b| {
+        let mut rng = ChaCha20Rng::from_entropy();
+        b.iter(|| black_box(rng.next_u64()));
+    });
     group.finish();
 }
 
@@ -85,7 +80,11 @@ fn bench_rng_statistical_quality(c: &mut Criterion) {
         b.iter(|| {
             let mut rng = AunsormNativeRng::new();
             let samples: Vec<u64> = (0..SAMPLES).map(|_| rng.next_u64()).collect();
-            let (chi_sq, p_val) = chi_square_test(&samples, BINS, RANGE);
+            let mut counts = vec![0_u64; BINS];
+            for sample in samples {
+                counts[(sample % RANGE) as usize] += 1;
+            }
+            let (chi_sq, p_val) = chi_square_test(&counts, SAMPLES as f64 / BINS as f64);
             black_box((chi_sq, p_val));
         });
     });

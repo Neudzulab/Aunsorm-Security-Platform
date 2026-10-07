@@ -12,6 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Harden `AunsormNativeRng`: redact Debug state, erase consumed output, replace
+  the key on each 1 KiB refill, and reseed from the OS after 64 KiB or a PID
+  change. Add fallible initialization and explicit reseeding for snapshot
+  restores; block output after entropy failures until reseeding succeeds.
+- Remove unvalidated floating-point output mixing and timestamp entropy claims.
+  Use actual chi-square upper-tail probabilities in RNG tests/benchmarks and
+  correct the historical entropy report. These changes do not constitute NIST
+  certification. Existing `new()` and `RngCore` call sites remain compatible.
+
+
 ### Added
 - `aunsorm-server` now exposes first-party application session endpoints
   (`POST /sessions`, `POST /sessions/{sessionId}/keys`) plus

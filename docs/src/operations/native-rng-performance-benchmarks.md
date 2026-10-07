@@ -1,5 +1,9 @@
 # Native RNG Performance Benchmarks
 
+> Historical measurements of the earlier implementation. The state lifecycle
+> was revised in [ADR 0008](../../architecture/adr/0008-native-rng-state-hardening.md).
+> Re-run benchmarks for the revised implementation; throughput is not a security guarantee.
+
 **Benchmark Date:** 2025-11-07  
 **Implementation:** ChaCha20-based AunsormNativeRng (crates/core/src/sealed/aunsorm_rng.rs)
 

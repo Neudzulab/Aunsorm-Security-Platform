@@ -6,6 +6,8 @@ license = "Apache-2.0"
 publish = false
 
 [dependencies]
+statrs = { workspace = true }
+rand_chacha = { workspace = true }
 criterion = { workspace = true }
 aunsorm-core = { path = "../crates/core" }
 aunsorm-packet = { path = "../crates/packet" }

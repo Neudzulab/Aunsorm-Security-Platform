@@ -5,7 +5,7 @@ Aunsorm is a zero-trust cryptographic security platform that unifies gateway, au
 
 ## Core Features
 - End-to-end cryptographic services (JWT/OAuth2, KMS, X.509, ACME) exposed through a single gateway.
-- Native entropy pipeline powered by **AunsormNativeRng** with calibrated seeding and reproducible testing flows.
+- Native randomness powered by **AunsormNativeRng** with OS seeding, fast key erasure, and reproducible validation flows.
 - PQC coverage with ML-KEM key encapsulation and SLH-DSA / ML-DSA signature families.
 - Clock attestation and calibration workflow to mitigate replay and skew-based attacks.
 - Hardened deployment defaults with port isolation and containerized runtime profiles.
@@ -123,14 +123,17 @@ Ensure the `git` CLI is available so `cargo deny check` can fetch the advisory d
 - **Client guidance:** Treat unversioned routes as compatibility paths and prepare integrations to follow versioned prefixes once they are announced in release notes.
 
 ## Security Guarantees
-- **Deterministic entropy**: All cryptographic random generation uses `AunsormNativeRng`; OS RNG is only allowed for bootstrapping entropy.
+- **Native randomness**: All cryptographic random generation uses `AunsormNativeRng`; OS RNG access is confined to its seeding and reseeding.
 - **Replay resistance**: Clock attestation with strict max-age windows and calibration fingerprints gates every time-sensitive operation.
 - **Strict transport**: TLS-first posture with explicit `Content-Type` and structured errors across services.
 - **Memory hygiene**: Secrets and key materials rely on zeroization strategies and strict backend interfaces.
 
 ## Native RNG Compliance
 `AunsormNativeRng` is the mandated RNG for all crates and services. Implementations must:
-- Seed from approved entropy sources once during bootstrap.
+- Seed at startup and reseed from OS randomness after 64 KiB of generated output or a PID change.
+- Call `reseed()` before using an RNG restored from a same-PID snapshot.
+- Use `try_new()`/`try_fill_bytes()` to handle OS failures; infallible methods panic on failure.
+- Redact state in Debug output and erase consumed buffered bytes. See [ADR 0008](docs/architecture/adr/0008-native-rng-state-hardening.md).
 - Reuse the RNG instance per request flow to avoid cross-contamination.
 - Be wired into tests and examples (no `rand::thread_rng`, `OsRng`, or HTTP randomness sources).
 
