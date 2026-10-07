@@ -223,6 +223,122 @@ fn rejects_replay_in_memory_store() {
         .expect("purge");
 }
 
+fn signed_token_inside_expiration_leeway() -> (Ed25519KeyPair, String, SystemTime) {
+    let key = Ed25519KeyPair::generate("kid-leeway-replay").expect("key");
+    let mut claims = Claims::new();
+    let now = SystemTime::now();
+    claims.expiration = Some(now - Duration::from_secs(1));
+    let token = JwtSigner::new(key.clone())
+        .sign(&mut claims)
+        .expect("signed token");
+    (key, token, now)
+}
+
+#[test]
+fn expiration_leeway_does_not_reopen_consumed_in_memory_jti() {
+    let (key, token, now) = signed_token_inside_expiration_leeway();
+    let store = Arc::new(InMemoryJtiStore::default());
+    let verifier = JwtVerifier::new([key.public_key()])
+        .with_store(store.clone())
+        .with_leeway(Duration::from_secs(3600));
+    let options = VerificationOptions {
+        now: Some(now),
+        ..VerificationOptions::default()
+    };
+    let token_claims = verifier
+        .verify(&token, &options)
+        .expect("first use within leeway");
+    let deadline = token_claims.expiration.unwrap() + Duration::from_secs(3600);
+    assert_eq!(
+        store
+            .purge_expired(deadline)
+            .expect("purge at inclusive deadline"),
+        0
+    );
+    let boundary = VerificationOptions {
+        now: Some(deadline),
+        ..options
+    };
+    assert!(matches!(
+        verifier.verify(&token, &boundary),
+        Err(JwtError::Replay)
+    ));
+    assert_eq!(
+        store
+            .purge_expired(deadline + Duration::from_secs(1))
+            .expect("purge after acceptance"),
+        1
+    );
+    let expired = VerificationOptions {
+        now: Some(deadline + Duration::from_secs(1)),
+        ..boundary
+    };
+    assert!(matches!(
+        verifier.verify(&token, &expired),
+        Err(JwtError::Expired)
+    ));
+}
+
+#[cfg(feature = "sqlite")]
+#[test]
+fn expiration_leeway_consumption_survives_sqlite_reopen() {
+    let (key, token, now) = signed_token_inside_expiration_leeway();
+    let dir = tempfile::tempdir().expect("temporary database directory");
+    let path = dir.path().join("leeway.db");
+    let options = VerificationOptions {
+        now: Some(now),
+        ..VerificationOptions::default()
+    };
+    {
+        let store = Arc::new(SqliteJtiStore::open(&path).expect("store"));
+        let verifier = JwtVerifier::new([key.public_key()])
+            .with_store(store.clone())
+            .with_leeway(Duration::from_secs(3600));
+        let token_claims = verifier
+            .verify(&token, &options)
+            .expect("first use within leeway");
+        let deadline = token_claims.expiration.unwrap() + Duration::from_secs(3600);
+        assert_eq!(
+            store
+                .purge_expired(deadline)
+                .expect("purge at inclusive deadline"),
+            0
+        );
+        let boundary = VerificationOptions {
+            now: Some(deadline),
+            ..options.clone()
+        };
+        assert!(matches!(
+            verifier.verify(&token, &boundary),
+            Err(JwtError::Replay)
+        ));
+    }
+    let reopened = Arc::new(SqliteJtiStore::open(&path).expect("reopened WAL store"));
+    let verifier = JwtVerifier::new([key.public_key()])
+        .with_store(reopened)
+        .with_leeway(Duration::from_secs(3600));
+    assert!(matches!(
+        verifier.verify(&token, &options),
+        Err(JwtError::Replay)
+    ));
+}
+
+#[test]
+fn replay_retention_time_overflow_is_an_error_not_an_unbounded_acceptance() {
+    let (key, token, now) = signed_token_inside_expiration_leeway();
+    let verifier = JwtVerifier::new([key.public_key()])
+        .with_store(Arc::new(InMemoryJtiStore::default()))
+        .with_leeway(Duration::MAX);
+    let options = VerificationOptions {
+        now: Some(now),
+        ..VerificationOptions::default()
+    };
+    assert!(matches!(
+        verifier.verify(&token, &options),
+        Err(JwtError::TimeConversion)
+    ));
+}
+
 #[test]
 fn replay_namespace_partitions_jti_replay_scope() {
     let key = Ed25519KeyPair::generate("kid-replay-scope").expect("key");

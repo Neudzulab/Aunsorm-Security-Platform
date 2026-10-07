@@ -109,7 +109,7 @@ async fn sitemap() -> impl IntoResponse {
     Response::builder()
         .status(StatusCode::OK)
         .header(axum::http::header::CONTENT_TYPE, "application/xml")
-        .body(axum::body::Body::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset><url><loc>http://localhost/health</loc></url><url><loc>http://localhost/broken</loc></url></urlset>"))
+        .body(axum::body::Body::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?><urlset><url><loc>/health</loc></url><url><loc>/broken</loc></url></urlset>"))
         .unwrap()
 }
 

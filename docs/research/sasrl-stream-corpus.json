@@ -1,0 +1,9 @@
+{
+  "cases": 2768,
+  "failed": 0,
+  "corpus_sha256": "75019e74e970db73cf6b66fe49971b278cb7a2f162c8504604af81ab4a99c625",
+  "coverage_guided": false,
+  "controls": "Eight allowed rates; valid 64-sample WAVs, every truncation and single high-bit byte flip; accepted PCM prefixes compare streaming/offline floats exactly",
+  "max_stream_prefix_samples": 64,
+  "source_authentication_verified": false
+}

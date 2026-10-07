@@ -57,7 +57,7 @@ mod acme;
 
 // Global registered devices set for testing
 static REGISTERED_DEVICES: Mutex<Option<HashSet<String>>> = Mutex::new(None);
-static QUIC_REPLAY_GRACE_TRACKER: Mutex<Option<HashMap<String, SystemTime>>> = Mutex::new(None);
+static QUIC_REPLAY_GRACE_TRACKER: Mutex<Option<GraceReplayTracker>> = Mutex::new(None);
 
 fn service_mode_from_binary_name(name: &str) -> Option<&'static str> {
     match name {
@@ -1590,9 +1590,10 @@ pub async fn security_encrypt(
     let mut rng = AunsormNativeRng::new();
     rng.fill_bytes(&mut iv);
 
+    let nonce = Nonce::from(iv);
     let encrypted = cipher
         .encrypt(
-            Nonce::from_slice(&iv),
+            &nonce,
             Payload {
                 msg: payload.as_slice(),
                 aad: aad.as_slice(),
@@ -1648,9 +1649,14 @@ pub async fn security_decrypt(
 
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|err| ApiError::server_error(format!("AES-256-GCM init failed: {err}")))?;
+    let nonce_bytes: [u8; 12] = iv
+        .as_slice()
+        .try_into()
+        .map_err(|_| ApiError::invalid_request("iv_b64 12 bayt decode edilmelidir"))?;
+    let nonce = Nonce::from(nonce_bytes);
     let decrypted = cipher
         .decrypt(
-            Nonce::from_slice(iv.as_slice()),
+            &nonce,
             Payload {
                 msg: combined.as_slice(),
                 aad: aad.as_slice(),
@@ -1974,6 +1980,16 @@ async fn verify_token_for_audience(
         ..VerificationOptions::default()
     };
 
+    let grace_context = GraceReplayContext {
+        issuer: &issuer,
+        audience: expected_audience,
+        token: normalized_token.as_ref(),
+        scope_digest: grace_scope_fingerprint(
+            expected_audience,
+            request_purpose.as_deref(),
+            request_transport.as_deref(),
+        ),
+    };
     match verifier.verify(normalized_token.as_ref(), &options) {
         Ok(claims) => {
             let (payload, room_id) = match build_jwt_payload(&claims, &issuer, expected_audience) {
@@ -2048,6 +2064,7 @@ async fn verify_token_for_audience(
                     room_id.as_deref(),
                     purpose.as_deref(),
                     request_transport.as_deref(),
+                    grace_context,
                 ) {
                     record_quic_replay_acceptance(
                         &key,
@@ -2109,7 +2126,12 @@ async fn verify_token_for_audience(
                         };
                     }
                 };
-                match stateless_verifier.verify(normalized_token.as_ref(), &options) {
+                // The primary verifier has already returned Replay after validating
+                // a mandatory JTI. Recheck signature/claims without consuming again;
+                // the grace key below still requires a nonblank JTI and active ledger.
+                let mut signature_options = options.clone();
+                signature_options.require_jti = false;
+                match stateless_verifier.verify(normalized_token.as_ref(), &signature_options) {
                     Ok(claims) => {
                         let purpose = resolved_purpose_from_claims(&claims, request_purpose);
                         let room_id = extract_room_id_from_claims(&claims);
@@ -2119,13 +2141,45 @@ async fn verify_token_for_audience(
                             room_id.as_deref(),
                             purpose.as_deref(),
                             request_transport.as_deref(),
+                            grace_context,
                         );
                         let now = SystemTime::now();
-                        let within_grace = replay_key.as_deref().is_some_and(|key| {
+                        let within_grace = replay_key.as_ref().is_some_and(|key| {
                             is_quic_replay_within_grace(key, now, Duration::from_millis(grace_ms))
                         });
 
                         if within_grace {
+                            match state
+                                .is_token_active(claims.jwt_id.as_deref().unwrap_or(""), now)
+                                .await
+                            {
+                                Ok(true) => {}
+                                inactive => {
+                                    let (reason, error) = match inactive {
+                                        Err(error) => (
+                                            "grace-token-ledger-error",
+                                            format!("Token ledger error: {error}"),
+                                        ),
+                                        _ => (
+                                            "grace-token-ledger-inactive",
+                                            "Token revoked or expired".to_owned(),
+                                        ),
+                                    };
+                                    return JwtVerifyResponse {
+                                        valid: false,
+                                        payload: None,
+                                        error: Some(error),
+                                        replay: Some(ReplayDiagnostics {
+                                            jti: claims.jwt_id.clone(),
+                                            sub: claims.subject,
+                                            room_id,
+                                            purpose,
+                                            transport: request_transport,
+                                            reason: reason.to_owned(),
+                                        }),
+                                    };
+                                }
+                            }
                             let (payload, _) =
                                 match build_jwt_payload(&claims, &issuer, expected_audience) {
                                     Ok(value) => value,
@@ -2383,57 +2437,583 @@ fn extract_room_id_from_claims(claims: &Claims) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// Volatile grace identity. Option values and field boundaries participate in
+/// equality directly; no delimiter, sentinel or persistent-key interpretation.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct GraceReplayKey {
+    issuer: String,
+    audience: String,
+    token_digest: [u8; 32],
+    scope_digest: [u8; 32],
+    jti: String,
+    subject: Option<String>,
+    room_id: Option<String>,
+    purpose: Option<String>,
+    transport: Option<String>,
+}
+
+#[derive(Clone, Copy)]
+struct GraceReplayContext<'a> {
+    issuer: &'a str,
+    audience: &'a str,
+    token: &'a str,
+    scope_digest: Option<[u8; 32]>,
+}
+
 fn build_grace_replay_key(
     jti: Option<&str>,
     subject: Option<&str>,
     room_id: Option<&str>,
     purpose: Option<&str>,
     transport: Option<&str>,
-) -> Option<String> {
-    let jti = jti?.trim();
-    if jti.is_empty() {
+    context: GraceReplayContext<'_>,
+) -> Option<GraceReplayKey> {
+    let jti = jti?;
+    if jti.trim().is_empty() {
         return None;
     }
-    let subject = subject.unwrap_or("<none>");
-    let room_id = room_id.unwrap_or("<none>");
-    let purpose = purpose.unwrap_or("<none>");
-    let transport = transport.unwrap_or("<none>");
-    Some(format!(
-        "jti={jti};sub={subject};roomId={room_id};purpose={purpose};transport={transport}"
-    ))
+    Some(GraceReplayKey {
+        issuer: context.issuer.to_owned(),
+        audience: context.audience.to_owned(),
+        token_digest: Sha256::digest(context.token.as_bytes()).into(),
+        scope_digest: context.scope_digest?,
+        jti: jti.to_owned(),
+        subject: subject.map(str::to_owned),
+        room_id: room_id.map(str::to_owned),
+        purpose: purpose.map(str::to_owned),
+        transport: transport.map(str::to_owned),
+    })
 }
 
-fn is_quic_replay_within_grace(key: &str, now: SystemTime, grace: Duration) -> bool {
-    let mut guard = match QUIC_REPLAY_GRACE_TRACKER.lock() {
-        Ok(guard) => guard,
-        Err(_) => return false,
+const MAX_QUIC_GRACE_ENTRIES: usize = 4096;
+
+/// Only this fixed-size fingerprint is retained. Raw token/claim strings are
+/// never retained in the global tracker. Lengths and option tags preserve all
+/// typed field boundaries under SHA-256 collision resistance.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct GraceReplayId([u8; 32]);
+
+impl GraceReplayKey {
+    fn fingerprint(&self) -> Option<GraceReplayId> {
+        let mut digest = Sha256::new();
+        digest.update(b"aunsorm-quic-grace-identity-v1\0");
+        digest.update(self.token_digest);
+        digest.update(self.scope_digest);
+        update_grace_fields(
+            &mut digest,
+            &[
+                Some(self.issuer.as_str()),
+                Some(self.audience.as_str()),
+                Some(self.jti.as_str()),
+                self.subject.as_deref(),
+                self.room_id.as_deref(),
+                self.purpose.as_deref(),
+                self.transport.as_deref(),
+            ],
+        )?;
+        Some(GraceReplayId(digest.finalize().into()))
+    }
+}
+
+fn update_grace_fields(digest: &mut Sha256, fields: &[Option<&str>]) -> Option<()> {
+    for value in fields {
+        if let Some(value) = value {
+            digest.update([1]);
+            digest.update(u64::try_from(value.len()).ok()?.to_le_bytes());
+            digest.update(value.as_bytes());
+        } else {
+            digest.update([0]);
+        }
+    }
+    Some(())
+}
+
+fn grace_scope_fingerprint(
+    audience: &str,
+    purpose: Option<&str>,
+    transport: Option<&str>,
+) -> Option<[u8; 32]> {
+    let mut digest = Sha256::new();
+    digest.update(b"aunsorm-quic-grace-verification-scope-v1\0");
+    update_grace_fields(&mut digest, &[Some(audience), purpose, transport])?;
+    Some(digest.finalize().into())
+}
+
+#[derive(Clone, Copy)]
+struct GraceAcceptance {
+    accepted_at: SystemTime,
+    expires_at: SystemTime,
+}
+
+#[derive(Default)]
+struct GraceReplayTracker {
+    entries: HashMap<GraceReplayId, GraceAcceptance>,
+}
+
+impl GraceReplayTracker {
+    fn prune(&mut self, now: SystemTime) {
+        // Rollback invalidates grace, rather than retaining future records forever.
+        self.entries
+            .retain(|_, entry| now >= entry.accepted_at && now <= entry.expires_at);
+    }
+
+    fn record(&mut self, identity: GraceReplayId, now: SystemTime, grace: Duration) -> bool {
+        self.prune(now);
+        if grace.is_zero() {
+            return false;
+        }
+        let Some(expires_at) = now.checked_add(grace) else {
+            return false;
+        };
+        if self.entries.contains_key(&identity) {
+            // A duplicate record call must not refresh the original deadline.
+            return true;
+        }
+        if self.entries.len() >= MAX_QUIC_GRACE_ENTRIES {
+            return false;
+        }
+        self.entries.insert(
+            identity,
+            GraceAcceptance {
+                accepted_at: now,
+                expires_at,
+            },
+        );
+        true
+    }
+
+    fn within(
+        &mut self,
+        identity: GraceReplayId,
+        now: SystemTime,
+        requested_grace: Duration,
+    ) -> bool {
+        self.prune(now);
+        if requested_grace.is_zero() {
+            return false;
+        }
+        self.entries
+            .get(&identity)
+            .and_then(|entry| now.duration_since(entry.accepted_at).ok())
+            .is_some_and(|elapsed| elapsed <= requested_grace)
+    }
+}
+
+fn is_quic_replay_within_grace(key: &GraceReplayKey, now: SystemTime, grace: Duration) -> bool {
+    let Some(identity) = key.fingerprint() else {
+        return false;
     };
-    let map = guard.get_or_insert_with(HashMap::new);
-    prune_quic_replay_tracker(map, now, grace);
-    map.get(key)
-        .and_then(|timestamp| now.duration_since(*timestamp).ok())
-        .is_some_and(|elapsed| elapsed <= grace)
+    let Ok(mut guard) = QUIC_REPLAY_GRACE_TRACKER.lock() else {
+        return false;
+    };
+    guard
+        .get_or_insert_with(GraceReplayTracker::default)
+        .within(identity, now, grace)
 }
 
-fn record_quic_replay_acceptance(key: &str, now: SystemTime, grace: Duration) {
+fn record_quic_replay_acceptance(key: &GraceReplayKey, now: SystemTime, grace: Duration) {
+    let Some(identity) = key.fingerprint() else {
+        return;
+    };
     let Ok(mut guard) = QUIC_REPLAY_GRACE_TRACKER.lock() else {
         return;
     };
-    let map = guard.get_or_insert_with(HashMap::new);
-    prune_quic_replay_tracker(map, now, grace);
-    map.insert(key.to_string(), now);
+    let admitted = guard
+        .get_or_insert_with(GraceReplayTracker::default)
+        .record(identity, now, grace);
+    if !admitted {
+        tracing::debug!("QUIC reconnect grace not recorded; normal replay policy remains in force");
+    }
 }
 
-fn prune_quic_replay_tracker(
-    map: &mut HashMap<String, SystemTime>,
-    now: SystemTime,
-    grace: Duration,
-) {
-    map.retain(|_, timestamp| {
-        now.duration_since(*timestamp)
-            .map(|elapsed| elapsed <= grace)
-            .unwrap_or(true)
-    });
+#[cfg(test)]
+mod grace_key_tests {
+    use super::{
+        build_grace_replay_key, grace_scope_fingerprint, GraceReplayContext, GraceReplayTracker,
+        MAX_QUIC_GRACE_ENTRIES,
+    };
+    use std::collections::HashMap;
+    use std::time::{Duration, SystemTime};
+
+    const CONTEXT: GraceReplayContext<'static> = GraceReplayContext {
+        issuer: "issuer",
+        audience: "audience",
+        token: "exact.signed.token",
+        scope_digest: Some([1; 32]),
+    };
+
+    #[test]
+    fn delimiter_shifted_fields_never_share_grace() {
+        let first =
+            build_grace_replay_key(Some("a;sub=b"), Some("c"), None, None, None, CONTEXT).unwrap();
+        let second =
+            build_grace_replay_key(Some("a"), Some("b;sub=c"), None, None, None, CONTEXT).unwrap();
+        assert_ne!(first, second);
+        assert_ne!(first.fingerprint(), second.fingerprint());
+        let entries = HashMap::from([(first, SystemTime::now())]);
+        assert!(!entries.contains_key(&second));
+    }
+
+    #[test]
+    fn absent_optional_values_are_distinct_from_sentinel_empty_and_delimiter_strings() {
+        let absent = build_grace_replay_key(Some("id"), None, None, None, None, CONTEXT).unwrap();
+        for value in ["<none>", "", ";roomId=x", "default", "é\0"] {
+            for options in [
+                [Some(value), None, None, None],
+                [None, Some(value), None, None],
+                [None, None, Some(value), None],
+                [None, None, None, Some(value)],
+            ] {
+                let present = build_grace_replay_key(
+                    Some("id"),
+                    options[0],
+                    options[1],
+                    options[2],
+                    options[3],
+                    CONTEXT,
+                )
+                .unwrap();
+                assert_ne!(absent, present);
+                assert_ne!(absent.fingerprint(), present.fingerprint());
+            }
+        }
+    }
+
+    #[test]
+    fn only_the_same_signed_token_issuer_and_verified_audience_can_match() {
+        let original = build_grace_replay_key(Some("id"), None, None, None, None, CONTEXT).unwrap();
+        assert_eq!(
+            original,
+            build_grace_replay_key(Some("id"), None, None, None, None, CONTEXT).unwrap()
+        );
+        for context in [
+            GraceReplayContext {
+                issuer: "different",
+                ..CONTEXT
+            },
+            GraceReplayContext {
+                audience: "different",
+                ..CONTEXT
+            },
+            GraceReplayContext {
+                token: "another.signed.token",
+                ..CONTEXT
+            },
+        ] {
+            assert_ne!(
+                original,
+                build_grace_replay_key(Some("id"), None, None, None, None, context).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn nonblank_jti_bytes_are_preserved_and_blank_jtis_never_create_grace() {
+        let exact = build_grace_replay_key(Some("id"), None, None, None, None, CONTEXT).unwrap();
+        let spaced = build_grace_replay_key(Some(" id "), None, None, None, None, CONTEXT).unwrap();
+        assert_ne!(exact, spaced);
+        assert_eq!(spaced.jti, " id ");
+        for value in [None, Some(""), Some(" \t\n")] {
+            assert!(build_grace_replay_key(value, None, None, None, None, CONTEXT).is_none());
+        }
+    }
+
+    #[test]
+    fn exact_expiry_boundary_is_retained_and_expired_entries_are_removed() {
+        let key = build_grace_replay_key(Some("id"), None, None, None, None, CONTEXT).unwrap();
+        let now = SystemTime::now();
+        let grace = Duration::from_millis(2500);
+        let mut tracker = GraceReplayTracker::default();
+        assert!(tracker.record(key.fingerprint().unwrap(), now, grace));
+        assert!(tracker.within(
+            key.fingerprint().unwrap(),
+            now + grace,
+            Duration::from_secs(15)
+        ));
+        assert!(!tracker.within(
+            key.fingerprint().unwrap(),
+            now + grace + Duration::from_micros(1),
+            Duration::from_secs(15)
+        ));
+        assert!(tracker.entries.is_empty());
+    }
+
+    #[test]
+    fn a_longer_retry_or_duplicate_record_cannot_extend_original_grace() {
+        let key =
+            build_grace_replay_key(Some("deadline"), None, None, None, None, CONTEXT).unwrap();
+        let now = SystemTime::now();
+        let mut tracker = GraceReplayTracker::default();
+        assert!(tracker.record(key.fingerprint().unwrap(), now, Duration::from_secs(1)));
+        assert!(tracker.record(
+            key.fingerprint().unwrap(),
+            now + Duration::from_millis(500),
+            Duration::from_secs(15)
+        ));
+        assert!(!tracker.within(
+            key.fingerprint().unwrap(),
+            now + Duration::from_millis(1001),
+            Duration::from_secs(15)
+        ));
+    }
+
+    #[test]
+    fn a_short_retry_never_prunes_other_live_acceptances() {
+        let first = build_grace_replay_key(Some("short"), None, None, None, None, CONTEXT).unwrap();
+        let second = build_grace_replay_key(Some("long"), None, None, None, None, CONTEXT).unwrap();
+        let now = SystemTime::now();
+        let mut tracker = GraceReplayTracker::default();
+        assert!(tracker.record(first.fingerprint().unwrap(), now, Duration::from_secs(15)));
+        assert!(tracker.record(second.fingerprint().unwrap(), now, Duration::from_secs(15)));
+        let retry_at = now + Duration::from_secs(2);
+        assert!(!tracker.within(
+            first.fingerprint().unwrap(),
+            retry_at,
+            Duration::from_secs(1)
+        ));
+        assert!(tracker.within(
+            second.fingerprint().unwrap(),
+            retry_at,
+            Duration::from_secs(15)
+        ));
+        assert_eq!(tracker.entries.len(), 2);
+    }
+
+    #[test]
+    fn verification_scope_absence_and_delimiter_collisions_remain_distinct() {
+        let scopes = [
+            grace_scope_fingerprint("aud", None, Some("quic")),
+            grace_scope_fingerprint("aud", Some("default"), Some("quic")),
+            grace_scope_fingerprint("aud", Some("quic-join"), Some("quic")),
+            grace_scope_fingerprint("aud;purpose=x", Some("y"), Some("quic")),
+            grace_scope_fingerprint("aud", Some("x;purpose=y"), Some("quic")),
+        ];
+        for (index, scope) in scopes.iter().enumerate() {
+            assert!(scope.is_some());
+            for other in scopes.iter().skip(index + 1) {
+                assert_ne!(scope, other);
+            }
+        }
+        let key = |scope_digest| {
+            build_grace_replay_key(
+                Some("same-jti"),
+                None,
+                None,
+                Some("quic-join"),
+                Some("quic"),
+                GraceReplayContext {
+                    scope_digest,
+                    ..CONTEXT
+                },
+            )
+            .unwrap()
+        };
+        let original = key(scopes[0]);
+        let different = key(scopes[2]);
+        let now = SystemTime::now();
+        let mut tracker = GraceReplayTracker::default();
+        assert!(tracker.record(
+            original.fingerprint().unwrap(),
+            now,
+            Duration::from_secs(15)
+        ));
+        assert!(!tracker.within(
+            different.fingerprint().unwrap(),
+            now,
+            Duration::from_secs(15)
+        ));
+    }
+
+    #[test]
+    fn capacity_refuses_new_grace_without_evicting_existing_live_entries() {
+        let now = SystemTime::now();
+        let grace = Duration::from_secs(1);
+        let mut tracker = GraceReplayTracker::default();
+        for number in 0..MAX_QUIC_GRACE_ENTRIES {
+            let key =
+                build_grace_replay_key(Some(&number.to_string()), None, None, None, None, CONTEXT)
+                    .unwrap();
+            assert!(tracker.record(key.fingerprint().unwrap(), now, grace));
+        }
+        let first = build_grace_replay_key(Some("0"), None, None, None, None, CONTEXT).unwrap();
+        let additional =
+            build_grace_replay_key(Some("additional"), None, None, None, None, CONTEXT).unwrap();
+        assert!(!tracker.record(additional.fingerprint().unwrap(), now, grace));
+        assert_eq!(tracker.entries.len(), MAX_QUIC_GRACE_ENTRIES);
+        assert!(tracker.within(first.fingerprint().unwrap(), now, grace));
+        assert!(!tracker.within(additional.fingerprint().unwrap(), now, grace));
+        assert!(tracker.record(
+            additional.fingerprint().unwrap(),
+            now + Duration::from_secs(2),
+            grace
+        ));
+        assert_eq!(tracker.entries.len(), 1);
+    }
+
+    #[test]
+    fn zero_grace_and_time_overflow_do_not_create_acceptances() {
+        let key =
+            build_grace_replay_key(Some("disabled"), None, None, None, None, CONTEXT).unwrap();
+        let now = SystemTime::now();
+        let mut tracker = GraceReplayTracker::default();
+        assert!(!tracker.record(key.fingerprint().unwrap(), now, Duration::ZERO));
+        assert!(!tracker.record(key.fingerprint().unwrap(), now, Duration::MAX));
+        assert!(tracker.entries.is_empty());
+        assert!(tracker.record(key.fingerprint().unwrap(), now, Duration::from_secs(1)));
+        assert!(!tracker.within(key.fingerprint().unwrap(), now, Duration::ZERO));
+    }
+
+    #[test]
+    fn clock_rollback_invalidates_grace_and_frees_future_records() {
+        let key =
+            build_grace_replay_key(Some("rollback"), None, None, None, None, CONTEXT).unwrap();
+        let now = SystemTime::now();
+        let mut tracker = GraceReplayTracker::default();
+        assert!(tracker.record(key.fingerprint().unwrap(), now, Duration::from_secs(15)));
+        assert!(!tracker.within(
+            key.fingerprint().unwrap(),
+            now - Duration::from_micros(1),
+            Duration::from_secs(15)
+        ));
+        assert!(tracker.entries.is_empty());
+        assert!(!tracker.within(key.fingerprint().unwrap(), now, Duration::from_secs(15)));
+    }
+
+    #[tokio::test]
+    async fn real_verifier_graces_only_the_original_signed_token() {
+        let state = super::build_test_state();
+        let mut claims = aunsorm_jwt::Claims::new();
+        claims.issuer = Some(state.issuer().to_owned());
+        claims.subject = Some("grace-regression-user".to_owned());
+        claims.audience = Some(aunsorm_jwt::Audience::Single(
+            "grace-regression-audience".to_owned(),
+        ));
+        claims.jwt_id = Some("grace-exact-signed-token-regression".to_owned());
+        claims.set_expiration_from_now(Duration::from_secs(60));
+        let original = state.signer().sign(&mut claims).unwrap();
+        state
+            .record_token(
+                claims.jwt_id.as_deref().unwrap(),
+                claims.expiration.unwrap(),
+                claims.subject.as_deref(),
+                Some("grace-regression-audience"),
+            )
+            .await
+            .unwrap();
+        let request = |token: String| super::JwtVerifyRequest {
+            token,
+            token_purpose: Some("quic-join".to_owned()),
+            token_intent: None,
+            transport: Some("quic".to_owned()),
+            reconnect_grace_ms: Some(15_000),
+        };
+        let first = super::verify_token_for_audience(
+            &state,
+            request(original.clone()),
+            "grace-regression-audience",
+        )
+        .await;
+        assert!(first.valid, "first token rejected: {:?}", first.error);
+        let retry = super::verify_token_for_audience(
+            &state,
+            request(original.clone()),
+            "grace-regression-audience",
+        )
+        .await;
+        assert!(retry.valid, "exact retry rejected: {:?}", retry.error);
+        assert_eq!(retry.replay.unwrap().reason, "reconnect-grace-accepted");
+        // A valid new signature with the same consumed JTI is not an exact retry.
+        claims
+            .extras
+            .insert("accessTier".to_owned(), serde_json::json!("changed"));
+        let different = state.signer().sign(&mut claims).unwrap();
+        let rejected = super::verify_token_for_audience(
+            &state,
+            request(different),
+            "grace-regression-audience",
+        )
+        .await;
+        assert!(!rejected.valid);
+        state
+            .revoke_access_token(claims.jwt_id.as_deref().unwrap(), None)
+            .await
+            .unwrap();
+        let revoked = super::verify_token_for_audience(
+            &state,
+            request(original),
+            "grace-regression-audience",
+        )
+        .await;
+        assert!(!revoked.valid);
+        assert_eq!(
+            revoked.replay.unwrap().reason,
+            "grace-token-ledger-inactive"
+        );
+    }
+
+    #[tokio::test]
+    async fn real_verifier_never_inherits_grace_from_a_different_request_scope() {
+        let state = super::build_test_state();
+        let mut claims = aunsorm_jwt::Claims::new();
+        claims.issuer = Some(state.issuer().to_owned());
+        claims.subject = Some("scope-isolation-user".to_owned());
+        claims.audience = Some(aunsorm_jwt::Audience::Single(
+            "scope-isolation-audience".to_owned(),
+        ));
+        claims.jwt_id = Some("scope-isolation-jti".to_owned());
+        claims.set_expiration_from_now(Duration::from_secs(60));
+        claims
+            .extras
+            .insert("tokenPurpose".to_owned(), serde_json::json!("quic-join"));
+        let token = state.signer().sign(&mut claims).unwrap();
+        state
+            .record_token(
+                claims.jwt_id.as_deref().unwrap(),
+                claims.expiration.unwrap(),
+                claims.subject.as_deref(),
+                Some("scope-isolation-audience"),
+            )
+            .await
+            .unwrap();
+        let request = |purpose: Option<&str>, grace_ms| super::JwtVerifyRequest {
+            token: token.clone(),
+            token_purpose: purpose.map(str::to_owned),
+            token_intent: None,
+            transport: Some("quic".to_owned()),
+            reconnect_grace_ms: Some(grace_ms),
+        };
+        // Claim-resolved purpose is quic-join in both calls, but only the second
+        // request's explicit purpose selects that persistent verification scope.
+        let untracked =
+            super::verify_token_for_audience(&state, request(None, 0), "scope-isolation-audience")
+                .await;
+        assert!(untracked.valid);
+        let tracked = super::verify_token_for_audience(
+            &state,
+            request(Some("quic-join"), 15_000),
+            "scope-isolation-audience",
+        )
+        .await;
+        assert!(tracked.valid);
+        let wrong_scope = super::verify_token_for_audience(
+            &state,
+            request(None, 15_000),
+            "scope-isolation-audience",
+        )
+        .await;
+        assert!(!wrong_scope.valid);
+        let same_scope = super::verify_token_for_audience(
+            &state,
+            request(Some("quic-join"), 15_000),
+            "scope-isolation-audience",
+        )
+        .await;
+        assert!(same_scope.valid);
+        assert_eq!(
+            same_scope.replay.unwrap().reason,
+            "reconnect-grace-accepted"
+        );
+    }
 }
 
 #[derive(Deserialize)]

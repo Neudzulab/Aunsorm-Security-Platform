@@ -1,0 +1,149 @@
+{
+  "kind": "exact_public_curve_reference_not_spectral_recovery",
+  "provenance": {
+    "cremona": "37a1",
+    "lmfdb": "37.a1",
+    "a_invariants": [
+      0,
+      0,
+      1,
+      -1,
+      0
+    ],
+    "source": "https://www.lmfdb.org/EllipticCurve/Q/37/a/1"
+  },
+  "model_sha256": "2489ec7b61e36dff74c7d9e691055639fa6da6e21fae8e37014fcf503ecba3ba",
+  "discriminant": 37,
+  "normalization": "L_unitary(s)=L_E(s+1/2); lambda(p^k)=(alpha^k+beta^k)*p^(-k/2)*log(p)",
+  "exact_fields": [
+    "n",
+    "points_over_fp",
+    "a_p",
+    "frobenius_power_trace"
+  ],
+  "floating_fields": [
+    "unitary_logarithmic_coefficient",
+    "unitary_lambda_at_prime_power"
+  ],
+  "work": {
+    "x_values_upper_bound": 160,
+    "maximum": 1000000
+  },
+  "rows": [
+    {
+      "p": 2,
+      "exponent": 1,
+      "n": 2,
+      "points_over_fp": 5,
+      "a_p": -2,
+      "frobenius_power_trace": -2,
+      "unitary_logarithmic_coefficient": -1.414213562373095,
+      "unitary_lambda_at_prime_power": -0.9802581434685471
+    },
+    {
+      "p": 3,
+      "exponent": 1,
+      "n": 3,
+      "points_over_fp": 7,
+      "a_p": -3,
+      "frobenius_power_trace": -3,
+      "unitary_logarithmic_coefficient": -1.7320508075688774,
+      "unitary_lambda_at_prime_power": -1.9028523017926922
+    },
+    {
+      "p": 5,
+      "exponent": 1,
+      "n": 5,
+      "points_over_fp": 8,
+      "a_p": -2,
+      "frobenius_power_trace": -2,
+      "unitary_logarithmic_coefficient": -0.8944271909999159,
+      "unitary_lambda_at_prime_power": -1.4395250311072008
+    },
+    {
+      "p": 7,
+      "exponent": 1,
+      "n": 7,
+      "points_over_fp": 9,
+      "a_p": -1,
+      "frobenius_power_trace": -1,
+      "unitary_logarithmic_coefficient": -0.3779644730092272,
+      "unitary_lambda_at_prime_power": -0.7354849040109982
+    },
+    {
+      "p": 11,
+      "exponent": 1,
+      "n": 11,
+      "points_over_fp": 17,
+      "a_p": -5,
+      "frobenius_power_trace": -5,
+      "unitary_logarithmic_coefficient": -1.507556722888818,
+      "unitary_lambda_at_prime_power": -3.6149631392905
+    },
+    {
+      "p": 13,
+      "exponent": 1,
+      "n": 13,
+      "points_over_fp": 16,
+      "a_p": -2,
+      "frobenius_power_trace": -2,
+      "unitary_logarithmic_coefficient": -0.5547001962252291,
+      "unitary_lambda_at_prime_power": -1.42277791189169
+    },
+    {
+      "p": 17,
+      "exponent": 1,
+      "n": 17,
+      "points_over_fp": 18,
+      "a_p": 0,
+      "frobenius_power_trace": 0,
+      "unitary_logarithmic_coefficient": 0.0,
+      "unitary_lambda_at_prime_power": 0.0
+    },
+    {
+      "p": 19,
+      "exponent": 1,
+      "n": 19,
+      "points_over_fp": 20,
+      "a_p": 0,
+      "frobenius_power_trace": 0,
+      "unitary_logarithmic_coefficient": 0.0,
+      "unitary_lambda_at_prime_power": 0.0
+    },
+    {
+      "p": 23,
+      "exponent": 1,
+      "n": 23,
+      "points_over_fp": 22,
+      "a_p": 2,
+      "frobenius_power_trace": 2,
+      "unitary_logarithmic_coefficient": 0.41702882811414954,
+      "unitary_lambda_at_prime_power": 1.3075914784276275
+    },
+    {
+      "p": 29,
+      "exponent": 1,
+      "n": 29,
+      "points_over_fp": 24,
+      "a_p": 6,
+      "frobenius_power_trace": 6,
+      "unitary_logarithmic_coefficient": 1.1141720290623112,
+      "unitary_lambda_at_prime_power": 3.751746827349089
+    },
+    {
+      "p": 31,
+      "exponent": 1,
+      "n": 31,
+      "points_over_fp": 36,
+      "a_p": -4,
+      "frobenius_power_trace": -4,
+      "unitary_logarithmic_coefficient": -0.7184212081070996,
+      "unitary_lambda_at_prime_power": -2.4670492360705407
+    }
+  ],
+  "limitations": [
+    "good reduction of the supplied model only",
+    "no complete L-zero spectrum or gamma/pole correction supplied",
+    "no cryptographic curve generation or group-order certification"
+  ]
+}

@@ -13,3 +13,12 @@ türetimi, EXTERNAL kalibrasyon kimlikleri ve oturum ratchet akışı bu crate i
   ile son durumun imzalı özetini kolayca dışa aktarabilirsiniz.
 
 Tüm API'lar tekrar çağrıldığında aynı girdilerle aynı çıktıyı verir ve güvenlik açısından hassas arabellekler temizlenir.
+
+## Native RNG spektral regresyonları
+
+`cargo test -p aunsorm-core --test rng_spectral -- --nocapture`, gerçek
+`AunsormNativeRng` çıktısının dört ardışık 4096 bit bloğunu tüm bağımsız Fourier
+frekanslarında, DC ve Nyquist uçları dahil kontrol eder. Dengeli periyodik kusur
+örnekleri ve bağımsız DFT/Parseval kontrolleri tanılama kodunu doğrular. Bu testler
+entropi kanıtı veya NIST sertifikasyonu değildir. Makaleden alınan fikirler,
+koşulları ve sayısal araç için [SASRL incelemesine](../../docs/sasrl-aunsorm-integration.md) bakın.

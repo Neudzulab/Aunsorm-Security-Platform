@@ -1,0 +1,33 @@
+{
+  "source": "Synthetic decoded QUIC gauge fixture, not a live capture",
+  "input_sha256": "d25f4769c3782061407c2fac034e1dae8a7f7f63b3918d9deb8c1c47a1557d51",
+  "metric": "sfu_contexts",
+  "samples": 32,
+  "expected_interval_ms": 5000,
+  "sample_rate_hz": 0.2,
+  "nyquist_hz": 0.1,
+  "missing_sequence_slots": 0,
+  "duplicate_sequences": 0,
+  "reordered_or_reset_sequences": 0,
+  "nonforward_clock_steps": 0,
+  "max_interval_error_ms": 2,
+  "max_lattice_phase_error_ms": 2,
+  "continuous": true,
+  "exact_uniform_lattice": false,
+  "cadence_within_tolerance": true,
+  "tolerance_ms": 5,
+  "spectrum_eligible": false,
+  "spectrum_blocked_reasons": [
+    "timestamps do not lie on the exact declared uniform lattice"
+  ],
+  "reconstructed_samples": 0,
+  "authentication_verified_by_tool": false,
+  "limitations": [
+    "Provenance and connection context are producer assertions",
+    "Sequence arithmetic assumes fewer than 2^31 slots between observations",
+    "No missing values are filled; clock jitter is not corrected",
+    "Millisecond timestamps can hide finer physical sampling jitter",
+    "Only gauge samples; cumulative counters need reset/rate handling",
+    "FFT powers are diagnostics, not anomaly/authentication decisions"
+  ]
+}

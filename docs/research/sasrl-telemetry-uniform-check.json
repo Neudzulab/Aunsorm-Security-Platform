@@ -1,0 +1,109 @@
+{
+  "source": "Synthetic decoded QUIC gauge fixture, not a live capture",
+  "input_sha256": "7fbc5d58672cbe0bceb6618acddc9b31603f87052cda6499772b04689d9c048f",
+  "metric": "sfu_contexts",
+  "samples": 32,
+  "expected_interval_ms": 5000,
+  "sample_rate_hz": 0.2,
+  "nyquist_hz": 0.1,
+  "missing_sequence_slots": 0,
+  "duplicate_sequences": 0,
+  "reordered_or_reset_sequences": 0,
+  "nonforward_clock_steps": 0,
+  "max_interval_error_ms": 0,
+  "max_lattice_phase_error_ms": 0,
+  "continuous": true,
+  "exact_uniform_lattice": true,
+  "cadence_within_tolerance": true,
+  "tolerance_ms": 0,
+  "spectrum_eligible": true,
+  "spectrum_blocked_reasons": [],
+  "reconstructed_samples": 0,
+  "authentication_verified_by_tool": false,
+  "limitations": [
+    "Provenance and connection context are producer assertions",
+    "Sequence arithmetic assumes fewer than 2^31 slots between observations",
+    "No missing values are filled; clock jitter is not corrected",
+    "Millisecond timestamps can hide finer physical sampling jitter",
+    "Only gauge samples; cumulative counters need reset/rate handling",
+    "FFT powers are diagnostics, not anomaly/authentication decisions"
+  ],
+  "spectrum": {
+    "normalization": "unnormalized_dft_squared_magnitude",
+    "sample_rate_hz": 0.2,
+    "nyquist_hz": 0.1,
+    "time_domain_energy": 12943.999999999998,
+    "spectral_energy": 12944.0,
+    "parseval_absolute_discrepancy": 1.8189894035458565e-12,
+    "bins": [
+      {
+        "frequency_hz": 0.0,
+        "power": 409600.0
+      },
+      {
+        "frequency_hz": 0.00625,
+        "power": 2.5389083277825865e-28
+      },
+      {
+        "frequency_hz": 0.0125,
+        "power": 0.0
+      },
+      {
+        "frequency_hz": 0.018750000000000003,
+        "power": 6.865155830783974e-29
+      },
+      {
+        "frequency_hz": 0.025,
+        "power": 2303.9999999999973
+      },
+      {
+        "frequency_hz": 0.03125,
+        "power": 1.6893628343362663e-28
+      },
+      {
+        "frequency_hz": 0.037500000000000006,
+        "power": 0.0
+      },
+      {
+        "frequency_hz": 0.043750000000000004,
+        "power": 2.334832683554442e-28
+      },
+      {
+        "frequency_hz": 0.05,
+        "power": 0.0
+      },
+      {
+        "frequency_hz": 0.05625,
+        "power": 1.5129507821734132e-28
+      },
+      {
+        "frequency_hz": 0.0625,
+        "power": 0.0
+      },
+      {
+        "frequency_hz": 0.06875,
+        "power": 1.6434472691803096e-30
+      },
+      {
+        "frequency_hz": 0.07500000000000001,
+        "power": 8.582806648804608e-28
+      },
+      {
+        "frequency_hz": 0.08125,
+        "power": 1.0192817239496707e-28
+      },
+      {
+        "frequency_hz": 0.08750000000000001,
+        "power": 0.0
+      },
+      {
+        "frequency_hz": 0.09375,
+        "power": 1.3088751379452688e-28
+      },
+      {
+        "frequency_hz": 0.1,
+        "power": 0.0
+      }
+    ]
+  }
+}

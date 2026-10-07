@@ -1,0 +1,18 @@
+{
+  "cases": 987,
+  "accepted": 1,
+  "rejected": 986,
+  "failures": 0,
+  "corpus_sha256": "304ab25bee3f5b36a93b1723db676f38033e110fc1d91d05ba57e457b4a7d22a",
+  "fixture_sha256": "94b1c9a35dfe7974ff52870440b18cce0614a22ad03c08cc25caa511d45d5aa1",
+  "verifier_sha256": "0d66a4fe258da2f28603ce84332d38784af745adb1c3385acabfdef911c5a739",
+  "executable_sha256": "41299cf63b5a39a10022d04968109cbf3553075550b45b91319b3fc6517c0771",
+  "case_budget": 1024,
+  "input_byte_budget": 1120,
+  "coverage_guided": false,
+  "fixture": "actual deterministic Ed25519 signature using a known synthetic seed",
+  "limitations": [
+    "Verifies response math; no hardware session or live HSM claim",
+    "Compiled/seeded controls do not establish sustained fuzz coverage"
+  ]
+}

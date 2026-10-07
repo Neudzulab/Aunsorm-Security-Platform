@@ -1,0 +1,46 @@
+{
+  "cases": 1765,
+  "failures": 0,
+  "corpus_sha256": "5092bbebc19c2ce4909db77cc54536c22bf72a686e038365d2e297e4ae9fa81f",
+  "executable_sha256": "428b65777729db7213b5b18db7c2b79defcd39ba1e441f42529eea2ab75e7689",
+  "parser_sha256": "76bfe6cf3301b46c3c5ff790befcd02b850f6ea2dccd29795ed9a09e229804b3",
+  "coverage_guided": false,
+  "case_budget": 4096,
+  "input_byte_budget": 4097,
+  "scope": "single/double DER, every truncation, full header byte mutations, overflow and trailing data",
+  "limitations": [
+    "Pure shared-source parser controls, no live HSM invocation",
+    "Cryptoki dependency advisory is not remediated by caller parser changes"
+  ],
+  "compiled_with": "rustc 1.76.0, edition 2021, -D warnings; shared parser/stdin source only",
+  "full_workspace_msrv_verified": false,
+  "date": "2026-10-07",
+  "kms_tests": {
+    "passed": 17,
+    "failed": 0,
+    "existing_ignored": 1,
+    "new_decoder_and_attribute_tests": 6,
+    "actual_ed25519_signature": true,
+    "live_hsm": false
+  },
+  "workspace_tests": {
+    "passed": 634,
+    "failed": 0,
+    "existing_ignored": 18,
+    "suite_count": 63
+  },
+  "workspace_clippy_all_targets_all_features_deny_warnings": "passed",
+  "fuzz_target_separate_graph_check": "passed; coverage-guided engine execution remains unverified",
+  "audit_exit_code": 1,
+  "audit_remaining_advisories": [
+    "RUSTSEC-2026-0286",
+    "RUSTSEC-2023-0071"
+  ],
+  "deny_advisory_errors": 4,
+  "patched_cryptoki_msrv": {
+    "package_version": "0.10.1",
+    "declared_rust_version": "1.77.0",
+    "cached_official_manifest_sha256": "9881b38ca2183998833945fda640bdb362e8077fbe6e83e80be5aded8c89a313",
+    "upgrade_performed": false
+  }
+}

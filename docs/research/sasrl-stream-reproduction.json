@@ -1,0 +1,298 @@
+{
+  "fixture": "Quantized synthetic 1kHz/20kHz sum; not live authenticated media",
+  "input_wav_sha256": "b8fb33b604d3393ef0f7c62d048ebcf2f1f9d73ef14840c2e5f56bb208310970",
+  "input_clipped_samples": 0,
+  "input_samples": 4096,
+  "input_rate_hz": 96000,
+  "filter_evaluations": 13569790,
+  "aggregate_filter_evaluation_limit": 20000000,
+  "planned_filter_evaluation_upper_bound": 13848000,
+  "kernel_construction": "separately bounded by per-call preflight and 250000 cached taps",
+  "rows": [
+    {
+      "output_rate_hz": 44100,
+      "chunk_sizes": [
+        960
+      ],
+      "output_wav_sha256": "c35d0a4f64276465f88d85fc828aef270966e48c6c243028d16b01ce9907297e",
+      "float_samples_exactly_equal_offline": true,
+      "quantized_wav_exactly_equal_offline": true,
+      "first_push_output_samples": 274,
+      "eof_pending_output_samples": 167,
+      "output_clipped_samples": 0,
+      "stream": {
+        "experimental": true,
+        "state": "finished",
+        "input_rate_hz": 96000,
+        "output_rate_hz": 44100,
+        "filter_profile": "refined",
+        "input_samples": 4096,
+        "output_samples": 1882,
+        "evaluations": 1372518,
+        "maximum_l1_gain": 2.6208515894486566,
+        "maximum_preflight_evaluations_per_call": 447488,
+        "per_call_evaluation_limit": 10000000,
+        "maximum_input_block_samples": 4096,
+        "retained_history_samples": 0,
+        "peak_history_samples": 1696,
+        "history_limit_samples": 4832,
+        "cached_taps_built": 107205,
+        "cached_tap_limit": 250000,
+        "retained_phase_kernels": 0,
+        "minimum_complete_stream_samples": 2,
+        "lookahead_upper_bound_input_samples": 367,
+        "lookahead_upper_bound_seconds": 0.0038229166666666667,
+        "sample_clock": "integer rational phases; continuous zero-based sample offsets",
+        "boundary": "whole_sample_reflection; right reflection only after explicit count-checked EOF",
+        "limitations": [
+          "Caller must authenticate and isolate source frames",
+          "Input offsets cannot detect loss hidden by a producer",
+          "No real-time throughput or transport backpressure guarantee",
+          "Already emitted prefixes do not certify later stream continuity"
+        ]
+      }
+    },
+    {
+      "output_rate_hz": 44100,
+      "chunk_sizes": [
+        257
+      ],
+      "output_wav_sha256": "c35d0a4f64276465f88d85fc828aef270966e48c6c243028d16b01ce9907297e",
+      "float_samples_exactly_equal_offline": true,
+      "quantized_wav_exactly_equal_offline": true,
+      "first_push_output_samples": 0,
+      "eof_pending_output_samples": 167,
+      "output_clipped_samples": 0,
+      "stream": {
+        "experimental": true,
+        "state": "finished",
+        "input_rate_hz": 96000,
+        "output_rate_hz": 44100,
+        "filter_profile": "refined",
+        "input_samples": 4096,
+        "output_samples": 1882,
+        "evaluations": 1372518,
+        "maximum_l1_gain": 2.6208515894486566,
+        "maximum_preflight_evaluations_per_call": 281888,
+        "per_call_evaluation_limit": 10000000,
+        "maximum_input_block_samples": 4096,
+        "retained_history_samples": 0,
+        "peak_history_samples": 993,
+        "history_limit_samples": 4832,
+        "cached_taps_built": 107205,
+        "cached_tap_limit": 250000,
+        "retained_phase_kernels": 0,
+        "minimum_complete_stream_samples": 2,
+        "lookahead_upper_bound_input_samples": 367,
+        "lookahead_upper_bound_seconds": 0.0038229166666666667,
+        "sample_clock": "integer rational phases; continuous zero-based sample offsets",
+        "boundary": "whole_sample_reflection; right reflection only after explicit count-checked EOF",
+        "limitations": [
+          "Caller must authenticate and isolate source frames",
+          "Input offsets cannot detect loss hidden by a producer",
+          "No real-time throughput or transport backpressure guarantee",
+          "Already emitted prefixes do not certify later stream continuity"
+        ]
+      }
+    },
+    {
+      "output_rate_hz": 44100,
+      "chunk_sizes": [
+        1,
+        7,
+        31,
+        53
+      ],
+      "output_wav_sha256": "c35d0a4f64276465f88d85fc828aef270966e48c6c243028d16b01ce9907297e",
+      "float_samples_exactly_equal_offline": true,
+      "quantized_wav_exactly_equal_offline": true,
+      "first_push_output_samples": 0,
+      "eof_pending_output_samples": 167,
+      "output_clipped_samples": 0,
+      "stream": {
+        "experimental": true,
+        "state": "finished",
+        "input_rate_hz": 96000,
+        "output_rate_hz": 44100,
+        "filter_profile": "refined",
+        "input_samples": 4096,
+        "output_samples": 1882,
+        "evaluations": 1372518,
+        "maximum_l1_gain": 2.6208515894486566,
+        "maximum_preflight_evaluations_per_call": 236256,
+        "per_call_evaluation_limit": 10000000,
+        "maximum_input_block_samples": 4096,
+        "retained_history_samples": 0,
+        "peak_history_samples": 789,
+        "history_limit_samples": 4832,
+        "cached_taps_built": 107205,
+        "cached_tap_limit": 250000,
+        "retained_phase_kernels": 0,
+        "minimum_complete_stream_samples": 2,
+        "lookahead_upper_bound_input_samples": 367,
+        "lookahead_upper_bound_seconds": 0.0038229166666666667,
+        "sample_clock": "integer rational phases; continuous zero-based sample offsets",
+        "boundary": "whole_sample_reflection; right reflection only after explicit count-checked EOF",
+        "limitations": [
+          "Caller must authenticate and isolate source frames",
+          "Input offsets cannot detect loss hidden by a producer",
+          "No real-time throughput or transport backpressure guarantee",
+          "Already emitted prefixes do not certify later stream continuity"
+        ]
+      }
+    },
+    {
+      "output_rate_hz": 44100,
+      "independent_10ms_frames_rmse_vs_whole_stream": 0.014023179313581165,
+      "independent_257_sample_chunk_output_count": 1896,
+      "correct_global_output_count": 1882,
+      "independent_rounding_drift_samples": 14,
+      "reference_clipped_samples": 0
+    },
+    {
+      "output_rate_hz": 48000,
+      "chunk_sizes": [
+        960
+      ],
+      "output_wav_sha256": "30eb717706c37fa65586e562d3a626f611616eb6fd7fcb26464be27ea4c3f0dd",
+      "float_samples_exactly_equal_offline": true,
+      "quantized_wav_exactly_equal_offline": true,
+      "first_push_output_samples": 313,
+      "eof_pending_output_samples": 167,
+      "output_clipped_samples": 0,
+      "stream": {
+        "experimental": true,
+        "state": "finished",
+        "input_rate_hz": 96000,
+        "output_rate_hz": 48000,
+        "filter_profile": "refined",
+        "input_samples": 4096,
+        "output_samples": 2048,
+        "evaluations": 1341440,
+        "maximum_l1_gain": 2.581202306303376,
+        "maximum_preflight_evaluations_per_call": 437372,
+        "per_call_evaluation_limit": 10000000,
+        "maximum_input_block_samples": 4096,
+        "retained_history_samples": 0,
+        "peak_history_samples": 1636,
+        "history_limit_samples": 4772,
+        "cached_taps_built": 655,
+        "cached_tap_limit": 250000,
+        "retained_phase_kernels": 0,
+        "minimum_complete_stream_samples": 2,
+        "lookahead_upper_bound_input_samples": 337,
+        "lookahead_upper_bound_seconds": 0.0035104166666666665,
+        "sample_clock": "integer rational phases; continuous zero-based sample offsets",
+        "boundary": "whole_sample_reflection; right reflection only after explicit count-checked EOF",
+        "limitations": [
+          "Caller must authenticate and isolate source frames",
+          "Input offsets cannot detect loss hidden by a producer",
+          "No real-time throughput or transport backpressure guarantee",
+          "Already emitted prefixes do not certify later stream continuity"
+        ]
+      }
+    },
+    {
+      "output_rate_hz": 48000,
+      "chunk_sizes": [
+        257
+      ],
+      "output_wav_sha256": "30eb717706c37fa65586e562d3a626f611616eb6fd7fcb26464be27ea4c3f0dd",
+      "float_samples_exactly_equal_offline": true,
+      "quantized_wav_exactly_equal_offline": true,
+      "first_push_output_samples": 0,
+      "eof_pending_output_samples": 167,
+      "output_clipped_samples": 0,
+      "stream": {
+        "experimental": true,
+        "state": "finished",
+        "input_rate_hz": 96000,
+        "output_rate_hz": 48000,
+        "filter_profile": "refined",
+        "input_samples": 4096,
+        "output_samples": 2048,
+        "evaluations": 1341440,
+        "maximum_l1_gain": 2.581202306303376,
+        "maximum_preflight_evaluations_per_call": 200096,
+        "per_call_evaluation_limit": 10000000,
+        "maximum_input_block_samples": 4096,
+        "retained_history_samples": 0,
+        "peak_history_samples": 933,
+        "history_limit_samples": 4772,
+        "cached_taps_built": 655,
+        "cached_tap_limit": 250000,
+        "retained_phase_kernels": 0,
+        "minimum_complete_stream_samples": 2,
+        "lookahead_upper_bound_input_samples": 337,
+        "lookahead_upper_bound_seconds": 0.0035104166666666665,
+        "sample_clock": "integer rational phases; continuous zero-based sample offsets",
+        "boundary": "whole_sample_reflection; right reflection only after explicit count-checked EOF",
+        "limitations": [
+          "Caller must authenticate and isolate source frames",
+          "Input offsets cannot detect loss hidden by a producer",
+          "No real-time throughput or transport backpressure guarantee",
+          "Already emitted prefixes do not certify later stream continuity"
+        ]
+      }
+    },
+    {
+      "output_rate_hz": 48000,
+      "chunk_sizes": [
+        1,
+        7,
+        31,
+        53
+      ],
+      "output_wav_sha256": "30eb717706c37fa65586e562d3a626f611616eb6fd7fcb26464be27ea4c3f0dd",
+      "float_samples_exactly_equal_offline": true,
+      "quantized_wav_exactly_equal_offline": true,
+      "first_push_output_samples": 0,
+      "eof_pending_output_samples": 167,
+      "output_clipped_samples": 0,
+      "stream": {
+        "experimental": true,
+        "state": "finished",
+        "input_rate_hz": 96000,
+        "output_rate_hz": 48000,
+        "filter_profile": "refined",
+        "input_samples": 4096,
+        "output_samples": 2048,
+        "evaluations": 1341440,
+        "maximum_l1_gain": 2.581202306303376,
+        "maximum_preflight_evaluations_per_call": 131144,
+        "per_call_evaluation_limit": 10000000,
+        "maximum_input_block_samples": 4096,
+        "retained_history_samples": 0,
+        "peak_history_samples": 729,
+        "history_limit_samples": 4772,
+        "cached_taps_built": 655,
+        "cached_tap_limit": 250000,
+        "retained_phase_kernels": 0,
+        "minimum_complete_stream_samples": 2,
+        "lookahead_upper_bound_input_samples": 337,
+        "lookahead_upper_bound_seconds": 0.0035104166666666665,
+        "sample_clock": "integer rational phases; continuous zero-based sample offsets",
+        "boundary": "whole_sample_reflection; right reflection only after explicit count-checked EOF",
+        "limitations": [
+          "Caller must authenticate and isolate source frames",
+          "Input offsets cannot detect loss hidden by a producer",
+          "No real-time throughput or transport backpressure guarantee",
+          "Already emitted prefixes do not certify later stream continuity"
+        ]
+      }
+    },
+    {
+      "output_rate_hz": 48000,
+      "independent_10ms_frames_rmse_vs_whole_stream": 0.00823072423786941,
+      "independent_257_sample_chunk_output_count": 2056,
+      "correct_global_output_count": 2048,
+      "independent_rounding_drift_samples": 8,
+      "reference_clipped_samples": 0
+    }
+  ],
+  "limitations": [
+    "Exact comparisons reproduce the same defined finite-filter boundary convention",
+    "Seam/rounding controls are fixed synthetic measurements, not universal SNR claims",
+    "Authentication, live QUIC loss/jitter, throughput and backpressure remain unverified"
+  ]
+}

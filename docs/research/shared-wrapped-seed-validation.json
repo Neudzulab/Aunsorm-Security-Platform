@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-07",
+  "implementation": "production/shared wrapped_seed.rs, fixed-buffer in-place AES-256-GCM",
+  "source_sha256": {
+    "crates/kms/src/wrapped_seed.rs": "b204531ccfa869242723cf9fd9b160deac18d63ef085b122ecf62efbcb9cf60e",
+    "crates/kms/src/pkcs11.rs": "33050900a64046e2a38eb1598a2073a5ad69a6d6d983cb725f33f1f33b584ba0",
+    "crates/kms/examples/wrapped_seed_stdin.rs": "b8ade78441ab620f01e397336198ccb0bb11b22d9ad2a0cd49d005f1ad3fb0ee",
+    "fuzz/fuzz_targets/fuzz_wrapped_seed.rs": "a7c6f449865f232a1aafed2d3af3b123979c614672c9373bb9048209cc154d51",
+    "fuzz/Cargo.lock": "a619489823f72163c7a3e4ec30473e8e925f054552582f9225ccd92dc1e48e0a"
+  },
+  "fixed_buffers": {
+    "binary_envelope_bytes": 60,
+    "zeroizing_seed_bytes": 32,
+    "plaintext_vec_allocated": false
+  },
+  "kms_context": "typed decoder failures translated to KmsError::Config with key-id context",
+  "kms_tests": {
+    "passed": 21,
+    "failed": 0,
+    "ignored": 0
+  },
+  "workspace_tests": {
+    "passed": 638,
+    "failed": 0,
+    "existing_ignored": 17,
+    "suite_count": 63
+  },
+  "workspace_clippy_all_targets_all_features_deny_warnings": "passed",
+  "fuzz_clippy_locked_target_deny_warnings": "passed",
+  "fuzz_locked_compiler_check": "passed",
+  "corpus_report": "docs/research/wrapped-seed-corpus.json",
+  "expected_outcomes": {
+    "cases": 656,
+    "accepted": 1,
+    "rejected": 655,
+    "failures": 0,
+    "corpus_sha256": "d4395e07d42e72563d5e560211aeaafeb371ac7a5089d74c0ac130372cf2c85e",
+    "fixture_sha256": "556280b131411d934cb3b6f434a331166955d6f290429670e6b2b2efd6a9adb9",
+    "decoder_sha256": "b204531ccfa869242723cf9fd9b160deac18d63ef085b122ecf62efbcb9cf60e",
+    "executable_sha256": "67fa577098573abebba76524d559beeba563a6a4a406f99c5f1e4f6e7e32ab87",
+    "case_budget": 1024,
+    "input_byte_budget": 1104,
+    "coverage_guided": false,
+    "fixture": "known synthetic key/seed, actual AES-GCM with AunsormNativeRng nonce",
+    "scope": "every envelope bit, malformed base64, all truncations and AAD/length changes",
+    "limitations": [
+      "Not live HSM or a sustained coverage-guided engine run",
+      "Known fixture key/seed are test material, not production secrets"
+    ]
+  },
+  "cryptoki_in_fuzz_lock": false,
+  "fuzz_audit_remaining_advisories": [
+    "RUSTSEC-2023-0071"
+  ],
+  "fuzz_unmaintained_warnings": 5,
+  "limitations": [
+    "Compiler/seeded corpus only, not a sustained coverage-guided campaign",
+    "No live HSM or hardware strict-public-key verification",
+    "Harness caps AAD at 1024 bytes; production key-id ingestion is not capped by that harness",
+    "Full MSRV, root Cryptoki/RSA and PQC audit/deny prerequisites remain open"
+  ]
+}

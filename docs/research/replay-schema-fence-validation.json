@@ -1,0 +1,19 @@
+{
+  "scope": "research fixtures on temporary WAL SQLite databases; actual current SqliteJtiStore",
+  "passed": 6,
+  "failed": 0,
+  "production_activation": false,
+  "persistent_key_encoding_changed": false,
+  "canonical_atomic_consume_api_implemented": false,
+  "reopened_old_store_result": "explicit startup error: views may not be indexed",
+  "already_open_insert_result": "trigger abort: legacy insert rejected",
+  "expired_cleanup_result": "trigger abort: legacy delete rejected",
+  "version_marker_only": "does not fence actual old store",
+  "rollback_retention": "maximum finite expiry; NULL is permanent; canonical fixture records retained",
+  "process_crash_tested": false,
+  "hashes": {
+    "crates/jwt/tests/replay_schema_fence.rs": "0e21a6341b3dbe31a5acadf1cd6b2bb9647149c17074f5e889c91b9c380b6cbc",
+    "crates/jwt/tests/data/replay_fence.sql": "a9cd6c3040349e47d50a0eaecb2467ae3612f31ea4c0fb1e86165e9193e5ceed",
+    "crates/jwt/tests/data/replay_rollback.sql": "2fd38f623d7352763ea1ee7fd9990f6dd9cf26fda991bc16ae3047c250356fb6"
+  }
+}

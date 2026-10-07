@@ -1,0 +1,981 @@
+{
+  "date": "2026-10-07",
+  "baseline_rust_version": "1.76",
+  "target": "x86_64-pc-windows-msvc",
+  "feature_mode": "all features, metadata graph including available normal/build/dev edges",
+  "rust_1_76_build_performed": false,
+  "above_baseline_count": 29,
+  "packages": [
+    {
+      "name": "async-compression",
+      "version": "0.4.37",
+      "declared_rust_version": "1.83",
+      "edition": "2018",
+      "shortest_workspace_path": [
+        "aunsorm-server@0.5.0",
+        "tower-http@0.5.2",
+        "async-compression@0.4.37"
+      ]
+    },
+    {
+      "name": "compression-codecs",
+      "version": "0.4.36",
+      "declared_rust_version": "1.83",
+      "edition": "2018",
+      "shortest_workspace_path": [
+        "aunsorm-server@0.5.0",
+        "tower-http@0.5.2",
+        "async-compression@0.4.37",
+        "compression-codecs@0.4.36"
+      ]
+    },
+    {
+      "name": "deranged",
+      "version": "0.5.5",
+      "declared_rust_version": "1.81.0",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "time@0.3.47",
+        "deranged@0.5.5"
+      ]
+    },
+    {
+      "name": "derive_more",
+      "version": "2.1.1",
+      "declared_rust_version": "1.81.0",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "endpoint-validator@0.5.0",
+        "scraper@0.25.0",
+        "selectors@0.33.0",
+        "derive_more@2.1.1"
+      ]
+    },
+    {
+      "name": "derive_more-impl",
+      "version": "2.1.1",
+      "declared_rust_version": "1.81.0",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "endpoint-validator@0.5.0",
+        "scraper@0.25.0",
+        "selectors@0.33.0",
+        "derive_more@2.1.1",
+        "derive_more-impl@2.1.1"
+      ]
+    },
+    {
+      "name": "half",
+      "version": "2.7.1",
+      "declared_rust_version": "1.81",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-core@0.5.0",
+        "criterion@0.5.1",
+        "ciborium@0.2.2",
+        "ciborium-ll@0.2.2",
+        "half@2.7.1"
+      ]
+    },
+    {
+      "name": "icu_collections",
+      "version": "2.1.1",
+      "declared_rust_version": "1.83",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_normalizer@2.1.1",
+        "icu_collections@2.1.1"
+      ]
+    },
+    {
+      "name": "icu_locale_core",
+      "version": "2.1.1",
+      "declared_rust_version": "1.83",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_properties@2.1.2",
+        "icu_locale_core@2.1.1"
+      ]
+    },
+    {
+      "name": "icu_normalizer",
+      "version": "2.1.1",
+      "declared_rust_version": "1.83",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_normalizer@2.1.1"
+      ]
+    },
+    {
+      "name": "icu_normalizer_data",
+      "version": "2.1.1",
+      "declared_rust_version": "1.83",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_normalizer@2.1.1",
+        "icu_normalizer_data@2.1.1"
+      ]
+    },
+    {
+      "name": "icu_properties",
+      "version": "2.1.2",
+      "declared_rust_version": "1.83",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_properties@2.1.2"
+      ]
+    },
+    {
+      "name": "icu_properties_data",
+      "version": "2.1.2",
+      "declared_rust_version": "1.83",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_properties@2.1.2",
+        "icu_properties_data@2.1.2"
+      ]
+    },
+    {
+      "name": "icu_provider",
+      "version": "2.1.1",
+      "declared_rust_version": "1.83",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_normalizer@2.1.1",
+        "icu_provider@2.1.1"
+      ]
+    },
+    {
+      "name": "idna_adapter",
+      "version": "1.2.1",
+      "declared_rust_version": "1.82",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1"
+      ]
+    },
+    {
+      "name": "indexmap",
+      "version": "2.13.0",
+      "declared_rust_version": "1.82",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-x509@0.5.0",
+        "serde_yaml_ng@0.10.0",
+        "indexmap@2.13.0"
+      ]
+    },
+    {
+      "name": "litemap",
+      "version": "0.8.1",
+      "declared_rust_version": "1.82",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_properties@2.1.2",
+        "icu_locale_core@2.1.1",
+        "litemap@0.8.1"
+      ]
+    },
+    {
+      "name": "potential_utf",
+      "version": "0.1.4",
+      "declared_rust_version": "1.82",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_normalizer@2.1.1",
+        "icu_collections@2.1.1",
+        "potential_utf@0.1.4"
+      ]
+    },
+    {
+      "name": "quinn-proto",
+      "version": "0.11.15",
+      "declared_rust_version": "1.85",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-server@0.5.0",
+        "quinn@0.11.9",
+        "quinn-proto@0.11.15"
+      ]
+    },
+    {
+      "name": "rayon",
+      "version": "1.12.0",
+      "declared_rust_version": "1.80",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-core@0.5.0",
+        "criterion@0.5.1",
+        "rayon@1.12.0"
+      ]
+    },
+    {
+      "name": "rayon-core",
+      "version": "1.13.0",
+      "declared_rust_version": "1.80",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-core@0.5.0",
+        "criterion@0.5.1",
+        "rayon@1.12.0",
+        "rayon-core@1.13.0"
+      ]
+    },
+    {
+      "name": "time",
+      "version": "0.3.47",
+      "declared_rust_version": "1.88.0",
+      "edition": "2024",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "time@0.3.47"
+      ]
+    },
+    {
+      "name": "time-core",
+      "version": "0.1.8",
+      "declared_rust_version": "1.88.0",
+      "edition": "2024",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "time@0.3.47",
+        "time-core@0.1.8"
+      ]
+    },
+    {
+      "name": "time-macros",
+      "version": "0.2.27",
+      "declared_rust_version": "1.88.0",
+      "edition": "2024",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "time@0.3.47",
+        "time-macros@0.2.27"
+      ]
+    },
+    {
+      "name": "tinystr",
+      "version": "0.8.2",
+      "declared_rust_version": "1.82",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_properties@2.1.2",
+        "icu_locale_core@2.1.1",
+        "tinystr@0.8.2"
+      ]
+    },
+    {
+      "name": "writeable",
+      "version": "0.6.2",
+      "declared_rust_version": "1.82",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_normalizer@2.1.1",
+        "icu_provider@2.1.1",
+        "writeable@0.6.2"
+      ]
+    },
+    {
+      "name": "yoke",
+      "version": "0.8.1",
+      "declared_rust_version": "1.82",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_normalizer@2.1.1",
+        "icu_collections@2.1.1",
+        "yoke@0.8.1"
+      ]
+    },
+    {
+      "name": "zerofrom",
+      "version": "0.1.6",
+      "declared_rust_version": "1.81",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_normalizer@2.1.1",
+        "icu_collections@2.1.1",
+        "zerofrom@0.1.6"
+      ]
+    },
+    {
+      "name": "zerotrie",
+      "version": "0.2.3",
+      "declared_rust_version": "1.82",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_properties@2.1.2",
+        "zerotrie@0.2.3"
+      ]
+    },
+    {
+      "name": "zerovec",
+      "version": "0.11.5",
+      "declared_rust_version": "1.82",
+      "edition": "2021",
+      "shortest_workspace_path": [
+        "aunsorm-acme@0.5.0",
+        "idna@1.1.0",
+        "idna_adapter@1.2.1",
+        "icu_normalizer@2.1.1",
+        "zerovec@0.11.5"
+      ]
+    }
+  ],
+  "missing_rust_version_count": 136,
+  "missing_rust_version": [
+    {
+      "name": "adler2",
+      "version": "2.0.1"
+    },
+    {
+      "name": "alloc-no-stdlib",
+      "version": "2.0.4"
+    },
+    {
+      "name": "alloc-stdlib",
+      "version": "0.2.2"
+    },
+    {
+      "name": "anes",
+      "version": "0.1.6"
+    },
+    {
+      "name": "ascii",
+      "version": "1.1.0"
+    },
+    {
+      "name": "asn1-rs-derive",
+      "version": "0.6.0"
+    },
+    {
+      "name": "asn1-rs-impl",
+      "version": "0.2.0"
+    },
+    {
+      "name": "aunsorm-acme",
+      "version": "0.5.0"
+    },
+    {
+      "name": "bit-set",
+      "version": "0.5.3"
+    },
+    {
+      "name": "bit-vec",
+      "version": "0.6.3"
+    },
+    {
+      "name": "bitflags",
+      "version": "1.3.2"
+    },
+    {
+      "name": "blake2",
+      "version": "0.10.6"
+    },
+    {
+      "name": "block-buffer",
+      "version": "0.10.4"
+    },
+    {
+      "name": "brotli-decompressor",
+      "version": "5.0.0"
+    },
+    {
+      "name": "cast",
+      "version": "0.3.0"
+    },
+    {
+      "name": "cfg_aliases",
+      "version": "0.2.1"
+    },
+    {
+      "name": "chacha20poly1305",
+      "version": "0.10.1"
+    },
+    {
+      "name": "chunked_transfer",
+      "version": "1.5.0"
+    },
+    {
+      "name": "cobs",
+      "version": "0.3.0"
+    },
+    {
+      "name": "compression-core",
+      "version": "0.4.31"
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.2.17"
+    },
+    {
+      "name": "criterion",
+      "version": "0.5.1"
+    },
+    {
+      "name": "criterion-plot",
+      "version": "0.5.0"
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.1.7"
+    },
+    {
+      "name": "cssparser-macros",
+      "version": "0.6.1"
+    },
+    {
+      "name": "curve25519-dalek-derive",
+      "version": "0.1.1"
+    },
+    {
+      "name": "dbl",
+      "version": "0.3.2"
+    },
+    {
+      "name": "diff",
+      "version": "0.1.13"
+    },
+    {
+      "name": "difflib",
+      "version": "0.4.0"
+    },
+    {
+      "name": "digest",
+      "version": "0.10.7"
+    },
+    {
+      "name": "dtoa-short",
+      "version": "0.3.5"
+    },
+    {
+      "name": "dunce",
+      "version": "1.0.5"
+    },
+    {
+      "name": "ego-tree",
+      "version": "0.10.0"
+    },
+    {
+      "name": "embedded-io",
+      "version": "0.4.0"
+    },
+    {
+      "name": "embedded-io",
+      "version": "0.6.1"
+    },
+    {
+      "name": "fallible-iterator",
+      "version": "0.3.0"
+    },
+    {
+      "name": "fallible-streaming-iterator",
+      "version": "0.1.9"
+    },
+    {
+      "name": "float-cmp",
+      "version": "0.10.0"
+    },
+    {
+      "name": "fnv",
+      "version": "1.0.7"
+    },
+    {
+      "name": "futf",
+      "version": "0.1.5"
+    },
+    {
+      "name": "generic-array",
+      "version": "0.14.7"
+    },
+    {
+      "name": "getrandom",
+      "version": "0.2.17"
+    },
+    {
+      "name": "group",
+      "version": "0.13.0"
+    },
+    {
+      "name": "hashlink",
+      "version": "0.9.1"
+    },
+    {
+      "name": "hex",
+      "version": "0.4.3"
+    },
+    {
+      "name": "hkdf",
+      "version": "0.12.4"
+    },
+    {
+      "name": "hmac",
+      "version": "0.12.1"
+    },
+    {
+      "name": "hpke",
+      "version": "0.11.0"
+    },
+    {
+      "name": "httparse",
+      "version": "1.10.1"
+    },
+    {
+      "name": "humantime",
+      "version": "2.3.0"
+    },
+    {
+      "name": "hyper-timeout",
+      "version": "0.5.2"
+    },
+    {
+      "name": "interop-benches",
+      "version": "0.1.0"
+    },
+    {
+      "name": "ipnet",
+      "version": "2.11.0"
+    },
+    {
+      "name": "itertools",
+      "version": "0.10.5"
+    },
+    {
+      "name": "lazy_static",
+      "version": "1.5.0"
+    },
+    {
+      "name": "libsqlite3-sys",
+      "version": "0.28.0"
+    },
+    {
+      "name": "lru-slab",
+      "version": "0.1.2"
+    },
+    {
+      "name": "mac",
+      "version": "0.1.1"
+    },
+    {
+      "name": "matchers",
+      "version": "0.2.0"
+    },
+    {
+      "name": "matchit",
+      "version": "0.7.3"
+    },
+    {
+      "name": "mime",
+      "version": "0.3.17"
+    },
+    {
+      "name": "minimal-lexical",
+      "version": "0.2.1"
+    },
+    {
+      "name": "miniz_oxide",
+      "version": "0.8.9"
+    },
+    {
+      "name": "new_debug_unreachable",
+      "version": "1.0.6"
+    },
+    {
+      "name": "normalize-line-endings",
+      "version": "0.3.0"
+    },
+    {
+      "name": "ntapi",
+      "version": "0.4.2"
+    },
+    {
+      "name": "oorandom",
+      "version": "11.1.5"
+    },
+    {
+      "name": "opaque-debug",
+      "version": "0.3.1"
+    },
+    {
+      "name": "openapiv3",
+      "version": "1.0.4"
+    },
+    {
+      "name": "pin-utils",
+      "version": "0.1.0"
+    },
+    {
+      "name": "plotters",
+      "version": "0.3.7"
+    },
+    {
+      "name": "plotters-backend",
+      "version": "0.3.7"
+    },
+    {
+      "name": "plotters-svg",
+      "version": "0.3.7"
+    },
+    {
+      "name": "postcard",
+      "version": "1.1.3"
+    },
+    {
+      "name": "pqcrypto-falcon",
+      "version": "0.4.1"
+    },
+    {
+      "name": "pqcrypto-internals",
+      "version": "0.2.11"
+    },
+    {
+      "name": "pqcrypto-mldsa",
+      "version": "0.1.2"
+    },
+    {
+      "name": "pqcrypto-mlkem",
+      "version": "0.1.1"
+    },
+    {
+      "name": "pqcrypto-sphincsplus",
+      "version": "0.7.2"
+    },
+    {
+      "name": "pqcrypto-traits",
+      "version": "0.3.5"
+    },
+    {
+      "name": "precomputed-hash",
+      "version": "0.1.1"
+    },
+    {
+      "name": "pretty_assertions",
+      "version": "1.4.1"
+    },
+    {
+      "name": "quick-error",
+      "version": "1.2.3"
+    },
+    {
+      "name": "rand",
+      "version": "0.8.8"
+    },
+    {
+      "name": "rand_chacha",
+      "version": "0.3.1"
+    },
+    {
+      "name": "rand_core",
+      "version": "0.6.4"
+    },
+    {
+      "name": "rand_xorshift",
+      "version": "0.3.0"
+    },
+    {
+      "name": "rusqlite",
+      "version": "0.31.0"
+    },
+    {
+      "name": "rustc-hash",
+      "version": "2.1.1"
+    },
+    {
+      "name": "rusticata-macros",
+      "version": "4.1.0"
+    },
+    {
+      "name": "rusty-fork",
+      "version": "0.3.1"
+    },
+    {
+      "name": "same-file",
+      "version": "1.0.6"
+    },
+    {
+      "name": "scopeguard",
+      "version": "1.2.0"
+    },
+    {
+      "name": "scraper",
+      "version": "0.25.0"
+    },
+    {
+      "name": "secrecy",
+      "version": "0.8.0"
+    },
+    {
+      "name": "selectors",
+      "version": "0.33.0"
+    },
+    {
+      "name": "serde-wasm-bindgen",
+      "version": "0.6.5"
+    },
+    {
+      "name": "serde_urlencoded",
+      "version": "0.7.1"
+    },
+    {
+      "name": "servo_arc",
+      "version": "0.4.3"
+    },
+    {
+      "name": "sha1",
+      "version": "0.10.6"
+    },
+    {
+      "name": "sha2",
+      "version": "0.10.9"
+    },
+    {
+      "name": "simd-adler32",
+      "version": "0.3.8"
+    },
+    {
+      "name": "siphasher",
+      "version": "1.0.1"
+    },
+    {
+      "name": "smallvec",
+      "version": "1.15.1"
+    },
+    {
+      "name": "stable_deref_trait",
+      "version": "1.2.1"
+    },
+    {
+      "name": "string_cache_codegen",
+      "version": "0.6.1"
+    },
+    {
+      "name": "subtle",
+      "version": "2.6.1"
+    },
+    {
+      "name": "sync_wrapper",
+      "version": "1.0.2"
+    },
+    {
+      "name": "synstructure",
+      "version": "0.13.2"
+    },
+    {
+      "name": "tendril",
+      "version": "0.4.3"
+    },
+    {
+      "name": "tiny_http",
+      "version": "0.12.0"
+    },
+    {
+      "name": "tinytemplate",
+      "version": "1.2.1"
+    },
+    {
+      "name": "tinyvec",
+      "version": "1.10.0"
+    },
+    {
+      "name": "tinyvec_macros",
+      "version": "0.1.1"
+    },
+    {
+      "name": "tonic",
+      "version": "0.12.3"
+    },
+    {
+      "name": "tower-layer",
+      "version": "0.3.3"
+    },
+    {
+      "name": "tower-service",
+      "version": "0.3.3"
+    },
+    {
+      "name": "try-lock",
+      "version": "0.2.5"
+    },
+    {
+      "name": "unarray",
+      "version": "0.1.4"
+    },
+    {
+      "name": "untrusted",
+      "version": "0.9.0"
+    },
+    {
+      "name": "utf-8",
+      "version": "0.7.6"
+    },
+    {
+      "name": "utf8_iter",
+      "version": "1.0.4"
+    },
+    {
+      "name": "utf8parse",
+      "version": "0.2.2"
+    },
+    {
+      "name": "vcpkg",
+      "version": "0.2.15"
+    },
+    {
+      "name": "version_check",
+      "version": "0.9.5"
+    },
+    {
+      "name": "wait-timeout",
+      "version": "0.2.1"
+    },
+    {
+      "name": "walkdir",
+      "version": "2.5.0"
+    },
+    {
+      "name": "want",
+      "version": "0.3.1"
+    },
+    {
+      "name": "webpki-roots",
+      "version": "0.26.11"
+    },
+    {
+      "name": "winapi",
+      "version": "0.3.9"
+    },
+    {
+      "name": "winapi-util",
+      "version": "0.1.11"
+    },
+    {
+      "name": "yasna",
+      "version": "0.5.2"
+    },
+    {
+      "name": "yoke-derive",
+      "version": "0.8.1"
+    },
+    {
+      "name": "zerocopy-derive",
+      "version": "0.8.33"
+    },
+    {
+      "name": "zerofrom-derive",
+      "version": "0.1.6"
+    },
+    {
+      "name": "zerovec-derive",
+      "version": "0.11.2"
+    }
+  ],
+  "limitations": [
+    "Declared metadata only; not an actual Rust 1.76 build or source/API audit",
+    "Shortest paths are graph reachability evidence, not proof of which dependency kind is compiled in every command",
+    "Absence of rust-version metadata is not evidence of MSRV compatibility",
+    "Compatible pins must also satisfy unsuppressed security audits; lowering versions blindly is not remediation"
+  ],
+  "compatible_lock_revisions": [
+    {
+      "package": "base64ct",
+      "previous_version": "1.8.3",
+      "locked_version": "1.6.0",
+      "declared_rust_version": "1.60",
+      "edition": "2021",
+      "upstream_changelog": "https://github.com/RustCrypto/formats/blob/master/base64ct/CHANGELOG.md",
+      "actual_1_76_build": false
+    }
+  ],
+  "cargo_metadata_sha256": "bcead85e10d1539ac01a0038ee6883d5f8f9474024ab5f45f911673b1e58f3da",
+  "rust_1_76_check": {
+    "command": "cargo +1.76.0-x86_64-pc-windows-msvc check -p aunsorm-core --lib --locked",
+    "cargo_version": "1.76.0",
+    "rustc_version": "1.76.0",
+    "result": "failed before compilation: rayon 1.12.0 requires rustc 1.80",
+    "initial_offline_attempt": "no matching base64 in old Cargo registry cache; online retry resolved dependencies",
+    "scope": "core library selection resolves both normal core/sysinfo/rayon and dev benchmark dependencies; graph proves Rayon is not only a benchmark dependency",
+    "default_toolchain_changed": false,
+    "rerun_after_rayon_safety_revision": true
+  },
+  "rust_1_76_check_attempted": true,
+  "safety_revisions": [
+    {
+      "package": "rayon",
+      "root_previous_version": "1.11.0",
+      "fuzz_previous_version": "1.10.0",
+      "locked_version": "1.12.0",
+      "declared_rust_version": "1.80",
+      "reason": "upstream Unicode surrogate-boundary range invalid-char correction",
+      "source": "https://github.com/rayon-rs/rayon/blob/main/RELEASES.md",
+      "msrv_1_76_resolved": false,
+      "fuzz_rayon_core_previous_version": "1.12.1",
+      "fuzz_rayon_core_locked_version": "1.13.0"
+    }
+  ],
+  "rayon_normal_dependency_path": [
+    "aunsorm-core@0.5.0",
+    "sysinfo@0.29.11",
+    "rayon@1.12.0",
+    "rayon-core@1.13.0"
+  ],
+  "rayon_normal_dependency_features": {
+    "sysinfo": [
+      "default",
+      "multithread",
+      "rayon"
+    ],
+    "criterion_optional_parallel_statistics_also_enabled": true
+  },
+  "metadata_command": "cargo metadata --format-version 1 --all-features --filter-platform x86_64-pc-windows-msvc --locked --offline",
+  "additional_focused_msrv_check": {
+    "compiled": true,
+    "toolchain": "rustc 1.76.0",
+    "scope": "crates/kms/examples/pkcs11_point_stdin.rs plus shared pkcs11_point.rs only, -D warnings",
+    "full_workspace_verified": false,
+    "corpus": "docs/research/pkcs11-point-corpus.json"
+  }
+}

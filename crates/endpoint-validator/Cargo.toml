@@ -13,7 +13,7 @@ base64 = { workspace = true }
 clap = { workspace = true }
 futures = "0.3.31"
 openapiv3 = "1.0"
-quick-xml = { version = "0.31", features = ["serialize"] }
+roxmltree = "0.21.1"
 regex = "1.10"
 reqwest = { version = "0.12", default-features = false, features = ["json", "gzip", "stream", "rustls-tls"] }
 scraper = "0.25"

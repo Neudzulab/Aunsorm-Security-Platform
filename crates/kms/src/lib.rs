@@ -36,6 +36,12 @@ mod gcp;
 mod local;
 #[cfg(feature = "kms-pkcs11")]
 mod pkcs11;
+#[cfg(feature = "kms-pkcs11")]
+mod pkcs11_identity;
+#[cfg(feature = "kms-pkcs11")]
+mod pkcs11_point;
+#[cfg(feature = "kms-pkcs11")]
+mod wrapped_seed;
 // mod rng; // DEPRECATED: Use aunsorm-core::AunsormNativeRng instead
 mod rotation;
 mod util;

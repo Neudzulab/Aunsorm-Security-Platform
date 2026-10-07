@@ -1,0 +1,112 @@
+{
+  "source": "Andrew Odlyzko, zeros1, first 30 ordinates; https://www-users.cse.umn.edu/~odlyzko/zeta_tables/zeros1 ; retrieved 2026-10-07. The next ordinate is 103.725538040; this prefix includes 101.317851006 as a coverage witness above 100.",
+  "input_sha256": "2dc7410fe9f42febf6260d98034901ed049a19a5457736065771046a5ff8c7de",
+  "explicit_metadata_input_sha256": "5887cd350f090539ffd6a907a760ab1eb7c730c07d6a759e9340bb2d8ff916ff",
+  "implementation_sha256": "4dda08589a7f9e2974ee7fb053fa5f77331249d5f1cbe608769f060c18cd7c56",
+  "supported_model": {
+    "id": "riemann_zeta",
+    "degree": 1,
+    "conductor": 1,
+    "self_dual": true,
+    "normalization": "unshifted",
+    "critical_line_real_part": 0.5,
+    "pole_at_one_order": 1,
+    "gamma_factor": "Gamma(s/2)",
+    "trivial_zeros": "negative_even_integers_starting_at_minus_two"
+  },
+  "legacy_declaration": "implicit_zeta_legacy_input",
+  "explicit_declaration": "explicit_unverified_zeta_declaration",
+  "comparisons": [
+    {
+      "integer": 3,
+      "method": "hard",
+      "estimate": 1.0,
+      "legacy_explicit_results_identical": true
+    },
+    {
+      "integer": 3,
+      "method": "weighted",
+      "estimate": 1.0734739763689038,
+      "legacy_explicit_results_identical": true
+    },
+    {
+      "integer": 10,
+      "method": "hard",
+      "estimate": 0.21884253893761918,
+      "legacy_explicit_results_identical": true
+    },
+    {
+      "integer": 10,
+      "method": "weighted",
+      "estimate": 0.1794532819237228,
+      "legacy_explicit_results_identical": true
+    },
+    {
+      "integer": 20,
+      "method": "hard",
+      "estimate": 0.08971234282875284,
+      "legacy_explicit_results_identical": true
+    },
+    {
+      "integer": 20,
+      "method": "weighted",
+      "estimate": 0.09517062048834886,
+      "legacy_explicit_results_identical": true
+    }
+  ],
+  "rejected_contradictions": [
+    {
+      "field": "id",
+      "rejected": true,
+      "reason": "unsupported l_function id; zeta corrections cannot be reused"
+    },
+    {
+      "field": "degree",
+      "rejected": true,
+      "reason": "unsupported l_function degree; zeta corrections cannot be reused"
+    },
+    {
+      "field": "conductor",
+      "rejected": true,
+      "reason": "unsupported l_function conductor; zeta corrections cannot be reused"
+    },
+    {
+      "field": "self_dual",
+      "rejected": true,
+      "reason": "unsupported l_function self_dual; zeta corrections cannot be reused"
+    },
+    {
+      "field": "normalization",
+      "rejected": true,
+      "reason": "unsupported l_function normalization; zeta corrections cannot be reused"
+    },
+    {
+      "field": "critical_line_real_part",
+      "rejected": true,
+      "reason": "unsupported l_function critical_line_real_part; zeta corrections cannot be reused"
+    },
+    {
+      "field": "pole_at_one_order",
+      "rejected": true,
+      "reason": "unsupported l_function pole_at_one_order; zeta corrections cannot be reused"
+    },
+    {
+      "field": "gamma_factor",
+      "rejected": true,
+      "reason": "unsupported l_function gamma_factor; zeta corrections cannot be reused"
+    },
+    {
+      "field": "trivial_zeros",
+      "rejected": true,
+      "reason": "unsupported l_function trivial_zeros; zeta corrections cannot be reused"
+    }
+  ],
+  "analytic_model_verified_from_input": false,
+  "coverage_verified": false,
+  "cryptographic_use": false,
+  "limitations": [
+    "Metadata contract does not prove that ordinates belong to zeta",
+    "No general primitive L-function or missing correction support",
+    "Explicit declarations do not certify RH, completeness or input precision"
+  ]
+}

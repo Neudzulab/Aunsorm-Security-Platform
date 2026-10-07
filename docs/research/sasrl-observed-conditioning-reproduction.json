@@ -1,0 +1,668 @@
+{
+  "fixture": "synthetic decoded gauge geometry at observed millisecond timestamps",
+  "rows": [
+    {
+      "control": "uniform",
+      "analysis": {
+        "source": "synthetic observed-time control; not a live capture",
+        "input_sha256": "9c1a6075cda37c4a2831b7fcfcd711b3606bfb7cf2caeffb9c170562821317b3",
+        "metric": "active_contexts",
+        "samples": 32,
+        "expected_interval_ms": 1000,
+        "sample_rate_hz": 1.0,
+        "nyquist_hz": 0.5,
+        "missing_sequence_slots": 0,
+        "duplicate_sequences": 0,
+        "reordered_or_reset_sequences": 0,
+        "nonforward_clock_steps": 0,
+        "max_interval_error_ms": 0,
+        "max_lattice_phase_error_ms": 0,
+        "continuous": true,
+        "exact_uniform_lattice": true,
+        "cadence_within_tolerance": true,
+        "tolerance_ms": 0,
+        "spectrum_eligible": true,
+        "spectrum_blocked_reasons": [],
+        "reconstructed_samples": 0,
+        "authentication_verified_by_tool": false,
+        "limitations": [
+          "Provenance and connection context are producer assertions",
+          "Sequence arithmetic assumes fewer than 2^31 slots between observations",
+          "No missing values are filled; clock jitter is not corrected",
+          "Millisecond timestamps can hide finer physical sampling jitter",
+          "Only gauge samples; cumulative counters need reset/rate handling",
+          "FFT powers are diagnostics, not anomaly/authentication decisions"
+        ],
+        "spectrum": {
+          "normalization": "unnormalized_dft_squared_magnitude",
+          "sample_rate_hz": 1.0,
+          "nyquist_hz": 0.5,
+          "time_domain_energy": 16.0,
+          "spectral_energy": 16.0,
+          "parseval_absolute_discrepancy": 0.0,
+          "bins": [
+            {
+              "frequency_hz": 0.0,
+              "power": 2.4515875047720446e-30
+            },
+            {
+              "frequency_hz": 0.03125,
+              "power": 256.0
+            },
+            {
+              "frequency_hz": 0.0625,
+              "power": 2.4629611870133047e-31
+            },
+            {
+              "frequency_hz": 0.09375,
+              "power": 9.11658934123205e-31
+            },
+            {
+              "frequency_hz": 0.125,
+              "power": 1.1023334177215925e-30
+            },
+            {
+              "frequency_hz": 0.15625,
+              "power": 2.4153716983101593e-31
+            },
+            {
+              "frequency_hz": 0.1875,
+              "power": 9.782028567091887e-31
+            },
+            {
+              "frequency_hz": 0.21875,
+              "power": 2.848744442364873e-30
+            },
+            {
+              "frequency_hz": 0.25,
+              "power": 8.332142034375216e-31
+            },
+            {
+              "frequency_hz": 0.28125,
+              "power": 1.2430322669756837e-30
+            },
+            {
+              "frequency_hz": 0.3125,
+              "power": 3.686914851330861e-32
+            },
+            {
+              "frequency_hz": 0.34375,
+              "power": 1.2177721720445164e-30
+            },
+            {
+              "frequency_hz": 0.375,
+              "power": 5.445245222268567e-31
+            },
+            {
+              "frequency_hz": 0.40625,
+              "power": 1.601475387321079e-30
+            },
+            {
+              "frequency_hz": 0.4375,
+              "power": 2.037807548075738e-31
+            },
+            {
+              "frequency_hz": 0.46875,
+              "power": 4.8292756424071115e-30
+            },
+            {
+              "frequency_hz": 0.5,
+              "power": 5.451617093963472e-32
+            }
+          ]
+        },
+        "known_frequency_conditioning": {
+          "eligible": true,
+          "scope": "geometry of observed positions only; gauge values not fitted",
+          "missing_slots_reconstructed": 0,
+          "matrix": {
+            "model": "known complex Fourier modes at observed declared millisecond timestamps",
+            "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+            "samples": 32,
+            "frequencies_hz": [
+              0.0,
+              0.5
+            ],
+            "sample_rate_hz": null,
+            "singular_value_estimates": [
+              0.9999999999999999,
+              0.9999999999999999
+            ],
+            "converged": true,
+            "sweeps_completed": 1,
+            "sweep_limit": 40,
+            "rotations": 0,
+            "maximum_resolved_column_correlation": 0.0,
+            "correlation_tolerance": 1e-12,
+            "heuristic_resolution_floor": 1.6077746776921858e-13,
+            "numerically_unresolved": false,
+            "condition_estimate": 1.0,
+            "noise_gain_estimate": 1.0000000000000002,
+            "frobenius_squared_error": 4.440892098500626e-16,
+            "sample_scaled_work_upper_bound": 15616,
+            "status": "converged estimate",
+            "limitations": [
+              "Observed positions only; no missing samples, jitter correction or cadence inference",
+              "Producer timestamps are unverified and can hide sub-millisecond physical jitter",
+              "Irregular timestamps have no single declared Nyquist frequency",
+              "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+              "Resolution floor is heuristic; sub-floor column correlations are excluded",
+              "Known 2..8 modes only; matrix positions do not authenticate data",
+              "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+            ],
+            "relative_timestamps_ms": [
+              0,
+              1000,
+              2000,
+              3000,
+              4000,
+              5000,
+              6000,
+              7000,
+              8000,
+              9000,
+              10000,
+              11000,
+              12000,
+              13000,
+              14000,
+              15000,
+              16000,
+              17000,
+              18000,
+              19000,
+              20000,
+              21000,
+              22000,
+              23000,
+              24000,
+              25000,
+              26000,
+              27000,
+              28000,
+              29000,
+              30000,
+              31000
+            ],
+            "timestamp_origin_ms": 18446744073709451616,
+            "nyquist_hz": null,
+            "exact_binary64_duplicate_columns_detected": false
+          }
+        }
+      }
+    },
+    {
+      "control": "thinned",
+      "analysis": {
+        "source": "synthetic observed-time control; not a live capture",
+        "input_sha256": "e73fb432f7278c30efb5b8dd3eb8a47de6e3f36c72e3ff92e9c43ce731711017",
+        "metric": "active_contexts",
+        "samples": 32,
+        "expected_interval_ms": 1000,
+        "sample_rate_hz": 1.0,
+        "nyquist_hz": 0.5,
+        "missing_sequence_slots": 31,
+        "duplicate_sequences": 0,
+        "reordered_or_reset_sequences": 0,
+        "nonforward_clock_steps": 0,
+        "max_interval_error_ms": 0,
+        "max_lattice_phase_error_ms": 0,
+        "continuous": false,
+        "exact_uniform_lattice": false,
+        "cadence_within_tolerance": false,
+        "tolerance_ms": 0,
+        "spectrum_eligible": false,
+        "spectrum_blocked_reasons": [
+          "sequence gaps, duplicates, reordering/reset or nonforward clock"
+        ],
+        "reconstructed_samples": 0,
+        "authentication_verified_by_tool": false,
+        "limitations": [
+          "Provenance and connection context are producer assertions",
+          "Sequence arithmetic assumes fewer than 2^31 slots between observations",
+          "No missing values are filled; clock jitter is not corrected",
+          "Millisecond timestamps can hide finer physical sampling jitter",
+          "Only gauge samples; cumulative counters need reset/rate handling",
+          "FFT powers are diagnostics, not anomaly/authentication decisions"
+        ],
+        "known_frequency_conditioning": {
+          "eligible": true,
+          "scope": "geometry of observed positions only; gauge values not fitted",
+          "missing_slots_reconstructed": 0,
+          "matrix": {
+            "model": "known complex Fourier modes at observed declared millisecond timestamps",
+            "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+            "samples": 32,
+            "frequencies_hz": [
+              0.0,
+              0.5
+            ],
+            "sample_rate_hz": null,
+            "singular_value_estimates": [
+              0.0,
+              1.4142135623730947
+            ],
+            "converged": true,
+            "sweeps_completed": 1,
+            "sweep_limit": 40,
+            "rotations": 1,
+            "maximum_resolved_column_correlation": 0.0,
+            "correlation_tolerance": 1e-12,
+            "heuristic_resolution_floor": 1.6077746776921858e-13,
+            "numerically_unresolved": true,
+            "condition_estimate": null,
+            "noise_gain_estimate": null,
+            "frobenius_squared_error": 8.881784197001252e-16,
+            "sample_scaled_work_upper_bound": 15616,
+            "status": "unresolved",
+            "limitations": [
+              "Observed positions only; no missing samples, jitter correction or cadence inference",
+              "Producer timestamps are unverified and can hide sub-millisecond physical jitter",
+              "Irregular timestamps have no single declared Nyquist frequency",
+              "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+              "Resolution floor is heuristic; sub-floor column correlations are excluded",
+              "Known 2..8 modes only; matrix positions do not authenticate data",
+              "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+            ],
+            "relative_timestamps_ms": [
+              0,
+              2000,
+              4000,
+              6000,
+              8000,
+              10000,
+              12000,
+              14000,
+              16000,
+              18000,
+              20000,
+              22000,
+              24000,
+              26000,
+              28000,
+              30000,
+              32000,
+              34000,
+              36000,
+              38000,
+              40000,
+              42000,
+              44000,
+              46000,
+              48000,
+              50000,
+              52000,
+              54000,
+              56000,
+              58000,
+              60000,
+              62000
+            ],
+            "timestamp_origin_ms": 18446744073709451616,
+            "nyquist_hz": null,
+            "exact_binary64_duplicate_columns_detected": true
+          }
+        }
+      }
+    },
+    {
+      "control": "jitter_breaks_alias",
+      "analysis": {
+        "source": "synthetic observed-time control; not a live capture",
+        "input_sha256": "dafa6d880566cd55ff360a689c677623b93a4c29e67b4a3555e1a5105fa11e64",
+        "metric": "active_contexts",
+        "samples": 32,
+        "expected_interval_ms": 1000,
+        "sample_rate_hz": 1.0,
+        "nyquist_hz": 0.5,
+        "missing_sequence_slots": 0,
+        "duplicate_sequences": 0,
+        "reordered_or_reset_sequences": 0,
+        "nonforward_clock_steps": 0,
+        "max_interval_error_ms": 1,
+        "max_lattice_phase_error_ms": 1,
+        "continuous": true,
+        "exact_uniform_lattice": false,
+        "cadence_within_tolerance": false,
+        "tolerance_ms": 0,
+        "spectrum_eligible": false,
+        "spectrum_blocked_reasons": [
+          "timestamps do not lie on the exact declared uniform lattice"
+        ],
+        "reconstructed_samples": 0,
+        "authentication_verified_by_tool": false,
+        "limitations": [
+          "Provenance and connection context are producer assertions",
+          "Sequence arithmetic assumes fewer than 2^31 slots between observations",
+          "No missing values are filled; clock jitter is not corrected",
+          "Millisecond timestamps can hide finer physical sampling jitter",
+          "Only gauge samples; cumulative counters need reset/rate handling",
+          "FFT powers are diagnostics, not anomaly/authentication decisions"
+        ],
+        "known_frequency_conditioning": {
+          "eligible": true,
+          "scope": "geometry of observed positions only; gauge values not fitted",
+          "missing_slots_reconstructed": 0,
+          "matrix": {
+            "model": "known complex Fourier modes at observed declared millisecond timestamps",
+            "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+            "samples": 32,
+            "frequencies_hz": [
+              0.0,
+              1.0
+            ],
+            "sample_rate_hz": null,
+            "singular_value_estimates": [
+              0.0007730277592574568,
+              1.4142133510995019
+            ],
+            "converged": true,
+            "sweeps_completed": 1,
+            "sweep_limit": 40,
+            "rotations": 1,
+            "maximum_resolved_column_correlation": 1.3657626746644804e-14,
+            "correlation_tolerance": 1e-12,
+            "heuristic_resolution_floor": 1.6077746776921858e-13,
+            "numerically_unresolved": false,
+            "condition_estimate": 1829.4470465820598,
+            "noise_gain_estimate": 1293.6146057168305,
+            "frobenius_squared_error": 4.440892098500626e-16,
+            "sample_scaled_work_upper_bound": 15616,
+            "status": "converged estimate",
+            "limitations": [
+              "Observed positions only; no missing samples, jitter correction or cadence inference",
+              "Producer timestamps are unverified and can hide sub-millisecond physical jitter",
+              "Irregular timestamps have no single declared Nyquist frequency",
+              "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+              "Resolution floor is heuristic; sub-floor column correlations are excluded",
+              "Known 2..8 modes only; matrix positions do not authenticate data",
+              "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+            ],
+            "relative_timestamps_ms": [
+              0,
+              1000,
+              2000,
+              3000,
+              4000,
+              5000,
+              6000,
+              7001,
+              8000,
+              9000,
+              10000,
+              11000,
+              12000,
+              13000,
+              14000,
+              15000,
+              16000,
+              17000,
+              18000,
+              19000,
+              20000,
+              21000,
+              22000,
+              23000,
+              24000,
+              25000,
+              26000,
+              27000,
+              28000,
+              29000,
+              30000,
+              31000
+            ],
+            "timestamp_origin_ms": 18446744073709451616,
+            "nyquist_hz": null,
+            "exact_binary64_duplicate_columns_detected": false
+          }
+        }
+      }
+    },
+    {
+      "control": "nominal_alias",
+      "analysis": {
+        "source": "synthetic observed-time control; not a live capture",
+        "input_sha256": "9c1a6075cda37c4a2831b7fcfcd711b3606bfb7cf2caeffb9c170562821317b3",
+        "metric": "active_contexts",
+        "samples": 32,
+        "expected_interval_ms": 1000,
+        "sample_rate_hz": 1.0,
+        "nyquist_hz": 0.5,
+        "missing_sequence_slots": 0,
+        "duplicate_sequences": 0,
+        "reordered_or_reset_sequences": 0,
+        "nonforward_clock_steps": 0,
+        "max_interval_error_ms": 0,
+        "max_lattice_phase_error_ms": 0,
+        "continuous": true,
+        "exact_uniform_lattice": true,
+        "cadence_within_tolerance": true,
+        "tolerance_ms": 0,
+        "spectrum_eligible": true,
+        "spectrum_blocked_reasons": [],
+        "reconstructed_samples": 0,
+        "authentication_verified_by_tool": false,
+        "limitations": [
+          "Provenance and connection context are producer assertions",
+          "Sequence arithmetic assumes fewer than 2^31 slots between observations",
+          "No missing values are filled; clock jitter is not corrected",
+          "Millisecond timestamps can hide finer physical sampling jitter",
+          "Only gauge samples; cumulative counters need reset/rate handling",
+          "FFT powers are diagnostics, not anomaly/authentication decisions"
+        ],
+        "spectrum": {
+          "normalization": "unnormalized_dft_squared_magnitude",
+          "sample_rate_hz": 1.0,
+          "nyquist_hz": 0.5,
+          "time_domain_energy": 16.0,
+          "spectral_energy": 16.0,
+          "parseval_absolute_discrepancy": 0.0,
+          "bins": [
+            {
+              "frequency_hz": 0.0,
+              "power": 2.4515875047720446e-30
+            },
+            {
+              "frequency_hz": 0.03125,
+              "power": 256.0
+            },
+            {
+              "frequency_hz": 0.0625,
+              "power": 2.4629611870133047e-31
+            },
+            {
+              "frequency_hz": 0.09375,
+              "power": 9.11658934123205e-31
+            },
+            {
+              "frequency_hz": 0.125,
+              "power": 1.1023334177215925e-30
+            },
+            {
+              "frequency_hz": 0.15625,
+              "power": 2.4153716983101593e-31
+            },
+            {
+              "frequency_hz": 0.1875,
+              "power": 9.782028567091887e-31
+            },
+            {
+              "frequency_hz": 0.21875,
+              "power": 2.848744442364873e-30
+            },
+            {
+              "frequency_hz": 0.25,
+              "power": 8.332142034375216e-31
+            },
+            {
+              "frequency_hz": 0.28125,
+              "power": 1.2430322669756837e-30
+            },
+            {
+              "frequency_hz": 0.3125,
+              "power": 3.686914851330861e-32
+            },
+            {
+              "frequency_hz": 0.34375,
+              "power": 1.2177721720445164e-30
+            },
+            {
+              "frequency_hz": 0.375,
+              "power": 5.445245222268567e-31
+            },
+            {
+              "frequency_hz": 0.40625,
+              "power": 1.601475387321079e-30
+            },
+            {
+              "frequency_hz": 0.4375,
+              "power": 2.037807548075738e-31
+            },
+            {
+              "frequency_hz": 0.46875,
+              "power": 4.8292756424071115e-30
+            },
+            {
+              "frequency_hz": 0.5,
+              "power": 5.451617093963472e-32
+            }
+          ]
+        },
+        "known_frequency_conditioning": {
+          "eligible": true,
+          "scope": "geometry of observed positions only; gauge values not fitted",
+          "missing_slots_reconstructed": 0,
+          "matrix": {
+            "model": "known complex Fourier modes at observed declared millisecond timestamps",
+            "algorithm": "unpreconditioned one-sided complex Jacobi column rotations",
+            "samples": 32,
+            "frequencies_hz": [
+              0.0,
+              1.0
+            ],
+            "sample_rate_hz": null,
+            "singular_value_estimates": [
+              0.0,
+              1.4142135623730947
+            ],
+            "converged": true,
+            "sweeps_completed": 1,
+            "sweep_limit": 40,
+            "rotations": 1,
+            "maximum_resolved_column_correlation": 0.0,
+            "correlation_tolerance": 1e-12,
+            "heuristic_resolution_floor": 1.6077746776921858e-13,
+            "numerically_unresolved": true,
+            "condition_estimate": null,
+            "noise_gain_estimate": null,
+            "frobenius_squared_error": 8.881784197001252e-16,
+            "sample_scaled_work_upper_bound": 15616,
+            "status": "unresolved",
+            "limitations": [
+              "Observed positions only; no missing samples, jitter correction or cadence inference",
+              "Producer timestamps are unverified and can hide sub-millisecond physical jitter",
+              "Irregular timestamps have no single declared Nyquist frequency",
+              "Binary64 diagnostic, not LAPACK accuracy guarantees or certified rank",
+              "Resolution floor is heuristic; sub-floor column correlations are excluded",
+              "Known 2..8 modes only; matrix positions do not authenticate data",
+              "No inverse, missing-data reconstruction, authentication or sub-Nyquist theorem"
+            ],
+            "relative_timestamps_ms": [
+              0,
+              1000,
+              2000,
+              3000,
+              4000,
+              5000,
+              6000,
+              7000,
+              8000,
+              9000,
+              10000,
+              11000,
+              12000,
+              13000,
+              14000,
+              15000,
+              16000,
+              17000,
+              18000,
+              19000,
+              20000,
+              21000,
+              22000,
+              23000,
+              24000,
+              25000,
+              26000,
+              27000,
+              28000,
+              29000,
+              30000,
+              31000
+            ],
+            "timestamp_origin_ms": 18446744073709451616,
+            "nyquist_hz": null,
+            "exact_binary64_duplicate_columns_detected": true
+          }
+        }
+      }
+    }
+  ],
+  "planned_sample_scaled_work_upper_bound": 62464,
+  "aggregate_work_limit": 100000,
+  "implementation_sha256": {
+    "sasrl_cluster_conditioning.py": "093cae7128680bac90cd2ea02f4ddda14e1c5c5716a01e88a6b1be7f835b28fa",
+    "sasrl_telemetry.py": "69146fe6018fd8a5aa94993acea49742165cadf2cd6b4322c809a37ae24ff123"
+  },
+  "limitations": [
+    "Gauge values not fitted; no missing slots reconstructed",
+    "Producer time/context are unverified; no live transport claim",
+    "Resolution floor is heuristic; known 2..8 modes only"
+  ],
+  "independent_numpy_validation": {
+    "version": "2.3.5",
+    "api": "numpy.linalg.svd, complex128 observed-time matrix",
+    "scope": "explicit optional host verification; runtime remains standard-library-only",
+    "api_source": "https://numpy.org/doc/stable/reference/generated/numpy.linalg.svd.html",
+    "rows": [
+      {
+        "control": "uniform",
+        "numpy_singular_values": [
+          0.9999999999999999,
+          0.9999999999999999
+        ],
+        "maximum_absolute_sigma_difference": 0.0,
+        "relative_min_sigma_error_if_resolved": 0.0
+      },
+      {
+        "control": "thinned",
+        "numpy_singular_values": [
+          4.703973423743606e-15,
+          1.4142135623730954
+        ],
+        "maximum_absolute_sigma_difference": 4.703973423743606e-15,
+        "relative_min_sigma_error_if_resolved": null
+      },
+      {
+        "control": "jitter_breaks_alias",
+        "numpy_singular_values": [
+          0.0007730277592579367,
+          1.4142133510995025
+        ],
+        "maximum_absolute_sigma_difference": 6.661338147750939e-16,
+        "relative_min_sigma_error_if_resolved": 6.20725693067925e-13
+      },
+      {
+        "control": "nominal_alias",
+        "numpy_singular_values": [
+          4.703973423743606e-15,
+          1.4142135623730954
+        ],
+        "maximum_absolute_sigma_difference": 4.703973423743606e-15,
+        "relative_min_sigma_error_if_resolved": null
+      }
+    ]
+  }
+}
