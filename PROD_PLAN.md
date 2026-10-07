@@ -23,6 +23,7 @@ This document tracks all remaining work required for production deployment.
 - [x] Document clock attestation server deployment procedures
 
 ### Native RNG Compliance
+- [ ] Add reproducible SASRL arithmetic research tooling with exact sieve ground truth, pinned zero-data provenance, cutoff sensitivity bounds and a fixed spectral-edge scan; keep review and merge pending, with no RNG/entropy claims.
 - [ ] Revize: Harden native RNG state lifecycle (redacted Debug, fast key erasure, OS reseeding, PID changes and snapshot guidance); correct statistical p-values. Revises the completed implementation/audit tasks below.
 - [x] Aunsorm Native RNG implemented across all crates
 - [x] OsRng usage restricted to initial entropy seeding only

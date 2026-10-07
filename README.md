@@ -10,6 +10,13 @@ Aunsorm is a zero-trust cryptographic security platform that unifies gateway, au
 - Clock attestation and calibration workflow to mitigate replay and skew-based attacks.
 - Hardened deployment defaults with port isolation and containerized runtime profiles.
 
+### Arithmetic Research
+
+The offline [SASRL research tool](research/sasrl/README.md) reproduces spectral
+arithmetic experiments with exact sieve comparisons and recorded data/code
+hashes. It is an experimental reconstruction tool; it does not supply entropy
+or change native RNG and key-generation behavior.
+
 ### Architecture Diagram
 ```mermaid
 graph TD

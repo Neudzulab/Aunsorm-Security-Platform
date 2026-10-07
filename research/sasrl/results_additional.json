@@ -1,0 +1,56 @@
+{
+  "blocks": [
+    {
+      "start": 2,
+      "end": 399,
+      "count": 398,
+      "rmse": 0.19546240677685156,
+      "max_abs_error": 0.5449043370202036,
+      "correct": 398,
+      "confusion": {
+        "tp": 78,
+        "tn": 320,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "start": 10000,
+      "end": 12000,
+      "count": 2001,
+      "rmse": 0.08171526382663569,
+      "max_abs_error": 0.24100390273978767,
+      "correct": 2001,
+      "confusion": {
+        "tp": 209,
+        "tn": 1792,
+        "fp": 0,
+        "fn": 0
+      }
+    }
+  ],
+  "count": 2399,
+  "confusion": {
+    "tp": 287,
+    "tn": 2112,
+    "fp": 0,
+    "fn": 0
+  },
+  "rmse": 0.10912371407051018,
+  "experiment": "SASRL conjectural hard-cutoff reconstruction",
+  "formula": "1 - 2/sqrt(n) * sum(gamma <= cutoff_scale*n, cos(gamma*log(n)))",
+  "threshold_fraction": 0.75,
+  "cutoff_scale": 3.141592653589793,
+  "source": {
+    "sha256": "3436c916a7878261ac183fd7b9448c9a4736b8bbccf1356874a6ce1788541632",
+    "count": 100000,
+    "first": 14.134725142,
+    "last": 74920.827498994,
+    "matches_pinned_odlyzko_file": true,
+    "source_url": "https://www-users.cse.umn.edu/~odlyzko/zeta_tables/zeros1",
+    "published_ordinate_error_bound": 3e-09
+  },
+  "python": "3.12.14",
+  "script_sha256": "38f6ce756e0976922195c3152d72bee29ea0b86321503ca89c6dd7ecb47419a3",
+  "claim_scope": "finite numerical experiment; not a weighted-theorem proof, RNG, entropy source, or cryptographic validation"
+}
