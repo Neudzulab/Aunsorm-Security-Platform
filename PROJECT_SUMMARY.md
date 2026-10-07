@@ -18,6 +18,14 @@ Aunsorm is a **production-grade cryptographic security platform** designed for m
 
 ---
 
+## Arithmetic Research
+
+`research/sasrl` provides standalone Python tools for reproducing the
+conjectural SASRL hard-cutoff reconstruction and its cutoff scan. Research
+results are compared with exact sieve arithmetic, with pinned source-data
+hashes and ordinate sensitivity bounds. This module has no production or RNG
+integration and adds no Rust dependencies.
+
 ## Core Architecture
 
 ### Cryptographic Foundation

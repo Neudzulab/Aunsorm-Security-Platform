@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Added
+- Add offline SASRL arithmetic reconstruction and cutoff-scan research tools,
+  with exact sieve ground truth, per-integer output, source/code hashes,
+  numerical sensitivity bounds, and reproduced 5,499-integer results.
 - `aunsorm-server` now exposes first-party application session endpoints
   (`POST /sessions`, `POST /sessions/{sessionId}/keys`) plus
   `/security/hmac-sign` and `/security/hmac-verify` for session-cookie signing

@@ -1,0 +1,126 @@
+{
+  "blocks": [
+    {
+      "start": 400,
+      "end": 799,
+      "count": 400,
+      "rmse": 0.13748850488933972,
+      "max_abs_error": 0.374686415501434,
+      "correct": 400,
+      "confusion": {
+        "tp": 61,
+        "tn": 339,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "start": 800,
+      "end": 1199,
+      "count": 400,
+      "rmse": 0.12626381934455705,
+      "max_abs_error": 0.3189947418212875,
+      "correct": 400,
+      "confusion": {
+        "tp": 57,
+        "tn": 343,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "start": 1600,
+      "end": 2099,
+      "count": 500,
+      "rmse": 0.1315467263392406,
+      "max_abs_error": 0.34953235797705695,
+      "correct": 500,
+      "confusion": {
+        "tp": 66,
+        "tn": 434,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "start": 2500,
+      "end": 2999,
+      "count": 500,
+      "rmse": 0.12099448663390856,
+      "max_abs_error": 0.34108548983917153,
+      "correct": 500,
+      "confusion": {
+        "tp": 63,
+        "tn": 437,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "start": 4800,
+      "end": 5299,
+      "count": 500,
+      "rmse": 0.10798966657276135,
+      "max_abs_error": 0.3680702008466825,
+      "correct": 500,
+      "confusion": {
+        "tp": 56,
+        "tn": 444,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "start": 8800,
+      "end": 9299,
+      "count": 500,
+      "rmse": 0.06981291366785392,
+      "max_abs_error": 0.1886724644900415,
+      "correct": 500,
+      "confusion": {
+        "tp": 56,
+        "tn": 444,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    {
+      "start": 17850,
+      "end": 18149,
+      "count": 300,
+      "rmse": 0.0574244287496446,
+      "max_abs_error": 0.1590897741470645,
+      "correct": 300,
+      "confusion": {
+        "tp": 35,
+        "tn": 265,
+        "fp": 0,
+        "fn": 0
+      }
+    }
+  ],
+  "count": 3100,
+  "confusion": {
+    "tp": 394,
+    "tn": 2706,
+    "fp": 0,
+    "fn": 0
+  },
+  "rmse": 0.11240398760271354,
+  "experiment": "SASRL conjectural hard-cutoff reconstruction",
+  "formula": "1 - 2/sqrt(n) * sum(gamma <= cutoff_scale*n, cos(gamma*log(n)))",
+  "threshold_fraction": 0.75,
+  "cutoff_scale": 3.141592653589793,
+  "source": {
+    "sha256": "3436c916a7878261ac183fd7b9448c9a4736b8bbccf1356874a6ce1788541632",
+    "count": 100000,
+    "first": 14.134725142,
+    "last": 74920.827498994,
+    "matches_pinned_odlyzko_file": true,
+    "source_url": "https://www-users.cse.umn.edu/~odlyzko/zeta_tables/zeros1",
+    "published_ordinate_error_bound": 3e-09
+  },
+  "python": "3.12.14",
+  "script_sha256": "38f6ce756e0976922195c3152d72bee29ea0b86321503ca89c6dd7ecb47419a3",
+  "claim_scope": "finite numerical experiment; not a weighted-theorem proof, RNG, entropy source, or cryptographic validation"
+}
