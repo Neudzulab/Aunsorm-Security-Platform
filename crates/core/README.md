@@ -12,6 +12,7 @@ türetimi, EXTERNAL kalibrasyon kimlikleri ve oturum ratchet akışı bu crate i
   kaydederek üretim ortamlarında şeffaflık sağlar; `TransparencyCheckpoint`
   ile son durumun imzalı özetini kolayca dışa aktarabilirsiniz.
 
+
 Tüm API'lar tekrar çağrıldığında aynı girdilerle aynı çıktıyı verir ve güvenlik açısından hassas arabellekler temizlenir.
 
 ## Native RNG spektral regresyonları
@@ -22,3 +23,20 @@ frekanslarında, DC ve Nyquist uçları dahil kontrol eder. Dengeli periyodik ku
 örnekleri ve bağımsız DFT/Parseval kontrolleri tanılama kodunu doğrular. Bu testler
 entropi kanıtı veya NIST sertifikasyonu değildir. Makaleden alınan fikirler,
 koşulları ve sayısal araç için [SASRL incelemesine](../../docs/sasrl-aunsorm-integration.md) bakın.
+=======
+Deterministik türetme API'ları aynı girdilerle aynı çıktıyı verir; rastgelelik API'ları OS entropisi kullanır.
+
+## Native RNG
+
+`AunsormNativeRng` ChaCha20 ile her 1 KiB tampon dolumunda anahtarı yeniler,
+anahtar için ayrılan baytları çıktıya vermez ve tüketilen baytları temizler.
+64 KiB çıktı üretiminden sonra ve PID değişiminde OS entropisiyle yeniden tohumlanır.
+`try_new()` ve `try_fill_bytes()` OS hatalarını döndürür; `new()`/`fill_bytes()`
+hata durumunda panic üretir. Başarısız bir reseed sonrası çıktı, reseed başarılı
+olana kadar engellenir. Debug çıktısı gizli durumu içermez.
+
+Aynı PID ile snapshot geri yükleme otomatik algılanamaz: ilk kullanımdan önce
+`reseed()` çağrılmalıdır. Canlı belleği okuyabilen saldırgan, henüz tüketilmemiş
+tamponu görebilir ve yeni gizli OS tohumu alınana kadar gelecek çıktıyı tahmin
+edebilir. Bu uygulama bağımsız bir sertifikasyon iddiası taşımaz.
+

@@ -52,15 +52,15 @@ This repository is coordinated by specialized domain agents. All new features, r
 **CRITICAL:** All cryptographic random number generation MUST use `AunsormNativeRng`.
 
 ### Forbidden Usage:
-- ❌ Direct `OsRng` usage (except initial entropy seeding)
+- ❌ Direct `OsRng` usage (except seeding/reseeding inside the shared native RNG)
 - ❌ HTTP `/random/number` endpoint calls (6.4s overhead)
 - ❌ `rand::thread_rng()` or other stdlib RNGs
 - ❌ `ChaCha8Rng` or other external RNG implementations (except in tests)
 
 ### Required Usage:
 - ✅ `AunsormNativeRng` - Same implementation across all crates
-- ✅ HKDF + NEUDZ-PCS + AACM mixing - Same algorithm as server
-- ✅ 4x Performance - Native vs HTTP (1.5s vs 6.4s RSA-2048)
+- ✅ ChaCha20 fast key erasure, OS reseeding, and consumed-buffer zeroization - Same implementation as server
+- ✅ Measure performance with local benchmarks; do not treat historical speed claims as guarantees
 
 ### Implementation Pattern:
 

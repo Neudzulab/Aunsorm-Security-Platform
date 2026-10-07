@@ -1,0 +1,24 @@
+{
+  "status": "synthetic PRNG demonstration; no measured physical entropy or production guarantee",
+  "model": "IID Bernoulli(p=0.8), known parameter; independent ideal uniform seeds assumed only by theorem",
+  "input_bits_per_block": 4096,
+  "blocks": 1000,
+  "model_min_entropy_floor_bits": 1318,
+  "output_bits_per_block": 1062,
+  "security_bits": 128,
+  "conditional_bound": "TV <= 2^-129 per block, only under certified entropy and ideal independent seed assumptions",
+  "raw_total_bits": 4096000,
+  "raw_ones": 3278275,
+  "raw_one_fraction": 0.800360107421875,
+  "output_total_bits": 1062000,
+  "output_ones": 531373,
+  "output_one_fraction": 0.5003512241054614,
+  "exact_half_ones_output_blocks": 39,
+  "output_sha256_padded_little_endian_blocks": "526e697b0b8d23fbf1617f074f7f335d7b2297e7c3442c975366813f247c43fa",
+  "python": "3.12.14",
+  "source_sha256": {
+    "extractor.py": "900c3ced6282293f7a80320ca3bfe0cb4d7a25c797d45f447a0b2d34aecd42b7",
+    "experiment.py": "d3cc7676f69a888e49975d1142bb1eccf3cf663bfecf9391c5f06a255f3242fc",
+    "test_extractor.py": "9b1c7a0f5ddae24d71e05feddc6623e571e32a62a188aac18be0b8f06154bc48"
+  }
+}

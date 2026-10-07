@@ -92,9 +92,17 @@ Aunsorm is a **production-grade cryptographic security platform** designed for m
 - **Calibration-Bound Cryptography**: Every cryptographic operation is tied to a secure clock attestation (NTP-style) to prevent replay attacks and ensure temporal consistency
 - **Post-Quantum Cryptography (PQC)**: ML-KEM-768, ML-DSA-65, SLH-DSA-128s implementations alongside classical algorithms
 - **Zero-Trust Architecture**: Microservices-based design with per-service isolation, mutual TLS, and strict policy enforcement
-- **Native RNG System**: Custom entropy mixing (HKDF + NEUDZ-PCS + AACM) providing 4x performance vs HTTP-based RNG
+- **Native RNG System**: OS-seeded ChaCha20 with fast key erasure and periodic reseeding; no HTTP dependency
 
 ---
+
+## Arithmetic Research
+
+`research/sasrl` provides standalone Python tools for reproducing the
+conjectural SASRL hard-cutoff reconstruction and its cutoff scan. Research
+results are compared with exact sieve arithmetic, with pinned source-data
+hashes and ordinate sensitivity bounds. This module has no production or RNG
+integration and adds no Rust dependencies.
 
 ## Core Architecture
 
@@ -125,11 +133,11 @@ Aunsorm is a **production-grade cryptographic security platform** designed for m
 - Auto-refresh architecture for production environments
 
 **2. Native RNG (Aunsorm Native Random Number Generator)**
-- HKDF-based entropy derivation from OsRng seed
-- NEUDZ-PCS noise injection for additional entropy mixing
-- AACM (Adaptive Additive Chaotic Maps) for state evolution
+- ChaCha20 fast key erasure with 1 KiB buffers; consumed bytes are zeroized
+- OS reseeding at startup, after 64 KiB of generated output, and on PID changes
+- Explicit reseed for same-PID snapshots; fully redacted Debug state
 - Constant-time rejection sampling (timing attack resistant)
-- **Performance:** 1.5s RSA-2048 key generation (vs 6.4s HTTP-based)
+- **Performance:** Hardware-dependent; rerun local benchmarks after lifecycle revisions
 
 **3. Session Ratcheting**
 - Double-ratchet protocol for E2EE sessions

@@ -69,6 +69,9 @@ Tasks above remain unchecked until verification and the applicable approval gate
 - [x] Document clock attestation server deployment procedures
 
 ### Native RNG Compliance
+- [ ] Add reproducible SASRL arithmetic research tooling with exact sieve ground truth, pinned zero-data provenance, cutoff sensitivity bounds and a fixed spectral-edge scan; keep review and merge pending, with no RNG/entropy claims.
+- [ ] Research Toeplitz universal-hash entropy extraction: exact finite validation, certified min-entropy output budgeting and synthetic bias experiment; physical-source assessment, independent-seed design, production integration and review remain pending.
+- [ ] Revize: Harden native RNG state lifecycle (redacted Debug, fast key erasure, OS reseeding, PID changes and snapshot guidance); correct statistical p-values. Revises the completed implementation/audit tasks below.
 - [x] Aunsorm Native RNG implemented across all crates
 - [x] OsRng usage restricted to initial entropy seeding only
 - [x] Security audit of HKDF + NEUDZ-PCS + AACM mixing algorithm

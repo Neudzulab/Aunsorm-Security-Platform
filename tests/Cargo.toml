@@ -16,6 +16,7 @@ kms-pkcs11 = ["aunsorm-kms/kms-pkcs11"]
 kms-remote = ["kms-gcp", "kms-azure"]
 
 [dependencies]
+statrs = { workspace = true }
 aunsorm-core = { path = "../crates/core" }
 aunsorm-acme = { path = "../crates/acme" }
 aunsorm-packet = { path = "../crates/packet" }
