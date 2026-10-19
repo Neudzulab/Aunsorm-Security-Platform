@@ -44,6 +44,7 @@ mod jobs;
 mod quic;
 // mod rng; // DEPRECATED: Use aunsorm-core::AunsormNativeRng instead
 mod routes;
+mod service_auth;
 mod state;
 mod telemetry;
 mod transparency;

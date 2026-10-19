@@ -258,6 +258,16 @@ struct FabricVerificationAuditResponse {
     clock_skew_ms: u64,
 }
 
+const INTERNAL_SECRET_HEADER: &str = "x-aunsorm-internal-secret";
+const TEST_INTERNAL_SECRET: &str = "test-internal-secret-0123456789abcdef";
+const TEST_ANTARYON_SECRET: &str = "test-antaryon-secret-0123456789";
+
+/// Ortak test ortamı: tüm testler aynı değerleri yazar (paralel çalışmada çakışma yok).
+fn set_shared_test_env() {
+    std::env::set_var("AUNSORM_INTERNAL_SECRET", TEST_INTERNAL_SECRET);
+    std::env::set_var("AUNSORM_ANTARYON_CLIENT_SECRET", TEST_ANTARYON_SECRET);
+}
+
 fn test_seed() -> [u8; 32] {
     [7_u8; 32]
 }
@@ -274,6 +284,7 @@ fn setup_state_with_profile(
     const ROLE_BINDINGS_JSON: &str = r#"{"alice":["user","admin"],"client:demo-client":["service","user"],"client:webapp-123":["user"]}"#;
     const MFA_SECRETS_JSON: &str =
         r#"{"alice":{"secret":"YWRtaW4tc2hhcmVkLXNlY3JldC1vdHA=","digits":6}}"#;
+    set_shared_test_env();
     let key = Ed25519KeyPair::from_seed("test", test_seed()).expect("seed");
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -2498,6 +2509,7 @@ async fn sfu_context_flow() {
             Request::builder()
                 .method("POST")
                 .uri("/sfu/context")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(create_payload.to_string()))
                 .expect("request"),
@@ -2524,6 +2536,7 @@ async fn sfu_context_flow() {
             Request::builder()
                 .method("POST")
                 .uri("/sfu/context/step")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(step_payload.to_string()))
                 .expect("request"),
@@ -2559,6 +2572,7 @@ async fn sfu_context_step_rejects_unknown() {
             Request::builder()
                 .method("POST")
                 .uri("/sfu/context/step")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(payload.to_string()))
                 .expect("request"),
@@ -2869,6 +2883,7 @@ async fn jwt_verify_endpoint_accepts_valid_token() {
             Request::builder()
                 .method("POST")
                 .uri("/security/generate-media-token")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(token_payload.to_string()))
                 .expect("request"),
@@ -3019,6 +3034,7 @@ async fn jwt_verify_endpoint_accepts_bearer_prefix() {
             Request::builder()
                 .method("POST")
                 .uri("/security/generate-media-token")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(token_payload.to_string()))
                 .expect("token request"),
@@ -3076,6 +3092,7 @@ async fn jwt_verify_endpoint_rejects_tampered_token() {
             Request::builder()
                 .method("POST")
                 .uri("/security/generate-media-token")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(
                     json!({
@@ -3791,4 +3808,401 @@ async fn client_credentials_grant_rejects_client_without_secret() {
         .expect("response");
 
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+// ── Mahzen M0: service caller auth, antaryon client, JWKS ────────────────────
+
+async fn send_json(
+    app: &Router,
+    method: &str,
+    uri: &str,
+    body: Option<Value>,
+    headers: &[(&str, &str)],
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder().method(method).uri(uri);
+    for (name, value) in headers {
+        builder = builder.header(*name, *value);
+    }
+    let body = match body {
+        Some(json_body) => {
+            builder = builder.header("content-type", "application/json");
+            Body::from(json_body.to_string())
+        }
+        None => Body::empty(),
+    };
+    let response = app
+        .clone()
+        .oneshot(builder.body(body).expect("request"))
+        .await
+        .expect("response");
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    let value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    (status, value)
+}
+
+fn media_token_body() -> Value {
+    json!({ "roomId": "antaryon-meydan", "identity": "antaryon:player:42" })
+}
+
+fn decode_claims(token: &str) -> Value {
+    let payload = token.split('.').nth(1).expect("payload");
+    serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload).expect("b64")).expect("claims")
+}
+
+async fn antaryon_token(
+    app: &Router,
+    extras: Value,
+    scope: &str,
+    secret: &str,
+) -> (StatusCode, Value) {
+    send_json(
+        app,
+        "POST",
+        "/oauth/token",
+        Some(json!({
+            "grant_type": "client_credentials",
+            "client_id": "antaryon",
+            "client_secret": secret,
+            "scope": scope,
+            "extras": extras,
+        })),
+        &[],
+    )
+    .await
+}
+
+#[tokio::test]
+async fn protected_endpoints_reject_anonymous_callers() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let cases = [
+        ("/security/generate-media-token", media_token_body()),
+        ("/v1/security/generate-media-token", media_token_body()),
+        ("/sessions", json!({ "room": "r", "identity": "x" })),
+        ("/sessions/abc/keys", json!({})),
+        (
+            "/sfu/context",
+            json!({ "room_id": "r", "participant": "p" }),
+        ),
+        ("/sfu/context/step", json!({ "context_id": "c" })),
+    ];
+    for (uri, body) in cases {
+        let (status, error) = send_json(&app, "POST", uri, Some(body), &[]).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri}");
+        assert_eq!(error["error"], "invalid_token", "{uri}");
+    }
+}
+
+#[tokio::test]
+async fn media_token_rejects_wrong_internal_secret_and_accepts_right_one() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, _) = send_json(
+        &app,
+        "POST",
+        "/security/generate-media-token",
+        Some(media_token_body()),
+        &[(INTERNAL_SECRET_HEADER, "wrong-secret-wrong-secret-wrong")],
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (status, body) = send_json(
+        &app,
+        "POST",
+        "/security/generate-media-token",
+        Some(media_token_body()),
+        &[(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["identity"], "antaryon:player:42");
+}
+
+#[tokio::test]
+async fn media_token_accepts_confidential_service_bearer() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, token) = send_json(
+        &app,
+        "POST",
+        "/oauth/token",
+        Some(json!({
+            "grant_type": "client_credentials",
+            "client_id": "service-client",
+            "client_secret": "aunsorm-service-secret"
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let bearer = format!("Bearer {}", token["access_token"].as_str().expect("token"));
+    let (status, _) = send_json(
+        &app,
+        "POST",
+        "/security/generate-media-token",
+        Some(media_token_body()),
+        &[("authorization", bearer.as_str())],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn media_token_rejects_non_service_bearers() {
+    let state = setup_state();
+    let app = build_router(&state);
+
+    // Player token from the confidential antaryon client: valid JWT, wrong role.
+    let (status, player) = antaryon_token(
+        &app,
+        json!({ "sub": "antaryon:player:7", "role": "admin" }),
+        "mahzen:read",
+        TEST_ANTARYON_SECRET,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let bearer = format!("Bearer {}", player["access_token"].as_str().expect("token"));
+    let (status, error) = send_json(
+        &app,
+        "POST",
+        "/security/generate-media-token",
+        Some(media_token_body()),
+        &[("authorization", bearer.as_str())],
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(error["error"], "insufficient_scope");
+
+    // Public client (no secret) asking for the service role and spoofing clientId.
+    let (status, spoof) = send_json(
+        &app,
+        "POST",
+        "/oauth/token",
+        Some(json!({
+            "grant_type": "client_credentials",
+            "client_id": "demo-client",
+            "extras": { "role": "service", "clientId": "service-client" }
+        })),
+        &[],
+    )
+    .await;
+    if status == StatusCode::OK {
+        let token = spoof["access_token"].as_str().expect("token");
+        assert_eq!(decode_claims(token)["extras"]["clientId"], "demo-client");
+        let bearer = format!("Bearer {token}");
+        let (status, _) = send_json(
+            &app,
+            "POST",
+            "/security/generate-media-token",
+            Some(media_token_body()),
+            &[("authorization", bearer.as_str())],
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+    }
+
+    // Garbage bearer
+    let (status, _) = send_json(
+        &app,
+        "POST",
+        "/sfu/context",
+        Some(json!({ "room_id": "r", "participant": "p" })),
+        &[("authorization", "Bearer not.a.jwt")],
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn unprotected_endpoints_stay_open() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, _) = send_json(&app, "GET", "/health", None, &[]).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[test]
+fn dev_bypass_is_off_by_default_and_ignored_in_strict_mode() {
+    use crate::service_auth::{authorize, ServiceAuthConfig};
+    let relaxed = setup_state();
+    let headers = HeaderMap::new();
+    assert!(authorize(
+        &relaxed,
+        &headers,
+        &ServiceAuthConfig::new(None, false, vec![])
+    )
+    .is_err());
+    assert!(authorize(
+        &relaxed,
+        &headers,
+        &ServiceAuthConfig::new(None, true, vec![])
+    )
+    .is_ok());
+    let strict = setup_state_with_profile(true, None, None);
+    assert!(authorize(
+        &strict,
+        &headers,
+        &ServiceAuthConfig::new(None, true, vec![])
+    )
+    .is_err());
+}
+
+#[tokio::test]
+async fn antaryon_client_issues_player_tokens() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, body) = antaryon_token(
+        &app,
+        json!({
+            "sub": "antaryon:player:42",
+            "role": "moderator",
+            "name": "Zabkaf",
+            "kidem": 7,
+            "clientId": "service-client",
+            "grantType": "authorization_code"
+        }),
+        "mahzen:read mahzen:write mahzen:voice mahzen:dm",
+        TEST_ANTARYON_SECRET,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["role"], "moderator");
+    assert!(body["expires_in"].as_u64().expect("ttl") <= 900);
+    let claims = decode_claims(body["access_token"].as_str().expect("token"));
+    assert_eq!(claims["sub"], "antaryon:player:42");
+    assert_eq!(claims["extras"]["clientId"], "antaryon");
+    assert_eq!(claims["extras"]["grantType"], "client_credentials");
+    assert_eq!(claims["extras"]["role"], "moderator");
+    assert_eq!(claims["extras"]["name"], "Zabkaf");
+    assert_eq!(claims["extras"]["kidem"], 7);
+}
+
+#[tokio::test]
+async fn antaryon_client_rejects_bad_requests() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let ok_extras = json!({ "sub": "antaryon:player:1", "role": "user" });
+
+    let (status, _) = antaryon_token(&app, ok_extras.clone(), "mahzen:read", "wrong").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let cases = [
+        (json!({ "role": "user" }), "mahzen:read"),
+        (json!({ "sub": "player:1", "role": "user" }), "mahzen:read"),
+        (
+            json!({ "sub": "antaryon:player:", "role": "user" }),
+            "mahzen:read",
+        ),
+        (
+            json!({ "sub": "antaryon:player:1 OR 1", "role": "user" }),
+            "mahzen:read",
+        ),
+        (
+            json!({ "sub": "antaryon:admin:1", "role": "user" }),
+            "mahzen:read",
+        ),
+        (
+            json!({ "sub": "antaryon:player:1", "role": "service" }),
+            "mahzen:read",
+        ),
+        (ok_extras.clone(), "admin"),
+    ];
+    for (extras, scope) in cases {
+        let (status, body) =
+            antaryon_token(&app, extras.clone(), scope, TEST_ANTARYON_SECRET).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{extras} {scope} {body}");
+    }
+}
+
+#[tokio::test]
+async fn other_clients_cannot_mint_antaryon_subjects() {
+    let state = setup_state();
+    let app = build_router(&state);
+    for sub in ["antaryon:player:1", "ANTARYON:player:1", " antaryon:x"] {
+        let (status, body) = send_json(
+            &app,
+            "POST",
+            "/oauth/token",
+            Some(json!({
+                "grant_type": "client_credentials",
+                "client_id": "service-client",
+                "client_secret": "aunsorm-service-secret",
+                "extras": { "sub": sub }
+            })),
+            &[],
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{sub} {body}");
+        assert_eq!(body["error"], "invalid_grant");
+    }
+}
+
+#[test]
+fn antaryon_client_requires_configured_secret() {
+    assert!(crate::state::antaryon_oauth_client(None).is_none());
+    assert!(crate::state::antaryon_oauth_client(Some("  ")).is_none());
+    let client = crate::state::antaryon_oauth_client(Some("s3cret")).expect("client");
+    assert!(client.has_secret());
+    assert!(client.verify_secret("s3cret"));
+    assert!(client.policy("service").is_none());
+    for role in ["user", "moderator", "admin"] {
+        assert!(client.policy(role).expect(role).allows_scope("mahzen:dm"));
+    }
+    assert_eq!(crate::state::service_client_secret(None, true), None);
+    assert_eq!(
+        crate::state::service_client_secret(Some(String::new()), true),
+        None
+    );
+    assert_eq!(
+        crate::state::service_client_secret(None, false).as_deref(),
+        Some("aunsorm-service-secret")
+    );
+    assert_eq!(
+        crate::state::service_client_secret(Some("x".into()), true).as_deref(),
+        Some("x")
+    );
+}
+
+#[tokio::test]
+async fn jwks_endpoint_verifies_issued_tokens() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, jwks) = send_json(&app, "GET", "/.well-known/jwks.json", None, &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    let key = &jwks["keys"][0];
+    assert_eq!(key["kty"], "OKP");
+    assert_eq!(key["crv"], "Ed25519");
+    assert_eq!(key["alg"], "EdDSA");
+    assert_eq!(key["kid"], "test");
+    assert!(
+        key.get("d").is_none(),
+        "private key must never be published"
+    );
+    let (status, _) = send_json(&app, "GET", "/v1/.well-known/jwks.json", None, &[]).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (_, token) = antaryon_token(
+        &app,
+        json!({ "sub": "antaryon:player:9", "role": "user" }),
+        "mahzen:read",
+        TEST_ANTARYON_SECRET,
+    )
+    .await;
+    let parsed: aunsorm_jwt::Jwks = serde_json::from_value(jwks).expect("jwks");
+    let verifier = aunsorm_jwt::JwtVerifier::from_jwks(&parsed).expect("verifier");
+    let claims = verifier
+        .verify(
+            token["access_token"].as_str().expect("token"),
+            &aunsorm_jwt::VerificationOptions {
+                issuer: Some("https://issuer".to_owned()),
+                require_jti: false,
+                ..aunsorm_jwt::VerificationOptions::default()
+            },
+        )
+        .expect("verifies with published key");
+    assert_eq!(claims.subject.as_deref(), Some("antaryon:player:9"));
 }

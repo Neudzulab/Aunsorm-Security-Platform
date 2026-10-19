@@ -1,0 +1,7 @@
+# BEGIN private-documentation-deny
+# Internal plans and agent instructions must never be HTTP downloads.
+<FilesMatch "(?i)\.(md|mdc)$">
+    Require all denied
+</FilesMatch>
+# END private-documentation-deny
+

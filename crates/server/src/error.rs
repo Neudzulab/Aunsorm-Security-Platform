@@ -138,6 +138,28 @@ impl ApiError {
         Self::new(StatusCode::NOT_FOUND, ErrorBody::not_found(message))
     }
 
+    /// 401: kimlik bilgisi yok ya da geçersiz.
+    pub fn unauthorized(message: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::UNAUTHORIZED,
+            ErrorBody {
+                error: "invalid_token",
+                error_description: message.into(),
+            },
+        )
+    }
+
+    /// 403: kimlik doğrulandı ama yetki yok.
+    pub fn forbidden(message: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            ErrorBody {
+                error: "insufficient_scope",
+                error_description: message.into(),
+            },
+        )
+    }
+
     pub fn unprocessable_entity(message: impl Into<String>) -> Self {
         Self::new(
             StatusCode::UNPROCESSABLE_ENTITY,

@@ -55,7 +55,16 @@ const DEFAULT_TOTP_DIGITS: u32 = 6;
 const TOTP_STEP_SECONDS: u64 = 30;
 const DEFAULT_ADMIN_SUBJECT: &str = "alice";
 const DEFAULT_ADMIN_MFA_SECRET_B64: &str = "YWRtaW4tc2hhcmVkLXNlY3JldC1vdHA=";
-const DEFAULT_SERVICE_ROLE: &str = "service";
+pub(crate) const DEFAULT_SERVICE_ROLE: &str = "service";
+/// Antaryon oyun sunucusunun gizli OAuth istemcisi.
+pub(crate) const ANTARYON_CLIENT_ID: &str = "antaryon";
+/// Antaryon oyuncu kimlikleri için ayrılmış `sub` öneki.
+pub(crate) const ANTARYON_SUBJECT_PREFIX: &str = "antaryon:player:";
+/// Yalnız `antaryon` istemcisinin kullanabileceği ayrılmış önek.
+pub(crate) const ANTARYON_RESERVED_PREFIX: &str = "antaryon:";
+const ANTARYON_ROLES: [&str; 3] = ["user", "moderator", "admin"];
+const ANTARYON_SCOPES: [&str; 4] = ["mahzen:read", "mahzen:write", "mahzen:voice", "mahzen:dm"];
+const DEV_SERVICE_CLIENT_SECRET: &str = "aunsorm-service-secret";
 
 #[derive(Debug, Clone)]
 pub struct RolePolicy {
@@ -479,7 +488,41 @@ fn generate_id() -> String {
     hex::encode(buf)
 }
 
-fn default_oauth_clients() -> HashMap<String, OAuthClient> {
+/// Antaryon gizli istemcisini kurar. Gizli boşsa istemci kaydedilmez.
+pub(crate) fn antaryon_oauth_client(secret: Option<&str>) -> Option<OAuthClient> {
+    let secret = secret.map(str::trim).filter(|value| !value.is_empty())?;
+    let scopes: Vec<String> = ANTARYON_SCOPES.iter().map(|s| (*s).to_owned()).collect();
+    let mut roles = HashMap::new();
+    for role in ANTARYON_ROLES {
+        roles.insert(
+            role.to_owned(),
+            RolePolicy::new(
+                scopes.clone(),
+                Duration::from_secs(900),
+                Duration::from_secs(3_600),
+                false,
+            ),
+        );
+    }
+    Some(OAuthClient::new_with_secret(
+        vec![],
+        scopes,
+        "user",
+        roles,
+        secret,
+    ))
+}
+
+/// `service-client` gizi: ortam değişkeni, yoksa yalnız katı olmayan kipte geliştirme varsayılanı.
+pub(crate) fn service_client_secret(env_value: Option<String>, strict: bool) -> Option<String> {
+    match env_value.map(|value| value.trim().to_owned()) {
+        Some(value) if !value.is_empty() => Some(value),
+        _ if strict => None,
+        _ => Some(DEV_SERVICE_CLIENT_SECRET.to_owned()),
+    }
+}
+
+fn default_oauth_clients(strict: bool) -> HashMap<String, OAuthClient> {
     let mut clients = HashMap::new();
 
     // Build redirect URIs with environment variable support
@@ -577,9 +620,10 @@ fn default_oauth_clients() -> HashMap<String, OAuthClient> {
     );
 
     // Machine-to-machine service account that uses client_credentials grant.
-    // Secret: "aunsorm-service-secret" (override via AUNSORM_SERVICE_CLIENT_SECRET env var).
-    let service_secret = std::env::var("AUNSORM_SERVICE_CLIENT_SECRET")
-        .unwrap_or_else(|_| "aunsorm-service-secret".to_owned());
+    // Secret: AUNSORM_SERVICE_CLIENT_SECRET. Strict kipte zorunludur (yoksa istemci kaydedilmez);
+    // geliştirmede "aunsorm-service-secret" varsayılanı kullanılır.
+    let service_secret =
+        service_client_secret(std::env::var("AUNSORM_SERVICE_CLIENT_SECRET").ok(), strict);
     let mut service_roles = HashMap::new();
     service_roles.insert(
         DEFAULT_SERVICE_ROLE.to_owned(),
@@ -590,16 +634,27 @@ fn default_oauth_clients() -> HashMap<String, OAuthClient> {
             false,
         ),
     );
-    clients.insert(
-        "service-client".to_string(),
-        OAuthClient::new_with_secret(
-            vec![],
-            vec!["introspect".to_string()],
-            DEFAULT_SERVICE_ROLE,
-            service_roles,
-            &service_secret,
-        ),
-    );
+    if let Some(service_secret) = service_secret {
+        clients.insert(
+            "service-client".to_string(),
+            OAuthClient::new_with_secret(
+                vec![],
+                vec!["introspect".to_string()],
+                DEFAULT_SERVICE_ROLE,
+                service_roles,
+                &service_secret,
+            ),
+        );
+    }
+
+    // Antaryon oyun sunucusu (Mahzen token zinciri). Secret: AUNSORM_ANTARYON_CLIENT_SECRET.
+    if let Some(antaryon) = antaryon_oauth_client(
+        std::env::var("AUNSORM_ANTARYON_CLIENT_SECRET")
+            .ok()
+            .as_deref(),
+    ) {
+        clients.insert(ANTARYON_CLIENT_ID.to_string(), antaryon);
+    }
 
     // TakeMDM auth-service client — used by auth-service for client_credentials token delegation
     let mut takemdm_roles = HashMap::new();
@@ -1772,7 +1827,7 @@ impl ServerState {
         let mdm = default_mdm_directory()?;
         let fabric = FabricDidRegistry::poc()?;
         let acme = AcmeService::new(&issuer)?;
-        let oauth_clients = Arc::new(default_oauth_clients());
+        let oauth_clients = Arc::new(default_oauth_clients(strict));
 
         let webhook_client = revocation_webhook
             .map(|config| WebhookClient::new(Arc::new(config)))

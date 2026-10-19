@@ -458,3 +458,8 @@ Each section requires approval before marking complete:
 **Velocity:** ~8 tasks/week  
 **Estimated Remaining:** ~80 tasks  
 **Projected Completion:** ~10 weeks (after blockers resolved)
+
+
+## SEC-DOC-HTTP-20261019 — Internal documentation HTTP access
+- [x] Add case-insensitive Markdown HTTP denial at the Apache project root and both Nginx server configurations; retain existing routes and directives. Local configuration coverage verified.
+- [ ] Deploy/reload the applicable production vhosts and verify known internal document URLs return 403/404.

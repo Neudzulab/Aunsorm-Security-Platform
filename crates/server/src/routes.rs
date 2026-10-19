@@ -270,7 +270,10 @@ use crate::quic::datagram::AuditOutcome;
 use crate::quic::datagram::{AudioPcmDatagram, DatagramChannel, MAX_PAYLOAD_BYTES};
 #[cfg(feature = "http3-experimental")]
 use crate::quic::{build_alt_svc_header_value, spawn_http3_poc, ALT_SVC_MAX_AGE};
-use crate::state::{AuditProofDocument, ClockHealthStatus, RefreshTokenRecord, ServerState};
+use crate::state::{
+    AuditProofDocument, ClockHealthStatus, RefreshTokenRecord, ServerState, ANTARYON_CLIENT_ID,
+    ANTARYON_RESERVED_PREFIX, ANTARYON_SUBJECT_PREFIX,
+};
 use crate::transparency::TransparencyEvent as LedgerTransparencyEvent;
 use crate::webhook::ClientContext;
 use crate::AunsormNativeRng;
@@ -3677,6 +3680,15 @@ pub async fn begin_auth(
         if trimmed.is_empty() {
             return Err(ApiError::invalid_request("subject cannot be empty"));
         }
+        if client_id != ANTARYON_CLIENT_ID
+            && trimmed
+                .to_ascii_lowercase()
+                .starts_with(ANTARYON_RESERVED_PREFIX)
+        {
+            return Err(ApiError::invalid_grant(
+                "antaryon: öneki yalnız antaryon istemcisine ayrılmıştır",
+            ));
+        }
         trimmed.to_owned()
     } else {
         format!("client:{client_id}")
@@ -3814,6 +3826,59 @@ pub struct OAuthTokenResponse {
     pub role: String,
     #[serde(rename = "mfaVerified")]
     pub mfa_verified: bool,
+}
+
+/// `client_credentials` çağıranının `extras` ile ezemeyeceği claim adları.
+const RESERVED_EXTRA_CLAIMS: [&str; 11] = [
+    "sub",
+    "role",
+    "clientId",
+    "grantType",
+    "scope",
+    "iss",
+    "aud",
+    "exp",
+    "iat",
+    "nbf",
+    "jti",
+];
+
+/// `client_credentials` ile istenen `sub` değerini istemciye göre denetler.
+///
+/// * `antaryon` istemcisi yalnız `antaryon:player:<id>` biçiminde `sub` basabilir (zorunlu).
+/// * Diğer istemciler `antaryon:` önekli bir `sub` basamaz.
+pub(crate) fn validate_client_credentials_subject(
+    client_id: &str,
+    subject: Option<&str>,
+) -> Result<(), ApiError> {
+    if client_id == ANTARYON_CLIENT_ID {
+        let subject = subject
+            .ok_or_else(|| ApiError::invalid_grant("antaryon istemcisi extras.sub gerektirir"))?;
+        let player_id = subject
+            .strip_prefix(ANTARYON_SUBJECT_PREFIX)
+            .ok_or_else(|| ApiError::invalid_grant("sub antaryon:player: ile başlamalıdır"))?;
+        let valid_id = !player_id.is_empty()
+            && player_id.len() <= 64
+            && player_id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+        if !valid_id {
+            return Err(ApiError::invalid_grant("antaryon oyuncu kimliği geçersiz"));
+        }
+        return Ok(());
+    }
+    if let Some(subject) = subject {
+        if subject
+            .trim()
+            .to_ascii_lowercase()
+            .starts_with(ANTARYON_RESERVED_PREFIX)
+        {
+            return Err(ApiError::invalid_grant(
+                "antaryon: öneki yalnız antaryon istemcisine ayrılmıştır",
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -4022,11 +4087,13 @@ pub async fn exchange_token(
             let refresh_ttl = policy.refresh_ttl();
 
             // Use subject from extras if provided, otherwise use client:<client_id>
-            let subject = extras
+            let requested_subject = extras
                 .as_ref()
                 .and_then(|e| e.get("sub"))
-                .and_then(|v| v.as_str())
-                .map_or_else(|| format!("client:{client_id}"), str::to_owned);
+                .and_then(|v| v.as_str());
+            validate_client_credentials_subject(client_id, requested_subject)?;
+            let subject =
+                requested_subject.map_or_else(|| format!("client:{client_id}"), str::to_owned);
 
             let mut claims = Claims::new();
             claims.subject = Some(subject.clone());
@@ -4049,10 +4116,10 @@ pub async fn exchange_token(
                     .extras
                     .insert("scope".to_string(), Value::String(s.clone()));
             }
-            // Merge caller-provided extras into claims
+            // Merge caller-provided extras into claims (server-owned claims cannot be overridden)
             if let Some(extra_map) = extras {
                 for (key, value) in extra_map {
-                    if key != "sub" && key != "role" {
+                    if !RESERVED_EXTRA_CLAIMS.contains(&key.as_str()) {
                         claims.extras.insert(key, value);
                     }
                 }
@@ -5347,7 +5414,9 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
     let health_router = Router::new()
         // Health endpoints (available on all services)
         .route("/health", get(health))
-        .route("/metrics", get(metrics));
+        .route("/metrics", get(metrics))
+        // Public signing keys so services verify tokens locally
+        .route("/.well-known/jwks.json", get(jwks_document));
 
     let service_router = build_service_mode_router(service_mode.as_deref());
     let router = Router::new()
@@ -5369,6 +5438,12 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 .level(Level::ERROR)
                 .latency_unit(LatencyUnit::Millis),
         );
+
+    // Minting / key endpoints require an authenticated service caller.
+    let router = router.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        crate::service_auth::require_service_caller,
+    ));
 
     let router = router
         .layer(trace_layer)
@@ -5402,6 +5477,16 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
     };
 
     router.with_state(state.clone())
+}
+
+/// `GET /.well-known/jwks.json`: Ed25519 public keys (RFC 7517, OKP).
+async fn jwks_document(State(state): State<Arc<ServerState>>) -> Response {
+    let mut response = Json(state.jwks().clone()).into_response();
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=300"),
+    );
+    response
 }
 
 // Proxy functions for gateway
@@ -5563,12 +5648,19 @@ async fn proxy_media_token(
             request = request.header("authorization", auth_str);
         }
     }
+    if let Some(secret) = headers.get(crate::service_auth::INTERNAL_SECRET_HEADER) {
+        if let Ok(secret_str) = secret.to_str() {
+            request = request.header(crate::service_auth::INTERNAL_SECRET_HEADER, secret_str);
+        }
+    }
 
     match request.send().await {
         Ok(response) => {
             let status_code = match response.status().as_u16() {
                 200 => StatusCode::OK,
                 400 => StatusCode::BAD_REQUEST,
+                401 => StatusCode::UNAUTHORIZED,
+                403 => StatusCode::FORBIDDEN,
                 404 => StatusCode::NOT_FOUND,
                 422 => StatusCode::UNPROCESSABLE_ENTITY,
                 500 => StatusCode::INTERNAL_SERVER_ERROR,
@@ -6073,8 +6165,12 @@ mod session_endpoint_tests {
     use axum::body::to_bytes;
     use tower::ServiceExt;
 
+    // Same value as crates/server/src/tests.rs so parallel tests never disagree.
+    const SESSION_TEST_INTERNAL_SECRET: &str = "test-internal-secret-0123456789abcdef";
+
     #[tokio::test]
     async fn sessions_create_sign_verify_and_rotate_succeed() {
+        std::env::set_var("AUNSORM_INTERNAL_SECRET", SESSION_TEST_INTERNAL_SECRET);
         let state = build_test_state();
         let router = build_router(&state);
 
@@ -6084,6 +6180,7 @@ mod session_endpoint_tests {
                 axum::http::Request::builder()
                     .method("POST")
                     .uri("/sessions")
+                    .header("x-aunsorm-internal-secret", SESSION_TEST_INTERNAL_SECRET)
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         serde_json::json!({
@@ -6180,6 +6277,7 @@ mod session_endpoint_tests {
                 axum::http::Request::builder()
                     .method("POST")
                     .uri(format!("/sessions/{session_id}/keys"))
+                    .header("x-aunsorm-internal-secret", SESSION_TEST_INTERNAL_SECRET)
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from("{}"))
                     .expect("rotate request is built"),
