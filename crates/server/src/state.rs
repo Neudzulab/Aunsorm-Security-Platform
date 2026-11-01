@@ -586,40 +586,43 @@ fn default_oauth_clients(strict: bool) -> HashMap<String, OAuthClient> {
             false,
         ),
     );
-    clients.insert(
-        "demo-client".to_string(),
-        OAuthClient::new(
-            redirect_uris,
-            vec![
-                "read".to_string(),
-                "write".to_string(),
-                "introspect".to_string(),
-                "admin".to_string(),
-            ],
-            "user",
-            demo_roles,
-        ),
-    );
+    // Demo/örnek istemciler gizli anahtarsızdır; strict kipte kaydedilmez.
+    if !strict {
+        clients.insert(
+            "demo-client".to_string(),
+            OAuthClient::new(
+                redirect_uris,
+                vec![
+                    "read".to_string(),
+                    "write".to_string(),
+                    "introspect".to_string(),
+                    "admin".to_string(),
+                ],
+                "user",
+                demo_roles,
+            ),
+        );
 
-    let mut webapp_roles = HashMap::new();
-    webapp_roles.insert(
-        "user".to_owned(),
-        RolePolicy::new(
-            vec!["read".to_owned(), "write".to_owned()],
-            Duration::from_secs(3_600),
-            Duration::from_secs(43_200),
-            false,
-        ),
-    );
-    clients.insert(
-        "webapp-123".to_string(),
-        OAuthClient::new(
-            vec!["https://app.example.com/callback".to_string()],
-            vec!["read".to_string(), "write".to_string()],
-            "user",
-            webapp_roles,
-        ),
-    );
+        let mut webapp_roles = HashMap::new();
+        webapp_roles.insert(
+            "user".to_owned(),
+            RolePolicy::new(
+                vec!["read".to_owned(), "write".to_owned()],
+                Duration::from_secs(3_600),
+                Duration::from_secs(43_200),
+                false,
+            ),
+        );
+        clients.insert(
+            "webapp-123".to_string(),
+            OAuthClient::new(
+                vec!["https://app.example.com/callback".to_string()],
+                vec!["read".to_string(), "write".to_string()],
+                "user",
+                webapp_roles,
+            ),
+        );
+    }
 
     // Machine-to-machine service account that uses client_credentials grant.
     // Secret: AUNSORM_SERVICE_CLIENT_SECRET. Strict kipte zorunludur (yoksa istemci kaydedilmez);
@@ -700,20 +703,35 @@ fn default_oauth_clients(strict: bool) -> HashMap<String, OAuthClient> {
     // Also accept client_id from environment if customized
     let takemdm_client_id =
         std::env::var("TAKEMDM_CLIENT_ID").unwrap_or_else(|_| "takemdm-auth".to_string());
-    clients.insert(
-        takemdm_client_id,
-        OAuthClient::new(
-            vec!["https://mdm.taketaxi.eu/panel/auth/callback".to_string()],
-            vec![
-                "read".to_string(),
-                "write".to_string(),
-                "introspect".to_string(),
-                "admin".to_string(),
-            ],
+    let takemdm_redirects = vec!["https://mdm.taketaxi.eu/panel/auth/callback".to_string()];
+    let takemdm_scopes = vec![
+        "read".to_string(),
+        "write".to_string(),
+        "introspect".to_string(),
+        "admin".to_string(),
+    ];
+    // AUNSORM_TAKEMDM_CLIENT_SECRET tanımlıysa istemci gizli anahtarlıdır (client_credentials
+    // gizli anahtar ister). Tanımsızsa geriye dönük uyumluluk için public kalır.
+    let takemdm_client = match std::env::var("AUNSORM_TAKEMDM_CLIENT_SECRET")
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+    {
+        Some(secret) => OAuthClient::new_with_secret(
+            takemdm_redirects,
+            takemdm_scopes,
+            DEFAULT_SERVICE_ROLE,
+            takemdm_roles,
+            &secret,
+        ),
+        None => OAuthClient::new(
+            takemdm_redirects,
+            takemdm_scopes,
             DEFAULT_SERVICE_ROLE,
             takemdm_roles,
         ),
-    );
+    };
+    clients.insert(takemdm_client_id, takemdm_client);
     clients
 }
 
@@ -2666,8 +2684,18 @@ impl TransparencyTreeSnapshot {
 
 #[cfg(test)]
 mod tests {
-    use super::{AuditProof, AuditProofValidationError, ServerState};
+    use super::{default_oauth_clients, AuditProof, AuditProofValidationError, ServerState};
     use aunsorm_core::clock::ClockValidation;
+
+    #[test]
+    fn strict_mode_does_not_register_demo_clients() {
+        let strict_clients = default_oauth_clients(true);
+        assert!(!strict_clients.contains_key("demo-client"));
+        assert!(!strict_clients.contains_key("webapp-123"));
+        let dev_clients = default_oauth_clients(false);
+        assert!(dev_clients.contains_key("demo-client"));
+        assert!(dev_clients.contains_key("webapp-123"));
+    }
 
     fn sample_validation() -> ClockValidation {
         ClockValidation {
