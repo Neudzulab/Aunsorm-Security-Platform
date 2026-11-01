@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::convert::TryFrom;
 use std::fmt;
 use std::iter::FromIterator;
@@ -51,6 +51,8 @@ use crate::webhook::{ClientContext, WebhookClient};
 
 const AUTH_TTL: Duration = Duration::from_secs(300);
 const SFU_CONTEXT_TTL: Duration = Duration::from_secs(900);
+/// Bellek içi denetim olayı üst sınırı (sınırsız büyüme bellek sızıntısıydı).
+const MAX_AUDIT_EVENTS: usize = 10_000;
 const DEFAULT_TOTP_DIGITS: u32 = 6;
 const TOTP_STEP_SECONDS: u64 = 30;
 const DEFAULT_ADMIN_SUBJECT: &str = "alice";
@@ -1743,7 +1745,7 @@ pub struct ServerState {
     acme: AcmeService,
     rng: StdMutex<AunsormNativeRng>,
     audit_proof: Arc<RwLock<AuditProof>>,
-    audit_events: RwLock<Vec<AuditEvent>>,
+    audit_events: RwLock<VecDeque<AuditEvent>>,
     calibration_fingerprint: String,
     clock_max_age: Duration,
     clock_snapshot: Arc<RwLock<SecureClockSnapshot>>,
@@ -1859,7 +1861,7 @@ impl ServerState {
             acme,
             rng: StdMutex::new(AunsormNativeRng::new()),
             audit_proof,
-            audit_events: RwLock::new(Vec::new()),
+            audit_events: RwLock::new(VecDeque::new()),
             calibration_fingerprint: calibration_fingerprint_owned,
             clock_max_age,
             clock_snapshot: clock_snapshot_store,
@@ -2597,7 +2599,7 @@ impl ServerState {
             outcome,
             resource: resource.into(),
         };
-        self.audit_events.write().await.push(event);
+        self.push_audit_event(event).await;
     }
 
     pub async fn record_calibration_failure(
@@ -2618,11 +2620,20 @@ impl ServerState {
                 "calibration://{calibration_id}?expected={expected_hex}&actual={actual_hex}"
             ),
         };
-        self.audit_events.write().await.push(event);
+        self.push_audit_event(event).await;
+    }
+
+    /// Bellek içi denetim kaydı sınırlıdır; en eski olay düşürülür.
+    async fn push_audit_event(&self, event: AuditEvent) {
+        let mut events = self.audit_events.write().await;
+        if events.len() >= MAX_AUDIT_EVENTS {
+            events.pop_front();
+        }
+        events.push_back(event);
     }
 
     pub async fn audit_events(&self) -> Vec<AuditEvent> {
-        self.audit_events.read().await.clone()
+        self.audit_events.read().await.iter().cloned().collect()
     }
 }
 

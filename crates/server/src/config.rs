@@ -24,8 +24,18 @@ pub enum LedgerBackend {
 
 impl LedgerBackend {
     fn from_env(strict: bool) -> Result<Self, ServerError> {
-        match env::var("AUNSORM_JTI_DB") {
-            Ok(path) => Ok(Self::Sqlite(PathBuf::from(path))),
+        // Compose dosyaları `AUNSORM_LEDGER_PATH` kullanıyor; okunmadığı için üretim defteri
+        // sessizce bellekte kalıyordu. İkisi de kabul edilir, `AUNSORM_JTI_DB` önceliklidir.
+        let raw = match env::var("AUNSORM_JTI_DB") {
+            Err(env::VarError::NotPresent) => env::var("AUNSORM_LEDGER_PATH"),
+            other => other,
+        };
+        match raw {
+            Ok(path) if path.trim().is_empty() && !strict => Ok(Self::Memory),
+            Ok(path) if path.trim().is_empty() => Err(ServerError::Configuration(
+                "AUNSORM_STRICT=1 iken AUNSORM_JTI_DB boş olamaz".to_string(),
+            )),
+            Ok(path) => Ok(Self::Sqlite(PathBuf::from(path.trim()))),
             Err(env::VarError::NotPresent) if strict => Err(ServerError::Configuration(
                 "AUNSORM_STRICT=1 iken AUNSORM_JTI_DB zorunludur".to_string(),
             )),

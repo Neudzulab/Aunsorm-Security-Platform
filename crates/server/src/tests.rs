@@ -3449,6 +3449,7 @@ async fn security_jwe_encrypt_returns_envelope() {
                 .method("POST")
                 .uri("/security/jwe/encrypt")
                 .header("content-type", "application/json")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .body(Body::from(payload.to_string()))
                 .expect("request"),
         )
@@ -3499,6 +3500,7 @@ async fn security_jwe_encrypt_decrypt_roundtrip() {
                 .method("POST")
                 .uri("/security/jwe/encrypt")
                 .header("content-type", "application/json")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .body(Body::from(enc_payload.to_string()))
                 .expect("request"),
         )
@@ -3524,6 +3526,7 @@ async fn security_jwe_encrypt_decrypt_roundtrip() {
                 .method("POST")
                 .uri("/security/jwe/decrypt")
                 .header("content-type", "application/json")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .body(Body::from(dec_payload.to_string()))
                 .expect("request"),
         )
@@ -3556,6 +3559,7 @@ async fn security_jwe_decrypt_rejects_tampered_ciphertext() {
                 .method("POST")
                 .uri("/security/jwe/encrypt")
                 .header("content-type", "application/json")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .body(Body::from(enc_payload.to_string()))
                 .expect("request"),
         )
@@ -3582,6 +3586,7 @@ async fn security_jwe_decrypt_rejects_tampered_ciphertext() {
                 .method("POST")
                 .uri("/security/jwe/decrypt")
                 .header("content-type", "application/json")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .body(Body::from(dec_payload.to_string()))
                 .expect("request"),
         )
@@ -3823,13 +3828,10 @@ async fn send_json(
     for (name, value) in headers {
         builder = builder.header(*name, *value);
     }
-    let body = match body {
-        Some(json_body) => {
-            builder = builder.header("content-type", "application/json");
-            Body::from(json_body.to_string())
-        }
-        None => Body::empty(),
-    };
+    if body.is_some() {
+        builder = builder.header("content-type", "application/json");
+    }
+    let body = body.map_or_else(Body::empty, |json_body| Body::from(json_body.to_string()));
     let response = app
         .clone()
         .oneshot(builder.body(body).expect("request"))
@@ -4205,4 +4207,168 @@ async fn jwks_endpoint_verifies_issued_tokens() {
         )
         .expect("verifies with published key");
     assert_eq!(claims.subject.as_deref(), Some("antaryon:player:9"));
+}
+
+// ── Denetim 2026-11: client_credentials ve parola doğrulama sertleştirmesi ───
+
+#[tokio::test]
+async fn client_credentials_cannot_mint_mfa_role_for_public_client() {
+    // demo-client gizli anahtarsızdır; admin rolü MFA ister ve bu akışta MFA adımı yoktur.
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, _) = send_json(
+        &app,
+        "POST",
+        "/oauth/token",
+        Some(json!({
+            "grant_type": "client_credentials",
+            "client_id": "demo-client",
+            "extras": { "role": "admin" }
+        })),
+        &[],
+    )
+    .await;
+    assert_ne!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn client_credentials_extras_cannot_claim_mfa_verified() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, body) = send_json(
+        &app,
+        "POST",
+        "/oauth/token",
+        Some(json!({
+            "grant_type": "client_credentials",
+            "client_id": "demo-client",
+            "extras": { "mfaVerified": true }
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let token = body["access_token"].as_str().expect("access token");
+    let payload_b64 = token.split('.').nth(1).expect("payload segment");
+    let payload: Value =
+        serde_json::from_slice(&URL_SAFE_NO_PAD.decode(payload_b64).expect("base64"))
+            .expect("json");
+    assert!(payload.get("mfaVerified").is_none());
+    assert!(payload
+        .get("extras")
+        .and_then(|extras| extras.get("mfaVerified"))
+        .is_none());
+}
+
+#[tokio::test]
+async fn password_verify_rejects_hash_with_excessive_cost() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, body) = send_json(
+        &app,
+        "POST",
+        "/security/password-verify",
+        Some(json!({
+            "password": "irrelevant",
+            "hash": "$argon2id$v=19$m=4194304,t=1,p=1$c2FsdHNhbHRzYWx0$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaA"
+        })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["valid"], false);
+}
+
+#[tokio::test]
+async fn password_hash_round_trip_still_verifies() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, body) = send_json(
+        &app,
+        "POST",
+        "/security/password-hash",
+        Some(json!({ "password": "correct horse" })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let hash = body["hash"].as_str().expect("hash").to_owned();
+    let (status, body) = send_json(
+        &app,
+        "POST",
+        "/security/password-verify",
+        Some(json!({ "password": "correct horse", "hash": hash })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["valid"], true);
+}
+
+#[tokio::test]
+async fn jwe_decrypt_requires_service_caller() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, _) = send_json(
+        &app,
+        "POST",
+        "/security/jwe/decrypt",
+        Some(json!({ "token": "x", "org_salt": "s", "calibration_note": "n" })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn introspect_does_not_consume_token_and_revoke_still_applies() {
+    let state = setup_state();
+    let app = build_router(&state);
+    let (status, body) = send_json(
+        &app,
+        "POST",
+        "/oauth/token",
+        Some(json!({ "grant_type": "client_credentials", "client_id": "demo-client" })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let token = body["access_token"]
+        .as_str()
+        .expect("access token")
+        .to_owned();
+
+    for _ in 0..2 {
+        let (status, body) = send_json(
+            &app,
+            "POST",
+            "/oauth/introspect",
+            Some(json!({ "token": token })),
+            &[],
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["active"], true);
+    }
+
+    let (status, _) = send_json(
+        &app,
+        "POST",
+        "/oauth/revoke",
+        Some(json!({ "token": token, "token_type_hint": "access_token" })),
+        &[],
+    )
+    .await;
+    assert!(status.is_success(), "revoke status {status}");
+
+    let (status, body) = send_json(
+        &app,
+        "POST",
+        "/oauth/introspect",
+        Some(json!({ "token": token })),
+        &[],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["active"], false);
 }

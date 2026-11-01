@@ -32,10 +32,12 @@ pub const INTERNAL_SECRET_HEADER: &str = "x-aunsorm-internal-secret";
 const MIN_INTERNAL_SECRET_LEN: usize = 24;
 
 /// Her zaman korunan yol önekleri (`/v1` öneki olsun olmasın).
-const DEFAULT_PROTECTED_PREFIXES: [&str; 3] = [
+const DEFAULT_PROTECTED_PREFIXES: [&str; 4] = [
     "/security/generate-media-token",
     "/sessions",
     "/sfu/context",
+    // Sunucu anahtarıyla şifre çözer; korumasız hali herkese açık bir çözme kâhiniydi.
+    "/security/jwe",
 ];
 
 /// Servis doğrulama yapılandırması.
@@ -199,6 +201,8 @@ mod tests {
             "/v1/sessions/abc/keys",
             "/sfu/context",
             "/sfu/context/step",
+            "/security/jwe/encrypt",
+            "/v1/security/jwe/decrypt",
         ] {
             assert!(is_protected_path(path, &extra), "{path}");
         }

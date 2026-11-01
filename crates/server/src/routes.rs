@@ -1877,6 +1877,12 @@ pub async fn security_hmac_verify(
     }))
 }
 
+/// `/security/password-verify` için kabul edilen en yüksek Argon2 maliyetleri.
+/// Sunucunun ürettiği hash'ler (`Argon2::default()`: 19 MiB, t=2, p=1) bu sınırların altındadır.
+const MAX_VERIFY_ARGON2_M_COST_KIB: u32 = 64 * 1024;
+const MAX_VERIFY_ARGON2_T_COST: u32 = 8;
+const MAX_VERIFY_ARGON2_P_COST: u32 = 4;
+
 fn hash_password_with_aunsorm_rng(password: &str) -> Result<String, ApiError> {
     let mut rng = AunsormNativeRng::new();
     let mut salt_bytes = [0_u8; 16];
@@ -1897,7 +1903,11 @@ pub async fn security_password_hash(
         return Err(ApiError::invalid_request("password gereklidir"));
     }
 
-    let hash = hash_password_with_aunsorm_rng(&request.password)?;
+    // Argon2 bilinçli olarak yavaştır; tokio işçisini bloke etmemesi için ayrı iş parçacığında.
+    let password = request.password;
+    let hash = tokio::task::spawn_blocking(move || hash_password_with_aunsorm_rng(&password))
+        .await
+        .map_err(|err| ApiError::server_error(format!("Şifre hash görevi başarısız: {err}")))??;
 
     Ok((
         StatusCode::CREATED,
@@ -1920,22 +1930,33 @@ pub async fn security_password_verify(
         return Err(ApiError::invalid_request("hash gereklidir"));
     }
 
-    let parsed_hash = match PasswordHash::new(normalized_hash) {
-        Ok(hash) => hash,
-        Err(_) => {
-            return Ok(Json(PasswordVerifyResponse {
+    let normalized_hash = normalized_hash.to_owned();
+    let password = request.password;
+    let response = tokio::task::spawn_blocking(move || {
+        let Ok(parsed_hash) = PasswordHash::new(&normalized_hash) else {
+            return PasswordVerifyResponse {
                 valid: false,
                 algorithm: "unknown".to_string(),
-            }))
-        }
-    };
+            };
+        };
+        let algorithm = parsed_hash.algorithm.to_string();
+        // Maliyet parametreleri hash'ten okunur; sınırsız bırakılırsa çağıran gigabaytlarca
+        // bellek isteyen bir hash göndererek süreci düşürebilir.
+        let within_limits = argon2::Params::try_from(&parsed_hash).is_ok_and(|params| {
+            params.m_cost() <= MAX_VERIFY_ARGON2_M_COST_KIB
+                && params.t_cost() <= MAX_VERIFY_ARGON2_T_COST
+                && params.p_cost() <= MAX_VERIFY_ARGON2_P_COST
+        });
+        let valid = within_limits
+            && Argon2::default()
+                .verify_password(password.as_bytes(), &parsed_hash)
+                .is_ok();
+        PasswordVerifyResponse { valid, algorithm }
+    })
+    .await
+    .map_err(|err| ApiError::server_error(format!("Şifre doğrulama görevi başarısız: {err}")))?;
 
-    let algorithm = parsed_hash.algorithm.to_string();
-    let valid = Argon2::default()
-        .verify_password(request.password.as_bytes(), &parsed_hash)
-        .is_ok();
-
-    Ok(Json(PasswordVerifyResponse { valid, algorithm }))
+    Ok(Json(response))
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -3829,8 +3850,9 @@ pub struct OAuthTokenResponse {
 }
 
 /// `client_credentials` çağıranının `extras` ile ezemeyeceği claim adları.
-const RESERVED_EXTRA_CLAIMS: [&str; 11] = [
+const RESERVED_EXTRA_CLAIMS: [&str; 12] = [
     "sub",
+    "mfaVerified",
     "role",
     "clientId",
     "grantType",
@@ -4065,6 +4087,12 @@ pub async fn exchange_token(
             let policy = state
                 .role_policy(client_id, &role)
                 .ok_or_else(|| ApiError::invalid_grant("Rol politikası bulunamadı"))?;
+            // Bu akışta MFA adımı yoktur; MFA gerektiren roller (ör. admin) basılamaz.
+            if policy.require_mfa() {
+                return Err(ApiError::invalid_grant(
+                    "MFA gerektiren rol client_credentials ile alınamaz",
+                ));
+            }
 
             let normalized_scope = normalize_scope(scope.as_deref(), client.allowed_scopes())?;
             if let Some(ref scope_value) = normalized_scope {
@@ -4393,6 +4421,24 @@ pub struct OAuthIntrospectResponse {
     pub mfa_verified: Option<bool>,
 }
 
+/// İmza ve claim'leri JTI replay deposuna yazmadan doğrular.
+///
+/// Introspect ve revoke tokenı "tüketmemelidir": paylaşılan depoyla ilk introspect JTI'yi
+/// işaretliyor, sonraki introspect hata veriyor ve revoke sessizce hiçbir şey iptal etmiyordu.
+/// İptal durumu ayrıca token defterinden okunur.
+fn verify_without_replay(
+    state: &ServerState,
+    token: &str,
+    options: &VerificationOptions,
+) -> Result<Claims, JwtError> {
+    // Depo olmadan `require_jti` reddeder; JTI'siz token çağıranlarda zaten etkin sayılmaz.
+    let options = VerificationOptions {
+        require_jti: false,
+        ..options.clone()
+    };
+    aunsorm_jwt::JwtVerifier::from_jwks(state.jwks())?.verify(token, &options)
+}
+
 pub async fn introspect_token(
     State(state): State<Arc<ServerState>>,
     Json(request): Json<OAuthIntrospectRequest>,
@@ -4409,7 +4455,7 @@ pub async fn introspect_token(
         ..VerificationOptions::default()
     };
 
-    match state.verifier().verify(token, &options) {
+    match verify_without_replay(&state, token, &options) {
         Ok(claims) => {
             let now = SystemTime::now();
             let jti = claims.jwt_id.clone();
@@ -4515,7 +4561,8 @@ pub async fn revoke_token(
     }
 
     if hint.as_deref() != Some("refresh_token") {
-        if let Ok(claims) = state.verifier().verify(
+        if let Ok(claims) = verify_without_replay(
+            &state,
             token,
             &VerificationOptions {
                 issuer: Some(state.issuer().to_owned()),
@@ -5408,6 +5455,24 @@ fn build_service_mode_router(service_mode: Option<&str>) -> Router<Arc<ServerSta
 /// # Panics
 /// `http3-experimental` özelliği etkin ve `Alt-Svc` başlığı oluşturulamazsa panikler.
 pub fn build_router(state: &Arc<ServerState>) -> Router {
+    build_router_with_alt_svc(state, alt_svc_advertise_enabled())
+}
+
+/// `AUNSORM_ALT_SVC_ADVERTISE=true|1` ise `Alt-Svc` başlığı her yanıta eklenir.
+///
+/// Varsayılan kapalıdır: Aunsorm portları yalnız iç ağdan erişilebilir ve başlık tüketici
+/// gateway'leri üzerinden tarayıcılara kapalı bir UDP portunu ilan ediyordu. QUIC istemcileri
+/// portu `/http3/capabilities` yanıtından okur.
+fn alt_svc_advertise_enabled() -> bool {
+    env::var("AUNSORM_ALT_SVC_ADVERTISE")
+        .map(|value| matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true"))
+        .unwrap_or(false)
+}
+
+#[allow(clippy::cognitive_complexity)]
+#[allow(clippy::too_many_lines)]
+#[cfg_attr(not(feature = "http3-experimental"), allow(unused_variables))]
+fn build_router_with_alt_svc(state: &Arc<ServerState>, advertise_alt_svc: bool) -> Router {
     let service_mode = detect_service_mode();
     tracing::info!("🔧 SERVICE_MODE: {:?}", service_mode);
 
@@ -5457,7 +5522,7 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
     };
 
     #[cfg(feature = "http3-experimental")]
-    let router = {
+    let router = if advertise_alt_svc {
         let port = state.listen_port();
         let header_value =
             build_alt_svc_header_value(port).expect("Alt-Svc başlığı oluşturulamadı");
@@ -5474,6 +5539,8 @@ pub fn build_router(state: &Arc<ServerState>) -> Router {
                 }
             },
         ))
+    } else {
+        router
     };
 
     router.with_state(state.clone())
@@ -6755,10 +6822,10 @@ mod http3_tests {
     use tower::ServiceExt;
 
     #[tokio::test]
-    async fn alt_svc_header_is_injected_for_http3_routes() {
+    async fn alt_svc_header_is_injected_when_advertising_enabled() {
         let state = build_test_state();
         let port = state.listen_port();
-        let response = build_router(&state)
+        let response = build_router_with_alt_svc(&state, true)
             .oneshot(
                 axum::http::Request::builder()
                     .uri("/health")
@@ -6777,9 +6844,24 @@ mod http3_tests {
     }
 
     #[tokio::test]
+    async fn alt_svc_header_is_absent_when_advertising_disabled() {
+        let state = build_test_state();
+        let response = build_router_with_alt_svc(&state, false)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/health")
+                    .body(axum::body::Body::empty())
+                    .expect("request is built"),
+            )
+            .await
+            .expect("request succeeds");
+        assert!(response.headers().get(header::ALT_SVC).is_none());
+    }
+
+    #[tokio::test]
     async fn http3_capabilities_reports_active_status() {
         let state = build_test_state();
-        let response = build_router(&state)
+        let response = build_router_with_alt_svc(&state, true)
             .oneshot(
                 axum::http::Request::builder()
                     .uri("/http3/capabilities")
