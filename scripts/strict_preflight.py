@@ -38,6 +38,9 @@ def parse_env_file(path: str) -> dict[str, str]:
             value = value.strip()
             if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
                 value = value[1:-1]
+            else:
+                # Compose gibi: tırnaksız değerde " #" sonrası satır içi yorumdur.
+                value = re.split(r"\s+#", value, maxsplit=1)[0].strip()
             values[key.strip()] = value
     return values
 
