@@ -487,5 +487,5 @@ Each section requires approval before marking complete:
 - [ ] Kullanılmayan aun-postgres: kaldır ya da gerçekten bağla (kod Postgres kullanmıyor)
 - [x] Strict kip hazırlığı: `AUNSORM_STRICT_CLOCK=0` (kimlik katı, saat gevşek), strict kipte demo/webapp istemcileri kaydedilmez, `AUNSORM_TAKEMDM_CLIENT_SECRET` desteği, `scripts/strict_preflight.py`
 - [ ] Ops: ortak `AUNSORM_JWT_SEED_B64` + eksik sırlar; staging'de `AUNSORM_STRICT=1 AUNSORM_STRICT_CLOCK=0`; ardından production
-- [ ] TakeMDM: `client_secret` gönder, ardından `AUNSORM_TAKEMDM_CLIENT_SECRET` tanımla
+- [ ] TakeMDM gizli anahtarı (kod hazır, yalnız ops): aynı değeri Aunsorm `.env` → `AUNSORM_TAKEMDM_CLIENT_SECRET`, TakeMDM `.env` → `AUNSORM_CLIENT_SECRET` + `ASP_OIDC_CLIENT_SECRET`; ikisini birlikte ayarla, iki auth servisini yeniden oluştur. Doğrulama: secret'sız `client_id=takemdm-auth` isteği 401
 - [ ] NTP attestation sunucusu kurulunca `AUNSORM_STRICT_CLOCK` kaldırılır (tam strict)
