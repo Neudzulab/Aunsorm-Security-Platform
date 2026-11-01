@@ -152,6 +152,26 @@ fn normalize_host_value(host_raw: String) -> Result<String, ServerError> {
     Ok(candidate)
 }
 
+/// Strict kip bileşenleri. `clock`, NTP attestation sunucusu kurulana dek
+/// `AUNSORM_STRICT_CLOCK=0` ile kimlik/anahtar katılığından ayrı gevşetilebilir.
+#[derive(Debug, Clone, Copy)]
+struct StrictMode {
+    identity: bool,
+    clock: bool,
+}
+
+/// `AUNSORM_STRICT_CLOCK` değerini çözer; tanımsız ya da tanınmıyorsa strict kipi izler.
+fn strict_clock_from_env(strict: bool, raw: Option<String>) -> bool {
+    match raw
+        .as_deref()
+        .map(|value| value.trim().to_ascii_lowercase())
+    {
+        Some(value) if matches!(value.as_str(), "0" | "false") => false,
+        Some(value) if matches!(value.as_str(), "1" | "true") => true,
+        _ => strict,
+    }
+}
+
 /// Sunucu yapılandırması.
 pub struct ServerConfig {
     pub(crate) listen: SocketAddr,
@@ -502,6 +522,12 @@ impl ServerConfig {
         let strict = env::var("AUNSORM_STRICT")
             .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
             .unwrap_or(false);
+        let strict_clock = strict_clock_from_env(strict, env::var("AUNSORM_STRICT_CLOCK").ok());
+        if strict && !strict_clock {
+            tracing::warn!(
+                "AUNSORM_STRICT_CLOCK=0: strict kip etkin, saat attestation koşulları gevşek"
+            );
+        }
 
         let ledger = LedgerBackend::from_env(strict)?;
 
@@ -512,7 +538,7 @@ impl ServerConfig {
                 ))
             })?,
             Err(env::VarError::NotPresent) => {
-                if strict {
+                if strict_clock {
                     30
                 } else {
                     300
@@ -531,7 +557,7 @@ impl ServerConfig {
             ));
         }
 
-        if strict && clock_max_age_secs > 30 {
+        if strict_clock && clock_max_age_secs > 30 {
             return Err(ServerError::Configuration(format!(
                 "Strict kipte AUNSORM_CLOCK_MAX_AGE_SECS en fazla 30 saniye olabilir (şu an {clock_max_age_secs})"
             )));
@@ -569,7 +595,7 @@ impl ServerConfig {
                     ));
                 }
 
-                if strict {
+                if strict_clock {
                     let half_window = clock_max_age_secs / 2;
                     if half_window == 0 || interval_secs > half_window {
                         return Err(ServerError::Configuration(format!(
@@ -585,7 +611,7 @@ impl ServerConfig {
                 ))
             }
             Err(env::VarError::NotPresent) => {
-                if strict {
+                if strict_clock {
                     return Err(ServerError::Configuration(
                         "Strict kipte AUNSORM_CLOCK_REFRESH_URL zorunludur".to_string(),
                     ));
@@ -743,7 +769,7 @@ impl ServerConfig {
             ));
         }
 
-        if !strict && clock_refresh.is_none() {
+        if !strict_clock && clock_refresh.is_none() {
             // Auto-update timestamp to current time (development mode)
             // Production should use NTP attestation server with real signatures
             let now_ms = SystemTime::now()
@@ -760,12 +786,15 @@ impl ServerConfig {
             );
         }
 
-        Self::new(
+        Self::build(
             listen,
             issuer,
             audience,
             token_ttl,
-            strict,
+            StrictMode {
+                identity: strict,
+                clock: strict_clock,
+            },
             key_pair,
             ledger,
             fabric,
@@ -802,6 +831,47 @@ impl ServerConfig {
         revocation_webhook: Option<RevocationWebhookConfig>,
         cors: Option<CorsConfig>,
     ) -> Result<Self, ServerError> {
+        Self::build(
+            listen,
+            issuer,
+            audience,
+            token_ttl,
+            StrictMode {
+                identity: strict,
+                clock: strict,
+            },
+            key_pair,
+            ledger,
+            fabric,
+            fabric_gateway_url,
+            calibration_fingerprint,
+            clock_max_age,
+            clock_snapshot,
+            clock_refresh,
+            revocation_webhook,
+            cors,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build(
+        listen: SocketAddr,
+        issuer: impl Into<String>,
+        audience: impl Into<String>,
+        token_ttl: Duration,
+        mode: StrictMode,
+        key_pair: Ed25519KeyPair,
+        ledger: LedgerBackend,
+        fabric: Option<FabricChaincodeConfig>,
+        fabric_gateway_url: Option<Url>,
+        calibration_fingerprint: impl Into<String>,
+        clock_max_age: Duration,
+        clock_snapshot: SecureClockSnapshot,
+        clock_refresh: Option<ClockRefreshConfig>,
+        revocation_webhook: Option<RevocationWebhookConfig>,
+        cors: Option<CorsConfig>,
+    ) -> Result<Self, ServerError> {
+        let strict = mode.identity;
         if strict && matches!(ledger, LedgerBackend::Memory) {
             return Err(ServerError::Configuration(
                 "Strict kipte bellek içi JTI deposu kullanılamaz".to_string(),
@@ -812,7 +882,7 @@ impl ServerConfig {
                 "Saat doğrulama penceresi 0 olamaz".to_string(),
             ));
         }
-        if strict && clock_max_age > Duration::from_secs(30) {
+        if mode.clock && clock_max_age > Duration::from_secs(30) {
             return Err(ServerError::Configuration(format!(
                 "Strict kipte saat doğrulama penceresi en fazla 30 saniye olabilir (şu an {} saniye)",
                 clock_max_age.as_secs()
@@ -907,6 +977,42 @@ mod tests {
 
     fn sample_calibration() -> String {
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string()
+    }
+
+    #[test]
+    fn strict_clock_follows_strict_unless_overridden() {
+        assert!(strict_clock_from_env(true, None));
+        assert!(!strict_clock_from_env(false, None));
+        assert!(!strict_clock_from_env(true, Some(" 0 ".to_owned())));
+        assert!(!strict_clock_from_env(true, Some("FALSE".to_owned())));
+        assert!(strict_clock_from_env(false, Some("1".to_owned())));
+        assert!(strict_clock_from_env(true, Some("bogus".to_owned())));
+    }
+
+    #[test]
+    fn strict_identity_with_relaxed_clock_accepts_large_clock_window() {
+        let config = ServerConfig::build(
+            "127.0.0.1:0".parse().expect("addr"),
+            "issuer",
+            "audience",
+            Duration::from_secs(60),
+            StrictMode {
+                identity: true,
+                clock: false,
+            },
+            Ed25519KeyPair::generate("test").expect("key"),
+            LedgerBackend::Sqlite(PathBuf::from("./strict-identity-ledger.db")),
+            None,
+            None,
+            sample_calibration(),
+            Duration::from_secs(300),
+            sample_snapshot(),
+            None,
+            None,
+            None,
+        )
+        .expect("relaxed clock allows a 300 s window");
+        assert!(config.strict);
     }
 
     #[test]
