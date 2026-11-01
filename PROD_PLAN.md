@@ -483,3 +483,7 @@ Each section requires approval before marking complete:
 - [ ] `/health` bozuk durumda 503 dönsün; defter ping'i
 - [ ] Gateway-kipi proxy fonksiyonları: paylaşılan reqwest istemcisi + zaman aşımı + env'den upstream; `/validate/endpoint` SSRF
 - [ ] Kullanılmayan aun-postgres: kaldır ya da gerçekten bağla (kod Postgres kullanmıyor)
+- [x] Strict kip hazırlığı: `AUNSORM_STRICT_CLOCK=0` (kimlik katı, saat gevşek), strict kipte demo/webapp istemcileri kaydedilmez, `AUNSORM_TAKEMDM_CLIENT_SECRET` desteği, `scripts/strict_preflight.py`
+- [ ] Ops: ortak `AUNSORM_JWT_SEED_B64` + eksik sırlar; staging'de `AUNSORM_STRICT=1 AUNSORM_STRICT_CLOCK=0`; ardından production
+- [ ] TakeMDM: `client_secret` gönder, ardından `AUNSORM_TAKEMDM_CLIENT_SECRET` tanımla
+- [ ] NTP attestation sunucusu kurulunca `AUNSORM_STRICT_CLOCK` kaldırılır (tam strict)

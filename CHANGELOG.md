@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stop advertising `Alt-Svc` by default (`AUNSORM_ALT_SVC_ADVERTISE=true`
   re-enables it); the nginx gateway also hides it, strips an unstripped
   `/aunsorm` prefix and routes `/id`, `/random`, `/sfu` to their services.
+- Strict-mode readiness: `AUNSORM_STRICT_CLOCK=0` keeps identity/key strictness
+  while relaxing clock attestation rules; strict mode no longer registers the
+  secretless demo/webapp OAuth clients; `AUNSORM_TAKEMDM_CLIENT_SECRET` makes
+  `takemdm-auth` confidential; `scripts/strict_preflight.py` checks an env file
+  without printing values.
 - Honour `AUNSORM_LEDGER_PATH` (used by compose) as an alias for
   `AUNSORM_JTI_DB`, and bound the in-memory audit event buffer.
 - Reject ambiguous PKCS#11 private-key label matches, including duplicate
