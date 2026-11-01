@@ -463,3 +463,23 @@ Each section requires approval before marking complete:
 ## SEC-DOC-HTTP-20261019 — Internal documentation HTTP access
 - [x] Add case-insensitive Markdown HTTP denial at the Apache project root and both Nginx server configurations; retain existing routes and directives. Local configuration coverage verified.
 - [ ] Deploy/reload the applicable production vhosts and verify known internal document URLs return 403/404.
+
+## AUDIT-20261101 — Platform/Identity denetimi (gateway, auth, tüketiciler)
+
+- [x] aun-gateway (nginx): `/aunsorm` ve `/api/aunsorm` önekini soy; `/id`, `/random`, `/sfu` yollarını id/rng/e2ee servislerine yönlendir; `Alt-Svc` başlığını gizle
+- [x] Alt-Svc başlığı varsayılan kapalı (`AUNSORM_ALT_SVC_ADVERTISE=true` ile açılır); `/http3/capabilities` JSON alanları değişmedi
+- [x] client_credentials: MFA gerektiren rol (ör. demo-client `admin`) basılamaz; `mfaVerified` extras ile ezilemez
+- [x] `/security/jwe/*` servis doğrulaması arkasında (sunucu anahtarıyla çözme kâhini kapatıldı)
+- [x] `/security/password-verify`: Argon2 maliyet sınırı (OOM DoS) ve hash/verify `spawn_blocking`
+- [x] Introspect/revoke JTI replay deposunu tüketmiyor (revoke sessizce başarısız oluyordu)
+- [x] `AUNSORM_LEDGER_PATH` (compose) okunur; defter artık bellekte kalmaz
+- [x] Bellek içi denetim olayları 10 000 ile sınırlı
+- [ ] CD kararı: üretimde `AUNSORM_STRICT=1` + zorunlu `AUNSORM_JWT_SEED_B64`, `AUNSORM_SERVICE_CLIENT_SECRET`
+- [ ] CD kararı: `takemdm-auth` için client secret (public istemci şu an `admin` rolü basabiliyor); demo/webapp istemcilerini strict kipte kaldır
+- [ ] CD kararı: `/security/*` yardımcı uçları (generate-secret, hmac, encrypt/decrypt, password-*), `/id`, `/random`, `/oauth/introspect` için servis doğrulaması
+- [ ] CD kararı: oturum introspection/iptal API'si (kalıcı oturum kaydı, HKDF ratchet, opak oturum kimliği)
+- [ ] Revize: kid'i açık anahtar parmak izinden türet, anahtar rotasyonunda eski+yeni anahtarı JWKS'te yayınla
+- [ ] Graceful shutdown, TimeoutLayer, eşzamanlılık/hız sınırı (`/oauth/token`, `password-*`, `jwt-verify`)
+- [ ] `/health` bozuk durumda 503 dönsün; defter ping'i
+- [ ] Gateway-kipi proxy fonksiyonları: paylaşılan reqwest istemcisi + zaman aşımı + env'den upstream; `/validate/endpoint` SSRF
+- [ ] Kullanılmayan aun-postgres: kaldır ya da gerçekten bağla (kod Postgres kullanmıyor)

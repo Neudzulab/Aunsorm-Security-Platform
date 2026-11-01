@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a reproducible 669-case corpus and explicit post-parse failure propagation.
 
 ### Security
+- Audit 2026-11: block minting of MFA-required roles via `client_credentials`
+  and reserve `mfaVerified` from caller extras; require a service caller for
+  `/security/jwe/*`; cap Argon2 cost parameters accepted by
+  `/security/password-verify` and move hashing to `spawn_blocking`; stop
+  introspect/revoke from consuming the JTI replay store (revoke silently
+  failed after an introspect).
+- Stop advertising `Alt-Svc` by default (`AUNSORM_ALT_SVC_ADVERTISE=true`
+  re-enables it); the nginx gateway also hides it, strips an unstripped
+  `/aunsorm` prefix and routes `/id`, `/random`, `/sfu` to their services.
+- Honour `AUNSORM_LEDGER_PATH` (used by compose) as an alias for
+  `AUNSORM_JTI_DB`, and bound the in-memory audit event buffer.
 - Reject ambiguous PKCS#11 private-key label matches, including duplicate
   returned handles, instead of silently selecting the first object. Provider
   enumeration remains subject to the existing Cryptoki API and MSRV migration.
