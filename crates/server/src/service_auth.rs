@@ -32,12 +32,22 @@ pub const INTERNAL_SECRET_HEADER: &str = "x-aunsorm-internal-secret";
 const MIN_INTERNAL_SECRET_LEN: usize = 24;
 
 /// Her zaman korunan yol önekleri (`/v1` öneki olsun olmasın).
-const DEFAULT_PROTECTED_PREFIXES: [&str; 4] = [
+const DEFAULT_PROTECTED_PREFIXES: [&str; 12] = [
     "/security/generate-media-token",
     "/sessions",
     "/sfu/context",
     // Sunucu anahtarıyla şifre çözer; korumasız hali herkese açık bir çözme kâhiniydi.
     "/security/jwe",
+    // Yalnız sunucu tarafından çağrılan yardımcılar (mye-office iç sırla çağırır).
+    // `/security/encrypt|decrypt` tarayıcıdaki HD ses tarafından kullanıldığı için açıktır.
+    "/security/generate-secret",
+    "/security/hmac-sign",
+    "/security/hmac-verify",
+    "/security/password-hash",
+    "/security/password-verify",
+    "/id",
+    "/random",
+    "/oauth/introspect",
 ];
 
 /// Servis doğrulama yapılandırması.
@@ -203,6 +213,11 @@ mod tests {
             "/sfu/context/step",
             "/security/jwe/encrypt",
             "/v1/security/jwe/decrypt",
+            "/security/password-verify",
+            "/security/hmac-sign",
+            "/id/generate",
+            "/v1/random/number",
+            "/oauth/introspect",
         ] {
             assert!(is_protected_path(path, &extra), "{path}");
         }
@@ -213,6 +228,9 @@ mod tests {
             "/.well-known/jwks.json",
             "/oauth/token",
             "/v1x/sessions",
+            "/security/decrypt",
+            "/identity",
+            "/randomx",
         ] {
             assert!(!is_protected_path(path, &extra), "{path}");
         }

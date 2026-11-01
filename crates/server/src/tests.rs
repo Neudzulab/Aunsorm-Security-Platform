@@ -1186,6 +1186,7 @@ async fn pkce_flow_succeeds() {
             Request::builder()
                 .method("POST")
                 .uri("/oauth/introspect")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(introspect_payload.to_string()))
                 .expect("request"),
@@ -1372,6 +1373,7 @@ async fn admin_flow_requires_mfa() {
             Request::builder()
                 .method("POST")
                 .uri("/oauth/introspect")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(introspect_payload.to_string()))
                 .expect("request"),
@@ -1883,6 +1885,7 @@ async fn revoke_refresh_token_prevents_reuse() {
             Request::builder()
                 .method("POST")
                 .uri("/oauth/introspect")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(introspect_payload.to_string()))
                 .expect("introspect request"),
@@ -2249,6 +2252,7 @@ async fn revoke_access_token_marks_introspection_inactive() {
             Request::builder()
                 .method("POST")
                 .uri("/oauth/introspect")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(introspect_payload.to_string()))
                 .expect("introspect request"),
@@ -2288,6 +2292,7 @@ async fn revoke_access_token_marks_introspection_inactive() {
             Request::builder()
                 .method("POST")
                 .uri("/oauth/introspect")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .header("content-type", "application/json")
                 .body(Body::from(introspect_payload.to_string()))
                 .expect("introspect request"),
@@ -2593,6 +2598,7 @@ async fn random_number_endpoint_returns_entropy() {
             Request::builder()
                 .method("GET")
                 .uri("/random/number")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .body(Body::empty())
                 .expect("request"),
         )
@@ -2629,6 +2635,7 @@ async fn random_number_endpoint_returns_entropy() {
             Request::builder()
                 .method("GET")
                 .uri("/random/number?min=15&max=5000")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .body(Body::empty())
                 .expect("request"),
         )
@@ -2663,6 +2670,7 @@ async fn random_number_endpoint_returns_entropy() {
             Request::builder()
                 .method("GET")
                 .uri("/random/number?min=100&max=50")
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .body(Body::empty())
                 .expect("request"),
         )
@@ -2680,6 +2688,7 @@ async fn random_number_endpoint_returns_entropy() {
             Request::builder()
                 .method("GET")
                 .uri(&high_uri)
+                .header(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)
                 .body(Body::empty())
                 .expect("request"),
         )
@@ -4272,7 +4281,7 @@ async fn password_verify_rejects_hash_with_excessive_cost() {
             "password": "irrelevant",
             "hash": "$argon2id$v=19$m=4194304,t=1,p=1$c2FsdHNhbHRzYWx0$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaA"
         })),
-        &[],
+        &[(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)],
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -4288,7 +4297,7 @@ async fn password_hash_round_trip_still_verifies() {
         "POST",
         "/security/password-hash",
         Some(json!({ "password": "correct horse" })),
-        &[],
+        &[(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)],
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
@@ -4298,7 +4307,7 @@ async fn password_hash_round_trip_still_verifies() {
         "POST",
         "/security/password-verify",
         Some(json!({ "password": "correct horse", "hash": hash })),
-        &[],
+        &[(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)],
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -4344,7 +4353,7 @@ async fn introspect_does_not_consume_token_and_revoke_still_applies() {
             "POST",
             "/oauth/introspect",
             Some(json!({ "token": token })),
-            &[],
+            &[(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)],
         )
         .await;
         assert_eq!(status, StatusCode::OK);
@@ -4366,9 +4375,47 @@ async fn introspect_does_not_consume_token_and_revoke_still_applies() {
         "POST",
         "/oauth/introspect",
         Some(json!({ "token": token })),
-        &[],
+        &[(INTERNAL_SECRET_HEADER, TEST_INTERNAL_SECRET)],
     )
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["active"], false);
+}
+
+#[tokio::test]
+async fn server_side_helpers_require_service_caller() {
+    let state = setup_state();
+    let app = build_router(&state);
+    for (method, uri, body) in [
+        (
+            "POST",
+            "/security/password-hash",
+            Some(json!({ "password": "x" })),
+        ),
+        (
+            "POST",
+            "/security/generate-secret",
+            Some(json!({ "length": 32 })),
+        ),
+        (
+            "POST",
+            "/security/hmac-sign",
+            Some(json!({ "data": "d", "secret": "s" })),
+        ),
+        ("POST", "/oauth/introspect", Some(json!({ "token": "t" }))),
+        ("GET", "/random/number", None),
+    ] {
+        let (status, _) = send_json(&app, method, uri, body, &[]).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{uri}");
+    }
+    // Tarayıcıdaki HD ses bu ucu kimliksiz çağırır; açık kalmalı.
+    let (status, _) = send_json(
+        &app,
+        "POST",
+        "/security/encrypt",
+        Some(json!({ "plaintext": "x" })),
+        &[],
+    )
+    .await;
+    assert_ne!(status, StatusCode::UNAUTHORIZED);
 }

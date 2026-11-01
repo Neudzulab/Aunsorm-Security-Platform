@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stop advertising `Alt-Svc` by default (`AUNSORM_ALT_SVC_ADVERTISE=true`
   re-enables it); the nginx gateway also hides it, strips an unstripped
   `/aunsorm` prefix and routes `/id`, `/random`, `/sfu` to their services.
+- Require a service caller for `/security/generate-secret`, `hmac-sign`,
+  `hmac-verify`, `password-hash`, `password-verify`, `/id/*`, `/random/*` and
+  `/oauth/introspect`. `/security/encrypt|decrypt` stay public (browser HD audio).
 - Strict-mode readiness: `AUNSORM_STRICT_CLOCK=0` keeps identity/key strictness
   while relaxing clock attestation rules; strict mode no longer registers the
   secretless demo/webapp OAuth clients; `AUNSORM_TAKEMDM_CLIENT_SECRET` makes

@@ -477,6 +477,8 @@ Each section requires approval before marking complete:
 - [ ] CD kararı: üretimde `AUNSORM_STRICT=1` + zorunlu `AUNSORM_JWT_SEED_B64`, `AUNSORM_SERVICE_CLIENT_SECRET`
 - [ ] CD kararı: `takemdm-auth` için client secret (public istemci şu an `admin` rolü basabiliyor); demo/webapp istemcilerini strict kipte kaldır
 - [ ] CD kararı: `/security/*` yardımcı uçları (generate-secret, hmac, encrypt/decrypt, password-*), `/id`, `/random`, `/oauth/introspect` için servis doğrulaması
+- [x] Revize: generate-secret, hmac-sign/verify, password-hash/verify, `/id`, `/random`, `/oauth/introspect` servis doğrulaması arkasında (mye-office iç sırrı gönderiyor; önce mye dağıtılmalı). `/security/encrypt|decrypt` tarayıcı HD sesi için açık
+- [x] Ops: ortak JWT seed, iç sır (Aunsorm+mye), yeni imaj ve `AUNSORM_STRICT=1` + `AUNSORM_STRICT_CLOCK=0` production'da (2026-11-01)
 - [ ] CD kararı: oturum introspection/iptal API'si (kalıcı oturum kaydı, HKDF ratchet, opak oturum kimliği)
 - [ ] Revize: kid'i açık anahtar parmak izinden türet, anahtar rotasyonunda eski+yeni anahtarı JWKS'te yayınla
 - [ ] Graceful shutdown, TimeoutLayer, eşzamanlılık/hız sınırı (`/oauth/token`, `password-*`, `jwt-verify`)

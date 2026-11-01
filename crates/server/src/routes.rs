@@ -5980,6 +5980,11 @@ struct EndpointValidationResponse {
 
 #[cfg(test)]
 fn build_test_state() -> Arc<ServerState> {
+    // Korunan uçları çağıran testler bu iç gizli değeri başlıkta gönderir.
+    std::env::set_var(
+        "AUNSORM_INTERNAL_SECRET",
+        "test-internal-secret-0123456789abcdef",
+    );
     use std::net::SocketAddr;
     use std::time::Duration;
 
@@ -6126,6 +6131,10 @@ mod password_endpoint_tests {
                 axum::http::Request::builder()
                     .method("POST")
                     .uri("/security/password-hash")
+                    .header(
+                        "x-aunsorm-internal-secret",
+                        "test-internal-secret-0123456789abcdef",
+                    )
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(r#"{"password":"supersecret123"}"#))
                     .expect("request is built"),
@@ -6148,6 +6157,10 @@ mod password_endpoint_tests {
                 axum::http::Request::builder()
                     .method("POST")
                     .uri("/security/password-verify")
+                    .header(
+                        "x-aunsorm-internal-secret",
+                        "test-internal-secret-0123456789abcdef",
+                    )
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         serde_json::json!({
@@ -6288,6 +6301,10 @@ mod session_endpoint_tests {
                 axum::http::Request::builder()
                     .method("POST")
                     .uri("/security/hmac-sign")
+                    .header(
+                        "x-aunsorm-internal-secret",
+                        "test-internal-secret-0123456789abcdef",
+                    )
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         serde_json::json!({
@@ -6316,6 +6333,10 @@ mod session_endpoint_tests {
                 axum::http::Request::builder()
                     .method("POST")
                     .uri("/security/hmac-verify")
+                    .header(
+                        "x-aunsorm-internal-secret",
+                        "test-internal-secret-0123456789abcdef",
+                    )
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
                         serde_json::json!({
@@ -6610,6 +6631,10 @@ mod versioning_tests {
             .oneshot(
                 axum::http::Request::builder()
                     .uri("/v1/random/number")
+                    .header(
+                        "x-aunsorm-internal-secret",
+                        "test-internal-secret-0123456789abcdef",
+                    )
                     .body(axum::body::Body::empty())
                     .expect("request is built"),
             )
