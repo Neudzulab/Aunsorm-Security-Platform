@@ -232,6 +232,8 @@ services:
     environment:
       SERVICE_MODE: id-service
       AUNSORM_LISTEN: 0.0.0.0:50016
+      # Strict kip kalıcı defter yolu ister; bu servis token basmaz, defter kullanılmaz.
+      AUNSORM_LEDGER_PATH: /tmp/id-service-ledger.db
       RUST_LOG: ${RUST_LOG:-info}
       NO_COLOR: "1"
     ports:
@@ -265,6 +267,8 @@ services:
     environment:
       SERVICE_MODE: rng-service
       AUNSORM_LISTEN: 0.0.0.0:50019
+      # Strict kip kalıcı defter yolu ister; bu servis token basmaz, defter kullanılmaz.
+      AUNSORM_LEDGER_PATH: /tmp/rng-service-ledger.db
       RUST_LOG: ${RUST_LOG:-info}
       NO_COLOR: "1"
     ports:
